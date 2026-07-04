@@ -1,0 +1,305 @@
+<div class="space-y-5" (click)="closeDropdowns()" dir="rtl">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <h3 class="font-black text-slate-800 text-base">لیست انبارها (پروژه‌ها)</h3>
+        <p class="text-xs text-slate-400 mt-0.5">{{state.appState.projects.length}} محیط کارگاهی انبارگردانی فعال</p>
+      </div>
+      
+      <div class="flex flex-wrap items-center gap-2.5">
+        <div class="relative">
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <input type="text" [(ngModel)]="searchQuery" placeholder="جستجوی انبار یا لوکیشن..." class="w-full sm:w-56 pr-9 pl-4 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20 transition-all text-slate-700">
+        </div>
+        
+        <select [(ngModel)]="statusFilter" class="px-3 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:outline-none focus:border-indigo-400 text-slate-600 transition-all cursor-pointer appearance-none">
+          <option value="all">همه وضعیت‌ها</option>
+          <option value="active">فعال</option>
+          <option value="inactive">غیرفعال</option>
+        </select>
+
+        <button (click)="openAddModal()" class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md hover:shadow-lg active:scale-95" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          انبار جدید
+        </button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div class="flex-1">
+          <h4 class="font-bold text-slate-800 text-sm">بارگذاری فایل اکسل کالاهای اولیه</h4>
+          <p class="text-xs text-slate-400 mt-1">از طریق بارگذاری الگوی اکسل مشخص شده، رکوردهای پایه انبار انتخابی را تزریق کنید.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button (click)="downloadTemplate()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-200 shadow-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            دانلود قالب نمونه
+          </button>
+          <button (click)="goToDocs()" class="px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+            بارگذاری فایل اکسل
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div *ngFor="let p of filteredProjects" class="bg-white rounded-2xl border shadow-sm p-5 flex flex-col relative transition-all" 
+           [ngClass]="{'border-2 ring-2 ring-offset-2': p.id === state.appState.activeWarehouseId, 'opacity-60 grayscale-[40%]': !p.is_active}"
+           [style.--tw-ring-color]="p.color" [style.borderColor]="p.id === state.appState.activeWarehouseId ? p.color : ''">
+          
+
+
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3 min-w-0 cursor-pointer" (click)="handleWarehouseSwitch(p.id)">
+            <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm" [style.background]="!p.is_active ? '#cbd5e1' : p.color">
+                {{(p.code || '').slice(-2)}}
+            </div>
+            <div class="min-w-0">
+              <p class="font-black text-slate-800 text-sm leading-tight truncate">{{p.name}}</p>
+              <p class="text-[10px] text-slate-400 mt-1 truncate">{{p.location}}</p>
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-1.5 shrink-0">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="p.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'">{{p.is_active ? 'فعال' : 'غیرفعال'}}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4 text-xs">
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+            <p class="text-slate-400 text-[10px] font-medium">کل اقلام سیستمی</p>
+            <p class="font-black text-slate-800 text-base mt-0.5 w-max">{{p.total_quantity | number}}</p>
+          </div>
+          <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+            <p class="text-slate-400 text-[10px] font-medium">شمارش شده میدانی</p>
+            <p class="font-black mt-0.5 text-base w-max" [style.color]="!p.is_active ? '#64748b' : p.color">{{p.counted_quantity | number}}</p>
+          </div>
+        </div>
+
+        <ng-container *ngIf="p.is_active">
+          <div class="mb-4">
+            <div class="flex justify-between text-[10px] text-slate-400 mb-1.5">
+              <span class="font-medium">پیشرفت انبارگردانی فیزیکی</span>
+              <span class="font-black" [style.color]="p.color">{{p.percent}}٪</span>
+            </div>
+            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+              <div class="h-full rounded-full" [style.width.%]="p.percent" [style.background]="p.color"></div>
+            </div>
+          </div>
+        </ng-container>
+        <ng-container *ngIf="!p.is_active">
+          <div class="mb-4 p-2 bg-slate-50 rounded-lg text-center border border-slate-200">
+            <span class="text-[10px] font-bold text-slate-500">این انبار در حال حاضر غیرفعال است</span>
+          </div>
+        </ng-container>
+
+        <div class="flex gap-2 pt-3 border-t border-slate-100 mt-auto items-center relative project-action-container">
+          <ng-container *ngIf="!p.is_active">
+            <button class="flex-1 py-2 text-[11px] font-bold rounded-xl bg-slate-200 text-slate-500 cursor-not-allowed flex items-center justify-center gap-1.5" disabled>
+              دسترسی مسدود است
+            </button>
+          </ng-container>
+          <ng-container *ngIf="p.is_active">
+            <button (click)="goToDispatch(p.id)" class="flex-1 py-2 text-[11px] font-bold rounded-xl text-white shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5" [style.background]="'linear-gradient(135deg, ' + p.color + ', #6366f1)'">
+              ورود و مدیریت رکوردهای کالا
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </ng-container>
+          
+          <div class="relative">
+            <button (click)="toggleDropdown($event, p.id)" class="p-2 text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 rounded-xl transition-colors shrink-0 flex items-center justify-center z-20 relative" title="عملیات مدیریت کارگاه">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            
+            <div *ngIf="openDropdownId == p.id" class="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-[99] py-1 text-right fade-in">
+              <ng-container *ngIf="!p.is_active">
+                <button (click)="restoreWarehouse(p.id)" class="w-full text-right px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 font-bold transition-colors">
+                  <span>♻️</span> بازیابی و فعال‌سازی مجدد
+                </button>
+              </ng-container>
+              <ng-container *ngIf="p.is_active">
+                <button (click)="openEditModal(p.id)" class="w-full text-right px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-semibold">
+                  <span>✏️</span> ویرایش مشخصات انبار
+                </button>
+                <div class="border-t border-slate-100 my-1"></div>
+                <button (click)="archiveWarehouse(p.id)" class="w-full text-right px-4 py-2 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2 font-bold">
+                  <span>⏸️</span> غیرفعال کردن انبار
+                </button>
+              </ng-container>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+
+<!-- Modals -->
+
+<!-- Edit Modal -->
+<app-modal #editModal [isOpen]="editModalOpen" (closed)="editModalOpen = false" title="ویرایش مشخصات انبار: {{editingProject?.name}}" size="md">
+  <ng-container *ngIf="editingProject">
+  <form class="mt-4 text-right" (submit)="$event.preventDefault()">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد انبار (Warehouse Code)</label>
+        <input type="text" [(ngModel)]="editingProject.id" name="id" readonly class="w-full px-3 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-500 outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام انبار (Warehouse Name)</label>
+        <input type="text" [(ngModel)]="editingProject.name" name="name" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نوع انبار (Type)</label>
+        <input type="text" [(ngModel)]="editingProject.type" name="type" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متصدی / پیمانکار (Operator)</label>
+        <input type="text" [(ngModel)]="editingProject.operator_company" name="operator_company" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">مسئول انبار / انباردار (Manager)</label>
+        <select [(ngModel)]="editingProject.manager" name="manager" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="null">بدون مسئول</option>
+          <option *ngFor="let u of state.appState.users" [value]="u.id">{{u.first_name}} {{u.last_name}}</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شماره تلفن (Phone Number)</label>
+        <input type="text" [(ngModel)]="editingProject.phone_number" name="phone_number" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">آدرس (Address)</label>
+        <input type="text" [(ngModel)]="editingProject.location" name="location" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">مختصات جغرافیایی (GPS)</label>
+        <input type="text" [(ngModel)]="editingProject.gps_coordinates" name="gps_coordinates" placeholder="مثال: 35.6892, 51.3890" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">ظرفیت انبار (Capacity)</label>
+        <input type="number" [(ngModel)]="editingProject.capacity" name="capacity" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">وضعیت (Status)</label>
+        <select [(ngModel)]="editingProject.is_active" name="is_active" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="true">فعال</option>
+          <option [ngValue]="false">غیرفعال</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">انبار والد (Parent Warehouse)</label>
+        <select [(ngModel)]="editingProject.parent_warehouse" name="parent_warehouse" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="null">-- هیچکدام --</option>
+          <option *ngFor="let p of state.appState.projects" [value]="p.id" [disabled]="p.id === editingProject.id">{{p.name}}</option>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">توضیحات (Description)</label>
+        <textarea [(ngModel)]="editingProject.description" name="description" rows="2" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none resize-none"></textarea>
+      </div>
+    </div>
+  </form>
+  </ng-container>
+  
+  <div modal-footer class="flex items-center justify-end gap-3 w-full">
+    <button (click)="editModal.close()" class="px-5 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl">انصراف</button>
+    <button (click)="saveWarehouseEdit()" class="px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">ذخیره تغییرات</button>
+  </div>
+</app-modal>
+
+<!-- Add Modal -->
+<app-modal #addModal [isOpen]="addModalOpen" (closed)="addModalOpen = false" title="تعریف انبار / پروژه جدید" size="lg">
+  <form class="mt-4 text-right" (submit)="$event.preventDefault()">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد انبار (Warehouse Code)</label>
+        <input type="text" [(ngModel)]="newWh.code" name="newCode" placeholder="اختیاری (سیستم خودکار تخصیص می‌دهد)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام انبار (Warehouse Name) <span class="text-rose-500">*</span></label>
+        <input type="text" [(ngModel)]="newWh.name" name="newName" placeholder="مثال: انبار قطعات یدکی زاگرس" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نوع انبار (Type)</label>
+        <input type="text" [(ngModel)]="newWh.type" name="newType" placeholder="مثال: سوله، روباز،..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متصدی / پیمانکار (Operator)</label>
+        <input type="text" [(ngModel)]="newWh.operator_company" name="newOperator" placeholder="مثال: شرکت پترو..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">مسئول انبار / انباردار (Manager)</label>
+        <select [(ngModel)]="newWh.manager" name="newManager" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="null">بدون مسئول</option>
+          <option *ngFor="let u of state.appState.users" [value]="u.id">{{u.first_name}} {{u.last_name}}</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شماره تلفن (Phone Number)</label>
+        <input type="text" [(ngModel)]="newWh.phone_number" name="newPhone" placeholder="مثال: 021..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">آدرس (Address)</label>
+        <input type="text" [(ngModel)]="newWh.location" name="newLocation" placeholder="مثال: عسلویه، فاز..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">مختصات جغرافیایی (GPS)</label>
+        <input type="text" [(ngModel)]="newWh.gps_coordinates" name="newGps" placeholder="مثال: 35.6892, 51.3890" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">ظرفیت انبار (Capacity)</label>
+        <input type="number" [(ngModel)]="newWh.capacity" name="newCapacity" placeholder="ظرفیت (عدد)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">وضعیت (Status)</label>
+        <select [(ngModel)]="newWh.is_active" name="newIsActive" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="true">فعال</option>
+          <option [ngValue]="false">غیرفعال</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">انبار والد (Parent Warehouse)</label>
+        <select [(ngModel)]="newWh.parent_warehouse" name="newParent" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none appearance-none cursor-pointer">
+          <option [ngValue]="null">-- هیچکدام --</option>
+          <option *ngFor="let p of state.appState.projects" [value]="p.id">{{p.name}}</option>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-600 mb-1.5">توضیحات (Description)</label>
+        <textarea [(ngModel)]="newWh.description" name="newDescription" rows="2" placeholder="توضیحات تکمیلی انبار..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs text-slate-800 transition-all outline-none resize-none focus:ring-1 focus:ring-indigo-400/20 placeholder-slate-400"></textarea>
+      </div>
+    </div>
+  </form>
+  
+  <div modal-footer class="flex items-center justify-end gap-3 w-full">
+    <button (click)="addModal.close()" class="px-5 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors">انصراف</button>
+    <button (click)="saveNewWarehouse()" class="px-5 py-2 rounded-xl text-xs font-bold text-white shadow-md transition-all active:scale-95" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">ثبت نهایی انبار</button>
+  </div>
+</app-modal>
+
+<!-- Template Modal -->
+<app-modal #templateModal [isOpen]="templateModalOpen" (closed)="templateModalOpen = false" title="قالب استاندارد آپلود اکسل" size="lg">
+  <p class="text-sm text-slate-600 mb-4 text-right">برای عدم تداخل ستون‌ها، لطفا فایل خود را مطابق چیدمان زیر ذخیره و آپلود نمایید:</p>
+  <div class="overflow-x-auto mt-2 text-right">
+    <table class="w-full text-xs border border-slate-200 text-center">
+      <thead>
+        <tr class="bg-slate-100 text-slate-700">
+          <th class="p-2 border font-bold">A (کد سیستم)</th>
+          <th class="p-2 border font-bold">B (MESC)</th>
+          <th class="p-2 border font-bold">C (Part No)</th>
+          <th class="p-2 border font-bold">D (شرح)</th>
+          <th class="p-2 border font-bold">E (دسته‌بندی)</th>
+          <th class="p-2 border font-bold">F (موقعیت)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="p-2 border font-mono">REC-1001</td><td class="p-2 border font-mono">12.04.558.11</td><td class="p-2 border font-mono">FS-202X</td><td class="p-2 border text-right">شیر برقی ابزار دقیق</td><td class="p-2 border">تجهیزات دقیق</td><td class="p-2 border">سوله A</td></tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <div modal-footer class="flex items-center justify-end gap-3 w-full">
+    <button (click)="templateModal.close()" class="px-5 py-2 bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors">بستن</button>
+  </div>
+</app-modal>

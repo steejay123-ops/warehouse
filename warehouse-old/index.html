@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>اتوماسیون انبار - پروژه شیراز</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { vazir: ['Vazirmatn', 'Tahoma', 'system-ui', 'sans-serif'] },
+          colors: {
+            brand: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81',950:'#1e1b4b' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="./assets/css/style.css">
+</head>
+<body class="bg-slate-100 antialiased min-h-screen">
+
+<div id="toast-container" class="fixed bottom-6 left-6 z-[9999] space-y-2 pointer-events-none"></div>
+
+<div id="login-screen" class="min-h-screen flex items-center justify-center p-4" style="background: linear-gradient(135deg, rgb(15, 23, 42) 0%, rgb(30, 27, 75) 40%, rgb(49, 46, 129) 70%, rgb(30, 27, 75) 100%); display: flex;">
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute -top-40 -right-40 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-900/20 rounded-full blur-3xl"></div>
+  </div>
+
+  <div class="relative w-full max-w-sm">
+    <div class="bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
+      <div class="h-1 bg-gradient-to-l from-indigo-400 via-violet-500 to-blue-400"></div>
+
+      <div class="p-8">
+        <div class="flex flex-col items-center mb-8">
+          <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-xl" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <path d="M4 10L16 4L28 10V22L16 28L4 22V10Z" stroke="white" stroke-width="1.5" fill="none"></path>
+              <path d="M16 4V16M16 16L28 10M16 16L4 10" stroke="white" stroke-width="1.5" opacity=".6"></path>
+              <circle cx="16" cy="16" r="3" fill="white"></circle>
+              <path d="M10 13L16 16L22 13" stroke="white" stroke-width="1" opacity=".5"></path>
+            </svg>
+          </div>
+          <h1 class="text-xl font-black text-white text-center leading-tight">اتوماسیون هوشمند انبار</h1>
+          <p class="text-xs text-slate-400 mt-1.5 text-center">سامانه یکپارچه مدیریت انبارگردانی شیراز</p>
+          <div class="flex items-center gap-2 mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+            <span class="text-[10px] text-emerald-400 font-medium">سیستم آنلاین · نسخه ۱.۰</span>
+          </div>
+        </div>
+
+        <div id="login-alert" class="hidden mb-4 p-3 rounded-xl text-xs flex items-center gap-2.5" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#fca5a5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span id="login-alert-text">نام کاربری یا رمز عبور اشتباه است.</span>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">نام کاربری</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              </div>
+              <input type="text" id="username" value="saman_admin" placeholder="نام کاربری را وارد کنید" class="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">رمز عبور</label>
+            <div class="relative">
+              <button type="button" onclick="togglePassword()" class="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer text-slate-400 hover:text-white transition-colors focus:outline-none z-10">
+                <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+              <input type="password" id="password" value="123456" placeholder="••••••••" class="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all">
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked="" class="rounded border-slate-600 bg-slate-700 text-indigo-500">
+              <span>مرا به خاطر بسپار</span>
+            </label>
+            <a href="#" class="text-indigo-400 hover:text-indigo-300 transition-colors">فراموشی رمز عبور</a>
+          </div>
+
+          <button id="login-btn" onclick="handleLogin()" class="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[.98] mt-1 flex items-center justify-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 8px 25px rgba(99,102,241,.4)">
+            <span id="btn-text">ورود به سامانه</span>
+            <svg id="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <svg id="btn-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="text-right text-[10px] text-slate-500 mt-6 bg-slate-950/40 p-2.5 rounded-xl border border-white/5 space-y-1">
+          <p class="font-bold text-slate-400 mb-1">راهنمای کاربران (رمز همگی: 123456)</p>
+          <p>· مدیریت کل: <span class="text-indigo-400 font-mono">saman_admin</span></p>
+          <p>· مدیر پروژه: <span class="text-indigo-400 font-mono">heydari_manager</span></p>
+          <p>· واحد اجرایی: <span class="text-indigo-400 font-mono">ghasemi_exec</span></p>
+          <p>· واحد مدارک: <span class="text-indigo-400 font-mono">rezaei_docs</span></p>
+          <p>· واحد تغذیه: <span class="text-indigo-400 font-mono">karimi_feed</span></p>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-[10px] text-slate-600 mt-4">سامان تقوی سوق · مدیریت پروژه انبارگردانی شیراز</p>
+  </div>
+</div>
+
+<div id="app-screen" class="hidden min-h-screen flex-col md:flex-row">
+  <div id="sidebar-overlay" class="hidden fixed inset-0 bg-slate-900/60 z-40 md:hidden" onclick="closeSidebar()"></div>
+
+  <aside id="sidebar" class="fixed md:static inset-y-0 right-0 w-72 bg-slate-900 flex flex-col z-50 transition-transform duration-300 md:translate-x-0 translate-x-full" style="min-height:100vh">
+    <div class="p-5 border-b border-slate-800 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+          <path d="M4 10L16 4L28 10V22L16 28L4 22V10Z" stroke="white" stroke-width="1.5" fill="none"></path>
+          <circle cx="16" cy="16" r="2.5" fill="white"></circle>
+        </svg>
+      </div>
+      <div class="flex-1 min-w-0">
+        <h2 class="font-black text-white text-sm">اتوماسیون انبار</h2>
+        <span class="text-[10px] text-slate-500">نسخه ۱.۰ · شیراز</span>
+      </div>
+      <button onclick="closeSidebar()" class="md:hidden p-1 text-slate-400 hover:text-white transition-colors">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <div class="px-4 py-2.5 border-b border-slate-800/60 flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+      <span class="text-[10px] text-slate-500">واحد جاری:</span>
+      <span id="active-unit-badge" class="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">مدیریت کل سیستم</span>
+    </div>
+
+    <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto" id="sidebar-nav"></nav>
+
+    <div class="p-4 border-t border-slate-800 bg-slate-950/30">
+      <div class="flex items-center gap-3 mb-3">
+        <div id="user-avatar-display" class="w-9 h-9 rounded-full flex items-center justify-center font-black text-sm shrink-0 text-white" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">س</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-bold text-white truncate" id="user-name-display">کاربر سیستم</p>
+          <p class="text-[10px] text-slate-500 truncate" id="user-role-display">در حال بارگذاری...</p>
+        </div>
+        <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+      </div>
+      <button onclick="logout()" class="w-full py-2 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/20">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        <span>خروج از حساب</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col min-w-0 min-h-screen">
+    <header class="h-14 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between sticky top-0 z-30 gap-4">
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        <button onclick="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-600 shrink-0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div class="min-w-0 flex items-center gap-3">
+          <h1 class="text-sm font-bold text-slate-800 truncate" id="current-view-title">در حال بارگذاری...</h1>
+          
+          <div class="relative hidden sm:block">
+            <select id="header-warehouse-switcher" onchange="handleWarehouseSwitch(this.value)" class="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border-0 rounded-xl px-3 py-1.5 outline-none cursor-pointer transition-colors pr-8 appearance-none">
+            </select>
+            <div class="absolute inset-y-0 left-2.5 flex items-center pointer-events-none text-slate-500">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-2 md:gap-4 shrink-0">
+        <div class="hidden md:flex items-center gap-2">
+          <span class="text-xs text-slate-400">پیشرفت کل پروژه:</span>
+          <div class="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+            <div class="bg-indigo-600 h-full rounded-full" style="width:38%"></div>
+          </div>
+          <span class="text-xs font-bold text-slate-700">۳۸٪</span>
+        </div>
+        <button class="relative p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border border-white"></span>
+        </button>
+        <div id="header-avatar-display" class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs text-white shrink-0" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">س</div>
+      </div>
+    </header>
+    
+    <div class="p-3 bg-white border-b border-slate-200 block sm:hidden">
+      <label class="block text-[10px] font-bold text-slate-400 mb-1">انبار فعال:</label>
+      <select id="header-warehouse-switcher-mobile" onchange="handleWarehouseSwitch(this.value)" class="w-full text-xs font-bold text-slate-700 bg-slate-100 border-0 rounded-xl px-3 py-2 outline-none cursor-pointer"></select>
+    </div>
+
+    <div class="flex-1 p-4 md:p-6 overflow-y-auto bg-slate-50 fade-in" id="content-container"></div>
+  </main>
+</div>
+
+<div id="custom-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[9000] flex items-center justify-center p-4">
+  <div id="modal-box" class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full p-6 modal-enter">
+    <div class="flex items-start gap-4 mb-5">
+      <div id="modal-icon" class="w-11 h-11 rounded-full flex items-center justify-center shrink-0"></div>
+      <div class="flex-1 min-w-0">
+        <h3 id="modal-title" class="text-base font-bold text-slate-900 mb-1.5"></h3>
+        <div id="modal-body" class="text-xs text-slate-500 leading-relaxed w-full"></div>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2" id="modal-actions"></div>
+  </div>
+</div>
+
+<script src="./assets/js/state.js"></script>
+<script src="./assets/js/app.js"></script>
+<script src="./assets/js/views/dashboard.js"></script>
+<script src="./assets/js/views/projects.js"></script>
+<script src="./assets/js/views/dispatch.js"></script>
+<script src="./assets/js/views/docs.js"></script>
+<script src="./assets/js/views/users.js"></script>
+<script src="./assets/js/views/placeholders.js"></script>
+<script src="./assets/js/views/label_designer.js"></script>
+<script src="./assets/js/views/id_cards.js"></script>
+<script src="./assets/js/auth.js"></script>
+<script src="./assets/js/views/audit.js"></script>
+<script src="./assets/js/views/feeding.js"></script>
+<script src="./assets/js/views/settings.js"></script>
+</body>
+</html>

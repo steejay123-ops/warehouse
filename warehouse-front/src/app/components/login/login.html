@@ -1,0 +1,93 @@
+<div id="login-screen" class="min-h-screen flex items-center justify-center p-4" style="background: linear-gradient(135deg, rgb(15, 23, 42) 0%, rgb(30, 27, 75) 40%, rgb(49, 46, 129) 70%, rgb(30, 27, 75) 100%);">
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute -top-40 -right-40 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute -bottom-40 -left-40 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-900/20 rounded-full blur-3xl"></div>
+  </div>
+
+  <div class="relative w-full max-w-sm">
+    <div class="bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
+      <div class="h-1 bg-gradient-to-l from-indigo-400 via-violet-500 to-blue-400"></div>
+
+      <div class="p-8">
+        <div class="flex flex-col items-center mb-8">
+          <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-xl" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <path d="M4 10L16 4L28 10V22L16 28L4 22V10Z" stroke="white" stroke-width="1.5" fill="none"></path>
+              <path d="M16 4V16M16 16L28 10M16 16L4 10" stroke="white" stroke-width="1.5" opacity=".6"></path>
+              <circle cx="16" cy="16" r="3" fill="white"></circle>
+              <path d="M10 13L16 16L22 13" stroke="white" stroke-width="1" opacity=".5"></path>
+            </svg>
+          </div>
+          <h1 class="text-xl font-black text-white text-center leading-tight">اتوماسیون هوشمند انبار</h1>
+          <p class="text-xs text-slate-400 mt-1.5 text-center">سامانه یکپارچه مدیریت انبارگردانی شیراز</p>
+          <div class="flex items-center gap-2 mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
+            <span class="text-[10px] text-emerald-400 font-medium">سیستم آنلاین · نسخه ۱.۰</span>
+          </div>
+        </div>
+
+        <div *ngIf="loginError" class="mb-4 p-3 rounded-xl text-xs flex items-center gap-2.5" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#fca5a5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <span>نام کاربری یا رمز عبور اشتباه است.</span>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">نام کاربری</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              </div>
+              <input type="text" [(ngModel)]="username" placeholder="نام کاربری را وارد کنید" class="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">رمز عبور</label>
+            <div class="relative">
+              <input [type]="passwordFieldType" [(ngModel)]="password" placeholder="••••••••" class="w-full pr-10 pl-4 py-2.5 rounded-xl text-sm bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-all">
+              <button type="button" (click)="togglePassword()" class="absolute inset-y-0 right-0 flex items-center px-3 cursor-pointer text-slate-400 hover:text-white transition-colors focus:outline-none z-10">
+                <svg *ngIf="passwordFieldType === 'password'" class="pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                <svg *ngIf="passwordFieldType === 'text'" class="pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked="" class="rounded border-slate-600 bg-slate-700 text-indigo-500">
+              <span>مرا به خاطر بسپار</span>
+            </label>
+            <a href="#" class="text-indigo-400 hover:text-indigo-300 transition-colors">فراموشی رمز عبور</a>
+          </div>
+
+          <button [disabled]="isLoggingIn" (click)="handleLogin()" class="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[.98] mt-1 flex items-center justify-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 8px 25px rgba(99,102,241,.4)" [style.opacity]="isLoggingIn ? '0.85' : '1'">
+            <span *ngIf="!isLoggingIn">ورود به سامانه</span>
+            <span *ngIf="isLoggingIn">در حال ارتباط با سرور...</span>
+            <svg *ngIf="!isLoggingIn" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <svg *ngIf="isLoggingIn" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="text-right text-[10px] text-slate-500 mt-6 bg-slate-950/40 p-2.5 rounded-xl border border-white/5 space-y-1">
+          <p class="font-bold text-slate-400 mb-1">راهنمای کاربران (رمز همگی: 123456)</p>
+          <p>· مدیریت کل: <span class="text-indigo-400 font-mono">saman_admin</span></p>
+          <p>· مدیر پروژه: <span class="text-indigo-400 font-mono">heydari_manager</span></p>
+          <p>· واحد اجرایی: <span class="text-indigo-400 font-mono">ghasemi_exec</span></p>
+          <p>· واحد مدارک: <span class="text-indigo-400 font-mono">rezaei_docs</span></p>
+          <p>· واحد تغذیه: <span class="text-indigo-400 font-mono">karimi_feed</span></p>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-center text-[10px] text-slate-600 mt-4">سامان تقوی سوق · مدیریت پروژه انبارگردانی شیراز</p>
+  </div>
+</div>

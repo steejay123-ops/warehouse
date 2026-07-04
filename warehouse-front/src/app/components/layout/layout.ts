@@ -1,0 +1,179 @@
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { filter } from 'rxjs';
+import { AuthService } from '../../core/auth/auth.service';
+import { AuthStore } from '../../core/stores/auth.store';
+import { StateService } from '../../services/state.service';
+import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
+
+@Component({
+  selector: 'app-layout',
+  imports: [CommonModule, RouterOutlet, WarehouseSelectorComponent],
+  templateUrl: './layout.html',
+  styleUrl: './layout.css'
+})
+export class Layout implements OnInit {
+  navItems: any[] = [];
+  currentTitle = 'داشبورد مانیتورینگ';
+
+  /** لیست پروژه‌ها برای WarehouseSelector */
+  projectList: { id: number | string; name: string }[] = [];
+
+  private rawIcons: any = {
+    grid:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
+    archive:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`,
+    badge: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><circle cx="12" cy="11" r="3"></circle><path d="M17 18c0-2.2-2.2-4-5-4s-5 1.8-5 4"></path></svg>`,
+    users:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    'file-text':`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+    tag:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+    folder:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+    'upload-cloud':`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>`,
+    settings:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    clipboard:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>`,
+    printer: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`,
+    'check-circle': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+    download: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    'alert-triangle': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    'check-square': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
+    database: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`
+  };
+
+  icons: any = {};
+
+  private NAV_ITEMS: any = {
+    admin: [
+      {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid'},
+      {id:'users', label:'مدیریت کاربران و ساختار سازمانی', icon:'users'},
+      {id:'projects', label:'مدیریت انبارها و لوکیشن‌ها', icon:'archive'},
+      {id:'docs', label:'تزریق دیتابیس اولیه (Base Data)', icon:'upload-cloud'},
+      {id:'label-designer', label:'طراحی و کانفیگ لیبل/QR', icon:'printer'},
+      {id:'dispatch', label:'تگ‌گذاری و تخصیص به تیم‌ها', icon:'clipboard'},
+      {id:'feeding', label:'تغذیه سامانه MT', icon:'database'},
+      {id:'id-cards', label:'صدور کارت پرسنلی و گیت‌پاس', icon:'badge'},
+      {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text'},
+      {id:'settings', label:'تنظیمات سیستم', icon:'settings'}
+    ],
+    management: [
+      {id:'dashboard', label:'داشبورد عملکرد و مغایرت‌ها', icon:'grid'},
+      {id:'projects', label:'وضعیت پیشرفت انبارها', icon:'archive'},
+      {id:'approvals', label:'تایید نهایی رکوردها (فاز ۳)', icon:'check-circle'},
+      {id:'export', label:'صدور فایل برای تغذیه', icon:'download'}
+    ],
+    execution: [
+      {id:'dashboard', label:'وضعیت پیشرفت میدانی', icon:'grid'},
+      {id:'labels', label:'چاپ مجدد و اسکن لیبل', icon:'tag'},
+      {id:'field', label:'میزکار شمارش کور', icon:'clipboard'},
+      {id:'recounts', label:'بررسی مغایرت و بازشماری', icon:'alert-triangle'}
+    ],
+    documents: [
+      {id:'dashboard', label:'خلاصه وضعیت اسناد', icon:'grid'},
+      {id:'customs', label:'تکمیل فیلدهای مالی/گمرکی', icon:'folder'},
+      {id:'doc_approvals', label:'کارتابل تاییدات سرپرست', icon:'check-square'}
+    ],
+    feeding: [
+      {id:'dashboard', label:'داشبورد عملکرد تغذیه', icon:'grid'},
+      {id:'feeding', label:'مدیریت و تغذیه MT26/49', icon:'database'},
+      {id:'feed_approvals', label:'تاییدات سرپرست تغذیه', icon:'check-square', isPending: true}
+    ]
+  };
+
+  constructor(
+    public auth: AuthService,
+    public store: AuthStore,
+    public state: StateService,
+    private confirmDialog: ConfirmDialogService,
+    private router: Router,
+    private sanitizer: DomSanitizer
+  ) {
+    // Sanitize icons
+    for (const k in this.rawIcons) {
+      this.icons[k] = this.sanitizer.bypassSecurityTrustHtml(this.rawIcons[k]);
+    }
+
+    // Track current tab from URL
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe((e) => {
+      const tab = e.url.split('/')[1] || 'dashboard';
+      this.store.setCurrentTab(tab);
+      this.updateTitle(tab);
+    });
+  }
+
+  ngOnInit() {
+    // تنظیم navItems بر اساس department
+    const dept = this.auth.userDepartment();
+    this.navItems = this.NAV_ITEMS[dept] || this.NAV_ITEMS.admin;
+
+    // لیست پروژه‌ها از state (تا زمانی که API وصل نشده)
+    this.projectList = this.state.appState.projects.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+    }));
+  }
+
+  /** ──── Sidebar ──── */
+  get isSidebarOpen() { return this.store.isSidebarOpen(); }
+  get currentTab() { return this.store.currentTab(); }
+  get userAvatar() { return this.auth.userAvatar(); }
+  get userName() { return this.auth.userName(); }
+  get userRole() { return this.auth.userRoleTitles()[0] || ''; }
+
+  openSidebar() { this.store.openSidebar(); }
+  closeSidebar() { this.store.closeSidebar(); }
+
+  switchTab(tabId: string) {
+    this.closeSidebar();
+    this.router.navigate(['/' + tabId]);
+  }
+
+  /** ──── Warehouse Selector ──── */
+  get warehouseSwitcherValue() { return this.store.activeWarehouseId(); }
+
+  onWarehouseChanged(id: number | string): void {
+    this.store.setActiveWarehouse(id);
+    this.state.appState.activeWarehouseId = id;
+  }
+
+  /** ──── Logout & Settings ──── */
+  goToChangePassword() {
+    this.closeSidebar();
+    this.router.navigate(['/change-password']);
+  }
+
+  async logout() {
+    const confirmed = await this.confirmDialog.open({
+      title: 'خروج از حساب',
+      message: 'آیا مطمئنید می‌خواهید از حساب کاربری خارج شوید؟',
+      confirmText: 'بله، خروج',
+      cancelText: 'انصراف',
+      type: 'warning',
+    });
+    if (confirmed) {
+      this.auth.logout();
+    }
+  }
+
+  /** ──── Private ──── */
+  private updateTitle(tab: string) {
+    const titles: any = {
+      dashboard: 'داشبورد مانیتورینگ',
+      projects: 'مدیریت انبارها',
+      dispatch: 'تخصیص و مدیریت رکوردها',
+      users: 'کاربران و ساختار',
+      tasks: 'وظایف و اسناد',
+      labels: 'لیبل‌زن هوشمند',
+      docs: 'مدارک گمرکی',
+      'id-cards': 'صدور کارت پرسنلی و گیت‌پاس',
+      feeding: 'تغذیه سامانه MT',
+      settings: 'تنظیمات',
+      field: 'میز کار میدانی',
+      'label-designer': 'طراحی و کانفیگ لیبل/QR',
+      audit: 'رهگیری تغییرات'
+    };
+    this.currentTitle = titles[tab] || tab;
+  }
+}

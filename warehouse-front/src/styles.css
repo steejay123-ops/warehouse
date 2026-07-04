@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*{font-family:'Vazirmatn',Tahoma,system-ui,sans-serif;}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:#475569}
+.sidebar-link.active{background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;box-shadow:0 4px 15px rgba(99,102,241,.35)}
+.sidebar-link.active svg{color:#fff}
+.fade-in{animation:fadeIn .35s ease forwards}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card-hover{transition:all .2s ease}
+.card-hover:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.08)}
+.progress-bar{transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.toast{animation:slideIn .3s ease,fadeOut .3s ease 3.7s forwards}
+@keyframes slideIn{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fadeOut{from{opacity:1}to{opacity:0}}
+.pulse-dot{animation:pulseDot 2s infinite}
+@keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+.qr-scan-line{animation:scanLine 2s linear infinite}
+@keyframes scanLine{0%{top:10%}100%{top:85%}}
+.modal-enter{animation:modalIn .25s ease forwards}
+@keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.terminal-text{font-family:'Courier New',monospace}
+.label-preview{font-family:'Courier New',monospace;border:2px solid #1e293b}
+.drag-zone{transition:all .2s ease}
+.drag-zone.dragover{background:#eef2ff;border-color:#6366f1}
+.toggle-switch{position:relative;display:inline-block;width:44px;height:24px}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#cbd5e1;transition:.3s;border-radius:12px}
+.toggle-slider:before{position:absolute;content:"";height:18px;width:18px;right:3px;bottom:3px;background-color:white;transition:.3s;border-radius:50%}
+input:checked + .toggle-slider{background-color:#4f46e5}
+input:checked + .toggle-slider:before{right:calc(100% - 21px)}
+@media(max-width:768px){.sidebar-collapsed{transform:translateX(100%);transition:transform .3s ease}.sidebar-open{transform:translateX(0)!important}}

@@ -1,0 +1,3 @@
+- `[x]` Backend: Change AXES_LOCKOUT_PARAMETERS to ["ip_address"]
+- `[x]` Backend: Dynamically calculate wait time in CustomTokenObtainPairSerializer.validate
+- `[x]` Frontend: Update error.interceptor.ts to ignore 429 for /auth/login/

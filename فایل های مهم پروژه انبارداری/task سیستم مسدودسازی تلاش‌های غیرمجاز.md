@@ -1,0 +1,5 @@
+- `[x]` Backend: Install django-axes and update requirements.txt
+- `[x]` Backend: Configure settings.py
+- `[x]` Backend: Add axes_lockout_response to accounts/views.py
+- `[x]` Backend: Migrate database
+- `[x]` Frontend: Update login.ts to handle detailed errors

@@ -1,0 +1,4 @@
+- `[x]` Update `layout.ts` to add navigation method
+- `[x]` Update `layout.html` to add Change Password button
+- `[x]` Update `change-password.ts` for isMandatory logic
+- `[x]` Update `change-password.html` for dynamic UI

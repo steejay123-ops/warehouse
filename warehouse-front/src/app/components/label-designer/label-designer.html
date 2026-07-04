@@ -1,0 +1,227 @@
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 fade-in text-right pb-10" dir="rtl">
+    
+    <div class="xl:col-span-5 space-y-5">
+      
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-100 p-4">
+          <h3 class="font-black text-slate-800 text-sm flex items-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            ۱. منبع داده و مپینگ (Data Source)
+          </h3>
+        </div>
+        
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="labelDesignerState.dataSource === 'db' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-indigo-300'" (click)="toggleLabelSource('db')">
+              <input type="radio" name="lbl_source" [checked]="labelDesignerState.dataSource === 'db'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+              <div>
+                <span class="block text-xs font-bold" [ngClass]="labelDesignerState.dataSource === 'db' ? 'text-indigo-900' : 'text-slate-700'">دیتابیس انبار جاری</span>
+                <span class="block text-[9px] text-slate-500 mt-1">تغذیه از رکوردهای {{activeWh.name}}</span>
+              </div>
+            </label>
+            
+            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="labelDesignerState.dataSource === 'external' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-indigo-300'" (click)="toggleLabelSource('external')">
+              <input type="radio" name="lbl_source" [checked]="labelDesignerState.dataSource === 'external'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+              <div>
+                <span class="block text-xs font-bold" [ngClass]="labelDesignerState.dataSource === 'external' ? 'text-indigo-900' : 'text-slate-700'">فایل خارجی (آفلاین)</span>
+                <span class="block text-[9px] text-slate-500 mt-1">آپلود اکسل/CSV سفارشی</span>
+              </div>
+            </label>
+          </div>
+
+          <div *ngIf="labelDesignerState.dataSource === 'external'" id="lbl-external-box" class="space-y-4 mt-4 pt-4 border-t border-slate-100 fade-in">
+            <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-slate-50 transition-colors" (click)="simulateExcelUploadForLabels()">
+              <span class="text-3xl mb-2 block">📄</span>
+              <p class="text-xs font-bold text-slate-700">فایل اکسل خود را اینجا رها کنید</p>
+              <p class="text-[9px] text-slate-400 mt-1">کلیک برای آپلود (شبیه‌ساز)</p>
+            </div>
+            
+            <div *ngIf="showMappingSection" id="lbl-mapping-section" class="bg-slate-50 border border-slate-200 rounded-xl p-4 fade-in">
+              <p class="text-[10px] font-black text-indigo-700 mb-3 flex items-center gap-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg> تخصیص ستون‌های فایل (Mapping)</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[9px] font-bold text-slate-600 mb-1">کلید اصلی (QR Code) *</label>
+                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
+                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1" selected>Column B (شرح)</option><option value="2">Column C (لوکیشن)</option><option value="3">Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[9px] font-bold text-slate-600 mb-1">شرح کالا (Description)</label>
+                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
+                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1">Column B (شرح)</option><option value="2" selected>Column C (لوکیشن)</option><option value="3">Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[9px] font-bold text-slate-600 mb-1">لوکیشن / موقعیت</label>
+                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
+                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1">Column B (شرح)</option><option value="2">Column C (لوکیشن)</option><option value="3" selected>Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-100 p-4">
+          <h3 class="font-black text-slate-800 text-sm flex items-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            ۲. ابعاد کاغذ و تنظیمات شبکه (Grid)
+          </h3>
+        </div>
+        
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-500 mb-2">نوع کاغذ چاپی</label>
+            <select [(ngModel)]="labelDesignerState.paperType" (ngModelChange)="togglePaperSettings($event)" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <option value="A4">کاغذ استاندارد A4</option>
+              <option value="A3">کاغذ بزرگ A3</option>
+              <option value="A2">پلات / شیت A2</option>
+              <option value="A1">پلات / شیت A1</option>
+              <option value="roll">رول حرارتی (لیبل پرینتر)</option>
+            </select>
+          </div>
+
+          <div *ngIf="labelDesignerState.paperType !== 'roll'" id="lbl-sheet-settings" class="grid grid-cols-3 gap-3 pt-2 border-t border-slate-100 fade-in">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">تعداد سطر (Row)</label>
+              <input type="number" value="4" min="1" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">تعداد ستون (Col)</label>
+              <input type="number" value="3" min="1" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">حاشیه (mm)</label>
+              <input type="number" value="5" min="0" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+          </div>
+
+          <div *ngIf="labelDesignerState.paperType === 'roll'" id="lbl-roll-settings" class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 fade-in">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">عرض لیبل (Width mm)</label>
+              <input type="number" value="50" min="10" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">ارتفاع لیبل (Height mm)</label>
+              <input type="number" value="30" min="10" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center">
+          <h3 class="font-black text-slate-800 text-sm">۳. محتوای چاپی لیبل</h3>
+        </div>
+        
+        <div class="p-5 space-y-3">
+          
+          <div class="flex items-center gap-2">
+            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.mesc" disabled class="rounded text-indigo-600 focus:ring-0 opacity-50 cursor-not-allowed">
+            <label class="text-xs font-semibold text-slate-700 opacity-70">کد کالا / شناسه یکتا (الزامی) <span class="text-[9px] text-slate-400 mr-1">(الزامی)</span></label>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.desc" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+            <label class="text-xs font-semibold text-slate-700 cursor-pointer">شرح و نام کالا</label>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.loc" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+            <label class="text-xs font-semibold text-slate-700 cursor-pointer">موقعیت فیزیکی (Location)</label>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.project" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+            <label class="text-xs font-semibold text-slate-700 cursor-pointer">نام پروژه / انبار</label>
+          </div>
+
+          <div class="pt-2 border-t border-slate-100">
+            <div class="flex items-center gap-2 text-indigo-700 bg-indigo-50/50 p-2 rounded-lg">
+              <input type="checkbox" [(ngModel)]="labelDesignerState.fields.date" (change)="updateCurrentDate()" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+              <label class="text-xs font-semibold cursor-pointer">چاپ تاریخ لحظه شمارش/پرینت (خودکار)</label>
+            </div>
+          </div>
+
+          <div class="p-3 bg-rose-50 border border-rose-100 rounded-xl mt-2 relative overflow-hidden">
+            <div class="absolute top-0 right-0 w-1 h-full bg-rose-400"></div>
+            <div class="flex items-start gap-2">
+              <input type="checkbox" [(ngModel)]="labelDesignerState.fields.qty" class="mt-0.5 rounded text-rose-600 focus:ring-0 cursor-pointer">
+              <div>
+                <label class="text-xs font-bold text-rose-900 cursor-pointer">تعداد دفتری (Qty)</label>
+                <p class="text-[9px] text-rose-600 mt-1 font-semibold leading-relaxed">هشدار: بر اساس منطق شمارش کور، چاپ تعداد موجودی سیستم روی لیبل مجاز نیست و ممکن است باعث خطای انسانی شود.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <button (click)="executeLabelPrint()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black shadow-lg shadow-indigo-200 transition-all active:scale-[0.98] flex justify-center items-center gap-2">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        تولید و ارسال به پرینتر
+      </button>
+
+    </div>
+
+    <div class="xl:col-span-7">
+      <div class="bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-6 md:p-10 h-full flex flex-col relative min-h-[500px]">
+        
+        <div class="flex items-center justify-between mb-8 z-20">
+          <h3 class="font-black text-slate-700 text-sm">پیش‌نمایش زنده یک واحد لیبل (Live Preview)</h3>
+          <span class="px-3 py-1 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold animate-pulse">آپدیت در لحظه</span>
+        </div>
+        
+        <div class="flex-1 flex items-center justify-center relative z-10" id="lbl-preview-canvas">
+          
+          <div id="lbl-live-card" class="bg-white rounded shadow-2xl overflow-hidden transition-all duration-300 border border-slate-400 relative flex p-3 ring-8 ring-white ring-opacity-40" [ngStyle]="{'width': labelDesignerState.paperType === 'roll' ? '280px' : '360px', 'height': labelDesignerState.paperType === 'roll' ? '180px' : '200px'}">
+            
+            <div class="flex w-full gap-3 relative z-10 h-full">
+              <div class="flex-1 flex flex-col text-right justify-between">
+                
+                <div class="space-y-1">
+                  <div *ngIf="labelDesignerState.fields.project" class="font-black text-[9px] text-slate-500 bg-slate-100 inline-block px-1.5 py-0.5 rounded">
+                    {{activeWh.name}}
+                  </div>
+                  
+                  <div *ngIf="labelDesignerState.fields.mesc" class="font-mono font-black text-base text-slate-900 mt-1">
+                    85.12.34.567.8
+                  </div>
+                  
+                  <div *ngIf="labelDesignerState.fields.desc" class="text-[11px] font-bold text-slate-800 leading-snug line-clamp-2 pr-1">
+                    شیر فلکه کشویی فولادی کلاس ۱۵۰ فلنج‌دار سایز ۸ اینچ
+                  </div>
+                </div>
+                
+                <div class="flex items-end justify-between mt-2 pt-2 border-t border-dashed border-slate-300">
+                  <div class="space-y-1">
+                    <div *ngIf="labelDesignerState.fields.loc" class="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                      LOC: WH-02-A-14
+                    </div>
+                    <div *ngIf="labelDesignerState.fields.date" class="text-[9px] font-mono text-slate-400 font-bold">
+                       Date: <span>{{currentDate}}</span>
+                    </div>
+                  </div>
+                  
+                  <div *ngIf="labelDesignerState.fields.qty" class="text-[12px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                    Qty: 15
+                  </div>
+                </div>
+              </div>
+              
+              <div class="w-[90px] shrink-0 flex flex-col items-center justify-center border-r border-slate-200 pr-2">
+                <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMTAgMTBoMjB2MjBIMTB6TTMwIDEwaDIwdjIwSDMwek01MCAxMGgyMHYyMEg1MHpNNzAgMTBoMjB2MjBINzB6TTEwIDMwaDIwdjIwSDEwek0zMCAzMGgyMHYyMEgzMHpNNTAgMzBoMjB2MjBINTB6TTcwIDMwaDIwdjIwSDcwek0xMCA1MGgyMHYyMEgxMHpNMzAgNTBoMjB2MjBIMzB6TTUwIDUwaDIwdjIwSDUwek03MCA1MGgyMHYyMEg3MHpNMTAgNzBoMjB2MjBIMTB6TTMwIDcwaDIwdjIwSDMwek01MCA3MGgyMHYyMEg1MHpNNzAgNzBoMjB2MjBINzB6IiBvcGFjaXR5PSIuMSIvPjxwYXRoIGZpbGw9IiMxZTFlMWUiIGQ9Ik0xMCAxMGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNSA1aDEwdjEwSDUwem0xNS0xMGgzMHYzMEg2MHptNSA1aDIwdjIwSDY1ek0xMCA2MGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNS0xMGgxMHYxMEg1MHptMTUtMTBoMTB2MTBINjV6bTAtMTVWMzBINTB2MTBoMTV2MTVoMTVWNDBoLTE1em0xNSAzNWgxMHYxMEg4MHptLTE1IDEwaDEwdjEwSDY1em0tMTUgMGgxMHYxMEg1MHoiLz48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMjAgMjBoMTB2MTBIMjB6TTY1IDIwaDEwdjEwSDY1ek0yMCA3MGgxMHYxMEgyMHpNNDAgNDBoMTB2MTBINDB6TTQ1IDY1aDEwdjEwSDQ1eiIvPjwvc3ZnPg==" alt="QR Code" class="w-full h-auto mix-blend-multiply">
+              </div>
+            </div>
+          </div>
+          
+        </div>
+        
+        <div class="absolute bottom-6 left-0 w-full text-center z-20">
+          <p class="text-[10px] text-slate-500 font-bold bg-slate-100/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">این بوم بر اساس تنظیمات گرید (ردیف/ستون) یا رول، در زمان چاپ تکرار خواهد شد.</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>

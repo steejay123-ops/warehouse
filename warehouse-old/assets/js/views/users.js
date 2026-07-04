@@ -1,0 +1,545 @@
+// =========================================================================
+// ====== VIEW: USERS & ROLES (مدیریت کاربران و ساختار سازمانی) ======
+// =========================================================================
+function getUsers() {
+  setTimeout(() => renderUsersTabContent('users'), 50);
+
+  return `
+  <div class="space-y-6 text-right">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      <div>
+        <h3 class="font-black text-slate-800 text-base">مدیریت کاربران و ساختار سازمانی</h3>
+        <p class="text-[11px] text-slate-400 mt-1">مدیریت پرسنل، تعریف نقش‌های سیستمی و تخصیص سطح دسترسی به انبارها</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openRoleModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          تعریف نقش جدید
+        </button>
+        <button onclick="openUserModal()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-transform flex items-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          ثبت پرسنل جدید
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 px-2">
+      <div class="flex gap-6">
+        <button id="tab-btn-users" onclick="renderUsersTabContent('users')" class="pb-3 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition-all">لیست پرسنل سیستم</button>
+        <button id="tab-btn-roles" onclick="renderUsersTabContent('roles')" class="pb-3 text-xs font-bold text-slate-400 hover:text-slate-700 border-b-2 border-transparent transition-all">چارت سازمانی و نقش‌ها</button>
+      </div>
+      
+      <div id="users-search-bar" class="pb-2 hidden">
+        <div class="relative w-full md:w-64">
+          <input type="text" id="user-search-input" onkeyup="filterUsers()" placeholder="جستجو (نام، کد پرسنلی، کد ملی)..." class="w-full pr-9 pl-4 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:border-indigo-400 outline-none transition-all text-slate-700 shadow-sm">
+          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="users-tab-container" class="fade-in min-h-[400px]"></div>
+  </div>`;
+}
+
+function renderUsersTabContent(tab) {
+  document.getElementById('tab-btn-users').className = tab === 'users' ? 'pb-3 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition-all' : 'pb-3 text-xs font-bold text-slate-400 hover:text-slate-700 border-b-2 border-transparent transition-all';
+  document.getElementById('tab-btn-roles').className = tab === 'roles' ? 'pb-3 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition-all' : 'pb-3 text-xs font-bold text-slate-400 hover:text-slate-700 border-b-2 border-transparent transition-all';
+
+  const container = document.getElementById('users-tab-container');
+  const searchBar = document.getElementById('users-search-bar');
+  
+  if (tab === 'users') {
+    searchBar.classList.remove('hidden');
+    renderUsersGrid(appState.users); // رندر اولیه لیست کاربران
+  } else {
+    searchBar.classList.add('hidden');
+    // ---- تب نقش‌ها و ساختار درختی ----
+    let treeHtml = `<div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 overflow-hidden">
+        <h4 class="font-bold text-slate-800 text-sm mb-6 flex items-center gap-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> درختواره سلسله‌مراتب سیستم</h4>
+        <div class="relative">
+          <div class="absolute right-6 top-4 bottom-8 w-0.5 bg-slate-100 z-0"></div> ${buildRoleTreeHTML(null, 0)}
+        </div>
+      </div>`;
+    container.innerHTML = treeHtml;
+  }
+}
+
+// تابع جدید برای رندر کردن گرید کاربران (برای سرچ داینامیک)
+function renderUsersGrid(usersArray) {
+  const container = document.getElementById('users-tab-container');
+  if (usersArray.length === 0) {
+    container.innerHTML = `<div class="text-center py-10 text-slate-400 text-xs font-bold">کاربری با این مشخصات یافت نشد.</div>`;
+    return;
+  }
+
+  let html = `<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">`;
+  usersArray.forEach(u => {
+    const isSuspended = u.status === 'suspended' || u.isActive === false;
+    
+    // پشتیبانی از چند نقشی در رابط کاربری کارت کاربر
+    const userRolesArr = u.roleIds && u.roleIds.length > 0 ? u.roleIds : (u.roleId ? [u.roleId] : []);
+    const primaryRole = appState.roles.find(r => r.id === userRolesArr[0]) || {title: 'نامشخص', color: '#94a3b8'};
+    const rolesBadges = userRolesArr.map(rId => {
+        const rObj = appState.roles.find(r => r.id === rId) || {title: 'نامشخص', color: '#94a3b8'};
+        return `<span class="px-2 py-0.5 rounded-md font-bold text-[10px]" style="background:${rObj.color}15; color:${rObj.color}">${rObj.title}</span>`;
+    }).join(' ');
+
+    const whBadges = u.projects.slice(0,2).map(pid => `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[9px] font-bold border border-slate-200">${appState.projects.find(p=>p.id===pid)?.name || pid}</span>`).join('');
+    const plusWh = u.projects.length > 2 ? `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded text-[9px] font-bold border border-slate-200">+${u.projects.length - 2}</span>` : '';
+
+    html += `
+      <div class="bg-white rounded-2xl border ${isSuspended ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200'} shadow-sm p-4 relative group transition-all hover:shadow-md">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3 ${isSuspended ? 'opacity-60 grayscale-[50%]' : ''}">
+            <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-sm shrink-0" style="background:${primaryRole.color}">${u.avatar || '👤'}</div>
+            <div>
+              <h4 class="font-black text-slate-800 text-sm ${isSuspended ? 'line-through' : ''}">${u.firstName} ${u.lastName}</h4>
+              <p class="text-[10px] font-mono text-slate-400 mt-0.5">کاربری: <span class="font-bold text-slate-600">${u.username}</span></p>
+            </div>
+          </div>
+          
+          <div class="relative action-dropdown">
+            <button onclick="toggleActionMenu(event, 'usr-menu-${u.id}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </button>
+            <div id="usr-menu-${u.id}" class="hidden absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 text-right">
+              <button onclick="openUserModal('${u.id}')" class="w-full text-right px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><span>✏️</span> ویرایش پرونده پرسنلی</button>
+              <button onclick="resetPassword('${u.id}')" class="w-full text-right px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><span>🔑</span> ریست رمز عبور</button>
+              <div class="border-t border-slate-100 my-1"></div>
+              ${isSuspended 
+                ? `<button onclick="toggleUserStatus('${u.id}')" class="w-full text-right px-3 py-2 text-xs text-emerald-600 hover:bg-emerald-50 font-bold flex items-center gap-2"><span>✅</span> خروج از تعلیق (فعال‌سازی)</button>`
+                : `<button onclick="toggleUserStatus('${u.id}')" class="w-full text-right px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2"><span>⛔</span> تعلیق / مسدودسازی حساب</button>`
+              }
+            </div>
+          </div>
+        </div>
+        
+        <div class="space-y-2 mt-4 ${isSuspended ? 'opacity-70' : ''}">
+          <div class="flex items-start justify-between text-xs">
+            <span class="text-slate-400 text-[10px] mt-1 shrink-0">نقش‌های سیستمی:</span>
+            <div class="flex flex-wrap gap-1 justify-end max-w-[65%]">${rolesBadges}</div>
+          </div>
+          <div class="flex items-center justify-between text-xs pt-1">
+            <span class="text-slate-400 text-[10px]">دسترسی انبارها:</span>
+            <div class="flex gap-1 flex-wrap justify-end">${u.projects.length === 0 ? '<span class="text-[9px] text-rose-400">بدون دسترسی</span>' : whBadges + plusWh}</div>
+          </div>
+          <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+            <span class="text-slate-400 text-[10px]">شرکت متبوع:</span>
+            <span class="font-bold text-[10px] text-slate-600">${u.company || 'پیمانکار'}</span>
+          </div>
+        </div>
+        
+        ${isSuspended ? `<div class="absolute inset-0 border-2 border-rose-400 rounded-2xl pointer-events-none opacity-20"></div>` : ''}
+      </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+// تابع جستجو (فیلتر) زنده کاربران
+function filterUsers() {
+  const query = document.getElementById('user-search-input').value.toLowerCase();
+  const filtered = appState.users.filter(u => {
+    const fullName = `${u.firstName} ${u.lastName}`.toLowerCase();
+    return fullName.includes(query) || 
+           (u.username && u.username.toLowerCase().includes(query)) || 
+           (u.nationalCode && u.nationalCode.includes(query));
+  });
+  renderUsersGrid(filtered);
+}
+
+// تابع بازگشتی درختواره نقش‌ها (اصلاح باگ وابسته حلقوی با چک محدود)
+function buildRoleTreeHTML(parentId, depth) {
+  const children = appState.roles.filter(r => r.parentId === parentId);
+  let html = '';
+  children.forEach((role) => {
+    const hasChildren = appState.roles.some(r => r.parentId === role.id);
+    const usersCount = appState.users.filter(u => (u.roleIds && u.roleIds.includes(role.id)) || u.roleId === role.id).length;
+    
+    html += `
+      <div class="relative z-10 flex items-start gap-4 mb-4" style="margin-right: ${depth * 2.5}rem">
+        ${depth > 0 ? `<div class="absolute right-[-1.25rem] top-6 w-5 h-0.5 bg-slate-200"></div>` : ''}
+        
+        <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm flex-1 flex justify-between items-center group hover:border-indigo-400 transition-colors cursor-default">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style="background:${role.color}">
+               ${depth === 0 ? '👑' : '🛡️'}
+            </div>
+            <div>
+              <p class="text-sm font-black text-slate-800">${role.title}</p>
+              <div class="flex items-center gap-2 mt-0.5 text-[10px]">
+                <span class="text-slate-400 font-mono">ID: ${role.id}</span>
+                <span class="text-slate-300">|</span>
+                <span class="text-indigo-600 font-bold">${usersCount} پرسنل در این نقش</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onclick="openRoleModal('${role.id}')" class="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-colors" title="ویرایش نقش">✏️</button>
+            <button onclick="deleteRole('${role.id}')" class="p-2 bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors" title="حذف نقش">🗑️</button>
+          </div>
+        </div>
+      </div>
+    `;
+    if (hasChildren && depth < 5) { // جلوگیری احتیاطی از لوپ عمیق
+      html += buildRoleTreeHTML(role.id, depth + 1);
+    }
+  });
+  return html;
+}
+
+function toggleActionMenu(event, menuId) {
+  event.stopPropagation();
+  const menu = document.getElementById(menuId);
+  const isHidden = menu.classList.contains('hidden');
+  document.querySelectorAll('.action-dropdown > div').forEach(el => el.classList.add('hidden'));
+  if (isHidden) menu.classList.remove('hidden');
+}
+
+// =========================================================================
+// ====== CRUD OPERATIONS & MODALS ======
+// =========================================================================
+
+// --- مدیریت نقش‌ها ---
+function openRoleModal(roleId = null) {
+  const isEdit = !!roleId;
+  const role = isEdit ? appState.roles.find(r => r.id === roleId) : { title: '', parentId: 'none', color: '#6366f1', permissions: [] };
+  
+  const parentOptions = appState.roles
+    .filter(r => r.id !== roleId) 
+    .map(r => `<option value="${r.id}" ${role.parentId === r.id ? 'selected' : ''}>${r.title}</option>`).join('');
+
+  // تولید ماتریس دسترسی‌ها به صورت HTML
+  let permissionsHTML = '';
+  Object.keys(SYSTEM_PERMISSIONS).forEach(groupKey => {
+    const group = SYSTEM_PERMISSIONS[groupKey];
+    permissionsHTML += `
+      <div class="mb-4 bg-white p-3 rounded-xl border border-slate-200">
+        <h5 class="text-[11px] font-black text-indigo-700 mb-2 border-b border-slate-100 pb-1.5">${group.title}</h5>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          ${group.items.map(perm => `
+            <label class="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors">
+              <input type="checkbox" value="${perm.id}" class="role-perm-checkbox rounded text-indigo-600 focus:ring-0" ${(role.permissions || []).includes(perm.id) ? 'checked' : ''}>
+              <span class="text-[10px] text-slate-700 font-bold">${perm.label}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  });
+
+  const formHTML = `
+    <form id="role-form" class="mt-4 text-right" onsubmit="event.preventDefault();">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1.5">عنوان نقش سازمانی</label>
+          <input type="text" id="role_title" value="${role.title}" placeholder="مثال: کارشناس ایمنی (HSE)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1.5">گزارش می‌دهد به (نقش مافوق)</label>
+          <select id="role_parent" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none appearance-none cursor-pointer">
+            <option value="none">-- بالاترین سطح (بدون مافوق) --</option>
+            ${parentOptions}
+          </select>
+        </div>
+        <div class="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+          <div>
+            <p class="text-[11px] font-bold text-slate-700">رنگ سازمانی نقش (Color Code)</p>
+            <p class="text-[9px] text-slate-500 mt-0.5">برای نمایش در چارت سازمانی و کارت‌های پرسنلی</p>
+          </div>
+          <input type="color" id="role_color" value="${role.color}" class="w-10 h-10 rounded cursor-pointer border-0 bg-transparent p-0">
+        </div>
+      </div>
+
+      <div class="border-t border-slate-200 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <label class="block text-xs font-black text-slate-800">ماتریس دسترسی‌های سیستم (RBAC)</label>
+          
+          <button type="button" onclick="toggleAllPermissions()" class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-bold transition-colors active:scale-95 flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            انتخاب همه / لغو همه
+          </button>
+        </div>
+        <div class="max-h-60 overflow-y-auto bg-slate-50 p-2 rounded-xl border border-slate-200">
+           ${permissionsHTML}
+        </div>
+      </div>
+    </form>
+  `;
+
+  showModal(
+    isEdit ? `ویرایش نقش: ${role.title}` : 'تعریف نقش سازمانی جدید', 
+    formHTML, 'info',
+    `<button onclick="saveRole('${roleId || ''}')" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">${isEdit ? 'ذخیره تغییرات ماتریس' : 'ایجاد نقش با دسترسی‌ها'}</button>
+     <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors">انصراف</button>`,
+    'max-w-3xl' 
+  );
+}
+
+function toggleAllPermissions() {
+  const checkboxes = document.querySelectorAll('.role-perm-checkbox');
+  const isAnyUnchecked = Array.from(checkboxes).some(cb => !cb.checked);
+  checkboxes.forEach(cb => cb.checked = isAnyUnchecked);
+}
+
+function saveRole(roleId) {
+  const title = document.getElementById('role_title').value.trim();
+  const parentId = document.getElementById('role_parent').value === 'none' ? null : document.getElementById('role_parent').value;
+  const color = document.getElementById('role_color').value;
+  const checkedPermissions = Array.from(document.querySelectorAll('.role-perm-checkbox:checked')).map(cb => cb.value);
+
+  if(!title) return showToast('error', 'عنوان نقش الزامی است.');
+
+  if (roleId) {
+    const r = appState.roles.find(x => x.id === roleId);
+    r.title = title; r.parentId = parentId; r.color = color; r.permissions = checkedPermissions;
+    showToast('success', 'نقش و دسترسی‌های آن با موفقیت بروزرسانی شد.');
+  } else {
+    const newId = 'R' + Date.now();
+    appState.roles.push({ id: newId, title, parentId, color, permissions: checkedPermissions });
+    showToast('success', 'نقش جدید به همراه ماتریس دسترسی ایجاد شد.');
+  }
+  closeModal();
+  renderUsersTabContent('roles'); 
+}
+
+function deleteRole(roleId) {
+  // بررسی اینکه آیا کاربری در این نقش هست؟ (با احتساب چند نقشی)
+  const usersInRole = appState.users.filter(u => (u.roleIds && u.roleIds.includes(roleId)) || u.roleId === roleId).length;
+  if (usersInRole > 0) {
+    return showToast('error', `نمی‌توانید این نقش را حذف کنید. ابتدا نقش ${usersInRole} کاربر متصل به آن را تغییر دهید.`);
+  }
+  const children = appState.roles.filter(r => r.parentId === roleId).length;
+  if (children > 0) {
+    return showToast('error', `این نقش دارای زیرمجموعه در چارت است. ابتدا نقش‌های زیرمجموعه را ویرایش کنید.`);
+  }
+
+  appState.roles = appState.roles.filter(r => r.id !== roleId);
+  showToast('success', 'نقش از ساختار سازمانی حذف شد.');
+  renderUsersTabContent('roles');
+}
+
+function openUserModal(userId = null) {
+  const isEdit = !!userId;
+  // اضافه شدن فیلدهای جدید سیستم (شرکت، انقضا، ثبت‌نام، ورود، وضعیت اکتیو)
+  const user = isEdit ? appState.users.find(u => u.id === userId) : { 
+    firstName:'', lastName:'', nationalCode:'', username:'', phone:'', address:'', roleId: appState.roles[0]?.id, projects:[], company: 'NIOC',
+    isActive: true, expiryMode: 'default', expiryDays: 90, dateJoined: new Date().toISOString(), lastLogin: null
+  };
+
+  const userRoles = user.roleIds || (user.roleId ? [user.roleId] : []);
+  const roleCheckboxes = appState.roles.map(r => `
+      <label class="flex items-center gap-2 cursor-pointer hover:bg-indigo-50 p-2 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
+        <input type="checkbox" value="${r.id}" class="usr-role-checkbox rounded text-indigo-600 focus:ring-0" ${userRoles.includes(r.id) ? 'checked' : ''}>
+        <span class="text-[11px] text-slate-700 font-bold truncate" title="${r.title}">${r.title}</span>
+      </label>
+  `).join('');
+
+  const projCheckboxes = appState.projects.map(p => `
+      <label class="flex items-center gap-2 cursor-pointer hover:bg-indigo-50 p-2 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
+        <input type="checkbox" value="${p.id}" class="usr-proj-checkbox rounded text-indigo-600 focus:ring-0" ${user.projects.includes(p.id) ? 'checked' : ''}>
+        <span class="text-[11px] text-slate-700 font-bold truncate" title="${p.name}">${p.name}</span>
+      </label>
+  `).join('');
+
+  // استایل‌دهی تاریخ‌ها برای فیلدهای خواندنی (Read-Only)
+  const formattedJoinedDate = new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(user.dateJoined));
+  const formattedLastLogin = user.lastLogin ? new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(user.lastLogin)) : 'تاکنون وارد نشده';
+
+  const formHTML = `
+    <form id="user-form" class="mt-2 text-right" onsubmit="event.preventDefault();">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2 grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام (First Name)</label>
+            <input type="text" id="usr_fn" value="${user.firstName}" placeholder="مثال: علی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام خانوادگی (Last Name)</label>
+            <input type="text" id="usr_ln" value="${user.lastName}" placeholder="مثال: حسینی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد ملی (National ID)</label>
+            <input type="text" id="usr_nc" value="${user.nationalCode}" placeholder="۱۰ رقمی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left" dir="ltr">
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد/نام کاربری (Personnel ID)</label>
+            <input type="text" id="usr_un" value="${user.username}" placeholder="شناسه یکتای ورود" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono font-bold text-indigo-700" dir="ltr" ${isEdit?'readonly title="نام کاربری قابل ویرایش نیست"':''}>
+          </div>
+        </div>
+
+        <div class="md:col-span-1 flex flex-col gap-3">
+          <div class="flex-1 rounded-xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center p-3">
+             <div class="w-14 h-14 rounded-xl bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center text-xl font-black text-slate-400 mb-2">
+               ${isEdit && user.avatar ? user.avatar : '👤'}
+             </div>
+             <button type="button" onclick="showToast('info', 'آپلود تصویر در ماژول پروفایل کاربری مدیریت می‌شود')" class="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">مدیریت تصویر</button>
+          </div>
+          
+          <div class="bg-indigo-50/50 rounded-xl border border-indigo-100 p-3 flex justify-between items-center">
+            <span class="text-[10px] font-bold text-slate-700">وضعیت فعالیت (Active)</span>
+            <label class="toggle-switch shrink-0">
+              <input type="checkbox" id="usr_is_active" ${user.isActive !== false ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="col-span-1 md:col-span-3 border-t border-slate-100 my-1"></div>
+
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1.5">تلفن همراه</label>
+          <input type="tel" id="usr_ph" value="${user.phone}" placeholder="09..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left" dir="ltr">
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متبوع (Company)</label>
+          <select id="usr_company" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none appearance-none cursor-pointer">
+            <option value="NIOC" ${user.company === 'NIOC' ? 'selected' : ''}>نفت و گاز (NIOC)</option>
+            <option value="Fars Aalish" ${user.company === 'Fars Aalish' ? 'selected' : ''}>پیمانکار (فارس عالیش)</option>
+            <option value="Other" ${user.company === 'Other' ? 'selected' : ''}>سایر پیمانکاران...</option>
+          </select>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex flex-col justify-center">
+          <label class="flex items-center gap-2 cursor-pointer mb-1.5">
+            <input type="checkbox" id="usr_exp_default" class="rounded text-indigo-600 focus:ring-0" ${user.expiryMode === 'default' ? 'checked' : ''} onchange="document.getElementById('usr_exp_days').disabled = this.checked;">
+            <span class="text-[10px] font-bold text-slate-700">انقضای پیش‌فرض (۳ ماهه)</span>
+          </label>
+          <div class="flex items-center gap-2">
+            <span class="text-[9px] text-slate-500">یا اعتبار به روز:</span>
+            <input type="number" id="usr_exp_days" value="${user.expiryDays || 90}" class="w-16 px-2 py-1 text-[10px] text-center border border-slate-200 rounded outline-none disabled:opacity-50" ${user.expiryMode === 'default' ? 'disabled' : ''}>
+          </div>
+        </div>
+
+        <div class="col-span-1 md:col-span-3">
+          <label class="block text-[11px] font-bold text-slate-600 mb-2">تخصیص نقش‌های سازمانی (Roles)</label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 max-h-32 overflow-y-auto">
+             ${roleCheckboxes}
+          </div>
+        </div>
+        
+        <div class="col-span-1 md:col-span-3">
+          <label class="block text-[11px] font-bold text-slate-600 mb-2">محدوده عملیاتی مجاز (زون‌ها و انبارها)</label>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 max-h-32 overflow-y-auto">
+             ${projCheckboxes}
+          </div>
+        </div>
+
+        <div class="col-span-1 md:col-span-3 bg-slate-100/50 border border-slate-200 rounded-xl p-3 flex justify-between items-center mt-2">
+           <div>
+             <p class="text-[9px] text-slate-400 font-bold mb-0.5">تاریخ ثبت در سیستم (Joined)</p>
+             <p class="text-[10px] font-mono text-slate-600">${formattedJoinedDate}</p>
+           </div>
+           <div class="text-left">
+             <p class="text-[9px] text-slate-400 font-bold mb-0.5">آخرین ورود (Last Login)</p>
+             <p class="text-[10px] font-mono text-slate-600">${formattedLastLogin}</p>
+           </div>
+        </div>
+
+      </div>
+    </form>
+  `;
+
+  showModal(
+    isEdit ? `پرونده پرسنلی: ${user.firstName} ${user.lastName}` : 'ثبت مشخصات پرسنل جدید', 
+    formHTML, 'info',
+    `<button onclick="saveUser('${userId || ''}')" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all flex items-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        ${isEdit ? 'ذخیره و بروزرسانی پرونده' : 'ایجاد حساب کاربری'}
+     </button>
+     <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors">انصراف</button>`,
+    'max-w-2xl'
+  );
+}
+
+function saveUser(userId) {
+  const fn = document.getElementById('usr_fn').value.trim();
+  const ln = document.getElementById('usr_ln').value.trim();
+  const un = document.getElementById('usr_un').value.trim();
+  
+  const selectedRoles = Array.from(document.querySelectorAll('.usr-role-checkbox:checked')).map(cb => cb.value);
+  if(selectedRoles.length === 0) return showToast('error', 'انتخاب حداقل یک نقش سازمانی الزامی است.');
+  const roleId = selectedRoles[0]; // نقش اصلی برای سازگاری با توابع دیگر سیستم
+  
+  const isActive = document.getElementById('usr_is_active').checked;
+  const isDefaultExpiry = document.getElementById('usr_exp_default').checked;
+  const expiryDays = parseInt(document.getElementById('usr_exp_days').value) || 90;
+  
+  if(!fn || !ln || !un) return showToast('error', 'وارد کردن نام، نام خانوادگی و شناسه ورود الزامی است.');
+
+  const projects = Array.from(document.querySelectorAll('.usr-proj-checkbox:checked')).map(cb => cb.value);
+
+  if (userId) {
+    const u = appState.users.find(x => x.id === userId);
+    u.firstName = fn; u.lastName = ln; u.nationalCode = document.getElementById('usr_nc').value;
+    u.phone = document.getElementById('usr_ph').value; u.company = document.getElementById('usr_company').value;
+    u.roleId = roleId; u.roleIds = selectedRoles; u.projects = projects; u.isActive = isActive;
+    u.expiryMode = isDefaultExpiry ? 'default' : 'custom';
+    u.expiryDays = isDefaultExpiry ? 90 : expiryDays;
+    
+    // آپدیت وضعیت لاگین و تعلیق در دیتابیس لاگین
+    if (usersDatabase[u.username]) {
+       usersDatabase[u.username].name = `${fn} ${ln}`;
+    }
+    
+    showToast('success', 'پروفایل کاربر و سطح دسترسی‌ها بروزرسانی شد.');
+  } else {
+    if(appState.users.some(x => x.username === un)) return showToast('error', 'این نام/کد کاربری قبلاً در سیستم ثبت شده است.');
+    
+    // ثبت یوزر جدید در State
+    appState.users.unshift({
+      id: 'U' + Date.now(), firstName: fn, lastName: ln, username: un,
+      nationalCode: document.getElementById('usr_nc').value, phone: document.getElementById('usr_ph').value,
+      company: document.getElementById('usr_company').value, roleId: roleId, roleIds: selectedRoles,
+      projects: projects, avatar: fn.charAt(0), isActive: isActive,
+      expiryMode: isDefaultExpiry ? 'default' : 'custom', expiryDays: isDefaultExpiry ? 90 : expiryDays,
+      dateJoined: new Date().toISOString(), lastLogin: null
+    });
+    
+    // **باگ فیکس مهم**: ثبت یوزر جدید در دیتابیس لاگین سیستم برای احراز هویت
+    // ما نقشه بین RoleID (R1, R2, ...) و دپارتمان‌های سیستم را اینجا هندل می‌کنیم (ساده‌سازی شده)
+    let deptMapping = 'execution'; // پیش‌فرض شمارشگر
+    if(roleId === 'R1') deptMapping = 'admin';
+    if(roleId === 'R2') deptMapping = 'management';
+    if(roleId === 'R4') deptMapping = 'documents';
+    if(roleId === 'R6') deptMapping = 'feeding';
+    
+    usersDatabase[un] = {
+        password: document.getElementById('usr_nc').value || '123456', // پیش‌فرض کد ملی یا ۱۲۳۴۵۶
+        role: deptMapping,
+        name: `${fn} ${ln}`,
+        avatar: fn.charAt(0)
+    };
+
+    showToast('success', 'حساب کاربری جدید با موفقیت ایجاد و برای ورود فعال شد.');
+  }
+  
+  closeModal();
+  renderUsersTabContent('users');
+}
+
+function toggleUserStatus(userId) {
+  const u = appState.users.find(x => x.id === userId);
+  if (u) {
+    if (u.isActive === false || u.status === 'suspended') {
+      u.isActive = true;
+      u.status = 'active';
+      showToast('success', `حساب کاربری ${u.firstName} از تعلیق خارج و مجدداً فعال شد.`);
+    } else {
+      u.isActive = false;
+      u.status = 'suspended';
+      showToast('warning', `حساب کاربری ${u.firstName} مسدود و دسترسی وی قطع شد.`);
+    }
+    renderUsersTabContent('users');
+  }
+}
+
+function resetPassword(userId) {
+  const u = appState.users.find(x => x.id === userId);
+  showModal('ریست رمز عبور', `آیا مطمئن هستید که می‌خواهید رمز عبور <b>${u.firstName} ${u.lastName}</b> را به حالت پیش‌فرض (کد ملی) بازنشانی کنید؟`, 'warning',
+    `<button onclick="closeModal();showToast('success','رمز عبور با موفقیت به کد ملی تغییر یافت.')" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-md transition-colors">بله، ریست شود</button>
+     <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold rounded-xl transition-colors">انصراف</button>`
+  );
+}

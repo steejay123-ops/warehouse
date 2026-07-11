@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { StateService } from '../../services/state.service';
 import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponent } from '../../shared';
+import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
 
 @Component({
   selector: 'app-projects',
-  imports: [CommonModule, FormsModule, ModalComponent, StatusBadgeComponent],
+  imports: [CommonModule, FormsModule, ModalComponent],
   templateUrl: './projects.html',
   styleUrl: './projects.css'
 })
@@ -41,10 +42,12 @@ export class Projects implements OnInit {
     private toast: ToastService,
     private confirm: ConfirmDialogService,
     private router: Router,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public store: AuthStore
   ) {}
 
   ngOnInit() {
+    this.store.setWarehouseContext(false);
     this.loadWarehouses();
   }
 
@@ -71,12 +74,25 @@ export class Projects implements OnInit {
   }
 
   handleWarehouseSwitch(id: number) {
+    this.store.setActiveWarehouse(id);
     this.state.appState.activeWarehouseId = id as any;
   }
 
   goToDispatch(id: number) {
     this.handleWarehouseSwitch(id);
-    this.router.navigate(['/dispatch']);
+    this.store.setWarehouseContext(true);
+    const p = this.state.appState.projects.find((x: any) => x.id === id);
+    if (p) {
+      this.toast.info(`شما وارد محیط انبار «${p.name}» شدید`);
+    }
+    
+    if (this.store.isSwitchingWarehouse()) {
+      const nextTab = this.store.lastWarehouseTab() || 'dashboard';
+      this.store.setIsSwitchingWarehouse(false);
+      this.router.navigate(['/' + nextTab]);
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
   }
 
   toggleDropdown(event: Event, id: number) {
@@ -183,7 +199,10 @@ export class Projects implements OnInit {
   }
 
   downloadTemplate() {
-    this.templateModalOpen = true;
+    const link = document.createElement('a');
+    link.href = 'assets/template.xlsx';
+    link.download = 'Warehouse_Template.xlsx';
+    link.click();
   }
 
   goToDocs() {

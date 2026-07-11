@@ -1,0 +1,5 @@
+cd "e:\warehouse project\warehouse-backend"
+.\venv\Scripts\python manage.py runserver 8000
+
+cd "e:\warehouse project\warehouse-front"
+npm run start

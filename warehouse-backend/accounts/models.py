@@ -10,6 +10,7 @@ class CustomUser(AbstractUser):
     supervisor = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='subordinates')
     
     assigned_warehouses = models.ManyToManyField('warehouses.Warehouse', related_name='assigned_users', blank=True)
+    ui_preferences = models.JSONField(default=dict, blank=True)
     
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_users')

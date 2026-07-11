@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpRequest, HttpEvent } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
@@ -41,6 +41,16 @@ export class ApiService {
    */
   upload<T>(endpoint: string, formData: FormData): Observable<T> {
     return this.http.post<T>(this.url(endpoint), formData);
+  }
+
+  /**
+   * آپلود فایل با گزارش پیشرفت
+   */
+  uploadWithProgress(endpoint: string, formData: FormData): Observable<HttpEvent<any>> {
+    const req = new HttpRequest('POST', this.url(endpoint), formData, {
+      reportProgress: true
+    });
+    return this.http.request(req);
   }
 
   /**

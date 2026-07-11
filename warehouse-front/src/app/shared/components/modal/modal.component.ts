@@ -23,7 +23,7 @@ import { CommonModule } from '@angular/common';
   template: `
     @if (isOpen) {
       <div
-        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        class="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-24"
         role="dialog"
         aria-modal="true"
       >

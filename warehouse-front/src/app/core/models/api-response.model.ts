@@ -50,6 +50,7 @@ export interface AuthUserProfile {
   role_titles: string[];
   permissions: string[];
   requires_password_change: boolean;
+  ui_preferences?: any;
 }
 
 /** پیلود لاگین */

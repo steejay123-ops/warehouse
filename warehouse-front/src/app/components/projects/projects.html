@@ -26,33 +26,19 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div class="flex-1">
-          <h4 class="font-bold text-slate-800 text-sm">بارگذاری فایل اکسل کالاهای اولیه</h4>
-          <p class="text-xs text-slate-400 mt-1">از طریق بارگذاری الگوی اکسل مشخص شده، رکوردهای پایه انبار انتخابی را تزریق کنید.</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <button (click)="downloadTemplate()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-200 shadow-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            دانلود قالب نمونه
-          </button>
-          <button (click)="goToDocs()" class="px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-            بارگذاری فایل اکسل
-          </button>
-        </div>
-      </div>
-    </div>
+
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div *ngFor="let p of filteredProjects" class="bg-white rounded-2xl border shadow-sm p-5 flex flex-col relative transition-all" 
+      <div *ngFor="let p of filteredProjects" class="bg-white rounded-2xl border shadow-sm p-5 flex flex-col relative transition-all hover:shadow-md cursor-pointer select-none" 
+           (click)="p.is_active && handleWarehouseSwitch(p.id)"
+           (dblclick)="p.is_active && goToDispatch(p.id)"
            [ngClass]="{'border-2 ring-2 ring-offset-2': p.id === state.appState.activeWarehouseId, 'opacity-60 grayscale-[40%]': !p.is_active}"
            [style.--tw-ring-color]="p.color" [style.borderColor]="p.id === state.appState.activeWarehouseId ? p.color : ''">
           
 
 
         <div class="flex items-start justify-between gap-3 mb-4">
-          <div class="flex items-center gap-3 min-w-0 cursor-pointer" (click)="handleWarehouseSwitch(p.id)">
+          <div class="flex items-center gap-3 min-w-0">
             <div class="w-11 h-11 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0 shadow-sm" [style.background]="!p.is_active ? '#cbd5e1' : p.color">
                 {{(p.code || '').slice(-2)}}
             </div>
@@ -101,7 +87,7 @@
             </button>
           </ng-container>
           <ng-container *ngIf="p.is_active">
-            <button (click)="goToDispatch(p.id)" class="flex-1 py-2 text-[11px] font-bold rounded-xl text-white shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5" [style.background]="'linear-gradient(135deg, ' + p.color + ', #6366f1)'">
+            <button (click)="$event.stopPropagation(); goToDispatch(p.id)" class="flex-1 py-2 text-[11px] font-bold rounded-xl text-white shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5" [style.background]="'linear-gradient(135deg, ' + p.color + ', #6366f1)'">
               ورود و مدیریت رکوردهای کالا
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>

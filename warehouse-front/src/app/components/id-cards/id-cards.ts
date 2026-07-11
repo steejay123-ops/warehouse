@@ -29,7 +29,7 @@ export class IdCards implements OnInit {
   }
 
   get activeUser() {
-    return this.state.appState.users[0] || { firstName: 'سامان', lastName: 'تقوی سوق', nationalCode: '1280954310', projects: ['PRJ-01', 'PRJ-02'], avatar: 'س', roleId: '' };
+    return this.state.appState.users[0] || { first_name: 'سامان', last_name: 'تقوی سوق', national_code: '1280954310', assigned_warehouses: [1, 2], avatar: 'س', roleId: '' };
   }
 
   get activeRole() {

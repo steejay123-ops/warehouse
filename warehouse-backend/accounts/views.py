@@ -34,6 +34,19 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save()
         return Response({'success': True, 'message': 'رمز عبور با موفقیت تغییر یافت.'})
 
+    @action(detail=False, methods=['post'])
+    def update_preferences(self, request):
+        user = request.user
+        prefs = request.data.get('preferences', {})
+        if isinstance(prefs, dict):
+            # Update specific keys instead of overriding completely
+            if not isinstance(user.ui_preferences, dict):
+                user.ui_preferences = {}
+            user.ui_preferences.update(prefs)
+            user.save()
+            return Response({'status': 'success', 'preferences': user.ui_preferences})
+        return Response({'error': 'Invalid preferences format'}, status=400)
+
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer

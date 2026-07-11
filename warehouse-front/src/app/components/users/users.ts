@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -37,8 +37,15 @@ export class Users implements OnInit {
 
   systemPermissions: Permission[] = [];
   systemPermissionGroups: { key: string, title: string, items: Permission[] }[] = [];
+  isLoading = false;
 
-  constructor(public state: StateService, private toast: ToastService, private accountsService: AccountsHttpService, private whService: WarehouseHttpService) {}
+  constructor(
+    public state: StateService, 
+    private toast: ToastService, 
+    private accountsService: AccountsHttpService, 
+    private whService: WarehouseHttpService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit() {
     this.loadData();
@@ -58,8 +65,14 @@ export class Users implements OnInit {
       this.state.appState.roles = res;
     });
 
+    this.isLoading = true;
     this.accountsService.getUsers().subscribe(res => {
       this.state.appState.users = res;
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }, error => {
+      this.isLoading = false;
+      this.cdr.detectChanges();
     });
     
     this.whService.getAll().subscribe((res: any) => {
@@ -91,12 +104,20 @@ export class Users implements OnInit {
 
   getPrimaryRole(u: any) {
     const userRolesArr = u.groups || [];
-    return this.state.appState.roles.find((r: any) => r.id === userRolesArr[0]) || {name: 'نامشخص', color: '#94a3b8'};
+    const r = this.state.appState.roles?.find((r: any) => r.id === userRolesArr[0]);
+    if (!r) return {name: 'نامشخص', color: '#94a3b8'};
+    const mapInfo = this.state.appState.rolesMap[r.name];
+    return { name: mapInfo?.title || r.name, color: mapInfo?.color || '#94a3b8' };
   }
 
   getUserRoles(u: any) {
     const userRolesArr = u.groups || [];
-    return userRolesArr.map((rId: any) => this.state.appState.roles.find((r: any) => r.id === rId) || {name: 'نامشخص', color: '#94a3b8'});
+    return userRolesArr.map((rId: any) => {
+      const r = this.state.appState.roles?.find((r: any) => r.id === rId);
+      if (!r) return {name: 'نامشخص', color: '#94a3b8'};
+      const mapInfo = this.state.appState.rolesMap[r.name];
+      return { name: mapInfo?.title || r.name, color: mapInfo?.color || '#94a3b8' };
+    });
   }
 
   getProjectName(id: any) {
@@ -270,5 +291,8 @@ export class Users implements OnInit {
     } catch {
       return dStr;
     }
+  }
+  getRoleTitleForForm(r: any) {
+    return this.state.appState.rolesMap[r.name]?.title || r.name;
   }
 }

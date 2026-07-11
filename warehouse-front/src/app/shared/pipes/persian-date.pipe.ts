@@ -13,7 +13,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   standalone: true,
 })
 export class PersianDatePipe implements PipeTransform {
-  transform(value: string | Date | null | undefined, format: 'short' | 'medium' | 'long' = 'medium'): string {
+  transform(value: string | Date | null | undefined, format: 'short' | 'medium' | 'long' | 'short-time' = 'medium'): string {
     if (!value) return '—';
 
     try {
@@ -31,6 +31,8 @@ export class PersianDatePipe implements PipeTransform {
     switch (format) {
       case 'short':
         return { year: 'numeric', month: '2-digit', day: '2-digit' };
+      case 'short-time':
+        return { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' };
       case 'long':
         return { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit' };
       case 'medium':

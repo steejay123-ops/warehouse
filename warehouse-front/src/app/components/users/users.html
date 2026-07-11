@@ -24,7 +24,7 @@
       
       <div *ngIf="activeTab === 'users'" class="pb-2 fade-in">
         <div class="relative w-full md:w-64">
-          <input type="text" [(ngModel)]="searchQuery" placeholder="جستجو (نام، کد پرسنلی، کد ملی)..." class="w-full pr-9 pl-4 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:border-indigo-400 outline-none transition-all text-slate-700 shadow-sm">
+          <input type="text" [(ngModel)]="searchQuery" name="searchQuery" placeholder="جستجو (نام، کد پرسنلی، کد ملی)..." class="w-full pr-9 pl-4 py-2 rounded-xl text-xs bg-white border border-slate-200 focus:border-indigo-400 outline-none transition-all text-slate-700 shadow-sm">
           <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </div>
@@ -35,8 +35,12 @@
     <div class="fade-in min-h-[400px]">
         <!-- Users Tab -->
         <ng-container *ngIf="activeTab === 'users'">
-            <div *ngIf="filteredUsers.length === 0" class="text-center py-10 text-slate-400 text-xs font-bold">کاربری با این مشخصات یافت نشد.</div>
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div *ngIf="isLoading" class="text-center py-10 flex flex-col items-center justify-center">
+                <svg class="animate-spin mb-3 text-indigo-500" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <p class="text-xs font-bold text-slate-400">در حال دریافت لیست پرسنل...</p>
+            </div>
+            <div *ngIf="!isLoading && filteredUsers.length === 0" class="text-center py-10 text-slate-400 text-xs font-bold">کاربری با این مشخصات یافت نشد.</div>
+            <div *ngIf="!isLoading && filteredUsers.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 <div *ngFor="let u of filteredUsers" class="bg-white rounded-2xl border shadow-sm p-4 relative group transition-all hover:shadow-md" [ngClass]="!u.is_active ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200'">
                     <div class="flex items-start justify-between mb-3">
                         <div class="flex items-center gap-3" [ngClass]="!u.is_active ? 'opacity-60 grayscale-[50%]' : ''">
@@ -48,10 +52,16 @@
                         </div>
                         
                         <div class="relative action-dropdown">
-                            <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                            <!-- Fixed transparent backdrop to capture outside clicks -->
+                            <div *ngIf="openMenuId === 'usr-' + u.id" 
+                                 class="fixed inset-0 z-[90]" 
+                                 (click)="closeMenus()"></div>
+                                 
+                            <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative z-[100]">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                             </button>
-                            <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 text-right fade-in">
+                            
+                            <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-[100] py-1 text-right fade-in">
                                 <button (click)="openUserModal(u.id)" class="w-full text-right px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><span>✏️</span> ویرایش پرونده پرسنلی</button>
                                 <button (click)="resetPassword(u.id)" class="w-full text-right px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2"><span>🔑</span> ریست رمز عبور</button>
                                 <div class="border-t border-slate-100 my-1"></div>
@@ -310,7 +320,7 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 max-h-32 overflow-y-auto">
                 <label *ngFor="let r of state.appState.roles" class="flex items-center gap-2 cursor-pointer hover:bg-indigo-50 p-2 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
                     <input type="checkbox" [checked]="userForm.groups.includes(r.id)" (change)="toggleUserRoleCheckbox(r.id, $event)" class="rounded text-indigo-600 focus:ring-0">
-                    <span class="text-[11px] text-slate-700 font-bold truncate" [title]="r.name">{{r.name}}</span>
+                    <span class="text-[11px] text-slate-700 font-bold truncate" [title]="r.name">{{getRoleTitleForForm(r)}}</span>
                 </label>
             </div>
           </div>

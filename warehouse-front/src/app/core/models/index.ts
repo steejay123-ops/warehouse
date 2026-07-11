@@ -5,6 +5,6 @@
 
 export * from './user.model';
 export * from './project.model';
-export * from './record.model';
+export * from './item.model';
 export * from './audit-log.model';
 export * from './api-response.model';

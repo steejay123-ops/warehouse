@@ -43,7 +43,7 @@ export class AuthService {
       password: '123456',
       profile: {
         id: 1, username: 'saman_admin', first_name: 'سامان', last_name: 'تقوی سوق',
-        avatar_letter: 'س', department: 'admin', role_titles: ['مدیریت کل سیستم (Admin)'],
+        avatar_letter: 'س', department: 'admin', role_titles: ['مدیریت کل سیستم (Admin)'], roles: ['admin'],
         permissions: ['perm_sys_settings', 'perm_sys_logs', 'perm_wh_create', 'perm_wh_edit', 'perm_wh_freeze', 'perm_rec_import', 'perm_rec_dispatch', 'perm_rec_label', 'perm_rec_recount', 'perm_usr_add', 'perm_usr_edit', 'perm_usr_role'],
       },
     },
@@ -51,7 +51,7 @@ export class AuthService {
       password: '123456',
       profile: {
         id: 2, username: 'heydari_manager', first_name: 'ناصر', last_name: 'حیدری',
-        avatar_letter: 'ح', department: 'management', role_titles: ['مدیریت پروژه'],
+        avatar_letter: 'ح', department: 'management', role_titles: ['مدیریت پروژه'], roles: ['manager'],
         permissions: ['perm_wh_edit', 'perm_rec_dispatch', 'perm_rec_recount'],
       },
     },
@@ -59,7 +59,7 @@ export class AuthService {
       password: '123456',
       profile: {
         id: 3, username: 'ghasemi_exec', first_name: 'علی', last_name: 'قاسمی',
-        avatar_letter: 'ع', department: 'execution', role_titles: ['سرپرست اجرا'],
+        avatar_letter: 'ع', department: 'execution', role_titles: ['سرپرست اجرا'], roles: ['supervisor'],
         permissions: ['perm_rec_label'],
       } as any,
     },
@@ -67,7 +67,7 @@ export class AuthService {
       password: '123456',
       profile: {
         id: 4, username: 'rezaei_docs', first_name: 'فاطمه', last_name: 'رضایی',
-        avatar_letter: 'ف', department: 'documents', role_titles: ['کارشناس مدارک'],
+        avatar_letter: 'ف', department: 'documents', role_titles: ['کارشناس مدارک'], roles: ['document_expert'],
         permissions: [],
       },
     },
@@ -75,7 +75,7 @@ export class AuthService {
       password: '123456',
       profile: {
         id: 5, username: 'karimi_feed', first_name: 'حسین', last_name: 'کریمی',
-        avatar_letter: 'ه', department: 'feeding', role_titles: ['اپراتور تغذیه MT'],
+        avatar_letter: 'ه', department: 'feeding', role_titles: ['اپراتور تغذیه MT'], roles: ['feeding_operator'],
         permissions: [],
       },
     },
@@ -154,6 +154,31 @@ export class AuthService {
   /** بررسی نقش (department) */
   hasDepartment(dept: string): boolean {
     return this.userDepartment() === dept;
+  }
+
+  // ────────── Preferences ──────────
+  
+  updatePreferences(prefs: any): Observable<any> {
+    if (environment.useMockData) {
+      const u = this._user();
+      if (u) {
+        u.ui_preferences = { ...u.ui_preferences, ...prefs };
+        this._user.set({ ...u });
+        localStorage.setItem(USER_KEY, JSON.stringify(u));
+      }
+      return of({ status: 'success', preferences: u?.ui_preferences });
+    }
+
+    return this.http.post(`${environment.apiUrl}/auth/users/update_preferences/`, { preferences: prefs }).pipe(
+      tap((res: any) => {
+        const u = this._user();
+        if (u) {
+          u.ui_preferences = res.preferences;
+          this._user.set({ ...u });
+          localStorage.setItem(USER_KEY, JSON.stringify(u));
+        }
+      })
+    );
   }
 
   // ────────── Private ──────────

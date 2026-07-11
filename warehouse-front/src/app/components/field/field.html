@@ -1,49 +1,69 @@
 <div class="max-w-md mx-auto bg-slate-50 min-h-[85vh] rounded-3xl shadow-2xl overflow-hidden border border-slate-200" dir="rtl">
     <div class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white p-6 rounded-b-3xl shadow-lg">
-        <h2 class="text-lg font-black text-center">اسکنر و شمارش میدانی</h2>
-        <p class="text-xs text-center opacity-80 mt-1">اپراتور: {{currentUser?.name || 'کاربر'}} | انبار فعال</p>
+        <h2 class="text-lg font-black text-center">کارتابل شمارشگر</h2>
+        <p class="text-xs text-center opacity-80 mt-1">کاربر: {{state.appState.currentUser?.name || 'کاربر'}} | انبار فعال</p>
     </div>
 
-    <!-- Scanner Section -->
-    <div *ngIf="isScanning" class="px-5 mt-6 fade-in" id="scanner-section">
-        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 text-center relative">
-            <div (click)="simulateQRScan('TAG-123')" class="w-24 h-24 mx-auto bg-indigo-50 rounded-full flex items-center justify-center border-2 border-dashed border-indigo-400 mb-4 cursor-pointer hover:bg-indigo-100 transition-colors animate-pulse">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/><path d="M3 12h18"/></svg>
-            </div>
-            <h3 class="text-sm font-bold text-slate-700">برای اسکن بارکد کلیک کنید</h3>
-            <p class="text-[10px] text-slate-400 mt-2">دوربین تبلت یا دستگاه بارکدخوان</p>
-            
-            <div class="mt-5 flex items-center gap-2">
-              <input type="text" [(ngModel)]="manualBarcode" placeholder="یا کلید رکورد را وارد کنید..." class="flex-1 text-center px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:border-indigo-500 outline-none">
-              <button (click)="simulateQRScan(manualBarcode)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl shadow-md transition-colors flex items-center justify-center">
-                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </button>
+    <!-- Task List Section -->
+    <div *ngIf="!selectedTask && !isLoading" class="px-4 mt-6 fade-in pb-10">
+        <div *ngIf="tasks.length === 0" class="text-center py-10">
+            <p class="text-sm font-bold text-slate-500">هیچ کالایی برای شمارش به شما ارجاع نشده است.</p>
+        </div>
+
+        <div class="space-y-3">
+            <div *ngFor="let t of tasks" 
+                 (click)="selectTask(t)"
+                 class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-400 hover:shadow-md transition-all active:scale-[0.98]">
+                
+                <div class="flex justify-between items-start mb-2">
+                    <span class="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-lg font-bold border border-indigo-100">
+                        {{t.item_details?.fa_unic_code || '-'}}
+                    </span>
+                    <span *ngIf="t.status === 'SUPERVISOR_REJECTED'" class="text-[9px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-lg font-bold border border-rose-200">
+                        رد شده (نیاز به بازشماری)
+                    </span>
+                    <span *ngIf="t.status === 'PENDING_COUNT'" class="text-[9px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg font-bold border border-slate-200">
+                        در انتظار شمارش
+                    </span>
+                </div>
+                
+                <h4 class="text-xs font-black text-slate-800 line-clamp-2 leading-relaxed">
+                    {{t.item_details?.description || 'بدون شرح'}}
+                </h4>
+                
+                <p class="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    لوکیشن: {{t.item_details?.location || '-'}}
+                </p>
+                <p *ngIf="t.supervisor_note && t.status === 'SUPERVISOR_REJECTED'" class="text-[10px] text-rose-600 mt-2 bg-rose-50 p-1.5 rounded border border-rose-100">
+                    <strong>پیام سرپرست:</strong> {{t.supervisor_note}}
+                </p>
             </div>
         </div>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="flex justify-center items-center py-20">
+        <div class="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
     </div>
 
     <!-- Count Form Section -->
-    <div *ngIf="!isScanning && record" class="px-5 mt-4 pb-10 fade-in" id="count-form-section">
+    <div *ngIf="selectedTask && !isLoading" class="px-5 mt-4 pb-10 fade-in">
       <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
         <div class="flex justify-between items-start mb-4 border-b border-slate-100 pb-4">
           <div>
-            <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">شناسه: {{record.tagId}}</span>
-            <h4 class="text-sm font-black text-slate-800 mt-2">{{record.desc}}</h4>
+            <span class="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">کد: {{selectedTask.item_details?.fa_unic_code}}</span>
+            <h4 class="text-sm font-black text-slate-800 mt-2">{{selectedTask.item_details?.description}}</h4>
             <p class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                لوکیشن سیستم: {{record.location}}
+                لوکیشن: {{selectedTask.item_details?.location}}
             </p>
           </div>
         </div>
-
-        <div *ngIf="canViewSysQty" class="mb-4 bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-xl flex justify-between items-center">
-            <span class="text-xs font-bold">موجودی سیستمی (صرفاً جهت اطلاع):</span>
-            <span class="text-lg font-black">{{record.sysQty}} <span class="text-[10px]">عدد</span></span>
-        </div>
         
-        <div *ngIf="!canViewSysQty" class="mb-4 bg-slate-50 border border-slate-200 text-slate-500 p-3 rounded-xl text-center flex items-center justify-center gap-2">
+        <div class="mb-4 bg-slate-50 border border-slate-200 text-slate-500 p-3 rounded-xl text-center flex items-center justify-center gap-2">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            <span class="text-[10px] font-bold">شمارش کور (Blind Count) فعال است</span>
+            <span class="text-[10px] font-bold">شمارش کور (Blind Count)</span>
         </div>
 
         <div class="space-y-4">
@@ -53,22 +73,13 @@
           </div>
           
           <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">وضعیت فیزیکی کالا</label>
-            <select [(ngModel)]="physCondition" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:border-indigo-400 outline-none appearance-none cursor-pointer">
-              <option value="ok">سالم و استاندارد</option>
-              <option value="damaged">آسیب دیده / زنگ زده</option>
-              <option value="wrong_loc">مغایرت لوکیشن (جابجا شده)</option>
-            </select>
-          </div>
-
-          <div class="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:bg-slate-50 transition-colors">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 mx-auto"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            <p class="text-[10px] text-slate-500 mt-1 font-bold">آپلود عکس از کالا (الزامی)</p>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">توضیحات شمارشگر</label>
+            <textarea [(ngModel)]="counterNote" rows="3" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:border-indigo-400 outline-none resize-none" placeholder="در صورت نیاز توضیحاتی درج کنید..."></textarea>
           </div>
 
           <div class="flex gap-2 pt-2">
-            <button (click)="submitCount()" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-xs py-3.5 rounded-xl shadow-lg active:scale-95 transition-all">ثبت نهایی شمارش</button>
-            <button (click)="resetScanner()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-3.5 rounded-xl transition-all">لغو</button>
+            <button (click)="submitCount()" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-xs py-3.5 rounded-xl shadow-lg active:scale-95 transition-all">ارسال به سرپرست</button>
+            <button (click)="cancelCount()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-3.5 rounded-xl transition-all">بازگشت</button>
           </div>
         </div>
       </div>

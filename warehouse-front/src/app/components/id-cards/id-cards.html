@@ -172,7 +172,7 @@
 
             <!-- اطلاعات هویتی -->
             <div class="flex-1 flex flex-col items-center px-4 pt-2 pb-4 text-center">
-              <h2 class="font-black text-slate-800 text-lg leading-tight w-full truncate">{{activeUser.firstName}} {{activeUser.lastName}}</h2>
+              <h2 class="font-black text-slate-800 text-lg leading-tight w-full truncate">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
               
               <div *ngIf="idCardSettings.fields.role" class="mt-1 w-full">
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block truncate max-w-full" [style.background]="activeRole.color + '15'" [style.color]="activeRole.color" [style.border]="'1px solid ' + activeRole.color + '40'">{{activeRole.title}}</span>
@@ -181,11 +181,11 @@
               <div class="w-full mt-auto space-y-1.5 border-t border-slate-100 pt-2.5">
                 <div *ngIf="idCardSettings.fields.nationalCode" class="flex justify-between items-center text-[10px]">
                   <span class="text-slate-400 font-semibold">کد ملی:</span>
-                  <span class="font-mono font-bold text-slate-700">{{activeUser.nationalCode}}</span>
+                  <span class="font-mono font-bold text-slate-700">{{activeUser.national_code}}</span>
                 </div>
                 <div *ngIf="idCardSettings.fields.projects" class="flex justify-between items-center text-[10px]">
                   <span class="text-slate-400 font-semibold">تردد مجاز:</span>
-                  <span class="font-mono font-bold text-indigo-600 truncate max-w-[120px]">{{activeUser.projects.join(', ')}}</span>
+                  <span class="font-mono font-bold text-indigo-600 truncate max-w-[120px]">{{activeUser.assigned_warehouses?.join(', ')}}</span>
                 </div>
               </div>
             </div>
@@ -226,7 +226,7 @@
                 <div class="flex-1 flex flex-col justify-between py-1">
                   <div>
                     <p class="text-[9px] text-slate-400 font-bold mb-0.5">نام و نام خانوادگی:</p>
-                    <h2 class="font-black text-slate-800 text-base">{{activeUser.firstName}} {{activeUser.lastName}}</h2>
+                    <h2 class="font-black text-slate-800 text-base">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
                   </div>
                   <div *ngIf="idCardSettings.fields.role">
                     <p class="text-[9px] text-slate-400 font-bold mb-0.5">مسئولیت / واحد:</p>
@@ -234,7 +234,7 @@
                   </div>
                   <div *ngIf="idCardSettings.fields.projects">
                     <p class="text-[9px] text-slate-400 font-bold mb-0.5">مجوز تردد در سایت‌ها:</p>
-                    <p class="font-mono font-bold text-xs text-slate-700">{{activeUser.projects.join(' - ')}}</p>
+                    <p class="font-mono font-bold text-xs text-slate-700">{{activeUser.assigned_warehouses?.join(' - ')}}</p>
                   </div>
                 </div>
                 
@@ -250,7 +250,7 @@
                  </div>
                  <div *ngIf="idCardSettings.fields.nationalCode" class="text-left">
                     <span class="text-[9px] text-slate-400 font-bold">NID: </span>
-                    <span class="font-mono font-black text-slate-700 text-[11px]">{{activeUser.nationalCode}}</span>
+                    <span class="font-mono font-black text-slate-700 text-[11px]">{{activeUser.national_code}}</span>
                  </div>
               </div>
             </div>

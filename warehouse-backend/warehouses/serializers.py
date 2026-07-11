@@ -11,10 +11,10 @@ class WarehouseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_total_quantity(self, obj):
-        return obj.records.count()
+        return obj.items.count()
 
     def get_counted_quantity(self, obj):
-        return obj.records.exclude(field_status='در انتظار شمارش').count()
+        return obj.items.exclude(field_status='در انتظار شمارش').count()
 
     def get_percent(self, obj):
         total = self.get_total_quantity(obj)

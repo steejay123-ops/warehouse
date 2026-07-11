@@ -3,7 +3,7 @@
  */
 export { ApiService } from './api.service';
 export { ProjectApiService } from './project-api.service';
-export { RecordApiService } from './record-api.service';
+export { ItemApiService } from './item-api.service';
 export { UserApiService } from './user-api.service';
 export { RoleApiService } from './role-api.service';
 export { DashboardApiService } from './dashboard-api.service';

@@ -20,6 +20,12 @@ class UserSerializer(serializers.ModelSerializer):
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
     user_permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
     assigned_warehouses = serializers.PrimaryKeyRelatedField(many=True, queryset=Warehouse.objects.all(), required=False)
+    roles = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        help_text="List of group names to assign to the user"
+    )
 
     class Meta:
         model = CustomUser
@@ -29,12 +35,14 @@ class UserSerializer(serializers.ModelSerializer):
             'supervisor', 'is_active', 'date_joined', 'last_login',
             'updated_at', 'created_by', 'modified_by',
             'groups', 'user_permissions', 'assigned_warehouses', 'is_superuser',
-            'requires_password_change'
+            'requires_password_change', 'ui_preferences', 'roles'
         ]
         read_only_fields = ['id', 'date_joined', 'last_login', 'updated_at', 'created_by', 'modified_by']
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        # Add roles as list of group names
+        ret['roles'] = list(instance.groups.values_list('name', flat=True))
         # Admin gets all warehouses logic
         if instance.is_superuser or instance.groups.filter(name='admin').exists():
             ret['assigned_warehouses'] = list(Warehouse.objects.values_list('id', flat=True))
@@ -42,6 +50,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         groups = validated_data.pop('groups', [])
+        roles = validated_data.pop('roles', None)
         user_permissions = validated_data.pop('user_permissions', [])
         assigned_warehouses = validated_data.pop('assigned_warehouses', [])
         password = validated_data.pop('password', '123456')
@@ -50,11 +59,24 @@ class UserSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         
-        user.groups.set(groups)
+        if roles is not None:
+            group_objs = Group.objects.filter(name__in=roles)
+            user.groups.set(group_objs)
+        else:
+            user.groups.set(groups)
+            
         user.user_permissions.set(user_permissions)
         user.assigned_warehouses.set(assigned_warehouses)
         
         return user
+
+    def update(self, instance, validated_data):
+        roles = validated_data.pop('roles', None)
+        if roles is not None:
+            group_objs = Group.objects.filter(name__in=roles)
+            instance.groups.set(group_objs)
+        
+        return super().update(instance, validated_data)
 
 from axes.handlers.proxy import AxesProxyHandler
 from rest_framework.exceptions import Throttled
@@ -99,6 +121,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'first_name': user.first_name,
             'last_name': user.last_name,
             'avatar_letter': user.first_name[0] if user.first_name else 'U',
+            'roles': list(user.groups.values_list('name', flat=True)),
             'role_titles': list(user.groups.values_list('name', flat=True)),
             'email': user.email,
             'national_code': user.national_code,
@@ -106,6 +129,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'operational_zone': user.operational_zone,
             'supervisor_id': user.supervisor_id,
             'requires_password_change': user.requires_password_change,
+            'ui_preferences': user.ui_preferences,
             'permissions': list(user_perms),
         }
         return {

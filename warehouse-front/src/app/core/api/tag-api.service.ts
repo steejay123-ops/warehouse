@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
-import { Tag } from '../models/record.model';
+
 
 @Injectable({ providedIn: 'root' })
 export class TagApiService {
@@ -10,13 +10,13 @@ export class TagApiService {
   constructor(private api: ApiService) {}
 
   /** لیست تگ‌ها (فیلتر بر اساس پروژه) */
-  getAll(projectId?: number): Observable<Tag[]> {
+  getAll(projectId?: number): Observable<any[]> {
     const params = projectId ? { project: projectId } : {};
-    return this.api.get<Tag[]>(this.endpoint, params);
+    return this.api.get<any[]>(this.endpoint, params);
   }
 
   /** ایجاد تگ جدید */
-  create(name: string, projectId: number | null = null): Observable<Tag> {
-    return this.api.post<Tag>(this.endpoint, { name, project: projectId });
+  create(name: string, projectId: number | null = null): Observable<any> {
+    return this.api.post<any>(this.endpoint, { name, project: projectId });
   }
 }

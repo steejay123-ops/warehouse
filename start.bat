@@ -6,7 +6,7 @@ echo =========================================
 echo.
 echo [1/2] Starting Django Backend (Port 8000)...
 cd /d "%~dp0warehouse-backend"
-start "Warehouse Backend" cmd /k ".\venv\Scripts\python.exe manage.py runserver 8000 --noreload"
+start "Warehouse Backend" cmd /k ".\venv\Scripts\python.exe manage.py runserver 8000"
 
 echo [2/2] Starting Angular Frontend (Port 4200)...
 cd /d "%~dp0warehouse-front"

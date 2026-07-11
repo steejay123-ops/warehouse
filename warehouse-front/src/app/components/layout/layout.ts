@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -7,20 +7,28 @@ import { AuthService } from '../../core/auth/auth.service';
 import { AuthStore } from '../../core/stores/auth.store';
 import { StateService } from '../../services/state.service';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
-import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
+import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, RouterOutlet, WarehouseSelectorComponent],
+  imports: [CommonModule, RouterOutlet],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
 export class Layout implements OnInit {
-  navItems: any[] = [];
-  currentTitle = 'داشبورد مانیتورینگ';
 
-  /** لیست پروژه‌ها برای WarehouseSelector */
-  projectList: { id: number | string; name: string }[] = [];
+  currentTitle = 'داشبورد مانیتورینگ';
+  isUserMenuOpen = false;
+
+  toggleUserMenu() {
+    this.isUserMenuOpen = !this.isUserMenuOpen;
+  }
+
+  closeUserMenu() {
+    this.isUserMenuOpen = false;
+  }
+
+  /** لیست پروژه‌ها از StateService خوانده می‌شود */
 
   private rawIcons: any = {
     grid:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
@@ -44,28 +52,32 @@ export class Layout implements OnInit {
   icons: any = {};
 
   private NAV_ITEMS: any = {
-    admin: [
+    globalAdmin: [
       {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid'},
       {id:'users', label:'مدیریت کاربران و ساختار سازمانی', icon:'users'},
-      {id:'projects', label:'مدیریت انبارها و لوکیشن‌ها', icon:'archive'},
-      {id:'docs', label:'تزریق دیتابیس اولیه (Base Data)', icon:'upload-cloud'},
-      {id:'label-designer', label:'طراحی و کانفیگ لیبل/QR', icon:'printer'},
-      {id:'dispatch', label:'تگ‌گذاری و تخصیص به تیم‌ها', icon:'clipboard'},
-      {id:'feeding', label:'تغذیه سامانه MT', icon:'database'},
+      {id:'projects', label:'مدیریت انبارها', icon:'archive'},
       {id:'id-cards', label:'صدور کارت پرسنلی و گیت‌پاس', icon:'badge'},
-      {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text'},
       {id:'settings', label:'تنظیمات سیستم', icon:'settings'}
+    ],
+    warehouseAdmin: [
+      {id:'dashboard', label:'داشبورد', icon:'grid'},
+      {id:'docs', label:'مدیریت ورود کالا', icon:'upload-cloud'},
+      {id:'dispatch', label:'تخصیص کالا', icon:'clipboard'},
+      {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text'},
+      {id:'feeding', label:'تغذیه سامانه MT', icon:'database'},
+      {id:'label-designer', label:'طراحی و کانفیگ لیبل/QR', icon:'printer'}
     ],
     management: [
       {id:'dashboard', label:'داشبورد عملکرد و مغایرت‌ها', icon:'grid'},
       {id:'projects', label:'وضعیت پیشرفت انبارها', icon:'archive'},
-      {id:'approvals', label:'تایید نهایی رکوردها (فاز ۳)', icon:'check-circle'},
+      {id:'manager-review', label:'تایید نهایی رکوردها (فاز ۳)', icon:'check-circle'},
       {id:'export', label:'صدور فایل برای تغذیه', icon:'download'}
     ],
     execution: [
       {id:'dashboard', label:'وضعیت پیشرفت میدانی', icon:'grid'},
       {id:'labels', label:'چاپ مجدد و اسکن لیبل', icon:'tag'},
       {id:'field', label:'میزکار شمارش کور', icon:'clipboard'},
+      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
       {id:'recounts', label:'بررسی مغایرت و بازشماری', icon:'alert-triangle'}
     ],
     documents: [
@@ -86,7 +98,8 @@ export class Layout implements OnInit {
     public state: StateService,
     private confirmDialog: ConfirmDialogService,
     private router: Router,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private whService: WarehouseHttpService
   ) {
     // Sanitize icons
     for (const k in this.rawIcons) {
@@ -104,18 +117,32 @@ export class Layout implements OnInit {
   }
 
   ngOnInit() {
-    // تنظیم navItems بر اساس department
-    const dept = this.auth.userDepartment();
-    this.navItems = this.NAV_ITEMS[dept] || this.NAV_ITEMS.admin;
-
-    // لیست پروژه‌ها از state (تا زمانی که API وصل نشده)
-    this.projectList = this.state.appState.projects.map((p: any) => ({
-      id: p.id,
-      name: p.name,
-    }));
+    // دریافت لیست انبارها از بک‌اند
+    this.whService.getAll().subscribe({
+      next: (data) => {
+        this.state.appState.projects = data as any;
+        
+        const storedId = this.store.activeWarehouseId();
+        if (data.length > 0 && !storedId) {
+          // اگر انباری انتخاب نشده بود، اولین انبار را انتخاب کن
+          this.onWarehouseChanged(data[0].id);
+        } else if (storedId) {
+          // اگر در استور موجود بود (مثلا از localStorage) حتماً سینک کن
+          this.state.appState.activeWarehouseId = Number(storedId);
+        }
+      }
+    });
   }
 
   /** ──── Sidebar ──── */
+  readonly navItems = computed(() => {
+    if (this.store.isWarehouseContext()) {
+      return this.NAV_ITEMS.warehouseAdmin;
+    }
+    const dept = this.auth.userDepartment();
+    return this.NAV_ITEMS[dept] || this.NAV_ITEMS.globalAdmin;
+  });
+  
   get isSidebarOpen() { return this.store.isSidebarOpen(); }
   get currentTab() { return this.store.currentTab(); }
   get userAvatar() { return this.auth.userAvatar(); }
@@ -133,9 +160,25 @@ export class Layout implements OnInit {
   /** ──── Warehouse Selector ──── */
   get warehouseSwitcherValue() { return this.store.activeWarehouseId(); }
 
-  onWarehouseChanged(id: number | string): void {
+  get currentWarehouse() {
+    const activeId = this.store.activeWarehouseId();
+    return this.state.appState.projects.find((x: any) => x.id === Number(activeId));
+  }
+
+  onWarehouseChanged(id: number | string | null): void {
     this.store.setActiveWarehouse(id);
-    this.state.appState.activeWarehouseId = id;
+    this.state.appState.activeWarehouseId = id as any;
+  }
+
+  exitWarehouseMode(fromSidebarSwitch = false) {
+    if (fromSidebarSwitch) {
+      this.store.setLastWarehouseTab(this.currentTab);
+      this.store.setIsSwitchingWarehouse(true);
+    } else {
+      this.store.setIsSwitchingWarehouse(false);
+    }
+    this.store.setWarehouseContext(false);
+    this.router.navigate(['/projects']);
   }
 
   /** ──── Logout & Settings ──── */
@@ -162,15 +205,17 @@ export class Layout implements OnInit {
     const titles: any = {
       dashboard: 'داشبورد مانیتورینگ',
       projects: 'مدیریت انبارها',
-      dispatch: 'تخصیص و مدیریت رکوردها',
+      dispatch: 'تخصیص کالا',
       users: 'کاربران و ساختار',
       tasks: 'وظایف و اسناد',
       labels: 'لیبل‌زن هوشمند',
-      docs: 'مدارک گمرکی',
+      docs: 'انبار',
       'id-cards': 'صدور کارت پرسنلی و گیت‌پاس',
       feeding: 'تغذیه سامانه MT',
       settings: 'تنظیمات',
       field: 'میز کار میدانی',
+      supervisor: 'کارتابل سرپرست شمارش',
+      'manager-review': 'بررسی نهایی رکوردها',
       'label-designer': 'طراحی و کانفیگ لیبل/QR',
       audit: 'رهگیری تغییرات'
     };

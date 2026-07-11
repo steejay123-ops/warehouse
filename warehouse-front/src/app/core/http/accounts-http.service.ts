@@ -28,6 +28,8 @@ export interface User {
   supervisor: number | null;
   is_active: boolean;
   groups: number[];
+  roles?: string[];
+  role_titles?: string[];
   user_permissions: number[];
   assigned_warehouses: string[];
 }

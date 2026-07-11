@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Item, CountTask
+from .models import Item, CountTask, CountTaskHistory
 
 class ItemSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
@@ -19,10 +19,23 @@ class ItemSerializer(serializers.ModelSerializer):
             return f"{obj.modified_by.first_name} {obj.modified_by.last_name}".strip() or obj.modified_by.username
         return None
 
+class CountTaskHistorySerializer(serializers.ModelSerializer):
+    action_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CountTaskHistory
+        fields = '__all__'
+
+    def get_action_by_name(self, obj):
+        if obj.action_by:
+            return f"{obj.action_by.first_name} {obj.action_by.last_name}".strip() or obj.action_by.username
+        return None
+
 class CountTaskSerializer(serializers.ModelSerializer):
     counter_name = serializers.SerializerMethodField()
     supervisor_name = serializers.SerializerMethodField()
     item_details = ItemSerializer(source='item', read_only=True)
+    history = CountTaskHistorySerializer(many=True, read_only=True)
 
     class Meta:
         model = CountTask

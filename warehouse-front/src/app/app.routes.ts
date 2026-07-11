@@ -16,7 +16,8 @@ import { IdCards } from './components/id-cards/id-cards';
 import { LabelDesigner } from './components/label-designer/label-designer';
 import { Placeholders } from './components/placeholders/placeholders';
 import { ChangePassword } from './components/change-password/change-password';
-import { SupervisorDashboard } from './components/supervisor-dashboard/supervisor-dashboard';
+import { CounterDashboard } from './components/counter/counter-dashboard/counter-dashboard';
+import { SupervisorDashboard } from './components/supervisor/supervisor-dashboard/supervisor-dashboard';
 import { ManagerReview } from './components/manager-review/manager-review';
 import { AuthGuard } from './guards/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
@@ -49,7 +50,7 @@ export const routes: Routes = [
       { path: 'label-designer', component: LabelDesigner },
       { path: 'placeholders', component: Placeholders },
       
-      // Placeholder routes
+      { path: 'counter', component: CounterDashboard },
       { path: 'supervisor', component: SupervisorDashboard },
       { path: 'manager-review', component: ManagerReview },
       { path: 'tasks', component: Placeholders },

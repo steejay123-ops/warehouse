@@ -14,7 +14,8 @@ class WarehouseSerializer(serializers.ModelSerializer):
         return obj.items.count()
 
     def get_counted_quantity(self, obj):
-        return obj.items.exclude(field_status='در انتظار شمارش').count()
+        # We only count items that have actively been counted (and potentially approved)
+        return obj.items.exclude(field_status__in=['در انتظار شمارش', 'counting']).count()
 
     def get_percent(self, obj):
         total = self.get_total_quantity(obj)

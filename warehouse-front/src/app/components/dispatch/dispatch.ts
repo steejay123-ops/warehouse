@@ -7,11 +7,13 @@ import { ToastService } from '../../services/toast.service';
 import { DataTableComponent, TableColumnDirective } from '../../shared';
 import { ItemApiService } from '../../core/api/item-api.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { ConfirmDialogService, ConfirmDialogComponent } from '../../shared';
+import { ConfirmDialogService } from '../../shared';
+import { PersianDatePipe } from '../../shared';
+import { AccountsHttpService } from '../../core/http/accounts-http.service';
 
 @Component({
   selector: 'app-dispatch',
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, ConfirmDialogComponent],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css'
 })
@@ -47,16 +49,18 @@ export class Dispatch implements OnInit {
     private itemApi: ItemApiService,
     private auth: AuthService,
     private cdr: ChangeDetectorRef,
-    private confirmDialog: ConfirmDialogService
+    private confirmDialog: ConfirmDialogService,
+    private accountsService: AccountsHttpService
   ) {}
 
   ngOnInit() {
-    // Field Workers (Counters)
-    this.fieldWorkers = this.state.appState.users.filter((u: any) => u.roles?.includes('counter'));
-    // Supervisors
-    this.supervisors = this.state.appState.users.filter((u: any) => u.roles?.includes('supervisor'));
-    // Doc and Price workers (combined team)
-    this.docWorkers = this.state.appState.users.filter((u: any) => u.roles?.includes('document_expert') || u.roles?.includes('feeding_operator'));
+    this.accountsService.getUsers().subscribe(users => {
+      this.state.appState.users = users;
+      this.fieldWorkers = users.filter((u: any) => u.roles?.includes('counter') || u.role_titles?.some((t: string) => t.includes('شمارشگر') || t.includes('انباردار میدانی')));
+      this.supervisors = users.filter((u: any) => u.roles?.includes('supervisor') || u.role_titles?.some((t: string) => t.includes('سرپرست')));
+      this.docWorkers = users.filter((u: any) => u.roles?.includes('document_expert') || u.roles?.includes('feeding_operator') || u.role_titles?.some((t: string) => t.includes('مدارک') || t.includes('تغذیه')));
+      this.cdr.detectChanges();
+    });
     
     // Load column preferences
     const prefs = this.auth.user()?.ui_preferences?.dispatchSettings;
@@ -75,6 +79,21 @@ export class Dispatch implements OnInit {
 
     this.loadItems();
   }
+
+  get tagFilterOptions() {
+    const tags = new Set<string>();
+    this.items.forEach(i => {
+      if (i.tag) {
+        i.tag.split('،').forEach((t: string) => tags.add(t.trim()));
+      }
+    });
+    return Array.from(tags).filter(t => t).map(t => ({label: t, value: t}));
+  }
+
+  booleanFilterOptions = [
+    { label: 'دارد', value: 'true' },
+    { label: 'ندارد', value: 'false' }
+  ];
 
   loadItems() {
     this.isLoading = true;
@@ -101,7 +120,7 @@ export class Dispatch implements OnInit {
         
         // For checkbox filters, we need to append __in
         // We know which ones are checkboxes based on if they contain commas and match certain keys
-        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee'];
+        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'tag'];
         if (inFields.includes(key)) {
             filters[`${key}__in`] = stateFilters[key];
         } else {
@@ -111,6 +130,7 @@ export class Dispatch implements OnInit {
             else if (key === 'labelStatus') filters['tag_status__in'] = stateFilters[key];
             else if (key === 'fieldAssignee') filters['field_assignee__in'] = stateFilters[key];
             else if (key === 'docAssignee') filters['doc_assignee__in'] = stateFilters[key];
+            else if (key === 'tag_search') filters['tag__icontains'] = stateFilters[key];
             else filters[key] = stateFilters[key]; 
         }
       }

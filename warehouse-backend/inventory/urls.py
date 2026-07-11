@@ -4,7 +4,7 @@ from .views import ItemViewSet, CountTaskViewSet
 
 router = DefaultRouter()
 router.register(r'count-tasks', CountTaskViewSet, basename='counttask')
-router.register(r'', ItemViewSet)
+router.register(r'items', ItemViewSet, basename='item')
 
 urlpatterns = [
     path('', include(router.urls)),

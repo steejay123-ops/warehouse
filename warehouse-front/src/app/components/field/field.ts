@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -22,7 +22,8 @@ export class Field implements OnInit {
   constructor(
     public state: StateService, 
     private toast: ToastService,
-    private countTaskApi: CountTaskApiService
+    private countTaskApi: CountTaskApiService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -31,14 +32,17 @@ export class Field implements OnInit {
 
   loadTasks() {
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.countTaskApi.getAll().subscribe({
-      next: (res) => {
-        this.tasks = res.results;
+      next: (res: any) => {
+        this.tasks = Array.isArray(res) ? res : (res.results || []);
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.toast.show('error', 'خطا در دریافت لیست شمارش');
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -61,7 +65,7 @@ export class Field implements OnInit {
     }
     
     this.countTaskApi.update(this.selectedTask.id, {
-      counted_balance: this.countedQty,
+      counted_balance: this.countedQty?.toString() || null,
       counter_note: this.counterNote,
       status: 'COUNTED'
     }).subscribe({

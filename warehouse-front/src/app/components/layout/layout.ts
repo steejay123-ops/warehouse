@@ -57,6 +57,9 @@ export class Layout implements OnInit {
       {id:'users', label:'مدیریت کاربران و ساختار سازمانی', icon:'users'},
       {id:'projects', label:'مدیریت انبارها', icon:'archive'},
       {id:'id-cards', label:'صدور کارت پرسنلی و گیت‌پاس', icon:'badge'},
+      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
+      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
+      {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle'},
       {id:'settings', label:'تنظیمات سیستم', icon:'settings'}
     ],
     warehouseAdmin: [
@@ -71,12 +74,14 @@ export class Layout implements OnInit {
       {id:'dashboard', label:'داشبورد عملکرد و مغایرت‌ها', icon:'grid'},
       {id:'projects', label:'وضعیت پیشرفت انبارها', icon:'archive'},
       {id:'manager-review', label:'تایید نهایی رکوردها (فاز ۳)', icon:'check-circle'},
+      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
+      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
       {id:'export', label:'صدور فایل برای تغذیه', icon:'download'}
     ],
     execution: [
       {id:'dashboard', label:'وضعیت پیشرفت میدانی', icon:'grid'},
       {id:'labels', label:'چاپ مجدد و اسکن لیبل', icon:'tag'},
-      {id:'field', label:'میزکار شمارش کور', icon:'clipboard'},
+      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
       {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
       {id:'recounts', label:'بررسی مغایرت و بازشماری', icon:'alert-triangle'}
     ],
@@ -213,7 +218,7 @@ export class Layout implements OnInit {
       'id-cards': 'صدور کارت پرسنلی و گیت‌پاس',
       feeding: 'تغذیه سامانه MT',
       settings: 'تنظیمات',
-      field: 'میز کار میدانی',
+      counter: 'میزکار شمارش کور',
       supervisor: 'کارتابل سرپرست شمارش',
       'manager-review': 'بررسی نهایی رکوردها',
       'label-designer': 'طراحی و کانفیگ لیبل/QR',

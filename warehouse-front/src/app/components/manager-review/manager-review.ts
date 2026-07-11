@@ -1,9 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { CountTaskApiService } from '../../core/api/count-task-api.service';
+import { CountTaskStatus } from '../../core/models/count-task.model';
 
 @Component({
   selector: 'app-manager-review',
@@ -20,7 +21,8 @@ export class ManagerReview implements OnInit {
   constructor(
     public state: StateService, 
     private toast: ToastService,
-    private countTaskApi: CountTaskApiService
+    private countTaskApi: CountTaskApiService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -35,10 +37,12 @@ export class ManagerReview implements OnInit {
         // so we filter locally if needed, but best if the API respects the filter (we didn't explicitly implement filter in API, so we filter here to be safe).
         this.tasks = res.results.filter((t: any) => t.status === 'MANAGER_REVIEW');
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: () => {
         this.toast.show('error', 'خطا در دریافت لیست بررسی');
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -46,11 +50,13 @@ export class ManagerReview implements OnInit {
   selectTask(task: any) {
     this.selectedTask = task;
     this.managerNote = task.manager_note || '';
+    this.cdr.detectChanges();
   }
 
   cancelReview() {
     this.selectedTask = null;
     this.managerNote = '';
+    this.cdr.detectChanges();
   }
 
   approveTask() {
@@ -69,7 +75,7 @@ export class ManagerReview implements OnInit {
 
   private updateTaskStatus(status: string, successMessage: string) {
     this.countTaskApi.update(this.selectedTask.id, {
-      status: status,
+      status: status as CountTaskStatus,
       manager_note: this.managerNote
     }).subscribe({
       next: () => {
@@ -77,7 +83,10 @@ export class ManagerReview implements OnInit {
         this.selectedTask = null;
         this.loadTasks();
       },
-      error: () => this.toast.show('error', 'خطا در ثبت اطلاعات')
+      error: () => {
+        this.toast.show('error', 'خطا در ثبت اطلاعات');
+        this.cdr.detectChanges();
+      }
     });
   }
 }

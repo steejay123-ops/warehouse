@@ -36,7 +36,7 @@ export class TableColumnDirective {
   @Input() sortable = true;
   @Input() filterable = true;
   @Input() width = '';
-  @Input() filterType: 'text' | 'checkbox' | 'date' | 'range' = 'text';
+  @Input() filterType: 'text' | 'checkbox' | 'checkbox_text' | 'date' | 'range' = 'text';
   @Input() filterOptions: {label: string, value: string}[] = [];
   
   // Inline editing properties
@@ -246,10 +246,10 @@ export interface PageEvent {
                 @for (col of columns; track col.key) {
                   <th class="px-3 py-2 border-t border-slate-100">
                     <div class="flex items-center gap-1">
-                      @if (col.filterType === 'checkbox') {
-                        <div class="relative text-right w-full">
+                      @if (col.filterType === 'checkbox' || col.filterType === 'checkbox_text') {
+                        <div class="relative text-right" [class.w-full]="col.filterType === 'checkbox'" [class.flex-1]="col.filterType === 'checkbox_text'">
                           <button (click)="toggleFilterDropdown(col.key)" class="w-full text-[10px] px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 focus:border-indigo-400 flex items-center justify-between text-slate-500">
-                            <span>{{ hasFilter(col.key) ? 'فیلتر فعال' : 'همه موارد' }}</span>
+                            <span>{{ hasFilter(col.key) ? 'فیلتر فعال' : (col.filterType === 'checkbox_text' ? 'انتخاب' : 'همه موارد') }}</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                           </button>
                           @if (activeFilterDropdown === col.key) {
@@ -320,13 +320,16 @@ export interface PageEvent {
                         </div>
                       }
                       
-                      @if (!col.filterType || col.filterType === 'text') {
+                      @if (!col.filterType || col.filterType === 'text' || col.filterType === 'checkbox_text') {
                         <input
                           type="text"
-                          class="w-full text-[10px] px-2 py-1 rounded-lg border border-slate-200 focus:border-indigo-400 outline-none placeholder:text-slate-300"
+                          class="text-[10px] px-2 py-1 rounded-lg border border-slate-200 focus:border-indigo-400 outline-none placeholder:text-slate-300"
+                          [class.w-full]="!col.filterType || col.filterType === 'text'"
+                          [class.flex-[2]]="col.filterType === 'checkbox_text'"
+                          [class.w-0]="col.filterType === 'checkbox_text'"
                           placeholder="جستجو..."
-                          [value]="filters[col.key] || ''"
-                          (input)="onFilter(col.key, $any($event.target).value)"
+                          [value]="col.filterType === 'checkbox_text' ? (filters[col.key + '_search'] || '') : (filters[col.key] || '')"
+                          (input)="onFilter(col.filterType === 'checkbox_text' ? col.key + '_search' : col.key, $any($event.target).value)"
                         />
                       }
                     </div>
@@ -368,12 +371,11 @@ export interface PageEvent {
                           [type]="col.inputType"
                           [value]="getCellValue(row, col.key)"
                           (blur)="onEditCommit(row, col.key, editInput.value)"
-                          (keydown.enter)="onEditCommit(row, col.key, editInput.value)"
-                          (keydown.escape)="cancelEditing()"
+                          (keydown)="handleKeyDown($event, row, col.key, editInput)"
                           class="editing-cell-input w-full min-w-[80px] text-xs px-2 py-1 rounded border border-indigo-400 focus:ring-1 focus:ring-indigo-400 outline-none bg-white shadow-sm"
                         />
                       } @else {
-                        <div (mousedown)="startEditing(row, col.key, $event)" class="cursor-text hover:bg-indigo-50/50 p-1 -m-1 rounded transition-colors border border-transparent hover:border-indigo-100 flex items-center min-h-[28px]" title="برای ویرایش کلیک کنید">
+                        <div (click)="startEditing(row, col.key, $event)" class="cursor-text hover:bg-indigo-50/50 p-1 -m-1 rounded transition-colors border border-transparent hover:border-indigo-100 flex items-center min-h-[28px]" title="کلیک برای ویرایش سریع">
                           <ng-container
                             [ngTemplateOutlet]="col.template"
                             [ngTemplateOutletContext]="{ $implicit: row, row: row, value: row[col.key], index: i }"
@@ -570,10 +572,12 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   editHistory: { row: any; field: string; oldVal: any; newVal: any }[] = [];
   historyIndex = -1;
   pendingChanges = new Set<any>(); 
-  editingCell: { row: any; field: string } | null = null;
+  editingCell: { row: any; field: string; value?: any } | null = null;
   isConfirming = false;
   isRevertConfirming = false;
   isCancelling = false;
+  moveToAfterCommit: { rowDelta: number, colDelta: number } | null = null;
+  selectAllOnFocus = false;
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
@@ -604,7 +608,11 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
         setTimeout(() => {
           const input = inputs.first.nativeElement as HTMLInputElement;
           input.focus();
-          if (input.type === 'text' && this.lastClickOffset !== -1) {
+          
+          if (this.selectAllOnFocus) {
+            input.select();
+            this.selectAllOnFocus = false;
+          } else if (input.type === 'text' && this.lastClickOffset !== -1) {
             const safeOffset = Math.min(this.lastClickOffset, input.value.length);
             input.setSelectionRange(safeOffset, safeOffset);
           }
@@ -1032,6 +1040,66 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => this.isCancelling = false, 100);
   }
 
+  handleKeyDown(event: KeyboardEvent, row: any, field: string, input: HTMLInputElement) {
+    if (event.key === 'Escape') {
+      this.cancelEditing();
+      return;
+    }
+    
+    let rowDelta = 0;
+    let colDelta = 0;
+
+    if (event.key === 'Enter') {
+      rowDelta = event.shiftKey ? -1 : 1;
+    } else if (event.key === 'ArrowDown') {
+      rowDelta = 1;
+      event.preventDefault();
+    } else if (event.key === 'ArrowUp') {
+      rowDelta = -1;
+      event.preventDefault();
+    } else if (event.key === 'Tab') {
+      colDelta = event.shiftKey ? -1 : 1;
+      event.preventDefault();
+    }
+
+    if (rowDelta !== 0 || colDelta !== 0) {
+      this.moveToAfterCommit = { rowDelta, colDelta };
+      input.blur();
+    }
+  }
+
+  moveFocus(currentRow: any, currentField: string, rowDelta: number, colDelta: number) {
+    let rowIdx = this.data.findIndex(r => r === currentRow);
+    if (rowIdx === -1) return;
+
+    const editableCols = this.columns.filter(c => c.editable && this.isColumnVisible(c.key));
+    if (editableCols.length === 0) return;
+
+    let colIdx = editableCols.findIndex(c => c.key === currentField);
+    if (colIdx === -1) colIdx = 0;
+
+    if (colDelta !== 0) {
+      colIdx += colDelta;
+      if (colIdx >= editableCols.length) {
+        colIdx = 0;
+        rowIdx += 1;
+      } else if (colIdx < 0) {
+        colIdx = editableCols.length - 1;
+        rowIdx -= 1;
+      }
+    } else if (rowDelta !== 0) {
+      rowIdx += rowDelta;
+    }
+
+    if (rowIdx < 0 || rowIdx >= this.data.length) return;
+
+    const nextRow = this.data[rowIdx];
+    const nextField = editableCols[colIdx].key;
+
+    this.selectAllOnFocus = true;
+    this.startEditing(nextRow, nextField);
+  }
+
   onEditCommit(row: any, field: string, newVal: any) {
     if (this.isCancelling) return;
     
@@ -1040,6 +1108,12 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     
     this.onCellChange(row, field, newVal);
+
+    if (this.moveToAfterCommit) {
+      const move = this.moveToAfterCommit;
+      this.moveToAfterCommit = null;
+      this.moveFocus(row, field, move.rowDelta, move.colDelta);
+    }
   }
 
   getTrackByKey(row: any): string {

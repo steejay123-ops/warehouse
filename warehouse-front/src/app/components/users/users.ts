@@ -5,10 +5,11 @@ import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { AccountsHttpService, User, Role, Permission } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
+import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ClickOutsideDirective],
   templateUrl: './users.html',
   styleUrl: './users.css'
 })
@@ -138,6 +139,10 @@ export class Users implements OnInit {
 
   closeMenus() {
     this.openMenuId = null;
+  }
+
+  trackById(index: number, item: any) {
+    return item.id;
   }
 
   toggleUserStatus(id: number) {

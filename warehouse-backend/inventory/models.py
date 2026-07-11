@@ -170,3 +170,17 @@ class CountTask(models.Model):
 
     def __str__(self):
         return f"Count Task for {self.item.fa_unic_code} - {self.get_status_display()}"
+
+class CountTaskHistory(models.Model):
+    task = models.ForeignKey(CountTask, on_delete=models.CASCADE, related_name='history', verbose_name="تسک شمارش")
+    action_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='action_histories', verbose_name="اقدام کننده")
+    action_type = models.CharField(max_length=50, verbose_name="نوع اقدام")
+    counted_balance = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, verbose_name="مقدار شمرده شده (Snapshot)")
+    note = models.TextField(null=True, blank=True, verbose_name="توضیحات در لحظه ثبت")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.action_type} on {self.task_id} by {self.action_by_id}"

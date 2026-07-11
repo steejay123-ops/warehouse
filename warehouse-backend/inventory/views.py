@@ -822,7 +822,9 @@ class ItemViewSet(viewsets.ModelViewSet):
 
 from .serializers import CountTaskSerializer
 from .models import CountTask
-from rest_framework import permissions
+from rest_framework import permissions, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 class CountTaskViewSet(viewsets.ModelViewSet):
     serializer_class = CountTaskSerializer
@@ -848,4 +850,100 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         serializer.save(created_by=self.request.user, modified_by=self.request.user)
 
     def perform_update(self, serializer):
-        serializer.save(modified_by=self.request.user)
+        instance = serializer.instance
+        old_status = instance.status
+        new_status = serializer.validated_data.get('status', old_status)
+        
+        updated_instance = serializer.save(modified_by=self.request.user)
+        
+        if old_status != new_status:
+            from .models import CountTaskHistory
+            
+            note = ''
+            if new_status in ['MANAGER_REJECTED', 'FINAL_APPROVED']:
+                note = updated_instance.manager_note
+            elif new_status == 'SUPERVISOR_REJECTED':
+                note = updated_instance.supervisor_note
+            elif new_status == 'COUNTED':
+                note = updated_instance.counter_note
+                
+            CountTaskHistory.objects.create(
+                task=updated_instance,
+                action_by=self.request.user,
+                action_type=new_status,
+                counted_balance=updated_instance.counted_balance,
+                note=note
+            )
+
+    @action(detail=False, methods=['post'])
+    def bulk_submit(self, request):
+        user = request.user
+        tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+        
+        from .models import CountTaskHistory
+        histories = []
+        for task in tasks:
+            histories.append(CountTaskHistory(
+                task=task,
+                action_by=user,
+                action_type='COUNTED',
+                counted_balance=task.counted_balance,
+                note=task.counter_note
+            ))
+            
+        count = tasks.update(status='COUNTED', modified_by=user)
+        if histories:
+            CountTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{count} مورد برای سرپرست ارسال شد.'})
+
+    @action(detail=False, methods=['post'])
+    def bulk_approve(self, request):
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        if not task_ids:
+            return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
+            
+        tasks = CountTask.objects.filter(id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED'])
+        
+        from .models import CountTaskHistory
+        histories = []
+        for task in tasks:
+            histories.append(CountTaskHistory(
+                task=task,
+                action_by=user,
+                action_type='MANAGER_REVIEW',
+                counted_balance=task.counted_balance,
+                note=task.supervisor_note
+            ))
+            
+        count = tasks.update(status='MANAGER_REVIEW', modified_by=user)
+        if histories:
+            CountTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{count} مورد تایید و برای مدیر ارسال شد.'})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        task = self.get_object()
+        note = request.data.get('note', '')
+        
+        if task.status not in ['COUNTED', 'MANAGER_REJECTED']:
+            return Response({'error': 'فقط موارد شمرده شده قابل رد هستند.'}, status=400)
+            
+        task.status = 'SUPERVISOR_REJECTED'
+        task.supervisor_note = note
+        task.modified_by = request.user
+        task.save()
+        
+        from .models import CountTaskHistory
+        CountTaskHistory.objects.create(
+            task=task,
+            action_by=request.user,
+            action_type='SUPERVISOR_REJECTED',
+            counted_balance=task.counted_balance,
+            note=note
+        )
+        
+        return Response({'message': 'مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
+

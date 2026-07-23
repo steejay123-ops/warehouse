@@ -42,6 +42,8 @@ cd warehouse-backend
 
 2. **فعال‌سازی محیط مجازی:**
    - در ویندوز: `.\venv\Scripts\activate`
+   > **نکته مهم برای ویندوز:** اگر در نرم‌افزار VSCode یا ترمینال PowerShell با خطای امنیتی اجرای اسکریپت مواجه شدید، ابتدا دستور زیر را اجرا کرده و `Y` را بزنید و سپس دوباره تلاش کنید:
+   > `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
    - در مک/لینوکس: `source venv/bin/activate`
 
 3. **نصب پکیج‌ها و کتابخانه‌های پایتون:**

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { HttpEvent } from '@angular/common/http';
 import { ApiService } from './api.service';
+import { AuthService } from '../auth/auth.service';
 import {
   Item,
 } from '../models/item.model';
@@ -13,11 +14,16 @@ import { environment } from '../../../environments/environment';
 export class ItemApiService {
   private readonly endpoint = 'inventory/items';
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private auth: AuthService) {}
 
   /** لیست رکوردها + فیلتر + مرتب‌سازی + صفحه‌بندی */
   getAll(filters?: any): Observable<Paginated<Item>> {
     return this.api.get<Paginated<Item>>(this.endpoint, filters as globalThis.Record<string, unknown>);
+  }
+
+  /** آمار داشبورد */
+  getDashboardStats(projectId?: string): Observable<any> {
+    return this.api.get<any>(`${this.endpoint}/dashboard_stats/`, projectId && projectId !== 'ALL' ? { project_id: projectId } : {});
   }
 
   /** جزئیات یک رکورد */
@@ -78,7 +84,7 @@ export class ItemApiService {
     formData.append('import_tag', importTag);
     formData.append('import_id', importId);
     
-    const token = localStorage.getItem('wh_access_token');
+    const token = this.auth.getAccessToken();
     const cleanEndpoint = this.endpoint.replace(/^\/|\/$/g, '');
     const url = `${environment.apiUrl}/${cleanEndpoint}/import_excel/`;
     
@@ -107,7 +113,7 @@ export class ItemApiService {
   }
 
   /** تخصیص دسته‌ای به تیم میدانی یا اسناد */
-  bulkDispatch(payload: any): Observable<{ updated: number }> {
+  bulkDispatch(payload: any): Observable<any> {
     return this.api.post(`${this.endpoint}/bulk_assign/`, payload);
   }
 

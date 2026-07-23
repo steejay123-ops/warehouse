@@ -8,6 +8,7 @@ export interface Item {
   item_no?: string;
   modifier_tag?: string;
   warehouse: number;
+  warehouse_name?: string;
   description?: string;
   unit?: string;
   scope_discipline?: string;

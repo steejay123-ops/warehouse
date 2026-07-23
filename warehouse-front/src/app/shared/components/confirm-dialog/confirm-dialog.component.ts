@@ -90,7 +90,7 @@ export class ConfirmDialogService {
           <!-- Content -->
           <div class="px-6 pt-4 pb-2 text-center">
             <h3 class="text-sm font-black text-slate-800 mb-2">{{ config()?.title }}</h3>
-            <p class="text-xs text-slate-500 leading-relaxed">{{ config()?.message }}</p>
+            <p class="text-xs text-slate-500 leading-relaxed" [innerHTML]="config()?.message"></p>
           </div>
 
           <!-- Actions -->

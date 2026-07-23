@@ -50,12 +50,18 @@
         <p class="text-[9px] text-slate-500 mb-3 pr-2 font-medium leading-relaxed">فقط رکوردهایی که لیبل آنها <span class="text-blue-600 font-bold">«چاپ شده»</span> است، قابل ارجاع هستند.</p>
         <div class="flex flex-col gap-2 pr-2">
           <select [(ngModel)]="selectedFieldWorker" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-blue-400">
-            <option value="">-- انتخاب تیم / شمارشگر --</option>
+            <option value="">-- همه انبارگردان‌ها (استخر مشترک) --</option>
             <option *ngFor="let w of fieldWorkers" [value]="w.id">{{w.first_name}} {{w.last_name}}</option>
           </select>
           <select [(ngModel)]="selectedSupervisor" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-blue-400">
-            <option value="">-- انتخاب سرپرست گروه --</option>
+            <option *ngIf="requireSupervisor" value="">-- همه سرپرست‌ها (استخر مشترک) --</option>
+            <option value="skip">-- بدون نیاز به سرپرست --</option>
+            <option *ngIf="!requireSupervisor" value="">-- همه سرپرست‌ها (استخر مشترک) --</option>
             <option *ngFor="let s of supervisors" [value]="s.id">{{s.first_name}} {{s.last_name}}</option>
+          </select>
+          <select [(ngModel)]="selectedManager" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-blue-400">
+            <option value="">-- همه مدیران (استخر مشترک) --</option>
+            <option *ngFor="let m of managers" [value]="m.id">{{m.first_name}} {{m.last_name}}</option>
           </select>
           <button (click)="executeFieldDispatch()" class="w-full py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -70,8 +76,18 @@
         <p class="text-[9px] text-slate-500 mb-3 pr-2 font-medium leading-relaxed">این فرآیند مستقل از چاپ لیبل بوده و موازی انجام می‌شود.</p>
         <div class="flex flex-col gap-2 pr-2">
           <select [(ngModel)]="selectedDocWorker" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-amber-400">
-            <option value="">-- کارشناس مدارک --</option>
-            <option *ngFor="let w of docWorkers" [value]="w.first_name + ' ' + w.last_name">{{w.first_name}} {{w.last_name}}</option>
+            <option value="">-- همه کارشناسان اسناد (استخر مشترک) --</option>
+            <option *ngFor="let w of docWorkers" [value]="w.id">{{w.first_name}} {{w.last_name}}</option>
+          </select>
+          <select [(ngModel)]="selectedDocSupervisor" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-amber-400">
+            <option *ngIf="requireDocSupervisor" value="">-- همه سرپرست‌های اسناد (استخر مشترک) --</option>
+            <option value="skip">-- بدون نیاز به سرپرست --</option>
+            <option *ngIf="!requireDocSupervisor" value="">-- همه سرپرست‌های اسناد (استخر مشترک) --</option>
+            <option *ngFor="let s of supervisors" [value]="s.id">{{s.first_name}} {{s.last_name}}</option>
+          </select>
+          <select [(ngModel)]="selectedDocManager" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-amber-400">
+            <option value="">-- همه مدیران (استخر مشترک) --</option>
+            <option *ngFor="let m of managers" [value]="m.id">{{m.first_name}} {{m.last_name}}</option>
           </select>
           <button (click)="executeDocDispatch()" class="w-full py-2.5 bg-amber-500 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-amber-600 transition-colors flex items-center justify-center gap-2 active:scale-[0.98]">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -86,9 +102,21 @@
         <div class="flex items-center gap-3">
           <h4 class="font-bold text-slate-700 text-xs">لیست یکپارچه رکوردها</h4>
           <span class="bg-indigo-100 text-indigo-700 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-indigo-200">{{totalItems | number}} رکورد</span>
-          <button (click)="clearAllFilters()" class="text-[10px] font-bold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded">
-             پاک کردن فیلترها ✕
-          </button>
+          @if (hasAnyFilter) {
+            <button (click)="clearAllFilters()" class="text-[10px] font-bold text-slate-500 hover:text-rose-500 transition-colors flex items-center gap-1 bg-white border border-slate-200 px-2 py-0.5 rounded">
+               پاک کردن فیلترها ✕
+            </button>
+          }
+          <div class="flex items-center gap-3 mr-4 border-r border-slate-200 pr-4">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="showCountedItems" (change)="loadItems()" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5">
+              <span class="text-[10px] font-bold text-emerald-700">شمرده شده</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="showCountingItems" (change)="loadItems()" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
+              <span class="text-[10px] font-bold text-blue-700">در حال شمارش</span>
+            </label>
+          </div>
         </div>
         
         <button (click)="requestRecount()" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-lg text-[10px] font-bold transition-colors">
@@ -97,7 +125,7 @@
         </button>
       </div>
       
-      <div class="overflow-x-auto min-h-[400px]">
+      <div class="w-full relative">
         <app-data-table 
           [data]="items" 
           [totalCount]="totalItems" 
@@ -106,6 +134,9 @@
           [showColumnToggle]="true"
           [visibleColumns]="state.appState.dispatchSettings.visibleCols"
           [selectedIds]="selectedItemIds"
+          [tableHeightClass]="'max-h-[calc(100vh-250px)] min-h-[300px]'"
+          [globalSearch]="state.appState.dispatchSettings.search || ''"
+          [rowClass]="getRowClass"
           (selectionChanged)="onSelectionChange($event)"
           (sortChanged)="handleTableSort($event)"
           (filterChanged)="handleTableFilter($event)"
@@ -131,14 +162,17 @@
           <ng-template appTableCol="old_location" label="لوکیشن فیزیکی" [editable]="true" let-value="value">
             <span class="font-mono text-[10px] text-slate-600">{{value || '-'}}</span>
           </ng-template>
-
-          <ng-template appTableCol="labelStatus" label="وضعیت لیبل" filterType="checkbox" [filterOptions]="[{label: 'چاپ نشده ⚪', value: 'pending'}, {label: 'چاپ شده 🔵', value: 'printed'}, {label: 'چاپ مجدد 🔴', value: 'reprint'}]" let-value="value">
-            <span *ngIf="value === 'pending'" class="text-[9px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-bold border border-slate-200">چاپ نشده ⚪</span>
-            <span *ngIf="value === 'printed'" class="text-[9px] px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold border border-blue-200">چاپ شده 🔵</span>
-            <span *ngIf="value === 'reprint'" class="text-[9px] px-2 py-0.5 rounded-md bg-rose-100 text-rose-700 font-bold border border-rose-300 animate-pulse">چاپ مجدد 🔴</span>
+          <ng-template appTableCol="labelStatus" label="وضعیت لیبل" filterType="checkbox" [filterOptions]="[{label: 'چاپ نشده ⚪', value: 'چاپ نشده'}, {label: 'چاپ شده 🔵', value: 'چاپ شده'}, {label: 'چاپ مجدد 🔴', value: 'چاپ مجدد'}]" [editable]="true" inputType="select" [selectOptions]="[{label: 'چاپ نشده ⚪', value: 'چاپ نشده'}, {label: 'چاپ شده 🔵', value: 'چاپ شده'}, {label: 'چاپ مجدد 🔴', value: 'چاپ مجدد'}]" let-value="value">
+            <span class="text-[10px] px-1.5 py-0.5 rounded font-bold" 
+                  [class.bg-slate-100]="value === 'چاپ نشده'" [class.text-slate-600]="value === 'چاپ نشده'"
+                  [class.bg-indigo-50]="value === 'چاپ شده'" [class.text-indigo-600]="value === 'چاپ شده'"
+                  [class.bg-rose-50]="value === 'چاپ مجدد'" [class.text-rose-600]="value === 'چاپ مجدد'">
+              {{value}}
+            </span>
           </ng-template>
 
-          <ng-template appTableCol="fieldAssignee" label="تیم شمارش" let-value="value">
+
+          <ng-template appTableCol="fieldAssignee" label="تیم شمارش" filterType="checkbox_text" [filterOptions]="fieldAssigneeFilterOptions" let-value="value">
             <span class="font-bold text-[10px]" [ngClass]="value !== 'ثبت نشده' ? 'text-slate-800' : 'text-slate-400'">{{value}}</span>
           </ng-template>
 
@@ -149,7 +183,7 @@
             <span *ngIf="value === 'done'" class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">تایید میدانی</span>
           </ng-template>
 
-          <ng-template appTableCol="docAssignee" label="تیم مدارک" let-value="value">
+          <ng-template appTableCol="docAssignee" label="تیم مدارک" filterType="checkbox_text" [filterOptions]="docAssigneeFilterOptions" let-value="value">
             <span class="font-bold text-[10px]" [ngClass]="value !== 'ثبت نشده' ? 'text-slate-800' : 'text-slate-400'">{{value}}</span>
           </ng-template>
 
@@ -195,7 +229,7 @@
           <ng-template appTableCol="bal4miv" label="موجودی مجاز MIV" [editable]="true" let-value="value"><span class="font-bold text-slate-700">{{value || '0'}}</span></ng-template>
           <ng-template appTableCol="new_location" label="لوکیشن جدید" [editable]="true" let-value="value"><span class="font-mono text-[10px] text-slate-600">{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="hov_no" label="شماره HOV" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
-          <ng-template appTableCol="hov_date" label="تاریخ HOV" filterType="date" [editable]="true" inputType="date" let-value="value"><span class="text-[10px] text-slate-600 dir-ltr inline-block">{{value || '-'}}</span></ng-template>
+          <ng-template appTableCol="hov_date" label="تاریخ HOV" filterType="date_range" [editable]="true" inputType="date" let-value="value"><span class="text-[10px] text-slate-600 dir-ltr inline-block">{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="msr_status" label="وضعیت MSR" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="vendor" label="سازنده (Vendor)" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="supplier" label="تامین کننده" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
@@ -234,10 +268,10 @@
           <ng-template appTableCol="updated_at" label="آخرین بروزرسانی" filterType="date" let-value="value">
             <span class="text-[10px] text-slate-500 dir-ltr inline-block">{{value | persianDate:'short-time'}}</span>
           </ng-template>
-          <ng-template appTableCol="created_by_name" label="ایجاد کننده" let-value="value">
+          <ng-template appTableCol="created_by_name" label="ایجاد کننده" filterType="checkbox_text" [filterOptions]="createdByFilterOptions" let-value="value">
             <span class="text-[10px] text-slate-600">{{value || '-'}}</span>
           </ng-template>
-          <ng-template appTableCol="modified_by_name" label="ویرایش کننده" let-value="value">
+          <ng-template appTableCol="modified_by_name" label="ویرایش کننده" filterType="checkbox_text" [filterOptions]="modifiedByFilterOptions" let-value="value">
             <span class="text-[10px] text-slate-600">{{value || '-'}}</span>
           </ng-template>
 

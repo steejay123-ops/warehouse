@@ -1,0 +1,9 @@
+# Agent Ignore File for Token Optimization
+*.xlsx
+*.docx
+Archive_Docs/
+warehouse-old/
+فایل های مهم پروژه انبارداری/
+warehouse-backend/error.html
+warehouse-backend/*.json
+warehouse-front/package-lock.json

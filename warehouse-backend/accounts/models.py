@@ -1,9 +1,12 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
+from django.utils import timezone
+
 class CustomUser(AbstractUser):
     # New Fields
     requires_password_change = models.BooleanField(default=True)
+    password_changed_at = models.DateTimeField(default=timezone.now)
     national_code = models.CharField(max_length=10, unique=True, null=True, blank=True)
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     operational_zone = models.CharField(max_length=100, null=True, blank=True)
@@ -18,3 +21,31 @@ class CustomUser(AbstractUser):
 
     def __str__(self):
         return f"{self.username}"
+
+    class Meta:
+        permissions = [
+            # System Tabs
+            ("view_sys_dashboard", "دسترسی به تب داشبورد مانیتورینگ کلی"),
+            ("view_sys_users", "دسترسی به تب مدیریت کاربران"),
+            ("view_sys_projects", "دسترسی به تب مدیریت انبارها"),
+            ("view_sys_id_cards", "دسترسی به تب صدور کارت پرسنلی"),
+            ("view_sys_counter", "دسترسی به تب میزکار شمارش کور"),
+            ("view_sys_supervisor", "دسترسی به تب کارتابل سرپرست شمارش"),
+            ("view_sys_manager_review", "دسترسی به تب بررسی نهایی مدیر"),
+            ("view_sys_export", "دسترسی به تب صدور فایل تغذیه"),
+            ("view_sys_recounts", "دسترسی به تب بررسی مغایرت و بازشماری"),
+            ("view_sys_settings", "دسترسی به تب تنظیمات سیستم"),
+            
+            # Warehouse Tabs
+            ("view_wh_dashboard", "دسترسی به تب داشبورد انبار"),
+            ("view_wh_docs", "دسترسی به تب مدیریت کالا (انبار)"),
+            ("view_wh_dispatch", "دسترسی به تب تخصیص کالا (انبار)"),
+            ("view_wh_customs", "دسترسی به تب فیلدهای مالی/گمرکی (انبار)"),
+            ("view_wh_doc_approvals", "دسترسی به تب تاییدات سرپرست (انبار)"),
+            ("view_wh_feeding", "دسترسی به تب مدیریت و تغذیه MT (انبار)"),
+            ("view_wh_feed_approvals", "دسترسی به تب تاییدات سرپرست تغذیه (انبار)"),
+            ("view_wh_labels", "دسترسی به تب چاپ مجدد و اسکن لیبل (انبار)"),
+            ("view_wh_label_designer", "دسترسی به تب طراحی و کانفیگ لیبل (انبار)"),
+            ("view_wh_audit", "دسترسی به تب رهگیری تغییرات (انبار)"),
+            ("view_wh_settings", "دسترسی به تب تنظیمات انبار"),
+        ]

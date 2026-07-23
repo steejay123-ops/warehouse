@@ -23,15 +23,27 @@ export class CountTaskApiService {
     return this.api.patch<CountTask>(`${this.endpoint}/${id}/`, payload);
   }
 
-  bulkSubmit(): Observable<{ message: string }> {
-    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_submit/`, {});
+  bulkSubmit(payload: any = {}): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_submit/`, payload);
   }
 
-  bulkApprove(taskIds: number[]): Observable<{ message: string }> {
-    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_approve/`, { task_ids: taskIds });
+  bulkCancel(taskIds: number[]): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_cancel/`, { task_ids: taskIds });
+  }
+
+  bulkApprove(taskIds: number[], note: string = ''): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_approve/`, { task_ids: taskIds, note });
+  }
+
+  bulkManagerApprove(taskIds: number[], note: string = ''): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_manager_approve/`, { task_ids: taskIds, note });
   }
 
   reject(id: number | string, note: string): Observable<{ message: string }> {
     return this.api.post<{ message: string }>(`${this.endpoint}/${id}/reject/`, { note });
+  }
+
+  managerReject(id: number | string, note: string): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/${id}/manager_reject/`, { note });
   }
 }

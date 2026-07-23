@@ -1,4 +1,4 @@
-import { Component, OnInit, computed } from '@angular/core';
+import { Component, OnInit, computed, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -22,10 +22,12 @@ export class Layout implements OnInit {
 
   toggleUserMenu() {
     this.isUserMenuOpen = !this.isUserMenuOpen;
+    this.cdr.detectChanges();
   }
 
   closeUserMenu() {
     this.isUserMenuOpen = false;
+    this.cdr.detectChanges();
   }
 
   /** لیست پروژه‌ها از StateService خوانده می‌شود */
@@ -51,51 +53,34 @@ export class Layout implements OnInit {
 
   icons: any = {};
 
-  private NAV_ITEMS: any = {
-    globalAdmin: [
-      {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid'},
-      {id:'users', label:'مدیریت کاربران و ساختار سازمانی', icon:'users'},
-      {id:'projects', label:'مدیریت انبارها', icon:'archive'},
-      {id:'id-cards', label:'صدور کارت پرسنلی و گیت‌پاس', icon:'badge'},
-      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
-      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
-      {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle'},
-      {id:'settings', label:'تنظیمات سیستم', icon:'settings'}
-    ],
-    warehouseAdmin: [
-      {id:'dashboard', label:'داشبورد', icon:'grid'},
-      {id:'docs', label:'مدیریت ورود کالا', icon:'upload-cloud'},
-      {id:'dispatch', label:'تخصیص کالا', icon:'clipboard'},
-      {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text'},
-      {id:'feeding', label:'تغذیه سامانه MT', icon:'database'},
-      {id:'label-designer', label:'طراحی و کانفیگ لیبل/QR', icon:'printer'}
-    ],
-    management: [
-      {id:'dashboard', label:'داشبورد عملکرد و مغایرت‌ها', icon:'grid'},
-      {id:'projects', label:'وضعیت پیشرفت انبارها', icon:'archive'},
-      {id:'manager-review', label:'تایید نهایی رکوردها (فاز ۳)', icon:'check-circle'},
-      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
-      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
-      {id:'export', label:'صدور فایل برای تغذیه', icon:'download'}
-    ],
-    execution: [
-      {id:'dashboard', label:'وضعیت پیشرفت میدانی', icon:'grid'},
-      {id:'labels', label:'چاپ مجدد و اسکن لیبل', icon:'tag'},
-      {id:'counter', label:'میزکار شمارش کور', icon:'clipboard'},
-      {id:'supervisor', label:'کارتابل سرپرست شمارش', icon:'check-square'},
-      {id:'recounts', label:'بررسی مغایرت و بازشماری', icon:'alert-triangle'}
-    ],
-    documents: [
-      {id:'dashboard', label:'خلاصه وضعیت اسناد', icon:'grid'},
-      {id:'customs', label:'تکمیل فیلدهای مالی/گمرکی', icon:'folder'},
-      {id:'doc_approvals', label:'کارتابل تاییدات سرپرست', icon:'check-square'}
-    ],
-    feeding: [
-      {id:'dashboard', label:'داشبورد عملکرد تغذیه', icon:'grid'},
-      {id:'feeding', label:'مدیریت و تغذیه MT26/49', icon:'database'},
-      {id:'feed_approvals', label:'تاییدات سرپرست تغذیه', icon:'check-square', isPending: true}
-    ]
-  };
+  private SYSTEM_NAV_ITEMS: any[] = [
+    {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
+    {id:'users', label:'کاربران و گیت‌پاس', icon:'users', permission: 'view_sys_users'},
+    {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
+    {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
+    {id:'customs', label:'کارتابل مالی', icon:'folder', permission: 'view_wh_customs'},
+    {id:'supervisor', label:'کارتابل سرپرست', icon:'check-square', permission: 'view_sys_supervisor'},
+    {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
+    {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
+    {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_sys_export'},
+    {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'}
+  ];
+
+  private WAREHOUSE_NAV_ITEMS: any[] = [
+    {id:'dashboard', label:'داشبورد انبار', icon:'grid', permission: 'view_wh_dashboard'},
+    {id:'docs', label:'مدیریت کالا', icon:'upload-cloud', permission: 'view_wh_docs'},
+    {id:'dispatch', label:'تخصیص کالا', icon:'clipboard', permission: 'view_wh_dispatch'},
+    {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
+    {id:'customs', label:'کارتابل مالی', icon:'folder', permission: 'view_wh_customs'},
+    {id:'supervisor', label:'کارتابل سرپرست', icon:'check-square', permission: 'view_sys_supervisor'},
+    {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
+    {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
+
+    {id:'feeding', label:'مدیریت و تغذیه MT26/49', icon:'database', permission: 'view_wh_feeding'},
+    {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_wh_export'},
+    {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text', permission: 'view_wh_audit'},
+    {id:'wh-settings', label:'تنظیمات انبار', icon:'settings', permission: 'view_wh_settings'}
+  ];
 
   constructor(
     public auth: AuthService,
@@ -104,7 +89,8 @@ export class Layout implements OnInit {
     private confirmDialog: ConfirmDialogService,
     private router: Router,
     private sanitizer: DomSanitizer,
-    private whService: WarehouseHttpService
+    private whService: WarehouseHttpService,
+    private cdr: ChangeDetectorRef
   ) {
     // Sanitize icons
     for (const k in this.rawIcons) {
@@ -133,7 +119,7 @@ export class Layout implements OnInit {
           this.onWarehouseChanged(data[0].id);
         } else if (storedId) {
           // اگر در استور موجود بود (مثلا از localStorage) حتماً سینک کن
-          this.state.appState.activeWarehouseId = Number(storedId);
+          this.state.appState.activeWarehouseId = storedId === 'ALL' ? 'ALL' : Number(storedId);
         }
       }
     });
@@ -141,11 +127,16 @@ export class Layout implements OnInit {
 
   /** ──── Sidebar ──── */
   readonly navItems = computed(() => {
-    if (this.store.isWarehouseContext()) {
-      return this.NAV_ITEMS.warehouseAdmin;
-    }
-    const dept = this.auth.userDepartment();
-    return this.NAV_ITEMS[dept] || this.NAV_ITEMS.globalAdmin;
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    
+    let items = this.store.isWarehouseContext() ? this.WAREHOUSE_NAV_ITEMS : this.SYSTEM_NAV_ITEMS;
+    
+    // Filter items based on permissions
+    return items.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission);
+    });
   });
   
   get isSidebarOpen() { return this.store.isSidebarOpen(); }
@@ -209,16 +200,17 @@ export class Layout implements OnInit {
   private updateTitle(tab: string) {
     const titles: any = {
       dashboard: 'داشبورد مانیتورینگ',
-      projects: 'مدیریت انبارها',
+      projects: 'انبارها',
       dispatch: 'تخصیص کالا',
-      users: 'کاربران و ساختار',
+      users: 'کاربران و نقش‌ها',
       tasks: 'وظایف و اسناد',
       labels: 'لیبل‌زن هوشمند',
       docs: 'انبار',
       'id-cards': 'صدور کارت پرسنلی و گیت‌پاس',
       feeding: 'تغذیه سامانه MT',
       settings: 'تنظیمات',
-      counter: 'میزکار شمارش کور',
+      counter: 'کارتابل انبارگردان',
+      customs: 'کارتابل مالی',
       supervisor: 'کارتابل سرپرست شمارش',
       'manager-review': 'بررسی نهایی رکوردها',
       'label-designer': 'طراحی و کانفیگ لیبل/QR',

@@ -22,10 +22,53 @@ class ItemFilter(django_filters.FilterSet):
     hov_date_after = django_filters.DateFilter(field_name='hov_date', lookup_expr='gte')
     hov_date_before = django_filters.DateFilter(field_name='hov_date', lookup_expr='lte')
 
-    
+    tag__in = django_filters.CharFilter(method='filter_tags_in')
+
+    def filter_tags_in(self, queryset, name, value):
+        if not value:
+            return queryset
+        tags = value.split(',')
+        query = Q()
+        for t in tags:
+            query |= Q(tag__icontains=t.strip())
+        return queryset.filter(query)
+
+    created_by_name__in = django_filters.CharFilter(method='filter_created_by_name_in')
+    modified_by_name__in = django_filters.CharFilter(method='filter_modified_by_name_in')
+
+    def filter_created_by_name_in(self, queryset, name, value):
+        if not value:
+            return queryset
+        names = [n.strip() for n in value.split(',')]
+        query = Q()
+        for n in names:
+            query |= Q(created_by__first_name__icontains=n) | Q(created_by__last_name__icontains=n) | Q(created_by__username__icontains=n)
+        return queryset.filter(query)
+
+    def filter_modified_by_name_in(self, queryset, name, value):
+        if not value:
+            return queryset
+        names = [n.strip() for n in value.split(',')]
+        query = Q()
+        for n in names:
+            query |= Q(modified_by__first_name__icontains=n) | Q(modified_by__last_name__icontains=n) | Q(modified_by__username__icontains=n)
+        return queryset.filter(query)
+
+    created_by_name = django_filters.CharFilter(method='filter_created_by_name_search')
+    modified_by_name = django_filters.CharFilter(method='filter_modified_by_name_search')
+
+    def filter_created_by_name_search(self, queryset, name, value):
+        if not value: return queryset
+        return queryset.filter(Q(created_by__first_name__icontains=value) | Q(created_by__last_name__icontains=value) | Q(created_by__username__icontains=value))
+
+    def filter_modified_by_name_search(self, queryset, name, value):
+        if not value: return queryset
+        return queryset.filter(Q(modified_by__first_name__icontains=value) | Q(modified_by__last_name__icontains=value) | Q(modified_by__username__icontains=value))
+
     # Text search
     description = django_filters.CharFilter(lookup_expr='icontains')
     tag = django_filters.CharFilter(lookup_expr='icontains')
+    field_assignee = django_filters.CharFilter(lookup_expr='icontains')
     fa_unic_code = django_filters.CharFilter(lookup_expr='icontains')
     plpkitem = django_filters.CharFilter(lookup_expr='icontains')
     old_location = django_filters.CharFilter(lookup_expr='icontains')

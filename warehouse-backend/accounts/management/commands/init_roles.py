@@ -10,6 +10,8 @@ class Command(BaseCommand):
             'manager',
             'supervisor',
             'counter',
+            'doc_worker',
+            'doc_supervisor',
             'document_expert',
             'feeding_operator'
         ]

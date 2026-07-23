@@ -1,27 +1,41 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CountTaskApiService } from '../../../core/api/count-task-api.service';
 import { CountTask } from '../../../core/models/count-task.model';
 import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { StateService } from '../../../services/state.service';
+import { HasPermissionDirective } from '../../../shared';
+import { WarehouseSelectorComponent } from '../../../shared/components/warehouse-selector/warehouse-selector.component';
+import { AuthStore } from '../../../core/stores/auth.store';
+import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-supervisor-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HasPermissionDirective, WarehouseSelectorComponent],
   templateUrl: './supervisor-dashboard.html',
   styleUrl: './supervisor-dashboard.css'
 })
 export class SupervisorDashboard implements OnInit {
+  authStore = inject(AuthStore);
   tasks: CountTask[] = [];
+  poolTasks: CountTask[] = [];
   isLoading = true;
   selectedTasks: Set<number> = new Set();
+  selectedPoolTasks: Set<number> = new Set();
+  currentTab: 'my-tasks' | 'pool' = 'my-tasks';
   
   // Reject Dialog State
   showRejectDialog = false;
   rejectingTask: CountTask | null = null;
   rejectNote: string = '';
+
+  // Approve Dialog State
+  showApproveDialog = false;
+  approveNote: string = '';
 
   // History Dialog State
   showHistoryDialog = false;
@@ -31,7 +45,9 @@ export class SupervisorDashboard implements OnInit {
     private countTaskApi: CountTaskApiService,
     private toast: ToastService,
     private confirmDialog: ConfirmDialogService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    public state: StateService,
+    private http: HttpClient
   ) {}
 
   ngOnInit() {
@@ -41,7 +57,14 @@ export class SupervisorDashboard implements OnInit {
   loadTasks() {
     this.isLoading = true;
     this.cdr.detectChanges();
-    this.countTaskApi.getAll({ status: 'COUNTED', page_size: 1000 }).subscribe({
+    
+    const params: any = { as_role: 'supervisor', status: 'COUNTED', page_size: 1000 };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      params.warehouse_id = whId;
+    }
+
+    this.countTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         try {
           const allTasks = Array.isArray(res) ? res : (res.results || []);
@@ -62,12 +85,79 @@ export class SupervisorDashboard implements OnInit {
     });
   }
 
+  loadPoolTasks() {
+    this.isLoading = true;
+    this.cdr.detectChanges();
+    
+    const params: any = { as_role: 'supervisor' };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      params.warehouse_id = whId;
+    }
+    
+    this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
+      next: (res: any) => {
+        this.poolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت تسک‌های استخر');
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  setTab(tab: 'my-tasks' | 'pool') {
+    this.currentTab = tab;
+    this.selectedTasks.clear();
+    this.selectedPoolTasks.clear();
+    if (tab === 'my-tasks') {
+      this.loadTasks();
+    } else {
+      this.loadPoolTasks();
+    }
+  }
+
+  togglePoolSelection(taskId: number) {
+    if (this.selectedPoolTasks.has(taskId)) {
+      this.selectedPoolTasks.delete(taskId);
+    } else {
+      this.selectedPoolTasks.add(taskId);
+    }
+    this.selectedPoolTasks = new Set(this.selectedPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  async claimSelectedTasks() {
+    if (this.selectedPoolTasks.size === 0) return;
+    
+    const payload = {
+      task_ids: Array.from(this.selectedPoolTasks),
+      as_role: 'supervisor'
+    };
+
+    this.http.post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, payload).subscribe({
+      next: (res: any) => {
+        this.toast.success(`${res.claimed_count} کالا با موفقیت به عهده گرفته شد`);
+        this.setTab('my-tasks');
+      },
+      error: (err: any) => {
+        const errorMsg = err?.error?.error || 'خطا در عملیات';
+        this.toast.error(errorMsg);
+      }
+    });
+  }
+
   toggleSelection(taskId: number) {
     if (this.selectedTasks.has(taskId)) {
       this.selectedTasks.delete(taskId);
     } else {
       this.selectedTasks.add(taskId);
     }
+    this.selectedTasks = new Set(this.selectedTasks);
+    this.cdr.detectChanges();
   }
 
   toggleAll(event: Event) {
@@ -77,58 +167,47 @@ export class SupervisorDashboard implements OnInit {
     } else {
       this.selectedTasks.clear();
     }
+    this.selectedTasks = new Set(this.selectedTasks);
+    this.cdr.detectChanges();
   }
 
   isAllSelected() {
     return this.tasks.length > 0 && this.selectedTasks.size === this.tasks.length;
   }
 
-  async bulkApprove() {
+  openApproveDialog() {
     if (this.selectedTasks.size === 0) return;
-
-    const confirmed = await this.confirmDialog.open({
-      title: 'تایید اقلام شمرده شده',
-      message: `آیا از تایید ${this.selectedTasks.size} قلم کالا و ارسال آن‌ها برای مدیریت اطمینان دارید؟`,
-      confirmText: 'بله، تایید کن',
-      cancelText: 'انصراف',
-      type: 'info'
-    });
-
-    if (confirmed) {
-      this.countTaskApi.bulkApprove(Array.from(this.selectedTasks)).subscribe({
-        next: (res) => {
-          this.toast.success(res.message);
-          this.loadTasks();
-        },
-        error: () => {
-          this.toast.error('خطا در تایید کالاها');
-          this.cdr.detectChanges();
-        }
-      });
-    }
+    this.approveNote = '';
+    this.showApproveDialog = true;
+    this.cdr.detectChanges();
   }
 
-  async approveSingle(task: CountTask) {
-    const confirmed = await this.confirmDialog.open({
-      title: 'تایید کالا',
-      message: `موجودی ${task.counted_balance} برای ${task.item_details?.description} تایید شود؟`,
-      confirmText: 'بله',
-      cancelText: 'خیر',
-      type: 'info'
-    });
+  cancelApprove() {
+    this.showApproveDialog = false;
+    this.approveNote = '';
+    this.cdr.detectChanges();
+  }
 
-    if (confirmed) {
-      this.countTaskApi.bulkApprove([task.id]).subscribe({
-        next: (res) => {
-          this.toast.success('کالا با موفقیت تایید شد');
-          this.loadTasks();
-        },
-        error: () => {
-          this.toast.error('خطا در عملیات');
-          this.cdr.detectChanges();
-        }
-      });
-    }
+  confirmApprove() {
+    if (this.selectedTasks.size === 0) return;
+
+    this.countTaskApi.bulkApprove(Array.from(this.selectedTasks), this.approveNote).subscribe({
+      next: (res) => {
+        this.toast.success(res.message);
+        this.showApproveDialog = false;
+        this.selectedTasks = new Set();
+        this.loadTasks();
+      },
+      error: () => {
+        this.toast.error('خطا در تایید کالاها');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  approveSingle(task: CountTask) {
+    this.selectedTasks = new Set([task.id]);
+    this.openApproveDialog();
   }
 
   openRejectDialog(task: CountTask) {

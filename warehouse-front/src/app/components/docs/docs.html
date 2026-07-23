@@ -14,6 +14,7 @@
         <app-file-upload
           accept=".xlsx,.csv,.accdb"
           [maxSizeMB]="20"
+          [selectedFile]="importService.currentState.fileToUpload"
           (fileSelected)="handleFileDrop($event)"
           (fileRemoved)="resetForm()">
         </app-file-upload>
@@ -26,7 +27,7 @@
             </div>
             <div class="flex-1">
               <label class="block text-xs font-bold text-indigo-900 mb-1.5">تگ‌گذاری گروهی محموله (Tag-on-Import)</label>
-              <p class="text-[10px] text-indigo-600/70 mb-3 leading-relaxed">با وارد کردن تگ در این بخش، تمامی رکوردهای موجود در فایل اکسل به صورت خودکار با این شناسه نشانه‌گذاری می‌شوند تا در مراحل بعدی (تخصیص به شمارشگر یا خروجی MT) به راحتی فیلتر شوند.</p>
+              <p class="text-[10px] text-indigo-600/70 mb-3 leading-relaxed">با وارد کردن تگ در این بخش، تمامی رکوردهای موجود در فایل اکسل به صورت خودکار با این شناسه نشانه‌گذاری می‌شوند تا در مراحل بعدی (تخصیص به انبارگردان یا خروجی MT) به راحتی فیلتر شوند.</p>
               
               <div class="relative max-w-sm">
                 <input type="text" [(ngModel)]="importService.currentState.importTag" list="existing-tags" placeholder="مثلاً: محموله فاز ۱، ترخیص مهرماه..." class="w-full px-4 py-2.5 rounded-xl bg-white border border-indigo-200 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all">
@@ -62,7 +63,7 @@
         </div>
 
         <!-- دکمه اکشن -->
-        <div class="mt-6">
+        <div class="mt-6" *appHasPermission="'perm_rec_import'">
           <div *ngIf="!hasWarehouse" class="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-amber-700 text-xs font-bold fade-in">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mt-0.5 shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span>لطفاً ابتدا یک انبار (پروژه) را انتخاب کنید تا امکان پردازش فایل و تزریق داده‌ها فراهم شود.</span>

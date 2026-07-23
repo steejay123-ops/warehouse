@@ -3,24 +3,31 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { AccountsHttpService, User, Role, Permission } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
+import { IdCards } from '../id-cards/id-cards';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, FormsModule, ClickOutsideDirective],
+  imports: [CommonModule, FormsModule, ClickOutsideDirective, IdCards],
   templateUrl: './users.html',
   styleUrl: './users.css'
 })
 export class Users implements OnInit {
   activeTab = 'users';
+  activeRoleTab = 'custom';
   searchQuery = '';
   
   openMenuId: string | null = null;
   
   isUserModalOpen = false;
   isRoleModalOpen = false;
+  isDeleteConfirmModalOpen = false;
+  roleToDelete: any = null;
+  usersCountToDelete: number = 0;
+  activePermTab = 'MAIN_MENU';
 
   // Role Form
   editingRole: any = null;
@@ -33,7 +40,7 @@ export class Users implements OnInit {
   userForm = {
     id: null as number | null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', 
     operational_zone: '', supervisor: null as number | null, address: '', company: '', groups: [] as number[], assigned_warehouses: [] as string[], expiry_date: '',
-    date_joined: '', last_login: '', is_active: true, expiryMode: 'default', expiryDays: 90
+    date_joined: '', last_login: '', is_active: true, is_superuser: false, expiryMode: 'default', expiryDays: 90
   };
 
   systemPermissions: Permission[] = [];
@@ -41,7 +48,8 @@ export class Users implements OnInit {
   isLoading = false;
 
   constructor(
-    public state: StateService, 
+    public state: StateService,
+    public auth: AuthService,
     private toast: ToastService, 
     private accountsService: AccountsHttpService, 
     private whService: WarehouseHttpService,
@@ -55,11 +63,28 @@ export class Users implements OnInit {
   loadData() {
     this.accountsService.getPermissions().subscribe(res => {
       this.systemPermissions = res;
-      this.systemPermissionGroups = [{
-        key: 'ALL',
-        title: 'تمامی دسترسی‌ها',
-        items: res
-      }];
+      
+      const mainMenuPerms = res.filter((p: any) => p.codename.startsWith('view_sys_'));
+      const warehouseMenuPerms = res.filter((p: any) => p.codename.startsWith('view_wh_'));
+      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_'));
+
+      this.systemPermissionGroups = [
+        {
+          key: 'MAIN_MENU',
+          title: 'دسترسی‌های منوی اصلی',
+          items: mainMenuPerms
+        },
+        {
+          key: 'WH_MENU',
+          title: 'دسترسی‌های منوی انبار',
+          items: warehouseMenuPerms
+        },
+        {
+          key: 'BACKEND',
+          title: 'دسترسی‌های عملیاتی و بک‌اند',
+          items: backendPerms
+        }
+      ];
     });
 
     this.accountsService.getRoles().subscribe(res => {
@@ -93,6 +118,16 @@ export class Users implements OnInit {
 
   get rootRoles() {
     return this.state.appState.roles;
+  }
+
+  get systemRoles() {
+    const sys = ['admin', 'manager', 'supervisor', 'counter'];
+    return this.rootRoles.filter((r: any) => sys.includes(r.name));
+  }
+
+  get customRoles() {
+    const sys = ['admin', 'manager', 'supervisor', 'counter'];
+    return this.rootRoles.filter((r: any) => !sys.includes(r.name));
   }
 
   getRoleChildren(parentId: string) {
@@ -135,10 +170,12 @@ export class Users implements OnInit {
     event.stopPropagation();
     if (this.openMenuId === menuId) this.openMenuId = null;
     else this.openMenuId = menuId;
+    this.cdr.detectChanges();
   }
 
   closeMenus() {
     this.openMenuId = null;
+    this.cdr.detectChanges();
   }
 
   trackById(index: number, item: any) {
@@ -156,6 +193,7 @@ export class Users implements OnInit {
         } else {
             this.toast.show('warning', `حساب کاربری مسدود و دسترسی وی قطع شد.`);
         }
+        this.cdr.detectChanges();
       }
     });
   }
@@ -163,9 +201,10 @@ export class Users implements OnInit {
   resetPassword(id: number) {
     this.closeMenus();
     const u = this.state.appState.users.find((x: any) => x.id === id);
-    if (confirm(`آیا مطمئن هستید که می‌خواهید رمز عبور ${u.first_name} ${u.last_name} را به حالت پیش‌فرض (کد ملی) بازنشانی کنید؟`)) {
-        // Here we could add a backend call to reset password
-        this.toast.show('success', 'رمز عبور با موفقیت به حالت پیش‌فرض تغییر یافت.');
+    if (confirm(`آیا مطمئن هستید که می‌خواهید رمز عبور ${u.first_name} ${u.last_name} را به حالت پیش‌فرض (123456) بازنشانی کنید؟`)) {
+        this.accountsService.adminResetPassword(id).subscribe(res => {
+            this.toast.show('success', res.message || 'رمز عبور با موفقیت به مقدار پیش‌فرض تغییر یافت و کاربر برای حفظ امنیت از سیستم خارج شد.');
+        });
     }
   }
 
@@ -182,10 +221,11 @@ export class Users implements OnInit {
       this.userForm = {
         id: null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', 
         operational_zone: '', supervisor: null, address: '', company: '', groups: [], assigned_warehouses: [], expiry_date: '',
-        date_joined: '', last_login: '', is_active: true, expiryMode: 'default', expiryDays: 90
+        date_joined: '', last_login: '', is_active: true, is_superuser: false, expiryMode: 'default', expiryDays: 90
       };
     }
     this.isUserModalOpen = true;
+    this.cdr.detectChanges();
   }
 
   toggleUserRoleCheckbox(roleId: number, event: Event) {
@@ -214,6 +254,7 @@ export class Users implements OnInit {
         Object.assign(this.editingUser, res);
         this.toast.show('success', 'اطلاعات کاربر با موفقیت بروزرسانی شد.');
         this.isUserModalOpen = false;
+        this.cdr.detectChanges();
       });
     } else {
       (payload as any).password = payload.national_code || '123456';
@@ -221,6 +262,7 @@ export class Users implements OnInit {
         this.state.appState.users.push(res);
         this.toast.show('success', 'کاربر جدید با موفقیت ایجاد شد.');
         this.isUserModalOpen = false;
+        this.cdr.detectChanges();
       });
     }
   }
@@ -230,13 +272,15 @@ export class Users implements OnInit {
     if (id) {
       const r = this.state.appState.roles.find((x: any) => x.id === id);
       this.editingRole = r;
-      this.roleForm = { ...r };
+      this.roleForm = { ...r, title: r.name };
       if (!this.roleForm.permissions) this.roleForm.permissions = [];
     } else {
       this.editingRole = null;
       this.roleForm = { id: null, title: '', permissions: [] };
     }
+    this.activePermTab = 'MAIN_MENU';
     this.isRoleModalOpen = true;
+    this.cdr.detectChanges();
   }
 
   toggleRolePermission(permId: number, event: Event) {
@@ -251,6 +295,21 @@ export class Users implements OnInit {
       this.roleForm.permissions = [];
     } else {
       this.roleForm.permissions = [...allPerms];
+    }
+  }
+
+  toggleGroupPermissions(groupKey: string) {
+    const group = this.systemPermissionGroups.find(g => g.key === groupKey);
+    if (!group) return;
+    
+    const groupPermIds = group.items.map((p: any) => p.id);
+    const hasAll = groupPermIds.every((id: number) => this.roleForm.permissions.includes(id));
+    
+    if (hasAll) {
+      this.roleForm.permissions = this.roleForm.permissions.filter((id: number) => !groupPermIds.includes(id));
+    } else {
+      const newPerms = new Set([...this.roleForm.permissions, ...groupPermIds]);
+      this.roleForm.permissions = Array.from(newPerms);
     }
   }
 
@@ -278,15 +337,44 @@ export class Users implements OnInit {
   }
 
   deleteRole(id: number) {
-    const usersInRole = this.getUsersInRoleCount(id);
-    if (usersInRole > 0) {
-      return this.toast.show('error', `نمی‌توانید این نقش را حذف کنید. ابتدا نقش ${usersInRole} کاربر متصل به آن را تغییر دهید.`);
+    const role = this.state.appState.roles.find((r: any) => r.id === id);
+    if (!role) return;
+    
+    const keyRoles = ['admin', 'manager', 'supervisor', 'counter'];
+    if (keyRoles.includes(role.name)) {
+        return this.toast.show('error', 'امکان حذف نقش‌های سیستمی و کلیدی وجود ندارد.');
     }
+    
+    this.roleToDelete = role;
+    this.usersCountToDelete = this.getUsersInRoleCount(id);
+    this.isDeleteConfirmModalOpen = true;
+    this.cdr.detectChanges();
+  }
 
+  confirmDeleteRole() {
+    if (!this.roleToDelete) return;
+    const id = this.roleToDelete.id;
+    
     this.accountsService.deleteRole(id).subscribe(() => {
         this.state.appState.roles = this.state.appState.roles.filter((r: any) => r.id !== id);
-        this.toast.show('success', 'نقش از ساختار سازمانی حذف شد.');
+        
+        // Remove this role from all users in frontend state automatically
+        this.state.appState.users.forEach((u: any) => {
+            if (u.groups && u.groups.includes(id)) {
+                u.groups = u.groups.filter((gId: number) => gId !== id);
+            }
+        });
+        
+        this.toast.show('success', 'نقش مورد نظر حذف و دسترسی کاربران مرتبط بروزرسانی شد.');
+        this.isDeleteConfirmModalOpen = false;
+        this.roleToDelete = null;
+        this.cdr.detectChanges();
     });
+  }
+
+  cancelDeleteRole() {
+      this.isDeleteConfirmModalOpen = false;
+      this.roleToDelete = null;
   }
 
   formatDate(dStr: string) {

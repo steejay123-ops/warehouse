@@ -3,13 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { StateService } from '../../services/state.service';
-import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponent } from '../../shared';
+import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponent, HasPermissionDirective } from '../../shared';
 import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
 
 @Component({
   selector: 'app-projects',
-  imports: [CommonModule, FormsModule, ModalComponent],
+  imports: [CommonModule, FormsModule, ModalComponent, HasPermissionDirective],
   templateUrl: './projects.html',
   styleUrl: './projects.css'
 })

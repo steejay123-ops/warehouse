@@ -4,6 +4,30 @@
             <h3 class="font-black text-slate-800 text-lg">بررسی نهایی مدیر (مغایرت‌گیری)</h3>
             <p class="text-xs text-slate-500 mt-1">مقایسه موجودی سیستمی با شمارش تایید شده سرپرست</p>
         </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 min-w-[200px]">
+            <app-warehouse-selector
+              *ngIf="!authStore.isWarehouseContext()"
+              [allowAll]="true"
+              [projects]="state.appState.projects"
+              [activeId]="authStore.activeWarehouseId()"
+              (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
+            ></app-warehouse-selector>
+          </div>
+          <button 
+            (click)="loadTasks()"
+            class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs flex items-center gap-2 transition-colors">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            بروزرسانی
+          </button>
+          <button 
+            *ngIf="selectedTasks.size > 0"
+            (click)="openApproveDialog()"
+            class="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-4 py-2 font-bold text-xs shadow-md shadow-purple-600/20 flex items-center gap-2 transition-transform active:scale-95 slide-in">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            تایید نهایی {{selectedTasks.size}} مورد
+          </button>
+        </div>
     </div>
 
     <div *ngIf="isLoading" class="flex justify-center items-center py-20">
@@ -12,48 +36,62 @@
 
     <!-- Task List -->
     <div *ngIf="!isLoading && !selectedTask" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        <!-- Select All Header -->
+        <div *ngIf="tasks.length > 0" class="col-span-full flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll($event)" class="w-4 h-4 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500">
+              <span class="text-sm font-bold text-slate-700">انتخاب همه موارد</span>
+            </label>
+        </div>
+
         <div *ngIf="tasks.length === 0" class="col-span-full text-center py-10">
             <p class="text-sm font-bold text-slate-500">موردی برای بررسی نهایی وجود ندارد.</p>
         </div>
 
-        <div *ngFor="let t of tasks" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between hover:shadow-md transition-all">
+        <div *ngFor="let t of tasks" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between transition-all"
+             [class.border-purple-300]="selectedTasks.has(t.id)"
+             [class.bg-purple-50]="selectedTasks.has(t.id)">
             <div>
                 <div class="flex justify-between items-start mb-3">
-                    <span class="text-xs font-black text-purple-700 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100">
-                        {{t.item_details?.fa_unic_code || '-'}}
-                    </span>
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" [checked]="selectedTasks.has(t.id)" (change)="toggleSelection(t.id)" class="w-4 h-4 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500 cursor-pointer">
+                        <span class="text-xs font-black text-purple-700 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100">
+                            {{t.item_details?.fa_unic_code || '-'}}
+                        </span>
+                    </div>
                     <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
                         منتظر بررسی مدیر
                     </span>
                 </div>
-                <h4 class="text-sm font-bold text-slate-800 mb-4 line-clamp-2">{{t.item_details?.description || '-'}}</h4>
+                <h4 class="text-sm font-bold text-slate-800 mb-4 line-clamp-2 pl-6">{{t.item_details?.description || '-'}}</h4>
                 
                 <div class="grid grid-cols-2 gap-2 text-xs mb-3">
                     <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
                         <span class="text-slate-500 font-bold mb-1 text-[10px]">موجودی سیستمی</span>
-                        <span class="font-black text-slate-800 text-base">{{t.item_details?.balance || 0}}</span>
+                        <span class="font-black text-slate-800 text-base">{{t.item_details?.bal4miv || 0}}</span>
                     </div>
                     <div class="p-3 rounded-xl border flex flex-col justify-center items-center" 
-                         [ngClass]="t.counted_balance == t.item_details?.balance ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
+                         [ngClass]="isMatched(t) ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
                         <span class="font-bold mb-1 text-[10px]"
-                              [ngClass]="t.counted_balance == t.item_details?.balance ? 'text-emerald-600' : 'text-rose-600'">مقدار شمرده شده</span>
+                              [ngClass]="isMatched(t) ? 'text-emerald-600' : 'text-rose-600'">مقدار شمرده شده</span>
                         <span class="font-black text-base"
-                              [ngClass]="t.counted_balance == t.item_details?.balance ? 'text-emerald-700' : 'text-rose-700'">{{t.counted_balance}}</span>
+                              [ngClass]="isMatched(t) ? 'text-emerald-700' : 'text-rose-700'">{{t.counted_balance}}</span>
                     </div>
                 </div>
                 <div class="text-[10px] text-slate-500 px-1 flex justify-between">
-                    <span>شمارشگر: <strong>{{t.counter_name}}</strong></span>
+                    <span>انبارگردان: <strong>{{t.counter_name}}</strong></span>
                     <span>سرپرست: <strong>{{t.supervisor_name}}</strong></span>
                 </div>
             </div>
             
-            <button (click)="selectTask(t)" class="w-full mt-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl shadow-sm hover:bg-purple-700 transition-colors">
-                مقایسه جزئیات و ثبت نتیجه
+            <button (click)="selectTask(t)" class="w-full mt-4 py-2 bg-purple-100 text-purple-700 hover:text-white text-xs font-bold rounded-xl shadow-sm hover:bg-purple-600 transition-colors">
+                مقایسه جزئیات و ثبت نتیجه تکی
             </button>
         </div>
     </div>
 
-    <!-- Review Form -->
+    <!-- Review Form (Single) -->
     <div *ngIf="selectedTask && !isLoading" class="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 fade-in">
         <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
             <h4 class="font-black text-slate-800">تصمیم‌گیری مدیر</h4>
@@ -72,19 +110,19 @@
                     <div class="absolute top-0 right-0 w-1 h-full bg-slate-400"></div>
                     <span class="text-xs text-slate-500 font-bold block mb-3 border-b border-slate-200 pb-2">اطلاعات سیستمی</span>
                     <div class="space-y-2">
-                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">موجودی:</span><span class="font-black text-slate-800">{{selectedTask.item_details?.balance}}</span></div>
-                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">لوکیشن:</span><span class="font-bold text-slate-700 text-[11px]">{{selectedTask.item_details?.location || '-'}}</span></div>
+                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">موجودی:</span><span class="font-black text-slate-800">{{selectedTask.item_details?.bal4miv}}</span></div>
+                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">لوکیشن:</span><span class="font-bold text-slate-700 text-[11px]">{{selectedTask.item_details?.new_location || '-'}}</span></div>
                     </div>
                 </div>
 
                 <div class="p-4 rounded-xl relative overflow-hidden border"
-                     [ngClass]="selectedTask.counted_balance == selectedTask.item_details?.balance ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'">
+                     [ngClass]="isMatched(selectedTask) ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'">
                     <div class="absolute top-0 right-0 w-1 h-full"
-                         [ngClass]="selectedTask.counted_balance == selectedTask.item_details?.balance ? 'bg-emerald-500' : 'bg-rose-500'"></div>
+                         [ngClass]="isMatched(selectedTask) ? 'bg-emerald-500' : 'bg-rose-500'"></div>
                     <span class="text-xs font-bold block mb-3 border-b pb-2"
-                          [ngClass]="selectedTask.counted_balance == selectedTask.item_details?.balance ? 'text-emerald-700 border-emerald-200' : 'text-rose-700 border-rose-200'">اطلاعات شمرده شده</span>
+                          [ngClass]="isMatched(selectedTask) ? 'text-emerald-700 border-emerald-200' : 'text-rose-700 border-rose-200'">اطلاعات شمرده شده</span>
                     <div class="space-y-2">
-                        <div class="flex justify-between"><span class="text-[10px]" [ngClass]="selectedTask.counted_balance == selectedTask.item_details?.balance ? 'text-emerald-600' : 'text-rose-600'">موجودی:</span><span class="font-black" [ngClass]="selectedTask.counted_balance == selectedTask.item_details?.balance ? 'text-emerald-800' : 'text-rose-800'">{{selectedTask.counted_balance}}</span></div>
+                        <div class="flex justify-between"><span class="text-[10px]" [ngClass]="isMatched(selectedTask) ? 'text-emerald-600' : 'text-rose-600'">موجودی:</span><span class="font-black" [ngClass]="isMatched(selectedTask) ? 'text-emerald-800' : 'text-rose-800'">{{selectedTask.counted_balance}}</span></div>
                     </div>
                 </div>
             </div>
@@ -141,10 +179,51 @@
                 <button (click)="approveTask()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-3 rounded-xl shadow-md transition-colors">
                     تایید نهایی شمارش
                 </button>
-                <button (click)="rejectTask()" class="flex-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-sm py-3 rounded-xl transition-colors border border-rose-200">
+                <button *appHasPermission="'perm_rec_recount'" (click)="rejectTask()" class="flex-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-sm py-3 rounded-xl transition-colors border border-rose-200">
                     درخواست بازشماری مجدد
                 </button>
             </div>
         </div>
     </div>
+
+  <!-- Approve Dialog (Bulk) -->
+  <div *ngIf="showApproveDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="cancelApprove()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col slide-in">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h3 class="font-black text-slate-800 text-sm">تایید کالاها</h3>
+        <button (click)="cancelApprove()" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      
+      <div class="p-6 flex-1 overflow-y-auto">
+        <div class="mb-4">
+          <div class="p-3 bg-purple-50 border border-purple-100 rounded-xl mb-4">
+            <p class="text-xs text-purple-800 leading-relaxed font-bold">آیا از تایید نهایی {{selectedTasks.size}} قلم کالا اطمینان دارید؟</p>
+          </div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">توضیحات مدیر (اختیاری)</label>
+          <textarea 
+            [(ngModel)]="approveNote"
+            rows="3" 
+            class="w-full text-sm rounded-xl border-slate-200 shadow-sm focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition-colors p-3 bg-slate-50/50"
+            placeholder="در صورت نیاز دستورات خود را بنویسید..."></textarea>
+        </div>
+      </div>
+      
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+        <button 
+          (click)="cancelApprove()"
+          class="flex-1 py-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">
+          انصراف
+        </button>
+        <button 
+          (click)="confirmApprove()"
+          class="flex-1 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-transform active:scale-95">
+          تایید نهایی کالاها
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>

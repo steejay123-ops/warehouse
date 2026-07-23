@@ -1,4 +1,4 @@
-from rest_framework import viewsets
+﻿from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
@@ -6,9 +6,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import Item, ImportLog, ImportHistory
-from .serializers import ItemSerializer
+from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer
 from django.forms.models import model_to_dict
 from warehouses.models import Warehouse
+from .models import CountTask, DocTask
 from django.db.models import Q
 from django.utils import timezone
 import openpyxl
@@ -78,6 +79,42 @@ class ItemViewSet(viewsets.ModelViewSet):
     ordering_fields = '__all__'
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        show_counted = self.request.query_params.get('show_counted') == 'true'
+        show_counting = self.request.query_params.get('show_counting') == 'true'
+        
+        excluded_statuses = []
+        if not show_counted:
+            excluded_statuses.append('done')
+        if not show_counting:
+            excluded_statuses.extend(['counting', 'recount'])
+            
+        if excluded_statuses:
+            queryset = queryset.exclude(field_status__in=excluded_statuses)
+            
+        return queryset
+
+    def get_permissions(self):
+        from accounts.permissions import HasMenuAccess
+        
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [HasMenuAccess('view_wh_docs') | HasMenuAccess('view_sys_counter')]
+        elif self.action == 'bulk_assign':
+            permission_classes = [HasMenuAccess('perm_rec_dispatch')]
+        elif self.action in ['export_excel', 'export_excel_mt']: # I'll just secure export here in case it's added
+            permission_classes = [HasMenuAccess('view_sys_export')]
+        elif self.action in ['import_excel', 'cancel_import', 'delete_from_excel', 'clear_warehouse_data']:
+            permission_classes = [HasMenuAccess('perm_rec_import')]
+        elif self.action in ['reject', 'manager_reject']:
+            permission_classes = [HasMenuAccess('perm_rec_recount')]
+        else: # create, update, partial_update, destroy, bulk_update, etc
+            permission_classes = [HasMenuAccess('perm_wh_edit')]
+            
+        return permission_classes
+
+
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):
         try:
@@ -119,36 +156,89 @@ class ItemViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def bulk_assign(self, request):
         ids = request.data.get('item_ids', request.data.get('ids', []))
-        field_assignee_id = request.data.get('field_assignee') # Now expecting ID
-        supervisor_id = request.data.get('supervisor_assignee') # New
-        doc_assignee = request.data.get('doc_assignee') # Still text for now or ID?
+        
+        # Field Counting Assignments
+        field_assignee_id = request.data.get('field_assignee')
+        supervisor_id = request.data.get('supervisor_assignee')
+        manager_id = request.data.get('manager_assignee')
+        
+        # Document Phase Assignments
+        doc_assignee_id = request.data.get('doc_assignee') # Used to be string, now expected to be ID or null
+        doc_supervisor_id = request.data.get('doc_supervisor_assignee')
+        doc_manager_id = request.data.get('doc_manager_assignee')
+        
         field_status = request.data.get('field_status')
         doc_status = request.data.get('doc_status')
+        force = request.data.get('force', False)
         
         items = Item.objects.filter(id__in=ids)
+        
+        # مورد 3: هشدار برای ارسال مجدد کالایی که CountTask دارد
+        if field_status == 'counting' and not force:
+            from .models import CountTask
+            existing_tasks = CountTask.objects.filter(item__in=items).count()
+            if existing_tasks > 0:
+                return Response({
+                    'warning': True,
+                    'message': f'تعداد {existing_tasks} مورد از کالاهای انتخاب شده قبلاً به فرآیند شمارش رفته‌اند. آیا از ارجاع مجدد اطمینان دارید؟'
+                }, status=200)
+                
+        # هشدار برای ارسال مجدد کالایی که DocTask دارد
+        if doc_status == 'checking' and not force:
+            from .models import DocTask
+            existing_doc_tasks = DocTask.objects.filter(item__in=items).count()
+            if existing_doc_tasks > 0:
+                return Response({
+                    'warning': True,
+                    'message': f'تعداد {existing_doc_tasks} مورد از کالاهای انتخاب شده قبلاً به فرآیند بررسی اسناد رفته‌اند. آیا از ارجاع مجدد اطمینان دارید؟'
+                }, status=200)
         
         from django.contrib.auth import get_user_model
         User = get_user_model()
         
-        counter_user = None
-        if field_assignee_id:
-            try:
-                counter_user = User.objects.get(id=field_assignee_id)
-            except User.DoesNotExist:
-                pass
-                
+        def _get_user_or_none(uid):
+            if uid:
+                try:
+                    return User.objects.get(id=uid)
+                except (User.DoesNotExist, ValueError):
+                    return None
+            return None
+
+        counter_user = _get_user_or_none(field_assignee_id)
+        manager_user = _get_user_or_none(manager_id)
+        
+        doc_worker_user = _get_user_or_none(doc_assignee_id)
+        doc_manager_user = _get_user_or_none(doc_manager_id)
+        
         supervisor_user = None
+        skip_supervisor = False
         if supervisor_id:
-            try:
-                supervisor_user = User.objects.get(id=supervisor_id)
-            except User.DoesNotExist:
-                pass
+            if str(supervisor_id) == 'skip':
+                skip_supervisor = True
+            else:
+                supervisor_user = _get_user_or_none(supervisor_id)
+                
+        doc_supervisor_user = None
+        doc_skip_supervisor = False
+        if doc_supervisor_id:
+            if str(doc_supervisor_id) == 'skip':
+                doc_skip_supervisor = True
+            else:
+                doc_supervisor_user = _get_user_or_none(doc_supervisor_id)
         
         update_data = {}
-        if counter_user:
-            update_data['field_assignee'] = f"{counter_user.first_name} {counter_user.last_name}".strip() or counter_user.username
-        if doc_assignee is not None:
-            update_data['doc_assignee'] = doc_assignee
+        if 'field_assignee' in request.data:
+            if counter_user:
+                update_data['field_assignee'] = f"{counter_user.first_name} {counter_user.last_name}".strip() or counter_user.username
+            else:
+                update_data['field_assignee'] = 'استخر عمومی'
+                
+        if 'doc_assignee' in request.data:
+            if doc_worker_user:
+                update_data['doc_assignee'] = f"{doc_worker_user.first_name} {doc_worker_user.last_name}".strip() or doc_worker_user.username
+            else:
+                update_data['doc_assignee'] = 'استخر عمومی'
+
         if field_status is not None:
             update_data['field_status'] = field_status
         if doc_status is not None:
@@ -159,21 +249,53 @@ class ItemViewSet(viewsets.ModelViewSet):
             update_data['modified_by'] = request.user
             items.update(**update_data)
             
+        from warehouses.services import get_setting
+        first_item = items.first()
+        wh_id = first_item.warehouse_id if first_item else None
+        
         # Create CountTasks if it's a field dispatch
-        if counter_user and supervisor_user and field_status == 'counting':
+        if field_status == 'counting':
             from .models import CountTask
+            
+            # بررسی تنظیم تایید سرپرست
+            req_supervisor = get_setting('require_supervisor_approval', wh_id)
+            
             tasks_to_create = []
             for item in items:
                 tasks_to_create.append(CountTask(
                     item=item,
                     counter=counter_user,
-                    supervisor=supervisor_user,
+                    supervisor=supervisor_user if (req_supervisor and not skip_supervisor) else None,
+                    skip_supervisor=skip_supervisor,
+                    assigned_manager=manager_user,
                     status='PENDING_COUNT',
                     created_by=request.user,
                     modified_by=request.user
                 ))
             if tasks_to_create:
                 CountTask.objects.bulk_create(tasks_to_create)
+
+        # Create DocTasks if it's a document dispatch
+        if doc_status == 'processing':
+            from .models import DocTask
+            
+            # بررسی تنظیم تایید سرپرست اسناد
+            req_doc_supervisor = get_setting('require_doc_supervisor_approval', wh_id)
+            
+            doc_tasks_to_create = []
+            for item in items:
+                doc_tasks_to_create.append(DocTask(
+                    item=item,
+                    doc_worker=doc_worker_user,
+                    doc_supervisor=doc_supervisor_user if (req_doc_supervisor and not doc_skip_supervisor) else None,
+                    skip_supervisor=doc_skip_supervisor,
+                    assigned_manager=doc_manager_user,
+                    status='PENDING_DOC',
+                    created_by=request.user,
+                    modified_by=request.user
+                ))
+            if doc_tasks_to_create:
+                DocTask.objects.bulk_create(doc_tasks_to_create)
             
         return Response({'status': 'success', 'updated': items.count()})
 
@@ -296,7 +418,12 @@ class ItemViewSet(viewsets.ModelViewSet):
     def import_excel(self, request):
         file_obj = request.FILES.get('file')
         warehouse_id = request.data.get('warehouse_id')
-        conflict_strategy = request.data.get('conflict_strategy', 'ignore')
+        
+        from warehouses.services import get_setting
+        sys_conflict_strategy = get_setting('default_conflict_strategy', warehouse_id)
+        sys_tag_status = get_setting('default_tag_status', warehouse_id)
+        
+        conflict_strategy = request.data.get('conflict_strategy') or sys_conflict_strategy
         import_tag = request.data.get('import_tag', '')
         import_id = request.data.get('import_id', '')
         
@@ -519,6 +646,8 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     
                                 try:
                                     if user_id: defaults['created_by_id'] = user_id
+                                    if 'tag_status' not in defaults:
+                                        defaults['tag_status'] = sys_tag_status
                                     new_item = Item.objects.create(fa_unic_code=fa_unic_code, **defaults)
                                     history_records.append(ImportHistory(item=new_item, action='create'))
                                     
@@ -820,6 +949,78 @@ class ItemViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': f'خطا در پردازش فایل: {str(e)}'}, status=500)
 
+    @action(detail=False, methods=['get'])
+    def dashboard_stats(self, request):
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.db.models import Q
+        
+        project_id = request.query_params.get('project_id')
+        items = Item.objects.all()
+        if project_id and project_id != 'ALL':
+            items = items.filter(warehouse_id=project_id)
+            
+        now = timezone.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Overall
+        total_quantity = items.count()
+        printed_tags = items.filter(tag_status__in=['printed', 'reprint']).count()
+        conflicts = items.filter(Q(has_conflict=True) | Q(field_status='recount')).count()
+        done = items.filter(field_status='done', doc_status='done').count()
+        
+        # Days stats (last 7 days)
+        weekly_data = []
+        days_name = ['دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه', 'یکشنبه']
+        
+        for i in range(6, -1, -1):
+            d_start = today_start - timedelta(days=i)
+            d_end = d_start + timedelta(days=1)
+            
+            day_items = items.filter(updated_at__gte=d_start, updated_at__lt=d_end)
+            
+            # Approximation for daily stats based on updated_at
+            c_count = day_items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
+            c_docs = day_items.exclude(doc_status__in=['waiting', 'processing']).count()
+            # For MT26 feed, doc_status='done' and field_status='done'
+            c_feed = day_items.filter(field_status='done', doc_status='done').count()
+            
+            day_idx = d_start.weekday()
+            
+            weekly_data.append({
+                'day': 'امروز' if i == 0 else ('دیروز' if i == 1 else days_name[day_idx]),
+                'count': c_count,
+                'docs': c_docs,
+                'feed': c_feed
+            })
+            
+        today_stats = weekly_data[-1]
+        yesterday_stats = weekly_data[-2]
+        
+        last_7_days_count = sum(d['count'] for d in weekly_data)
+        last_7_days_docs = sum(d['docs'] for d in weekly_data)
+        last_7_days_feed = sum(d['feed'] for d in weekly_data)
+        
+        max_val = max([max(d['count'], d['docs'], d['feed']) for d in weekly_data] + [10])
+        
+        return Response({
+            'overall': {
+                'total': total_quantity,
+                'printed': printed_tags,
+                'conflicts': conflicts,
+                'done': done
+            },
+            'today': today_stats,
+            'yesterday': yesterday_stats,
+            'last_week_totals': {
+                'count': last_7_days_count,
+                'docs': last_7_days_docs,
+                'feed': last_7_days_feed
+            },
+            'weekly_data': weekly_data,
+            'overallMax': max_val
+        })
+
 from .serializers import CountTaskSerializer
 from .models import CountTask
 from rest_framework import permissions, viewsets
@@ -828,23 +1029,115 @@ from rest_framework.response import Response
 
 class CountTaskViewSet(viewsets.ModelViewSet):
     serializer_class = CountTaskSerializer
-    permission_classes = [permissions.IsAuthenticated]
+
+    def get_permissions(self):
+        from accounts.permissions import HasMenuAccess
+        from rest_framework.permissions import IsAuthenticated
+        
+        if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks']:
+            permission_classes = [HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('view_sys_recounts')]
+        elif self.action == 'bulk_submit':
+            permission_classes = [HasMenuAccess('view_sys_counter')]
+        elif self.action == 'bulk_approve':
+            permission_classes = [HasMenuAccess('view_sys_supervisor')]
+        elif self.action in ['reject', 'manager_reject', 'bulk_manager_reject']:
+            permission_classes = [HasMenuAccess('perm_rec_recount')]
+        elif self.action in ['bulk_manager_approve', 'bulk_cancel']:
+            permission_classes = [HasMenuAccess('view_sys_manager_review')]
+        else: # create, update, etc
+            permission_classes = [IsAuthenticated()]
+            
+        return permission_classes
 
     def get_queryset(self):
         user = self.request.user
         queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by')
         
-        # Managers and Admins see everything
-        if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists():
-            pass
-        # Supervisors see COUNTED and MANAGER_REJECTED assigned to them
-        elif user.groups.filter(name='supervisor').exists():
-            queryset = queryset.filter(supervisor=user)
-        # Counters see PENDING_COUNT and SUPERVISOR_REJECTED assigned to them
-        elif user.groups.filter(name='counter').exists():
-            queryset = queryset.filter(counter=user)
+        as_role = self.request.query_params.get('as_role')
+        warehouse_id = self.request.query_params.get('warehouse_id')
+        
+        if warehouse_id:
+            queryset = queryset.filter(item__warehouse_id=warehouse_id)
+        
+        if as_role == 'counter':
+            return queryset.filter(counter=user)
+        elif as_role == 'supervisor':
+            return queryset.filter(supervisor=user)
+        elif as_role == 'manager':
+            from django.db.models import Q
+            queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
+        elif as_role == 'tracking':
+            # بازگرداندن همه موارد در حال شمارش برای پیگیری
+            show_completed = self.request.query_params.get('show_completed', 'false').lower() == 'true'
+            if not show_completed:
+                queryset = queryset.exclude(status='FINAL_APPROVED')
+        else:
+            # Fallback to group checking if as_role is not provided
+            if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists():
+                from django.db.models import Q
+                queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
+            elif user.groups.filter(name='supervisor').exists():
+                queryset = queryset.filter(supervisor=user)
+            elif user.groups.filter(name='counter').exists():
+                queryset = queryset.filter(counter=user)
+            else:
+                queryset = CountTask.objects.none()
             
         return queryset
+
+    @action(detail=False, methods=['get'])
+    def pool_tasks(self, request):
+        as_role = request.query_params.get('as_role')
+        warehouse_id = request.query_params.get('warehouse_id')
+        queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by')
+        
+        if warehouse_id:
+            queryset = queryset.filter(item__warehouse_id=warehouse_id)
+            
+        if as_role == 'counter':
+            queryset = queryset.filter(counter__isnull=True, status='PENDING_COUNT')
+        elif as_role == 'supervisor':
+            queryset = queryset.filter(supervisor__isnull=True, status='COUNTED')
+        else:
+            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def claim_tasks(self, request):
+        task_ids = request.data.get('task_ids', [])
+        as_role = request.data.get('as_role')
+        
+        if not task_ids or not as_role:
+            return Response({'error': 'شناسه تسک‌ها یا نقش ارسال نشده است.'}, status=400)
+            
+        tasks = CountTask.objects.filter(id__in=task_ids)
+        
+        if as_role == 'counter':
+            tasks = tasks.filter(counter__isnull=True, status='PENDING_COUNT')
+            # Fetch valid IDs to update Items as well
+            valid_task_ids = list(tasks.values_list('id', flat=True))
+            if not valid_task_ids:
+                return Response({'success': True, 'claimed_count': 0})
+                
+            from .models import Item
+            item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
+            
+            # Update CountTasks
+            updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user)
+            
+            # Update Item field_assignee
+            assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name)
+            
+        elif as_role == 'supervisor':
+            tasks = tasks.filter(supervisor__isnull=True, status='COUNTED')
+            updated = tasks.update(supervisor=request.user)
+        else:
+            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            
+        return Response({'success': True, 'claimed_count': updated})
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, modified_by=self.request.user)
@@ -878,24 +1171,44 @@ class CountTaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def bulk_submit(self, request):
         user = request.user
-        tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+        task_ids = request.data.get('task_ids', [])
+        
+        if task_ids:
+            tasks = CountTask.objects.filter(id__in=task_ids, counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+        else:
+            tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+        
+        first_task = tasks.first()
+        if not first_task:
+            return Response({'message': 'هیچ موردی برای ارسال یافت نشد.'})
+            
+        from warehouses.services import get_setting
+        req_sup_app = get_setting('require_supervisor_approval', first_task.item.warehouse_id)
         
         from .models import CountTaskHistory
         histories = []
-        for task in tasks:
+        tasks_list = list(tasks)
+        for task in tasks_list:
+            task_req_sup = req_sup_app and not task.skip_supervisor
+            target_status = 'COUNTED' if task_req_sup else 'MANAGER_REVIEW'
             histories.append(CountTaskHistory(
                 task=task,
                 action_by=user,
-                action_type='COUNTED',
+                action_type=target_status,
                 counted_balance=task.counted_balance,
                 note=task.counter_note
             ))
+            task.status = target_status
+            task.modified_by = user
             
-        count = tasks.update(status='COUNTED', modified_by=user)
+        count = len(tasks_list)
+        if count > 0:
+            CountTask.objects.bulk_update(tasks_list, ['status', 'modified_by'])
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
-        return Response({'message': f'{count} مورد برای سرپرست ارسال شد.'})
+        msg = f'{count} مورد برای سرپرست ارسال شد.' if target_status == 'COUNTED' else f'{count} مورد مستقیماً برای مدیر ارسال شد.'
+        return Response({'message': msg})
 
     @action(detail=False, methods=['post'])
     def bulk_approve(self, request):
@@ -906,22 +1219,75 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             
         tasks = CountTask.objects.filter(id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED'])
         
+        note = request.data.get('note', '')
+        
         from .models import CountTaskHistory
         histories = []
         for task in tasks:
+            task.supervisor_note = note
             histories.append(CountTaskHistory(
                 task=task,
                 action_by=user,
                 action_type='MANAGER_REVIEW',
                 counted_balance=task.counted_balance,
-                note=task.supervisor_note
+                note=note
             ))
             
-        count = tasks.update(status='MANAGER_REVIEW', modified_by=user)
+        count = tasks.update(status='MANAGER_REVIEW', supervisor_note=note, modified_by=user)
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
         return Response({'message': f'{count} مورد تایید و برای مدیر ارسال شد.'})
+
+    @action(detail=False, methods=['post'])
+    def bulk_manager_approve(self, request):
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
+        
+        if not task_ids:
+            return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
+            
+        tasks = CountTask.objects.filter(id__in=task_ids, status='MANAGER_REVIEW').select_related('item')
+        
+        from .models import CountTaskHistory
+        from django.db import transaction
+        
+        with transaction.atomic():
+            histories = []
+            items_to_update = []
+            
+            for task in tasks:
+                task.manager_note = note
+                histories.append(CountTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type='FINAL_APPROVED',
+                    counted_balance=task.counted_balance,
+                    note=note
+                ))
+                
+                # بروزرسانی کالای اصلی پس از تایید نهایی
+                item = task.item
+                item.field_status = 'done'
+                if task.counted_balance is not None:
+                    # بررسی مغایرت (اصلاح ۱۰)
+                    if str(task.counted_balance) != str(item.bal4miv):
+                        item.has_conflict = True
+                    item.balance = task.counted_balance
+                item.modified_by = user
+                item.updated_at = timezone.now()
+                items_to_update.append(item)
+            
+            count = tasks.update(status='FINAL_APPROVED', manager_note=note, modified_by=user)
+            
+            if items_to_update:
+                Item.objects.bulk_update(items_to_update, ['field_status', 'balance', 'has_conflict', 'modified_by', 'updated_at'])
+            
+            if histories:
+                CountTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{count} مورد به صورت گروهی تایید نهایی شد.'})
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
@@ -946,4 +1312,375 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         )
         
         return Response({'message': 'مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
+
+    @action(detail=True, methods=['post'])
+    def manager_reject(self, request, pk=None):
+        """رد توسط مدیر — بسته به تنظیم سرپرست، به سرپرست یا انبارگردان برمی‌گردد"""
+        task = self.get_object()
+        note = request.data.get('note', '')
+        
+        if not note.strip():
+            return Response({'error': 'لطفاً علت بازشماری را بنویسید.'}, status=400)
+        
+        if task.status != 'MANAGER_REVIEW':
+            return Response({'error': 'فقط موارد در انتظار تایید مدیر قابل رد هستند.'}, status=400)
+        
+        from warehouses.services import get_setting
+        
+        # بررسی سقف بازشماری (اصلاح ۵)
+        max_recounts = get_setting('max_recounts', task.item.warehouse_id)
+        if max_recounts is not None and max_recounts != -1:
+            from .models import CountTaskHistory
+            reject_count = CountTaskHistory.objects.filter(
+                task=task,
+                action_type__in=['MANAGER_REJECTED', 'SUPERVISOR_REJECTED']
+            ).count()
+            if reject_count >= int(max_recounts):
+                return Response({
+                    'error': f'سقف بازشماری ({max_recounts} بار) برای این کالا پر شده است.'
+                }, status=400)
+        
+        # بسته به تنظیم سرپرست، تعیین مقصد
+        req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
+        
+        if req_supervisor and task.supervisor:
+            # ارسال به سرپرست
+            target_status = 'MANAGER_REJECTED'
+            target_msg = 'مورد برای بازشماری به سرپرست ارجاع شد.'
+        else:
+            # ارسال مستقیم به انبارگردان
+            target_status = 'PENDING_COUNT'
+            target_msg = 'مورد برای بازشماری مستقیماً به انبارگردان ارجاع شد.'
+        
+        task.status = target_status
+        task.manager_note = note
+        task.counted_balance = None  # پاک کردن مقدار قبلی برای شمارش مجدد
+        task.modified_by = request.user
+        task.save()
+        
+        from .models import CountTaskHistory
+        CountTaskHistory.objects.create(
+            task=task,
+            action_by=request.user,
+            action_type='MANAGER_REJECTED',
+            counted_balance=task.counted_balance,
+            note=note
+        )
+        
+        return Response({'message': target_msg})
+
+class DocTaskViewSet(viewsets.ModelViewSet):
+    serializer_class = DocTaskSerializer
+
+    def get_permissions(self):
+        from accounts.permissions import HasMenuAccess
+        from rest_framework.permissions import IsAuthenticated
+        
+        # Similar permissions to counting but using doc permissions if they existed
+        # Actually for now, since we have the roles doc_worker, doc_supervisor, let's use the counting permissions for now, 
+        # or just allow IsAuthenticated and rely on s_role filtering since roles are new.
+        if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks']:
+            permission_classes = [IsAuthenticated()]
+        elif self.action == 'bulk_submit':
+            permission_classes = [IsAuthenticated()]
+        elif self.action == 'bulk_approve':
+            permission_classes = [IsAuthenticated()]
+        elif self.action in ['reject', 'manager_reject', 'bulk_manager_reject']:
+            permission_classes = [IsAuthenticated()]
+        elif self.action in ['bulk_manager_approve', 'bulk_cancel']:
+            permission_classes = [IsAuthenticated()]
+        else:
+            permission_classes = [IsAuthenticated()]
+            
+        return permission_classes
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = DocTask.objects.all().select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        
+        as_role = self.request.query_params.get('as_role')
+        warehouse_id = self.request.query_params.get('warehouse_id')
+        
+        if warehouse_id:
+            queryset = queryset.filter(item__warehouse_id=warehouse_id)
+        
+        if as_role == 'doc_worker':
+            return queryset.filter(doc_worker=user)
+        elif as_role == 'doc_supervisor':
+            return queryset.filter(doc_supervisor=user)
+        elif as_role == 'manager':
+            from django.db.models import Q
+            queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
+        elif as_role == 'tracking':
+            show_completed = self.request.query_params.get('show_completed', 'false').lower() == 'true'
+            if not show_completed:
+                queryset = queryset.exclude(status='DOC_FINAL_APPROVED')
+        else:
+            # Fallback
+            if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists():
+                from django.db.models import Q
+                queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
+            elif user.groups.filter(name='doc_supervisor').exists():
+                queryset = queryset.filter(doc_supervisor=user)
+            elif user.groups.filter(name='doc_worker').exists():
+                queryset = queryset.filter(doc_worker=user)
+            else:
+                queryset = DocTask.objects.none()
+            
+        return queryset
+
+    @action(detail=False, methods=['get'])
+    def pool_tasks(self, request):
+        as_role = request.query_params.get('as_role')
+        warehouse_id = request.query_params.get('warehouse_id')
+        queryset = DocTask.objects.all().select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        
+        if warehouse_id:
+            queryset = queryset.filter(item__warehouse_id=warehouse_id)
+            
+        if as_role == 'doc_worker':
+            queryset = queryset.filter(doc_worker__isnull=True, status='PENDING_DOC')
+        elif as_role == 'doc_supervisor':
+            queryset = queryset.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
+        else:
+            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def claim_tasks(self, request):
+        task_ids = request.data.get('task_ids', [])
+        as_role = request.data.get('as_role')
+        
+        if not task_ids or not as_role:
+            return Response({'error': 'لیست شناسه‌ها یا نقش ارسال نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids)
+        
+        if as_role == 'doc_worker':
+            tasks = tasks.filter(doc_worker__isnull=True, status='PENDING_DOC')
+            valid_task_ids = list(tasks.values_list('id', flat=True))
+            if not valid_task_ids:
+                return Response({'success': True, 'claimed_count': 0})
+                
+            from .models import Item
+            item_ids = list(DocTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
+            
+            # Update DocTasks
+            updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_worker=request.user)
+            
+            # Update Item doc_assignee
+            assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name)
+            
+        elif as_role == 'doc_supervisor':
+            tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
+            updated = tasks.update(doc_supervisor=request.user)
+        else:
+            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            
+        return Response({'success': True, 'claimed_count': updated})
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user, modified_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        old_status = instance.status
+        new_status = serializer.validated_data.get('status', old_status)
+        
+        updated_instance = serializer.save(modified_by=self.request.user)
+        
+        if old_status != new_status:
+            from .models import DocTaskHistory
+            
+            note = ''
+            if new_status in ['DOC_MANAGER_REJECTED', 'DOC_FINAL_APPROVED']:
+                note = updated_instance.manager_note
+            elif new_status == 'DOC_SUPERVISOR_REJECTED':
+                note = updated_instance.supervisor_note
+            elif new_status == 'DOC_PROCESSED':
+                note = updated_instance.worker_note
+                
+            DocTaskHistory.objects.create(
+                task=updated_instance,
+                action_by=self.request.user,
+                action_type=new_status,
+                note=note
+            )
+
+    @action(detail=False, methods=['post'])
+    def bulk_submit(self, request):
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        
+        if task_ids:
+            tasks = DocTask.objects.filter(id__in=task_ids, doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'])
+        else:
+            tasks = DocTask.objects.filter(doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'])
+        
+        first_task = tasks.first()
+        if not first_task:
+            return Response({'message': 'هیچ رکوردی برای ارجاع یافت نشد.'})
+            
+        from warehouses.services import get_setting
+        req_sup_app = get_setting('require_doc_supervisor_approval', first_task.item.warehouse_id)
+        
+        from .models import DocTaskHistory
+        histories = []
+        tasks_list = list(tasks)
+        for task in tasks_list:
+            task_req_sup = req_sup_app and not task.skip_supervisor
+            target_status = 'DOC_PROCESSED' if task_req_sup else 'DOC_MANAGER_REVIEW'
+            histories.append(DocTaskHistory(
+                task=task,
+                action_by=user,
+                action_type=target_status,
+                note=task.worker_note
+            ))
+            task.status = target_status
+            task.modified_by = user
+            
+        count = len(tasks_list)
+        if count > 0:
+            DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by'])
+        if histories:
+            DocTaskHistory.objects.bulk_create(histories)
+            
+        msg = f'{count} کالا جهت بررسی سرپرست ارسال شد.' if target_status == 'DOC_PROCESSED' else f'{count} کالا مستقیماً جهت بررسی مدیر ارسال شد.'
+        return Response({'message': msg})
+
+    @action(detail=False, methods=['post'])
+    def bulk_approve(self, request):
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        if not task_ids:
+            return Response({'error': 'هیچ کالایی انتخاب نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids, doc_supervisor=user, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+        
+        note = request.data.get('note', '')
+        
+        from .models import DocTaskHistory
+        histories = []
+        for task in tasks:
+            task.supervisor_note = note
+            histories.append(DocTaskHistory(
+                task=task,
+                action_by=user,
+                action_type='DOC_MANAGER_REVIEW',
+                note=note
+            ))
+            task.status = 'DOC_MANAGER_REVIEW'
+            task.modified_by = user
+            
+        if tasks:
+            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
+            DocTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{len(histories)} رکورد جهت تایید نهایی مدیر ارسال شد.'})
+
+    @action(detail=False, methods=['post'])
+    def reject(self, request):
+        task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
+        
+        if not task_ids:
+            return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+        
+        from .models import DocTaskHistory
+        histories = []
+        for task in tasks:
+            task.supervisor_note = note
+            histories.append(DocTaskHistory(
+                task=task,
+                action_by=request.user,
+                action_type='DOC_SUPERVISOR_REJECTED',
+                note=note
+            ))
+            task.status = 'DOC_SUPERVISOR_REJECTED'
+            task.modified_by = request.user
+            
+        if tasks:
+            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
+            DocTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{len(histories)} رکورد به بررسی‌کننده اسناد برگشت داده شد.'})
+
+    @action(detail=False, methods=['post'])
+    def manager_reject(self, request):
+        task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
+        
+        if not task_ids:
+            return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids, status='DOC_MANAGER_REVIEW')
+        
+        from .models import DocTaskHistory
+        histories = []
+        for task in tasks:
+            task.manager_note = note
+            histories.append(DocTaskHistory(
+                task=task,
+                action_by=request.user,
+                action_type='DOC_MANAGER_REJECTED',
+                note=note
+            ))
+            task.status = 'DOC_MANAGER_REJECTED'
+            task.modified_by = request.user
+            
+        if tasks:
+            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'manager_note'])
+            DocTaskHistory.objects.bulk_create(histories)
+            
+        return Response({'message': f'{len(histories)} رکورد به سرپرست اسناد (یا بررسی‌کننده) برگشت داده شد.'})
+
+    @action(detail=False, methods=['post'])
+    def bulk_manager_approve(self, request):
+        task_ids = request.data.get('task_ids', [])
+        if not task_ids:
+            return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids, status='DOC_MANAGER_REVIEW')
+        
+        from .models import DocTaskHistory, Item
+        histories = []
+        item_ids_to_update = []
+        for task in tasks:
+            histories.append(DocTaskHistory(
+                task=task,
+                action_by=request.user,
+                action_type='DOC_FINAL_APPROVED',
+                note=task.manager_note
+            ))
+            task.status = 'DOC_FINAL_APPROVED'
+            task.modified_by = request.user
+            item_ids_to_update.append(task.item_id)
+            
+        if tasks:
+            DocTask.objects.bulk_update(tasks, ['status', 'modified_by'])
+            DocTaskHistory.objects.bulk_create(histories)
+            Item.objects.filter(id__in=item_ids_to_update).update(doc_status='approved')
+            
+        return Response({'message': f'{len(histories)} رکورد نهایی شد.'})
+        
+    @action(detail=False, methods=['post'])
+    def bulk_cancel(self, request):
+        task_ids = request.data.get('task_ids', [])
+        if not task_ids:
+            return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
+            
+        tasks = DocTask.objects.filter(id__in=task_ids)
+        item_ids = list(tasks.values_list('item_id', flat=True))
+        
+        from .models import Item
+        deleted_count, _ = tasks.delete()
+        Item.objects.filter(id__in=item_ids).update(doc_status='checking', doc_assignee=None)
+        
+        return Response({'message': f'{deleted_count} وظیفه ارجاع اسناد با موفقیت لغو شد.'})
+
 

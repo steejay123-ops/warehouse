@@ -1,4 +1,6 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
+import { Router } from '@angular/router';
+import { CustomRouteReuseStrategy } from '../strategies/custom-route-reuse-strategy';
 
 /**
  * Auth Store — حالت مرکزی احراز هویت با Angular Signals
@@ -16,6 +18,8 @@ export class AuthStore {
   private readonly _activeWarehouseId = signal<number | string | null>(
     localStorage.getItem('wh_active_id') || null
   );
+
+  private readonly router = inject(Router);
   
   /** تب فعلی sidebar */
   private readonly _currentTab = signal<string>('dashboard');
@@ -47,11 +51,20 @@ export class AuthStore {
 
   // ── Actions ──
   setActiveWarehouse(id: number | string | null): void {
-    this._activeWarehouseId.set(id);
-    if (id) {
-      localStorage.setItem('wh_active_id', id.toString());
-    } else {
-      localStorage.removeItem('wh_active_id');
+    const currentId = this._activeWarehouseId();
+    if (currentId !== id) {
+      this._activeWarehouseId.set(id);
+      if (id) {
+        localStorage.setItem('wh_active_id', id.toString());
+      } else {
+        localStorage.removeItem('wh_active_id');
+      }
+
+      // Clear cached routes so tabs reload fresh data
+      const strategy = this.router.routeReuseStrategy as CustomRouteReuseStrategy;
+      if (strategy && typeof strategy.clear === 'function') {
+        strategy.clear();
+      }
     }
   }
 

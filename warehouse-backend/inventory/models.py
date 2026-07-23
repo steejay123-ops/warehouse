@@ -53,8 +53,8 @@ class Item(models.Model):
     
     # Old Record statuses for workflow
     tag_status = models.CharField(max_length=50, default='چاپ نشده', verbose_name="وضعیت لیبل")
-    field_status = models.CharField(max_length=50, default='در انتظار شمارش', verbose_name="وضعیت میدانی")
-    doc_status = models.CharField(max_length=50, default='عدم تطابق', verbose_name="وضعیت مستندات")
+    field_status = models.CharField(max_length=50, default='waiting', verbose_name="وضعیت میدانی")
+    doc_status = models.CharField(max_length=50, default='waiting', verbose_name="وضعیت مستندات")
     
     # Quality / Checks
     has_conflict = models.BooleanField(default=False, verbose_name="مغایرت دارد")
@@ -148,8 +148,9 @@ class CountTask(models.Model):
     ]
 
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='count_tasks', verbose_name="کالا")
-    counter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='counter_tasks', verbose_name="شمارشگر")
-    supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='supervisor_tasks', verbose_name="سرپرست")
+    counter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='counter_tasks', verbose_name="شمارشگر", null=True, blank=True)
+    supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='supervisor_tasks', verbose_name="سرپرست", null=True, blank=True)
+    assigned_manager = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='assigned_manager_tasks', verbose_name="مدیر اختصاصی", null=True, blank=True)
     
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING_COUNT', verbose_name="وضعیت")
     
@@ -158,6 +159,7 @@ class CountTask(models.Model):
     counter_note = models.TextField(null=True, blank=True, verbose_name="توضیحات شمارشگر")
     supervisor_note = models.TextField(null=True, blank=True, verbose_name="توضیحات سرپرست")
     manager_note = models.TextField(null=True, blank=True, verbose_name="توضیحات مدیر")
+    skip_supervisor = models.BooleanField(default=False, verbose_name="بدون نیاز به سرپرست")
     
     # Auditing
     created_at = models.DateTimeField(auto_now_add=True)
@@ -177,6 +179,54 @@ class CountTaskHistory(models.Model):
     action_type = models.CharField(max_length=50, verbose_name="نوع اقدام")
     counted_balance = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, verbose_name="مقدار شمرده شده (Snapshot)")
     note = models.TextField(null=True, blank=True, verbose_name="توضیحات در لحظه ثبت")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.action_type} on {self.task_id} by {self.action_by_id}"
+
+class DocTask(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING_DOC', 'در انتظار اسناد'),
+        ('DOC_PROCESSED', 'بررسی شده (توسط بررسی‌کننده)'),
+        ('DOC_SUPERVISOR_REJECTED', 'رد شده توسط سرپرست اسناد'),
+        ('DOC_MANAGER_REVIEW', 'در انتظار تایید مدیر'),
+        ('DOC_MANAGER_REJECTED', 'مغایرت تاییدشده (رد مدیر)'),
+        ('DOC_FINAL_APPROVED', 'تایید نهایی'),
+    ]
+
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='doc_tasks', verbose_name="کالا")
+    doc_worker = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='doc_worker_tasks', verbose_name="بررسی‌کننده", null=True, blank=True)
+    doc_supervisor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='doc_supervisor_tasks', verbose_name="سرپرست اسناد", null=True, blank=True)
+    assigned_manager = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='doc_assigned_manager_tasks', verbose_name="مدیر ارجاع‌دهنده", null=True, blank=True)
+    
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING_DOC', verbose_name="وضعیت")
+    skip_supervisor = models.BooleanField(default=False, verbose_name="بدون نیاز به سرپرست اسناد")
+    
+    worker_note = models.TextField(null=True, blank=True, verbose_name="توضیحات بررسی‌کننده")
+    supervisor_note = models.TextField(null=True, blank=True, verbose_name="توضیحات سرپرست اسناد")
+    manager_note = models.TextField(null=True, blank=True, verbose_name="توضیحات مدیر")
+    
+    # Auditing
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_doc_tasks')
+    modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_doc_tasks')
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"DocTask {self.id} for Item {self.item_id}"
+
+
+class DocTaskHistory(models.Model):
+    task = models.ForeignKey(DocTask, on_delete=models.CASCADE, related_name='history', verbose_name="تسک اسناد")
+    action_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='doc_action_histories', verbose_name="انجام‌دهنده")
+    action_type = models.CharField(max_length=50, verbose_name="نوع عملیات")
+    note = models.TextField(null=True, blank=True, verbose_name="یادداشت در زمان ثبت")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
 
     class Meta:

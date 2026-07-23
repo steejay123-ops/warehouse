@@ -13,7 +13,8 @@ import {
   HostListener,
   ViewChildren,
   ElementRef,
-  AfterViewInit
+  AfterViewInit,
+  ChangeDetectorRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
@@ -36,7 +37,7 @@ export class TableColumnDirective {
   @Input() sortable = true;
   @Input() filterable = true;
   @Input() width = '';
-  @Input() filterType: 'text' | 'checkbox' | 'checkbox_text' | 'date' | 'range' = 'text';
+  @Input() filterType: 'text' | 'checkbox' | 'checkbox_text' | 'date' | 'range' | 'number' | 'date_range' = 'text';
   @Input() filterOptions: {label: string, value: string}[] = [];
   
   // Inline editing properties
@@ -174,7 +175,7 @@ export interface PageEvent {
       }
 
       <!-- Table -->
-      <div class="overflow-auto max-h-[60vh] relative border-b border-slate-200">
+      <div class="overflow-auto relative border-b border-slate-200" [ngClass]="tableHeightClass">
         <table class="w-full text-xs" [style.zoom]="zoomScale">
           <thead class="sticky top-0 z-10 bg-white shadow-sm">
             <tr>
@@ -248,8 +249,7 @@ export interface PageEvent {
                     <div class="flex items-center gap-1">
                       @if (col.filterType === 'checkbox' || col.filterType === 'checkbox_text') {
                         <div class="relative text-right" [class.w-full]="col.filterType === 'checkbox'" [class.flex-1]="col.filterType === 'checkbox_text'">
-                          <button (click)="toggleFilterDropdown(col.key)" class="w-full text-[10px] px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 focus:border-indigo-400 flex items-center justify-between text-slate-500">
-                            <span>{{ hasFilter(col.key) ? 'فیلتر فعال' : (col.filterType === 'checkbox_text' ? 'انتخاب' : 'همه موارد') }}</span>
+                          <button (click)="toggleFilterDropdown(col.key)" class="text-[10px] px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 focus:border-indigo-400 flex items-center justify-center text-slate-500 w-full">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                           </button>
                           @if (activeFilterDropdown === col.key) {
@@ -266,15 +266,15 @@ export interface PageEvent {
                         </div>
                       }
                       
-                      @if (col.filterType === 'date') {
+                      @if (col.filterType === 'date' || col.filterType === 'date_range') {
                         <div class="relative text-right w-full">
                           <button (click)="toggleFilterDropdown(col.key)" class="w-full text-[10px] px-2 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 focus:border-indigo-400 flex items-center justify-between text-slate-500">
                             <span>{{ filters[col.key] || 'همه زمان‌ها' }}</span>
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                           </button>
                           @if (activeFilterDropdown === col.key) {
-                            <div class="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl z-[60] p-2 text-right flex flex-col gap-1">
-                              @if (!showCustomDateRange) {
+                            <div class="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl z-[60] p-2 text-right flex flex-col gap-1 max-h-64 overflow-y-auto">
+                              @if (!showCustomDateRange && col.filterType !== 'date_range') {
                                 @for (opt of dateFilterOptions; track opt.value) {
                                   <button (click)="applyDateFilter(col.key, opt.value, opt.label)" class="text-[10px] text-right font-bold px-2 py-1.5 rounded hover:bg-slate-50" [class.text-indigo-600]="filters[col.key] === opt.label" [class.text-slate-700]="filters[col.key] !== opt.label">{{opt.label}}</button>
                                 }
@@ -289,7 +289,10 @@ export interface PageEvent {
                                 </ng-persian-datepicker>
                                 <div class="flex items-center gap-1">
                                   <button (click)="applyCustomDateRange(col.key)" class="flex-1 bg-indigo-600 text-white text-[10px] font-bold py-1 rounded hover:bg-indigo-700">اعمال</button>
-                                  <button (click)="showCustomDateRange = false" class="flex-1 bg-slate-100 text-slate-600 text-[10px] font-bold py-1 rounded hover:bg-slate-200">بازگشت</button>
+                                  @if (col.filterType !== 'date_range') {
+                                    <button (click)="showCustomDateRange = false" class="flex-1 bg-slate-100 text-slate-600 text-[10px] font-bold py-1 rounded hover:bg-slate-200">بازگشت</button>
+                                  }
+                                  <button (click)="clearCustomDateRange(col.key)" class="flex-1 bg-slate-100 text-rose-600 text-[10px] font-bold py-1 rounded hover:bg-rose-50">پاک کردن</button>
                                 </div>
                               }
                             </div>
@@ -320,9 +323,9 @@ export interface PageEvent {
                         </div>
                       }
                       
-                      @if (!col.filterType || col.filterType === 'text' || col.filterType === 'checkbox_text') {
+                      @if (!col.filterType || col.filterType === 'text' || col.filterType === 'checkbox_text' || col.filterType === 'number') {
                         <input
-                          type="text"
+                          [type]="col.filterType === 'number' ? 'number' : 'text'"
                           class="text-[10px] px-2 py-1 rounded-lg border border-slate-200 focus:border-indigo-400 outline-none placeholder:text-slate-300"
                           [class.w-full]="!col.filterType || col.filterType === 'text'"
                           [class.flex-[2]]="col.filterType === 'checkbox_text'"
@@ -344,7 +347,8 @@ export interface PageEvent {
           <tbody class="divide-y divide-slate-100 bg-white">
             @for (row of data; track trackByFn(row); let i = $index) {
               <tr
-                class="hover:bg-indigo-50/30 transition-colors group"
+                class="transition-colors group"
+                [ngClass]="rowClass(row) || 'hover:bg-indigo-50/30'"
                 [class.bg-indigo-50/50]="isRowSelected(row)"
               >
                 @if (selectable) {
@@ -535,6 +539,8 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   @Input() filters: Record<string, string> = {};
   @Input() isLoading = false;
   @Input() globalSearch: string = '';
+  @Input() tableHeightClass: string = 'max-h-[60vh]';
+  @Input() rowClass: (row: any) => string = () => '';
 
   @Output() sortChanged = new EventEmitter<SortState>();
   @Output() filterChanged = new EventEmitter<Record<string, string>>();
@@ -598,6 +604,8 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
       $event.returnValue = true;
     }
   }
+
+  constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
   }
@@ -722,6 +730,23 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
       this.filterChanged.emit({ ...this.filters });
     }
     this.activeFilterDropdown = null;
+    this.cdr.detectChanges();
+  }
+
+  clearCustomDateRange(key: string) {
+    this.customDateStartControl.setValue('');
+    this.customDateEndControl.setValue('');
+    this.customDateStart = '';
+    this.customDateEnd = '';
+    
+    const newFilters = { ...this.filters };
+    delete newFilters[key];
+    delete newFilters[key + '_after'];
+    delete newFilters[key + '_before'];
+    this.filters = newFilters;
+    this.filterChanged.emit({ ...this.filters });
+    this.activeFilterDropdown = null;
+    this.cdr.detectChanges();
   }
 
   clearCustomRange(key: string) {
@@ -734,6 +759,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     this.customRangeEnd = null;
     this.activeFilterDropdown = null;
     this.filterChanged.emit({ ...this.filters });
+    this.cdr.detectChanges();
   }
 
   dateFilterOptions = [
@@ -755,6 +781,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
       this.activeFilterDropdown = key;
       this.showCustomDateRange = false;
     }
+    this.cdr.detectChanges();
   }
 
   hasFilter(key: string): boolean {
@@ -807,6 +834,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.activeFilterDropdown = null;
     this.showCustomDateRange = false;
+    this.cdr.detectChanges();
   }
 
   applyDateFilter(key: string, value: string, label: string) {
@@ -958,20 +986,35 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.filterTimeout) {
       clearTimeout(this.filterTimeout);
     }
-    this.filters = { ...this.filters, [key]: value };
+    
+    if (value.trim() === '') {
+      const newFilters = { ...this.filters };
+      delete newFilters[key];
+      this.filters = newFilters;
+    } else {
+      this.filters = { ...this.filters, [key]: value };
+    }
+    
     this.filterTimeout = setTimeout(() => {
       this.filterChanged.emit({ ...this.filters });
     }, 400);
   }
 
-  clearAllFilters(): void {
+  clearAllFilters(emitEvent: boolean = true): void {
+    if (this.filterTimeout) {
+      clearTimeout(this.filterTimeout);
+      this.filterTimeout = null;
+    }
     this.filters = {};
     this.sort = { key: null, direction: 'asc' };
     this.customDateStartControl.setValue('');
     this.customDateEndControl.setValue('');
     this.customDateStart = '';
     this.customDateEnd = '';
-    this.filtersCleared.emit();
+    this.globalSearch = '';
+    if (emitEvent) {
+      this.filtersCleared.emit();
+    }
   }
 
   toggleSelectAll(event: Event): void {

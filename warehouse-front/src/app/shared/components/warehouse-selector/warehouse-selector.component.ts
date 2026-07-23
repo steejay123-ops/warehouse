@@ -24,7 +24,8 @@ import { AuthStore } from '../../../core/stores/auth.store';
         (ngModelChange)="onChanged($event)"
         class="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border-0 rounded-xl px-3 py-1.5 outline-none cursor-pointer transition-colors w-full"
       >
-        <option [ngValue]="null" disabled hidden>انتخاب انبار...</option>
+        <option *ngIf="!allowAll" [ngValue]="null" disabled hidden>انتخاب انبار...</option>
+        <option *ngIf="allowAll" [ngValue]="null">همه انبارها</option>
         @for (project of projects; track project.id) {
           <option [value]="project.id">{{ project.name }}</option>
         }
@@ -35,6 +36,7 @@ import { AuthStore } from '../../../core/stores/auth.store';
 export class WarehouseSelectorComponent {
   @Input() projects: { id: number | string; name: string }[] = [];
   @Input() activeId: number | string | null = null;
+  @Input() allowAll: boolean = false;
   @Output() changed = new EventEmitter<number | string | null>();
 
   onChanged(value: string | null): void {

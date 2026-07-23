@@ -1,5 +1,5 @@
-import { Component, OnInit, ChangeDetectorRef, ViewChild } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+﻿import { Component, OnInit, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -10,6 +10,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { ConfirmDialogService } from '../../shared';
 import { PersianDatePipe } from '../../shared';
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
+import { SettingsService } from '../../services/settings';
 
 @Component({
   selector: 'app-dispatch',
@@ -20,15 +21,20 @@ import { AccountsHttpService } from '../../core/http/accounts-http.service';
 export class Dispatch implements OnInit {
   @ViewChild(DataTableComponent) dataTable!: DataTableComponent;
 
+  private loadSubscription?: Subscription;
   newTagInput = '';
   
   fieldWorkers: any[] = [];
   supervisors: any[] = [];
+  managers: any[] = [];
   docWorkers: any[] = [];
   
   selectedFieldWorker = '';
   selectedSupervisor = '';
+  selectedManager = '';
   selectedDocWorker = '';
+  selectedDocSupervisor = '';
+  selectedDocManager = '';
 
   selectedItemIds: Set<string> = new Set();
   availableTagsList: {label: string, value: string}[] = [];
@@ -42,6 +48,17 @@ export class Dispatch implements OnInit {
   currentPage = 1;
   pageSize = 100;
   isLoading = false;
+  requireSupervisor = true;
+  requireDocSupervisor = true; // پیش‌فرض: سرپرست اجباری
+  showCountedItems = false;
+  showCountingItems = false;
+
+  getRowClass = (row: any) => {
+    if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-slate-800';
+    if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-slate-800';
+    if (row.fieldStatus === 'counting') return 'bg-blue-100 hover:bg-blue-200 text-slate-800';
+    return '';
+  };
 
   constructor(
     public state: StateService, 
@@ -50,14 +67,16 @@ export class Dispatch implements OnInit {
     private auth: AuthService,
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService,
-    private accountsService: AccountsHttpService
+    private accountsService: AccountsHttpService,
+    private settingsService: SettingsService
   ) {}
 
   ngOnInit() {
     this.accountsService.getUsers().subscribe(users => {
       this.state.appState.users = users;
-      this.fieldWorkers = users.filter((u: any) => u.roles?.includes('counter') || u.role_titles?.some((t: string) => t.includes('شمارشگر') || t.includes('انباردار میدانی')));
+      this.fieldWorkers = users.filter((u: any) => u.roles?.includes('counter') || u.role_titles?.some((t: string) => t.includes('انبارگردان') || t.includes('انباردار میدانی')));
       this.supervisors = users.filter((u: any) => u.roles?.includes('supervisor') || u.role_titles?.some((t: string) => t.includes('سرپرست')));
+      this.managers = users.filter((u: any) => u.roles?.includes('manager') || u.role_titles?.some((t: string) => t.includes('مدیر')));
       this.docWorkers = users.filter((u: any) => u.roles?.includes('document_expert') || u.roles?.includes('feeding_operator') || u.role_titles?.some((t: string) => t.includes('مدارک') || t.includes('تغذیه')));
       this.cdr.detectChanges();
     });
@@ -78,6 +97,29 @@ export class Dispatch implements OnInit {
     }
 
     this.loadItems();
+
+    // خواندن تنظیم تایید سرپرست برای انبار فعال
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL') {
+        this.settingsService.getWarehouseSettings(Number(whId)).subscribe({
+          next: (res: any) => {
+            this.requireSupervisor = res?.require_supervisor_approval?.value ?? true;
+            this.requireDocSupervisor = res?.require_doc_supervisor_approval?.value ?? true;
+            if (this.requireSupervisor === false) {
+              this.selectedSupervisor = 'skip';
+            if (this.requireDocSupervisor === false) {
+              this.selectedDocSupervisor = 'skip';
+            } else {
+              this.selectedDocSupervisor = '';
+            }
+            } else {
+              this.selectedSupervisor = '';
+            }
+            this.cdr.detectChanges();
+          },
+          error: () => { /* پیش‌فرض: نیازمند سرپرست */ }
+        });
+    }
   }
 
   get tagFilterOptions() {
@@ -94,6 +136,42 @@ export class Dispatch implements OnInit {
     { label: 'دارد', value: 'true' },
     { label: 'ندارد', value: 'false' }
   ];
+
+  get fieldAssigneeFilterOptions() {
+    const assignees = new Set<string>();
+    this.items.forEach(i => {
+      if (i.fieldAssignee && i.fieldAssignee !== 'ثبت نشده') {
+        assignees.add(i.fieldAssignee);
+      }
+    });
+    return Array.from(assignees).map(a => ({label: a, value: a}));
+  }
+
+  get docAssigneeFilterOptions() {
+    const assignees = new Set<string>();
+    this.items.forEach(i => {
+      if (i.docAssignee && i.docAssignee !== 'ثبت نشده') {
+        assignees.add(i.docAssignee);
+      }
+    });
+    return Array.from(assignees).map(a => ({label: a, value: a}));
+  }
+
+  get createdByFilterOptions() {
+    const creators = new Set<string>();
+    this.items.forEach(i => {
+      if (i.created_by_name) creators.add(i.created_by_name);
+    });
+    return Array.from(creators).map(a => ({label: a, value: a}));
+  }
+
+  get modifiedByFilterOptions() {
+    const modifiers = new Set<string>();
+    this.items.forEach(i => {
+      if (i.modified_by_name) modifiers.add(i.modified_by_name);
+    });
+    return Array.from(modifiers).map(a => ({label: a, value: a}));
+  }
 
   loadItems() {
     this.isLoading = true;
@@ -120,7 +198,7 @@ export class Dispatch implements OnInit {
         
         // For checkbox filters, we need to append __in
         // We know which ones are checkboxes based on if they contain commas and match certain keys
-        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'tag'];
+        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'tag', 'created_by_name', 'modified_by_name'];
         if (inFields.includes(key)) {
             filters[`${key}__in`] = stateFilters[key];
         } else {
@@ -130,7 +208,11 @@ export class Dispatch implements OnInit {
             else if (key === 'labelStatus') filters['tag_status__in'] = stateFilters[key];
             else if (key === 'fieldAssignee') filters['field_assignee__in'] = stateFilters[key];
             else if (key === 'docAssignee') filters['doc_assignee__in'] = stateFilters[key];
-            else if (key === 'tag_search') filters['tag__icontains'] = stateFilters[key];
+            else if (key === 'tag_search') filters['tag'] = stateFilters[key];
+            else if (key === 'fieldAssignee_search') filters['field_assignee'] = stateFilters[key];
+            else if (key === 'docAssignee_search') filters['doc_assignee'] = stateFilters[key];
+            else if (key === 'created_by_name_search') filters['created_by_name'] = stateFilters[key];
+            else if (key === 'modified_by_name_search') filters['modified_by_name'] = stateFilters[key];
             else filters[key] = stateFilters[key]; 
         }
       }
@@ -146,13 +228,20 @@ export class Dispatch implements OnInit {
       filters['search'] = globalSearch;
     }
 
+    filters['show_counted'] = this.showCountedItems ? 'true' : 'false';
+    filters['show_counting'] = this.showCountingItems ? 'true' : 'false';
+
     // Add sorting
     const sort = this.state.appState.dispatchSettings.sort;
     if (sort.key) {
       filters['ordering'] = sort.dir === 'desc' ? `-${sort.key}` : sort.key;
     }
 
-    this.itemApi.getAll(filters).subscribe({
+    if (this.loadSubscription) {
+      this.loadSubscription.unsubscribe();
+    }
+
+    this.loadSubscription = this.itemApi.getAll(filters).subscribe({
       next: (res) => {
         this.items = res.results.map(r => ({
           ...r,
@@ -231,9 +320,21 @@ export class Dispatch implements OnInit {
     this.auth.updatePreferences({ dispatchSettings: this.state.appState.dispatchSettings }).subscribe();
   }
 
+  get hasAnyFilter(): boolean {
+    const settings = this.state.appState.dispatchSettings;
+    const hasSearch = !!settings.search && settings.search.trim() !== '';
+    const hasSort = !!settings.sort.key;
+    const hasFilters = Object.keys(settings.filters).length > 0;
+    return hasSearch || hasSort || hasFilters;
+  }
+
   clearAllFilters() {
+    this.state.appState.dispatchSettings.search = '';
     this.state.appState.dispatchSettings.filters = {};
     this.state.appState.dispatchSettings.sort = { key: null, dir: 'asc' };
+    if (this.dataTable) {
+      this.dataTable.clearAllFilters(false);
+    }
     this.currentPage = 1;
     this.loadItems();
     this.savePreferences();
@@ -280,46 +381,149 @@ export class Dispatch implements OnInit {
     this.selectedItemIds = new Set(this.selectedItemIds);
   }
 
-  executeFieldDispatch() {
+  async executeFieldDispatch() {
     if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
-    if (!this.selectedFieldWorker) return this.toast.show('error', 'لطفا شمارشگر میدانی را انتخاب کنید.');
-    if (!this.selectedSupervisor) return this.toast.show('error', 'لطفا سرپرست را انتخاب کنید.');
 
-    const payload = {
+    const worker = this.selectedFieldWorker ? this.state.appState.users.find((u: any) => u.id === Number(this.selectedFieldWorker)) : null;
+    const workerName = worker ? `${worker.first_name} ${worker.last_name}`.trim() || worker.username : (this.selectedFieldWorker ? this.selectedFieldWorker : 'همه انبارگردان‌ها (استخر مشترک)');
+    
+    let supName = 'همه سرپرست‌ها (استخر مشترک)';
+    if (this.selectedSupervisor) {
+      if (this.selectedSupervisor === 'skip') {
+        supName = 'بدون نیاز به سرپرست';
+      } else {
+        const sup = this.state.appState.users.find((u: any) => u.id === Number(this.selectedSupervisor));
+        supName = sup ? `${sup.first_name} ${sup.last_name}`.trim() || sup.username : this.selectedSupervisor;
+      }
+    }
+
+    let managerName = 'همه مدیران (استخر مشترک)';
+    if (this.selectedManager) {
+      const mgr = this.state.appState.users.find((u: any) => u.id === Number(this.selectedManager));
+      managerName = mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() || mgr.username : this.selectedManager;
+    }
+
+    const confirmed = await this.confirmDialog.open({
+      title: 'ارجاع شمارش کالا',
+      message: `آیا از ارجاع ${this.selectedItemIds.size} کالا به انبارگردان <span class="font-black text-blue-600">«${workerName}»</span>، سرپرست <span class="font-black text-emerald-600">«${supName}»</span> و مدیر <span class="font-black text-purple-600">«${managerName}»</span> اطمینان دارید؟`,
+      confirmText: 'بله، ارجاع بده',
+      cancelText: 'انصراف',
+      type: 'info'
+    });
+
+    if (!confirmed) return;
+
+    const payload: any = {
       item_ids: Array.from(this.selectedItemIds),
-      field_assignee: this.selectedFieldWorker,
-      supervisor_assignee: this.selectedSupervisor,
-      field_status: 'counting'
+      field_assignee: this.selectedFieldWorker || null,
+      field_status: 'counting',
+      supervisor_assignee: this.selectedSupervisor || null,
+      manager_assignee: this.selectedManager || null
+    };
+    if (this.selectedSupervisor) {
+      payload.supervisor_assignee = this.selectedSupervisor;
+    }
+
+    const sendRequest = (force = false) => {
+      const finalPayload = { ...payload, force };
+      this.itemApi.bulkDispatch(finalPayload).subscribe({
+        next: async (res) => {
+          if (res.warning) {
+            const forceConfirm = await this.confirmDialog.open({
+              title: 'هشدار ارجاع مجدد',
+              message: res.message,
+              confirmText: 'بله، مجدداً ارجاع بده',
+              cancelText: 'انصراف',
+              type: 'warning'
+            });
+            if (forceConfirm) {
+              sendRequest(true);
+            }
+          } else {
+            this.toast.show('success', res.success || 'رکوردها با موفقیت به کارتابل انبارگردان ارسال شدند.');
+            this.selectedItemIds.clear();
+            this.loadItems();
+          }
+        },
+        error: (err) => {
+          const errorMsg = err?.error?.error || 'خطا در ارجاع میدانی';
+          this.toast.show('error', errorMsg);
+        }
+      });
     };
 
-    this.itemApi.bulkDispatch(payload).subscribe({
-      next: (res) => {
-        this.toast.show('success', `${res.updated} رکورد به کارتابل شمارشگر ارسال شد.`);
-        this.selectedItemIds.clear();
-        this.loadItems();
-      },
-      error: () => this.toast.show('error', 'خطا در ارجاع میدانی')
-    });
+    sendRequest();
   }
 
-  executeDocDispatch() {
+  async executeDocDispatch() {
     if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
-    if (!this.selectedDocWorker) return this.toast.show('error', 'لطفا کارشناس اسناد و قیمت را انتخاب کنید.');
 
-    const payload = {
+    const worker = this.selectedDocWorker ? this.state.appState.users.find((u: any) => u.id === Number(this.selectedDocWorker)) : null;
+    const workerName = worker ? `${worker.first_name} ${worker.last_name}`.trim() || worker.username : (this.selectedDocWorker ? this.selectedDocWorker : 'همه کارشناسان اسناد (استخر مشترک)');
+    
+    let supName = 'همه سرپرست‌های اسناد (استخر مشترک)';
+    if (this.selectedDocSupervisor) {
+      if (this.selectedDocSupervisor === 'skip') {
+        supName = 'بدون نیاز به سرپرست';
+      } else {
+        const sup = this.state.appState.users.find((u: any) => u.id === Number(this.selectedDocSupervisor));
+        supName = sup ? `${sup.first_name} ${sup.last_name}`.trim() || sup.username : this.selectedDocSupervisor;
+      }
+    }
+
+    let managerName = 'همه مدیران (استخر مشترک)';
+    if (this.selectedDocManager) {
+      const mgr = this.state.appState.users.find((u: any) => u.id === Number(this.selectedDocManager));
+      managerName = mgr ? `${mgr.first_name} ${mgr.last_name}`.trim() || mgr.username : this.selectedDocManager;
+    }
+
+    const confirmed = await this.confirmDialog.open({
+      title: 'ارجاع بررسی اسناد',
+      message: `آیا از ارجاع ${this.selectedItemIds.size} کالا به بررسی‌کننده اسناد <span class="font-black text-blue-600">«${workerName}»</span>، سرپرست <span class="font-black text-emerald-600">«${supName}»</span> و مدیر <span class="font-black text-purple-600">«${managerName}»</span> اطمینان دارید؟`,
+      confirmText: 'بله، ارجاع بده',
+      cancelText: 'انصراف',
+      type: 'info'
+    });
+
+    if (!confirmed) return;
+
+    const payload: any = {
       item_ids: Array.from(this.selectedItemIds),
-      doc_assignee: this.selectedDocWorker,
-      doc_status: 'processing'
+      doc_assignee: this.selectedDocWorker || null,
+      doc_status: 'processing',
+      doc_supervisor_assignee: this.selectedDocSupervisor || null,
+      doc_manager_assignee: this.selectedDocManager || null
     };
 
-    this.itemApi.bulkDispatch(payload).subscribe({
-      next: (res) => {
-        this.toast.show('success', `فایل ${res.updated} رکورد جهت بررسی اسناد و قیمت ارسال شد.`);
-        this.selectedItemIds.clear();
-        this.loadItems();
-      },
-      error: () => this.toast.show('error', 'خطا در ارجاع اسناد')
-    });
+    const sendRequest = (force = false) => {
+      const finalPayload = { ...payload, force };
+      this.itemApi.bulkDispatch(finalPayload).subscribe({
+        next: async (res) => {
+          if (res.warning) {
+            const forceConfirm = await this.confirmDialog.open({
+              title: 'هشدار ارجاع مجدد',
+              message: res.message,
+              confirmText: 'بله، مجدداً ارجاع بده',
+              cancelText: 'انصراف',
+              type: 'warning'
+            });
+            if (forceConfirm) {
+              sendRequest(true);
+            }
+          } else {
+            this.toast.show('success', res.success || `فایل ${res.updated} رکورد جهت بررسی اسناد و قیمت ارسال شد.`);
+            this.selectedItemIds.clear();
+            this.loadItems();
+          }
+        },
+        error: (err) => {
+          const errorMsg = err?.error?.error || 'خطا در ارجاع اسناد';
+          this.toast.show('error', errorMsg);
+        }
+      });
+    };
+
+    sendRequest();
   }
 
   requestRecount() {
@@ -469,3 +673,4 @@ export class Dispatch implements OnInit {
     return true;
   }
 }
+

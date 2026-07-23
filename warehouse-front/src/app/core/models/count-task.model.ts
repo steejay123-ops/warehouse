@@ -23,7 +23,8 @@ export interface CountTask {
   id: number;
   item: number;
   counter: number;
-  supervisor: number;
+  supervisor: number | null;
+  assigned_manager?: number | null;
   status: CountTaskStatus;
   counted_balance: string | null;
   counter_note: string | null;
@@ -37,6 +38,8 @@ export interface CountTask {
   // Serializer method fields & nested objects
   counter_name?: string;
   supervisor_name?: string;
+  assigned_manager_name?: string;
   item_details?: Item;
   history?: CountTaskHistory[];
+  is_blind?: boolean;
 }

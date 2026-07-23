@@ -1,1 +1,489 @@
-[{"id": 2, "username": "enayat.taghavi", "first_name": "عنایت", "last_name": "تقوی", "groups": ["مدیر", "admin", "manager", "supervisor", "counter", "document_expert", "feeding_operator"]}, {"id": 3, "username": "ali", "first_name": "علی", "last_name": "تقوی", "groups": ["مدیر", "admin", "manager", "counter", "document_expert", "feeding_operator"]}, {"id": 4, "username": "saman_admin", "first_name": "سامان", "last_name": "ادمین", "groups": ["admin", "manager", "supervisor", "counter", "document_expert", "feeding_operator"]}, {"id": 1, "username": "admin", "first_name": "مدیر", "last_name": "شرکت", "groups": ["مدیر", "admin", "manager", "supervisor", "counter", "document_expert", "feeding_operator"]}]
+[
+  {
+    "id": 2,
+    "username": "enayat.taghavi",
+    "first_name": "عنایت",
+    "last_name": "تقوی",
+    "email": "",
+    "national_code": "4251247442",
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-04T01:32:48.923229+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-18T09:23:06.590012+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      6,
+      5,
+      3,
+      4
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1,
+      4,
+      5
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {
+      "dispatchSettings": {
+        "sort": {
+          "dir": "asc",
+          "key": null
+        },
+        "search": "",
+        "filters": {},
+        "recentTags": [
+          "اولویت الف",
+          "محموله مهر",
+          "سیستمی",
+          "تعمیری",
+          "اولویت ب"
+        ],
+        "sessionTags": {},
+        "visibleCols": [
+          "fa_unic_code",
+          "description",
+          "tag",
+          "created_at",
+          "updated_at",
+          "created_by_name",
+          "modified_by_name"
+        ]
+      }
+    },
+    "roles": [
+      "counter",
+      "supervisor",
+      "admin",
+      "manager"
+    ]
+  },
+  {
+    "id": 3,
+    "username": "ali",
+    "first_name": "علی",
+    "last_name": "تقوی",
+    "email": "",
+    "national_code": null,
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-05T22:45:00.327909+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-18T09:11:53.146688+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      6
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {},
+    "roles": [
+      "counter"
+    ]
+  },
+  {
+    "id": 1,
+    "username": "admin",
+    "first_name": "مدیر",
+    "last_name": "شرکت",
+    "email": "admin@example.com",
+    "national_code": null,
+    "phone_number": null,
+    "operational_zone": null,
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-03T04:42:46.266382+03:30",
+    "last_login": "2026-07-03T05:09:36.710121+03:30",
+    "updated_at": "2026-07-17T03:31:51.883596+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      3,
+      4
+    ],
+    "user_permissions": [
+      21,
+      22,
+      23,
+      99,
+      98,
+      100,
+      101,
+      94,
+      93,
+      102,
+      103,
+      104,
+      95,
+      96,
+      97,
+      24,
+      77,
+      73,
+      80,
+      76,
+      79,
+      75,
+      81,
+      82,
+      78,
+      74,
+      92,
+      86,
+      83,
+      85,
+      87,
+      84,
+      89,
+      88,
+      91,
+      90,
+      109,
+      1,
+      2,
+      3,
+      4,
+      9,
+      10,
+      11,
+      12,
+      5,
+      6,
+      7,
+      8,
+      33,
+      34,
+      35,
+      36,
+      45,
+      46,
+      47,
+      48,
+      41,
+      42,
+      43,
+      44,
+      37,
+      38,
+      39,
+      40,
+      13,
+      14,
+      15,
+      16,
+      65,
+      66,
+      67,
+      68,
+      69,
+      70,
+      71,
+      72,
+      61,
+      62,
+      63,
+      64,
+      53,
+      54,
+      55,
+      56,
+      49,
+      50,
+      51,
+      52,
+      57,
+      58,
+      59,
+      60,
+      29,
+      30,
+      31,
+      32,
+      17,
+      18,
+      19,
+      20,
+      105,
+      106,
+      107,
+      108,
+      25,
+      26,
+      27,
+      28
+    ],
+    "assigned_warehouses": [
+      2,
+      3,
+      1,
+      4,
+      5
+    ],
+    "is_superuser": true,
+    "requires_password_change": false,
+    "ui_preferences": {
+      "dispatchSettings": {
+        "sort": {
+          "dir": "asc",
+          "key": "fa_unic_code"
+        },
+        "search": "",
+        "filters": {},
+        "recentTags": [
+          "اولویت الف",
+          "محموله مهر",
+          "سیستمی",
+          "تعمیری",
+          "اولویت ب"
+        ],
+        "sessionTags": {},
+        "visibleCols": [
+          "fa_unic_code",
+          "balance",
+          "description",
+          "old_location",
+          "labelStatus",
+          "fieldAssignee",
+          "fieldStatus",
+          "docAssignee",
+          "docStatus",
+          "tag",
+          "is_fragile",
+          "is_heavy",
+          "needs_qc",
+          "plpkitem",
+          "pl",
+          "po",
+          "pk_number",
+          "item_no",
+          "bal4miv",
+          "msr_status",
+          "supplier",
+          "price_amount",
+          "price_remark",
+          "created_at",
+          "updated_at",
+          "created_by_name",
+          "modified_by_name",
+          "has_conflict"
+        ]
+      }
+    },
+    "roles": [
+      "admin",
+      "manager"
+    ]
+  },
+  {
+    "id": 5,
+    "username": "h.ak",
+    "first_name": "حسین",
+    "last_name": "اکبری",
+    "email": "",
+    "national_code": null,
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-12T01:53:05.184756+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-12T13:08:20.155876+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      5
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {},
+    "roles": [
+      "supervisor"
+    ]
+  },
+  {
+    "id": 6,
+    "username": "habib",
+    "first_name": "حبیب",
+    "last_name": "عالیشوندی",
+    "email": "",
+    "national_code": null,
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-12T12:21:59.695934+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-17T11:14:24.586842+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      4
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {},
+    "roles": [
+      "manager"
+    ]
+  },
+  {
+    "id": 7,
+    "username": "test",
+    "first_name": "test",
+    "last_name": "test",
+    "email": "",
+    "national_code": null,
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-18T12:44:24.290720+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-18T18:35:54.570990+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      9
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {},
+    "roles": [
+      "تست"
+    ]
+  },
+  {
+    "id": 8,
+    "username": "test_supervisor",
+    "first_name": "Test",
+    "last_name": "Supervisor",
+    "email": "",
+    "national_code": "1111111111",
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-18T23:02:07.206638+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-18T23:13:28.244110+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      5
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2
+    ],
+    "is_superuser": false,
+    "requires_password_change": false,
+    "ui_preferences": {},
+    "roles": [
+      "supervisor"
+    ]
+  },
+  {
+    "id": 9,
+    "username": "test_counter",
+    "first_name": "Test",
+    "last_name": "Counter",
+    "email": "",
+    "national_code": "2222222222",
+    "phone_number": "",
+    "operational_zone": "",
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-18T23:02:43.515773+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-18T23:02:43.975487+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      6
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2
+    ],
+    "is_superuser": false,
+    "requires_password_change": true,
+    "ui_preferences": {},
+    "roles": [
+      "counter"
+    ]
+  },
+  {
+    "id": 4,
+    "username": "saman_admin",
+    "first_name": "سامان",
+    "last_name": "ادمین",
+    "email": "",
+    "national_code": null,
+    "phone_number": null,
+    "operational_zone": null,
+    "supervisor": null,
+    "is_active": true,
+    "date_joined": "2026-07-11T02:04:29.685334+03:30",
+    "last_login": null,
+    "updated_at": "2026-07-11T02:43:58.709523+03:30",
+    "created_by": null,
+    "modified_by": null,
+    "groups": [
+      6,
+      5,
+      3,
+      4
+    ],
+    "user_permissions": [],
+    "assigned_warehouses": [
+      2,
+      3,
+      1,
+      4,
+      5
+    ],
+    "is_superuser": true,
+    "requires_password_change": true,
+    "ui_preferences": {},
+    "roles": [
+      "counter",
+      "supervisor",
+      "admin",
+      "manager"
+    ]
+  }
+]

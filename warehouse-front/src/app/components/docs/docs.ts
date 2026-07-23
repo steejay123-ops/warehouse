@@ -5,16 +5,17 @@ import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
-import { FileUploadComponent } from '../../shared';
+import { FileUploadComponent, HasPermissionDirective } from '../../shared';
 import { ModalComponent } from '../../shared';
 import { ItemApiService } from '../../core/api/item-api.service';
 import { ImportService } from '../../core/services/import.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-docs',
   standalone: true,
-  imports: [CommonModule, FormsModule, FileUploadComponent, ModalComponent],
+  imports: [CommonModule, FormsModule, FileUploadComponent, ModalComponent, HasPermissionDirective],
   templateUrl: './docs.html',
   styleUrl: './docs.css'
 })
@@ -102,7 +103,8 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
     private toast: ToastService,
     private itemApi: ItemApiService,
     public importService: ImportService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private auth: AuthService
   ) {}
 
   get hasWarehouse(): boolean {
@@ -211,7 +213,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
       return;
     }
 
-    const token = localStorage.getItem('wh_access_token');
+    const token = this.auth.getAccessToken();
     const url = `${environment.apiUrl}/inventory/items/download_import_log/?import_id=${this.importService.currentState.importId}&token=${token}`;
     window.open(url, '_blank');
   }

@@ -1,0 +1,156 @@
+<div class="h-full flex flex-col bg-slate-50">
+  <!-- Header -->
+  <div class="bg-white border-b px-6 py-4 flex-none">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-xl font-bold text-slate-800">پیگیری وضعیت شمارش</h1>
+        <p class="text-sm text-slate-500 mt-1">مدیریت و پیگیری کالاهای تخصیص یافته به انبارگردان‌ها</p>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <button (click)="toggleCompleted()" 
+                [class]="showCompleted ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'"
+                class="px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
+          <svg *ngIf="showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <svg *ngIf="!showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
+          نمایش پایان‌یافته
+        </button>
+
+        <button (click)="loadTasks()" 
+                class="btn-icon" 
+                title="بروزرسانی">
+          <i class="feather-refresh-cw" [class.animate-spin]="isLoading"></i>
+        </button>
+        
+        <button (click)="cancelAllocation()" 
+                [disabled]="selectedTaskIds.size === 0"
+                class="btn-danger flex items-center gap-2">
+          <i class="feather-x-circle"></i>
+          <span>لغو تخصیص ({{ selectedTaskIds.size }})</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="mt-4 flex items-center gap-4">
+      <div class="relative flex-1 max-w-md">
+        <i class="feather-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input type="text" 
+               [(ngModel)]="searchQuery" 
+               (ngModelChange)="applyFilters()"
+               placeholder="جستجو در کد یا نام کالا..." 
+               class="form-input pl-4 pr-10 w-full rounded-lg border-slate-200">
+      </div>
+      
+      <select [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()" class="form-select rounded-lg border-slate-200">
+        <option value="">همه وضعیت‌ها</option>
+        <option value="PENDING_COUNT">در حال شمارش</option>
+        <option value="COUNTED">در کارتابل سرپرست</option>
+        <option value="MANAGER_REVIEW">در کارتابل مدیر</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="flex-1 p-6 overflow-hidden">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
+      
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="p-8 flex flex-col items-center justify-center text-slate-500 flex-1">
+        <i class="feather-loader animate-spin text-3xl mb-4 text-blue-600"></i>
+        <p>در حال دریافت اطلاعات...</p>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="!isLoading && filteredTasks.length === 0" class="p-12 flex flex-col items-center justify-center text-slate-500 flex-1">
+        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+          <i class="feather-inbox text-2xl text-slate-400"></i>
+        </div>
+        <p class="text-lg font-medium text-slate-700">موردی یافت نشد</p>
+        <p class="text-sm mt-1">با این فیلترها کالایی برای پیگیری وجود ندارد.</p>
+      </div>
+
+      <!-- Data Table -->
+      <app-data-table *ngIf="!isLoading && filteredTasks.length > 0"
+                      class="flex-1"
+                      [data]="filteredTasks"
+                      [selectable]="true"
+                      [visibleColumns]="visibleCols"
+                      (selectionChanged)="onSelectionChange($event)">
+        <ng-template appTableCol="warehouse_name" label="انبار" let-row="row">
+          <span class="text-[11px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg">
+            {{ row.item_details?.warehouse_name || '-' }}
+          </span>
+        </ng-template>
+
+        <ng-template appTableCol="fa_unic_code" label="کد کالا" let-row="row">
+          <span class="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg" dir="ltr">
+            {{ row.item_details?.fa_unic_code || '-' }}
+          </span>
+        </ng-template>
+
+        <ng-template appTableCol="description" label="شرح کالا" let-row="row">
+          <div class="text-slate-700 font-bold text-[12px] max-w-[200px] truncate" [title]="row.item_details?.description">
+            {{ row.item_details?.description || '-' }}
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="counter" label="انبارگردان" let-row="row">
+          <div class="flex flex-col">
+            <span class="text-[11px] font-black text-slate-700">{{ row.counter_name || 'نامشخص' }}</span>
+            <span *ngIf="getStageDuration(row, 'counter') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              {{ dur }}
+            </span>
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="supervisor" label="سرپرست" let-row="row">
+          <div class="flex flex-col" *ngIf="row.supervisor_name">
+            <span class="text-[11px] font-black text-slate-700">{{ row.supervisor_name }}</span>
+            <span *ngIf="getStageDuration(row, 'supervisor') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              {{ dur }}
+            </span>
+          </div>
+          <span *ngIf="!row.supervisor_name" class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md inline-block">ندارد</span>
+        </ng-template>
+
+        <ng-template appTableCol="manager" label="مدیریت" let-row="row">
+          <div class="flex flex-col">
+            <span class="text-[11px] font-black" [ngClass]="row.assigned_manager_name || getManagerName(row) !== 'استخر مشترک' ? 'text-indigo-700' : 'text-slate-700'">
+              {{ getManagerName(row) }}
+            </span>
+            <span *ngIf="getStageDuration(row, 'manager') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              {{ dur }}
+            </span>
+            <span *ngIf="!getStageDuration(row, 'manager')" class="text-[9px] text-slate-400 font-medium mt-1">-</span>
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="status" label="وضعیت فعلی" let-row="row">
+          <div *ngIf="row.status === 'FINAL_APPROVED'" class="flex flex-col gap-1 items-start">
+            <span class="px-2 py-1 rounded-md text-[10px] font-black border bg-emerald-100 text-emerald-700 border-emerald-200">
+              تایید: {{ getManagerName(row) }}
+            </span>
+            <span *ngIf="getStageDuration(row, 'manager') as dur" class="text-[9px] text-slate-500 font-bold flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              {{ dur }}
+            </span>
+          </div>
+          <span *ngIf="row.status !== 'FINAL_APPROVED'" class="px-2 py-1 rounded-md text-[10px] font-black border" [class]="getStatusClass(row.status)">
+            {{ getStatusName(row.status) }}
+          </span>
+        </ng-template>
+
+        <ng-template appTableCol="counted_balance" label="تعداد شمارش" let-row="row">
+          <div class="text-sm font-black text-slate-800">
+            {{ row.counted_balance !== null ? row.counted_balance : '-' }}
+          </div>
+        </ng-template>
+      </app-data-table>
+
+    </div>
+  </div>
+</div>

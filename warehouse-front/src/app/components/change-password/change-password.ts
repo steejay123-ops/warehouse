@@ -1,10 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth/auth.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { ToastService } from '../../shared/components/toast/toast.component';
 
 @Component({
   selector: 'app-change-password',
@@ -15,7 +16,9 @@ export class ChangePassword implements OnInit {
   oldPassword = '';
   newPassword = '';
   confirmPassword = '';
-  passwordFieldType = 'password';
+  oldPasswordFieldType = 'password';
+  newPasswordFieldType = 'password';
+  confirmPasswordFieldType = 'password';
   isSubmitting = false;
   errorMessage = '';
   isMandatory = true;
@@ -23,7 +26,9 @@ export class ChangePassword implements OnInit {
   constructor(
     private auth: AuthService,
     private router: Router,
-    private http: HttpClient
+    private http: HttpClient,
+    private cdr: ChangeDetectorRef,
+    private toast: ToastService
   ) {}
 
   ngOnInit() {
@@ -33,8 +38,19 @@ export class ChangePassword implements OnInit {
     }
   }
 
-  togglePassword() {
-    this.passwordFieldType = this.passwordFieldType === 'password' ? 'text' : 'password';
+  toggleOldPassword() {
+    this.oldPasswordFieldType = this.oldPasswordFieldType === 'password' ? 'text' : 'password';
+    this.cdr.detectChanges();
+  }
+
+  toggleNewPassword() {
+    this.newPasswordFieldType = this.newPasswordFieldType === 'password' ? 'text' : 'password';
+    this.cdr.detectChanges();
+  }
+
+  toggleConfirmPassword() {
+    this.confirmPasswordFieldType = this.confirmPasswordFieldType === 'password' ? 'text' : 'password';
+    this.cdr.detectChanges();
   }
 
   handleChangePassword() {
@@ -42,20 +58,30 @@ export class ChangePassword implements OnInit {
 
     if (!this.oldPassword || !this.newPassword || !this.confirmPassword) {
       this.errorMessage = 'لطفا تمام فیلدها را پر کنید.';
+      this.cdr.detectChanges();
       return;
     }
 
     if (this.newPassword !== this.confirmPassword) {
       this.errorMessage = 'رمز عبور جدید و تکرار آن مطابقت ندارند.';
+      this.cdr.detectChanges();
       return;
     }
     
     if (this.newPassword.length < 6) {
       this.errorMessage = 'رمز عبور جدید باید حداقل 6 کاراکتر باشد.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    if (this.newPassword === '123456') {
+      this.errorMessage = 'استفاده از رمز عبور پیش‌فرض (123456) مجاز نیست.';
+      this.cdr.detectChanges();
       return;
     }
 
     this.isSubmitting = true;
+    this.cdr.detectChanges();
 
     this.http.post(`${environment.apiUrl}/auth/users/change_password/`, {
       old_password: this.oldPassword,
@@ -63,32 +89,28 @@ export class ChangePassword implements OnInit {
     }).subscribe({
       next: (res: any) => {
         this.isSubmitting = false;
-        // Upon success, we should refresh the token to update requires_password_change in frontend
-        // But since we just need to get past the guard, we can either re-login, refresh token,
-        // or manually update the local state. Manually updating is easiest.
-        const user = this.auth.user();
-        if (user) {
-          const updatedUser = { ...user, requires_password_change: false };
-          // Need to expose a way to update the user in AuthService, or just refresh token.
-          // For now, refreshing the token is the safest way to get fresh user data.
-          this.auth.refreshToken().subscribe({
-            next: () => {
-              // Now that token is refreshed, profile should be updated
-              // Actually refreshToken just updates access token, we also need profile.
-              // Let's just log out and ask them to log in with new password to be 100% safe.
-              // Or just navigate to login. Let's do that for simplicity and security.
-              this.auth.logout();
-              // logout navigates to /login automatically
-            },
-            error: () => {
-              this.auth.logout();
-            }
-          });
-        }
+        this.cdr.detectChanges();
+        this.toast.success('رمز عبور با موفقیت تغییر پیدا کرد.');
+        
+        setTimeout(() => {
+          const user = this.auth.user();
+          if (user) {
+            const updatedUser = { ...user, requires_password_change: false };
+            this.auth.refreshToken().subscribe({
+              next: () => {
+                this.auth.logout();
+              },
+              error: () => {
+                this.auth.logout();
+              }
+            });
+          }
+        }, 1500);
       },
       error: (err) => {
         this.isSubmitting = false;
         this.errorMessage = err.error?.error || 'خطایی رخ داد. لطفا دوباره تلاش کنید.';
+        this.cdr.detectChanges();
       }
     });
   }

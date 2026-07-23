@@ -8,14 +8,14 @@ export class StateService {
     user: null,
     unit: 'admin',
     tab: 'dashboard',
-    activeWarehouseId: null as any,
+    activeWarehouseId: (localStorage.getItem('wh_active_id') === 'ALL' ? 'ALL' : (localStorage.getItem('wh_active_id') ? Number(localStorage.getItem('wh_active_id')) : null)) as any,
     projects: [],
     rolesMap: {
       'admin': { title: 'مدیریت کل سیستم (Admin)', color: '#4f46e5' },
       'manager': { title: 'مدیریت پروژه', color: '#0891b2' },
       'supervisor': { title: 'سرپرست اجرا / شمارش', color: '#059669' },
       'document_expert': { title: 'کارشناس مدارک', color: '#7c3aed' },
-      'counter': { title: 'انباردار میدانی / شمارشگر', color: '#d97706' },
+      'counter': { title: 'انباردار میدانی / انبارگردان', color: '#d97706' },
       'feeding_operator': { title: 'اپراتور تغذیه MT', color: '#be123c' }
     } as any,
     users: [],

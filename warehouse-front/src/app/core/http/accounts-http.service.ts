@@ -58,6 +58,10 @@ export class AccountsHttpService {
     return this.http.put<User>(`${this.apiUrl}/auth/users/${id}/`, data);
   }
 
+  adminResetPassword(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/users/${id}/admin_reset_password/`, {});
+  }
+
   toggleUserStatus(id: number): Observable<any> {
     return this.http.patch(`${this.apiUrl}/auth/users/${id}/toggle_status/`, {});
   }

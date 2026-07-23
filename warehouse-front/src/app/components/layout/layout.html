@@ -109,7 +109,7 @@
           <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border border-white"></span>
         </button>
         
-        <div class="hidden lg:flex items-center gap-2 border-r border-slate-200 pr-4">
+        <div class="hidden lg:flex items-center gap-2 border-r border-slate-200 pr-4" *ngIf="!['counter', 'customs', 'supervisor'].includes(store.currentTab())">
           <span class="text-xs text-slate-400 shrink-0">پیشرفت کل پروژه:</span>
           <div class="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
             <div class="bg-indigo-600 h-full rounded-full" style="width:38%"></div>
@@ -141,7 +141,7 @@
       
       <!-- Breadcrumbs -->
       <div *ngIf="store.isWarehouseContext()" class="mb-5 flex items-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
-        <span class="hover:text-slate-600 cursor-pointer transition-colors" (click)="exitWarehouseMode()">مدیریت انبارها</span>
+        <span class="hover:text-slate-600 cursor-pointer transition-colors" (click)="exitWarehouseMode()">انبارها</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
         <span [style.color]="currentWarehouse?.color || '#4f46e5'">{{currentWarehouse?.name}}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>

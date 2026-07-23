@@ -84,17 +84,17 @@ export class AuthService {
   constructor(private router: Router, private http: HttpClient) {}
 
   /** لاگین — mock یا API واقعی */
-  login(username: string, password: string): Observable<LoginResponse> {
+  login(username: string, password: string, rememberMe: boolean = true): Observable<LoginResponse> {
     this._isLoading.set(true);
 
     if (environment.useMockData) {
-      return this.mockLogin(username, password);
+      return this.mockLogin(username, password, rememberMe);
     }
 
     return this.http
       .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, { username, password })
       .pipe(
-        tap((response) => this.handleLoginSuccess(response)),
+        tap((response) => this.handleLoginSuccess(response, rememberMe)),
         catchError((err) => {
           this._isLoading.set(false);
           return throwError(() => err);
@@ -104,21 +104,15 @@ export class AuthService {
 
   /** لاگ‌اوت */
   logout(): void {
-    if (!environment.useMockData) {
-      const refresh = localStorage.getItem(REFRESH_KEY);
-      if (refresh) {
-        this.http
-          .post(`${environment.apiUrl}/auth/logout/`, { refresh })
-          .subscribe({ error: () => {} });
-      }
-    }
+    // Note: SimpleJWT doesn't have a built-in logout endpoint unless token blacklisting is explicitly configured.
+    // So we just clear the auth tokens locally to avoid 404 errors.
     this.clearAuth();
     this.router.navigate(['/login']);
   }
 
   /** رفرش توکن — خودکار توسط interceptor */
   refreshToken(): Observable<string> {
-    const refresh = localStorage.getItem(REFRESH_KEY);
+    const refresh = this.getItem(REFRESH_KEY);
     if (!refresh) {
       this.clearAuth();
       return throwError(() => new Error('No refresh token'));
@@ -131,7 +125,7 @@ export class AuthService {
     return this.http
       .post<{ access: string }>(`${environment.apiUrl}/auth/refresh/`, { refresh })
       .pipe(
-        tap((response) => localStorage.setItem(TOKEN_KEY, response.access)),
+        tap((response) => this.setItem(TOKEN_KEY, response.access)),
         catchError((err) => {
           this.clearAuth();
           this.router.navigate(['/login']);
@@ -143,7 +137,7 @@ export class AuthService {
 
   /** دریافت access token فعلی */
   getAccessToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return this.getItem(TOKEN_KEY);
   }
 
   /** بررسی دسترسی */
@@ -164,7 +158,7 @@ export class AuthService {
       if (u) {
         u.ui_preferences = { ...u.ui_preferences, ...prefs };
         this._user.set({ ...u });
-        localStorage.setItem(USER_KEY, JSON.stringify(u));
+        this.setItem(USER_KEY, JSON.stringify(u));
       }
       return of({ status: 'success', preferences: u?.ui_preferences });
     }
@@ -175,15 +169,40 @@ export class AuthService {
         if (u) {
           u.ui_preferences = res.preferences;
           this._user.set({ ...u });
-          localStorage.setItem(USER_KEY, JSON.stringify(u));
+          this.setItem(USER_KEY, JSON.stringify(u));
         }
       })
     );
   }
 
+  // ────────── Storage Helpers ──────────
+
+  private setItem(key: string, value: string, rememberMe?: boolean): void {
+    if (rememberMe === true) {
+      localStorage.setItem(key, value);
+    } else if (rememberMe === false) {
+      sessionStorage.setItem(key, value);
+    } else {
+      if (sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, value);
+      } else {
+        localStorage.setItem(key, value);
+      }
+    }
+  }
+
+  private getItem(key: string): string | null {
+    return sessionStorage.getItem(key) || localStorage.getItem(key);
+  }
+
+  private removeItem(key: string): void {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  }
+
   // ────────── Private ──────────
 
-  private mockLogin(username: string, password: string): Observable<LoginResponse> {
+  private mockLogin(username: string, password: string, rememberMe: boolean): Observable<LoginResponse> {
     return new Observable((subscriber) => {
       setTimeout(() => {
         const account = this.mockUsers[username];
@@ -192,7 +211,7 @@ export class AuthService {
             tokens: { access: 'mock-access-token', refresh: 'mock-refresh-token' },
             user: account.profile,
           };
-          this.handleLoginSuccess(response);
+          this.handleLoginSuccess(response, rememberMe);
           subscriber.next(response);
           subscriber.complete();
         } else {
@@ -203,24 +222,24 @@ export class AuthService {
     });
   }
 
-  private handleLoginSuccess(response: LoginResponse): void {
-    localStorage.setItem(TOKEN_KEY, response.tokens.access);
-    localStorage.setItem(REFRESH_KEY, response.tokens.refresh);
-    localStorage.setItem(USER_KEY, JSON.stringify(response.user));
+  private handleLoginSuccess(response: LoginResponse, rememberMe: boolean): void {
+    this.setItem(TOKEN_KEY, response.tokens.access, rememberMe);
+    this.setItem(REFRESH_KEY, response.tokens.refresh, rememberMe);
+    this.setItem(USER_KEY, JSON.stringify(response.user), rememberMe);
     this._user.set(response.user);
     this._isLoading.set(false);
   }
 
   private clearAuth(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-    localStorage.removeItem(USER_KEY);
+    this.removeItem(TOKEN_KEY);
+    this.removeItem(REFRESH_KEY);
+    this.removeItem(USER_KEY);
     this._user.set(null);
   }
 
   private loadUserFromStorage(): AuthUserProfile | null {
     try {
-      const raw = localStorage.getItem(USER_KEY);
+      const raw = typeof window !== "undefined" ? (sessionStorage.getItem(USER_KEY) || localStorage.getItem(USER_KEY)) : null;
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;

@@ -102,7 +102,7 @@ export class FileUploadComponent {
   @ViewChild('fileInput') fileInputRef!: ElementRef<HTMLInputElement>;
 
   isDragging = false;
-  selectedFile: File | null = null;
+  @Input() selectedFile: File | null = null;
   errorMessage = '';
 
   onDragOver(event: DragEvent): void {

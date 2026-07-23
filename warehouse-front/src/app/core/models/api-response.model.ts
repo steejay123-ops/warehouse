@@ -48,7 +48,9 @@ export interface AuthUserProfile {
   avatar_letter: string;
   department: string;
   role_titles: string[];
+  roles: string[];
   permissions: string[];
+  is_superuser?: boolean;
   requires_password_change: boolean;
   ui_preferences?: any;
 }

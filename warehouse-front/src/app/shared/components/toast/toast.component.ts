@@ -44,7 +44,7 @@ export class ToastService {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="fixed bottom-4 left-4 z-[9999] flex flex-col-reverse gap-2 max-w-sm" id="toast-container">
+    <div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] flex flex-col gap-2 max-w-sm w-full px-4" id="toast-container">
       @for (toast of toastService.toasts(); track toast.id) {
         <div
           class="toast flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-md shadow-lg text-xs font-bold"
@@ -70,8 +70,8 @@ export class ToastService {
       cursor: pointer;
     }
     @keyframes toastSlideIn {
-      from { transform: translateX(-100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
     }
   `],
 })

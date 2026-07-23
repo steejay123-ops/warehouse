@@ -21,34 +21,34 @@
             <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
             <span class="text-xs font-black text-slate-700">عملکرد امروز (جاری)</span>
           </div>
-          <span class="text-xl font-black text-blue-600">842</span>
+          <span class="text-xl font-black text-blue-600">{{(todayStats.count + todayStats.docs + todayStats.feed) || 0 | number}}</span>
         </div>
         <div class="space-y-3.5">
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">شمارش شده (تیم اجرا)</span>
-              <span class="font-bold text-slate-700">415</span>
+              <span class="font-bold text-slate-700">{{todayStats.count || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-blue-500 h-full rounded-full" style="width: 50%"></div>
+              <div class="bg-blue-500 h-full rounded-full" [style.width]="getHeight(todayStats.count)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تایید مدارک (گمرکی/مالی)</span>
-              <span class="font-bold text-slate-700">280</span>
+              <span class="font-bold text-slate-700">{{todayStats.docs || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-amber-500 h-full rounded-full" style="width: 35%"></div>
+              <div class="bg-amber-500 h-full rounded-full" [style.width]="getHeight(todayStats.docs)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تغذیه نهایی (MT26/MT49)</span>
-              <span class="font-bold text-slate-700">147</span>
+              <span class="font-bold text-slate-700">{{todayStats.feed || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-emerald-500 h-full rounded-full" style="width: 22%"></div>
+              <div class="bg-emerald-500 h-full rounded-full" [style.width]="getHeight(todayStats.feed)"></div>
             </div>
           </div>
         </div>
@@ -60,34 +60,34 @@
             <span class="w-2 h-2 rounded-full bg-slate-400"></span>
             <span class="text-xs font-black text-slate-700">عملکرد دیروز (بسته شده)</span>
           </div>
-          <span class="text-xl font-black text-slate-700">1,245</span>
+          <span class="text-xl font-black text-slate-700">{{(yesterdayStats.count + yesterdayStats.docs + yesterdayStats.feed) || 0 | number}}</span>
         </div>
         <div class="space-y-3.5">
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">شمارش شده (تیم اجرا)</span>
-              <span class="font-bold text-slate-700">850</span>
+              <span class="font-bold text-slate-700">{{yesterdayStats.count || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-blue-500 h-full rounded-full" style="width: 68%"></div>
+              <div class="bg-blue-500 h-full rounded-full" [style.width]="getHeight(yesterdayStats.count)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تایید مدارک (گمرکی/مالی)</span>
-              <span class="font-bold text-slate-700">310</span>
+              <span class="font-bold text-slate-700">{{yesterdayStats.docs || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-amber-500 h-full rounded-full" style="width: 25%"></div>
+              <div class="bg-amber-500 h-full rounded-full" [style.width]="getHeight(yesterdayStats.docs)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تغذیه نهایی (MT26/MT49)</span>
-              <span class="font-bold text-slate-700">85</span>
+              <span class="font-bold text-slate-700">{{yesterdayStats.feed || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-emerald-500 h-full rounded-full" style="width: 12%"></div>
+              <div class="bg-emerald-500 h-full rounded-full" [style.width]="getHeight(yesterdayStats.feed)"></div>
             </div>
           </div>
         </div>
@@ -99,34 +99,34 @@
             <span class="w-2 h-2 rounded-full bg-slate-400"></span>
             <span class="text-xs font-black text-slate-700">هفته گذشته (بسته شده)</span>
           </div>
-          <span class="text-xl font-black text-slate-700">8,930</span>
+          <span class="text-xl font-black text-slate-700">{{(lastWeekStats.count + lastWeekStats.docs + lastWeekStats.feed) || 0 | number}}</span>
         </div>
         <div class="space-y-3.5">
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">شمارش شده (تیم اجرا)</span>
-              <span class="font-bold text-slate-700">5,120</span>
+              <span class="font-bold text-slate-700">{{lastWeekStats.count || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-blue-500 h-full rounded-full" style="width: 58%"></div>
+              <div class="bg-blue-500 h-full rounded-full" [style.width]="getHeight(lastWeekStats.count)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تایید مدارک (گمرکی/مالی)</span>
-              <span class="font-bold text-slate-700">2,450</span>
+              <span class="font-bold text-slate-700">{{lastWeekStats.docs || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-amber-500 h-full rounded-full" style="width: 28%"></div>
+              <div class="bg-amber-500 h-full rounded-full" [style.width]="getHeight(lastWeekStats.docs)"></div>
             </div>
           </div>
           <div>
             <div class="flex justify-between text-[11px] mb-1">
               <span class="text-slate-500">تغذیه نهایی (MT26/MT49)</span>
-              <span class="font-bold text-slate-700">1,360</span>
+              <span class="font-bold text-slate-700">{{lastWeekStats.feed || 0 | number}}</span>
             </div>
             <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div class="bg-emerald-500 h-full rounded-full" style="width: 16%"></div>
+              <div class="bg-emerald-500 h-full rounded-full" [style.width]="getHeight(lastWeekStats.feed)"></div>
             </div>
           </div>
         </div>
@@ -193,7 +193,7 @@
             <div class="flex-1 min-w-0">
               <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-500">کل رکوردهای تخصیص یافته</span>
-                <span class="font-black text-slate-800">198,540</span>
+                <span class="font-black text-slate-800">{{overallStats.total || 0 | number}}</span>
               </div>
             </div>
           </div>
@@ -203,10 +203,10 @@
             <div class="flex-1 min-w-0">
               <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-500">لیبل‌های چاپ شده (QR)</span>
-                <span class="font-black text-slate-800">142,000</span>
+                <span class="font-black text-slate-800">{{overallStats.printed || 0 | number}}</span>
               </div>
               <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-indigo-600 h-full rounded-full" style="width: 71%"></div>
+                <div class="bg-indigo-600 h-full rounded-full" [style.width.%]="(overallStats.printed / (overallStats.total || 1)) * 100"></div>
               </div>
             </div>
           </div>
@@ -216,10 +216,10 @@
             <div class="flex-1 min-w-0">
               <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-500">مغایرت‌های کشف شده</span>
-                <span class="font-black text-amber-600">8,450</span>
+                <span class="font-black text-amber-600">{{overallStats.conflicts || 0 | number}}</span>
               </div>
               <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-amber-500 h-full rounded-full" style="width: 15%"></div>
+                <div class="bg-amber-500 h-full rounded-full" [style.width.%]="(overallStats.conflicts / (overallStats.total || 1)) * 100"></div>
               </div>
             </div>
           </div>
@@ -229,10 +229,10 @@
             <div class="flex-1 min-w-0">
               <div class="flex justify-between text-xs mb-1">
                 <span class="text-slate-500">پایان‌یافته و تغذیه شده</span>
-                <span class="font-black text-emerald-600">65,200</span>
+                <span class="font-black text-emerald-600">{{overallStats.done || 0 | number}}</span>
               </div>
               <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-emerald-500 h-full rounded-full" style="width: 33%"></div>
+                <div class="bg-emerald-500 h-full rounded-full" [style.width.%]="(overallStats.done / (overallStats.total || 1)) * 100"></div>
               </div>
             </div>
           </div>

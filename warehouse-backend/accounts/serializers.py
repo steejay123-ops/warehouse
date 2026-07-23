@@ -49,6 +49,12 @@ class UserSerializer(serializers.ModelSerializer):
         return ret
 
     def create(self, validated_data):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            is_req_admin = request.user.is_superuser or request.user.groups.filter(name='admin').exists()
+            if not is_req_admin and 'is_superuser' in validated_data:
+                validated_data.pop('is_superuser')
+                
         groups = validated_data.pop('groups', [])
         roles = validated_data.pop('roles', None)
         user_permissions = validated_data.pop('user_permissions', [])
@@ -71,7 +77,38 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
+        from django.db.models import Q
+        from rest_framework.exceptions import ValidationError
+        
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            is_req_admin = request.user.is_superuser or request.user.groups.filter(name='admin').exists()
+            if not is_req_admin and 'is_superuser' in validated_data:
+                validated_data.pop('is_superuser')
+                
         roles = validated_data.pop('roles', None)
+        
+        # Check if the user is currently an admin
+        was_admin = instance.is_superuser or instance.groups.filter(name='admin').exists()
+        
+        # Determine new states
+        new_is_active = validated_data.get('is_active', instance.is_active)
+        new_is_superuser = validated_data.get('is_superuser', instance.is_superuser)
+        new_has_admin_role = instance.groups.filter(name='admin').exists()
+        if roles is not None:
+            new_has_admin_role = 'admin' in roles
+            
+        will_be_admin = new_is_active and (new_is_superuser or new_has_admin_role)
+        
+        if was_admin and not will_be_admin:
+            # Check if there are other active admins
+            active_admins = CustomUser.objects.filter(is_active=True).filter(
+                Q(is_superuser=True) | Q(groups__name='admin')
+            ).exclude(id=instance.id).count()
+            
+            if active_admins == 0:
+                raise ValidationError("شما نمی‌توانید آخرین مدیر (Admin) فعال سیستم را تنزل درجه داده یا غیرفعال کنید.")
+                
         if roles is not None:
             group_objs = Group.objects.filter(name__in=roles)
             instance.groups.set(group_objs)
@@ -130,6 +167,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'supervisor_id': user.supervisor_id,
             'requires_password_change': user.requires_password_change,
             'ui_preferences': user.ui_preferences,
+            'is_superuser': user.is_superuser,
             'permissions': list(user_perms),
         }
         return {

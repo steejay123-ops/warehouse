@@ -4,20 +4,21 @@
       <div>
         <h3 class="font-black text-slate-800 text-sm flex items-center gap-2">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          پیکربندی کلان و معماری رفتار سامانه
+          پیکربندی کلان سیستم
         </h3>
-        <p class="text-[11px] text-slate-500 mt-1.5">مدیریت قوانین انبارگردانی، لاگ‌ها، یکپارچگی داده‌ها (MT) و تنظیمات پیش‌فرض چاپ</p>
+        <p class="text-[11px] text-slate-500 mt-1.5">مدیریت تنظیمات سراسری سیستم شامل فرآیندهای انبارگردانی و تغذیه داده‌ها</p>
       </div>
-      <button (click)="saveGlobalSettings()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 hover:shadow-indigo-200" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      <button [disabled]="isLoading" (click)="saveGlobalSettings()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 hover:shadow-indigo-200" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+        <span *ngIf="isLoading" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+        <svg *ngIf="!isLoading" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
         ذخیره و اعمال تنظیمات
       </button>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div *ngIf="!isLoading" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
+      <!-- فرآیندهای انبارگردانی -->
       <div class="space-y-6">
-        
         <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="bg-slate-50 border-b border-slate-100 p-4">
             <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
@@ -25,192 +26,100 @@
               قوانین عملیاتی و انبارگردانی فیزیکی
             </h4>
           </div>
-          <div class="p-5 space-y-4">
+          <div class="p-5 space-y-5">
             
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
-              <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">شمارش کور (Blind Count)</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">مخفی کردن موجودی سیستمی (دفتری) از دید انباردار میدانی در اپلیکیشن برای جلوگیری از تقلب.</p>
-              </div>
-              <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [(ngModel)]="blindCount" (change)="handleBlindCountToggle()">
-                <span class="toggle-slider"></span>
-              </label>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-2">تایید نهایی شمارش توسط مدیریت</label>
+              <select [(ngModel)]="settings.manager_approval_mode" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+                <option value="any_manager">امکان تایید توسط همه مدیران (استخر مشترک)</option>
+                <option value="assigned_manager_only">فقط مدیری که کار را ارجاع داده مجاز به تایید است</option>
+              </select>
             </div>
 
             <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
               <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">کش آفلاین (Offline Mode)</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">ذخیره داده‌ها در حافظه تبلت هنگام قطعی شبکه سایت و سینک خودکار پس از اتصال مجدد.</p>
+                <h5 class="text-xs font-black text-slate-800">تایید اجباری سرپرست</h5>
+                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">آیا کارهای شمارش شده قبل از رسیدن به دست مدیر باید توسط سرپرست نیز تایید شوند؟</p>
               </div>
               <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [(ngModel)]="offlineMode" (change)="handleToggleChange('offlineMode')">
+                <input type="checkbox" [checked]="settings.require_supervisor_approval" (change)="settings.require_supervisor_approval = !settings.require_supervisor_approval">
                 <span class="toggle-slider"></span>
               </label>
             </div>
 
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
-              <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">ثبت اجباری لوکیشن (GPS Tagging)</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">ثبت اتوماتیک مختصات جغرافیایی انباردار در لحظه ثبت رکورد جهت کنترل حضور در محل.</p>
-              </div>
-              <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [(ngModel)]="gpsTag" (change)="handleToggleChange('gpsTag')">
-                <span class="toggle-slider"></span>
-              </label>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-2">حالت نمایش موجودی سیستمی (شمارش کور)</label>
+              <select [(ngModel)]="settings.blind_counting" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+                <option value="blind">کور (شمارشگر موجودی سیستمی را نبیند)</option>
+                <option value="visible">قابل مشاهده برای شمارشگر</option>
+              </select>
             </div>
 
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
-              <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">فشرده‌سازی خودکار تصاویر الصاقی</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">کاهش سایز و رزولوشن عکس‌های گرفته شده از کالاها پیش از آپلود، جهت صرفه‌جویی در پهنای باند.</p>
-              </div>
-              <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [(ngModel)]="imgCompress" (change)="handleToggleChange('imgCompress')">
-                <span class="toggle-slider"></span>
-              </label>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-2">حداکثر دفعات مجاز بازشماری</label>
+              <select [(ngModel)]="settings.max_recounts" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+                <option [ngValue]="-1">بی‌نهایت (بدون محدودیت)</option>
+                <option [ngValue]="1">یک بار</option>
+                <option [ngValue]="2">دو بار</option>
+                <option [ngValue]="3">سه بار</option>
+              </select>
             </div>
-            
-            <div class="flex items-start gap-3 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100 opacity-90">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" class="mt-0.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <div>
-                <h5 class="text-[11px] font-black text-indigo-900">پیش‌نیاز اجباری چاپ لیبل (Hard Rule)</h5>
-                <p class="text-[10px] text-indigo-700/80 mt-1.5 leading-relaxed">بر اساس سیاست‌های معماری سیستم، ارجاع هیچ رکوردی به کارتابل شمارشگر میدانی پیش از <b>چاپ موفقیت‌آمیز لیبل QR</b> امکان‌پذیر نمی‌باشد. این سیاست قفل شده است.</p>
-              </div>
-            </div>
+
           </div>
         </div>
+      </div>
 
+      <!-- واردات اکسل و لیبل -->
+      <div class="space-y-6">
         <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div class="bg-slate-50 border-b border-slate-100 p-4">
             <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-              یکپارچگی داده‌ها و تغذیه MT26/49
+              یکپارچگی داده‌ها (آپلود اکسل)
             </h4>
           </div>
           <div class="p-5 space-y-5">
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">رفتار پیش‌فرض در برابر تداخل رکوردهای اکسل پایه</label>
-              <select [(ngModel)]="conflictAction" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
-                <option value="ignore">نادیده گرفتن رکوردهای تکراری (حفظ داده فعلی)</option>
+              <label class="block text-[11px] font-bold text-slate-700 mb-2">رفتار پیش‌فرض هنگام تداخل رکوردهای اکسل</label>
+              <select [(ngModel)]="settings.default_conflict_strategy" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+                <option value="ignore">نادیده گرفتن رکورد تکراری (حفظ داده‌های فعلی سیستم)</option>
                 <option value="replace">جایگزینی اجباری (Over-write)</option>
-                <option value="log">توقف فرآیند و ثبت در لاگ Audit</option>
+                <option value="update_empty">تکمیل مقادیر خالی بدون تغییر مقادیر موجود</option>
+                <option value="log">توقف پردازش آن سطر و ثبت در لاگ خطا</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-2">وضعیت پیش‌فرض لیبل برای کالاهای جدید</label>
+              <select [(ngModel)]="settings.default_tag_status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+                <option value="عدم نیاز به چاپ">عدم نیاز به چاپ</option>
+                <option value="چاپ نشده">نیاز به چاپ (چاپ نشده)</option>
+                <option value="چاپ شده">چاپ شده</option>
               </select>
             </div>
             
-            <div class="border-t border-slate-100 pt-5">
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">فرمت خروجی پیش‌فرض سامانه‌های مرکزی</label>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors">
-                  <input type="radio" [(ngModel)]="mtFormat" value="excel" name="mt_format" class="text-indigo-600 focus:ring-indigo-500">
-                  <span class="text-xs font-bold text-slate-600">Excel (XLSX) استاندارد</span>
-                </label>
-                <label class="flex items-center gap-2 p-3 bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 transition-colors">
-                  <input type="radio" [(ngModel)]="mtFormat" value="csv" name="mt_format" class="text-indigo-600 focus:ring-indigo-500">
-                  <span class="text-xs font-bold text-slate-600">CSV (برای سیستم‌های Legacy)</span>
-                </label>
-              </div>
-            </div>
           </div>
         </div>
-
-      </div>
-
-      <div class="space-y-6">
-
-        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-slate-50 border-b border-slate-100 p-4">
-            <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-              محتوای پیش‌فرض برچسب‌های حرارتی
-            </h4>
-            <p class="text-[10px] text-slate-500 mt-1.5 leading-relaxed">فیلدهایی که در سیستم به عنوان پایه روی ساختار لیبل‌ها و بارکدها نقش می‌بندند. (برای شخصی‌سازی ابعاد به طراح لیبل مراجعه کنید)</p>
-          </div>
-          
-          <div class="p-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">کد سیستم (ID)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printKey" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">کد استاندارد کالا (MESC)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printMesc" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">موقعیت فیزیکی (LOC)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printLoc" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">شرح کالا (DESC)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printDesc" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">وضعیت فیزیکی (COND)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printCond" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">نام کارگاه / انبار</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printProject" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">تگ رهگیری گروهی</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printTag" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-              <label class="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group">
-                <span class="text-[11px] font-bold text-slate-700 group-hover:text-indigo-700 transition-colors">بارکد دو بعدی (QR)</span>
-                <input type="checkbox" [(ngModel)]="lblSettings.printQr" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-slate-300 cursor-pointer">
-              </label>
-            </div>
-
-            <div class="p-4 rounded-xl transition-all duration-300" [ngClass]="blindCount ? 'bg-rose-50 border border-rose-200' : 'bg-slate-50 border border-slate-200'">
-              <label class="flex items-start gap-3 group" [ngClass]="blindCount ? 'cursor-not-allowed' : 'cursor-pointer'">
-                <input type="checkbox" [(ngModel)]="lblSettings.printQty" [disabled]="blindCount" class="mt-0.5 rounded text-indigo-600 focus:ring-0 transition-all" [ngClass]="blindCount ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'">
-                <div>
-                  <span class="text-[11px] font-black" [ngClass]="blindCount ? 'text-rose-900' : 'text-slate-700'">چاپ تعداد دفتری (QTY) روی لیبل فیزیکی</span>
-                  <p class="text-[9px] mt-1.5 leading-relaxed font-bold" [ngClass]="blindCount ? 'text-rose-600' : 'text-slate-400'">
-                    <ng-container *ngIf="blindCount">⚠️ به دلیل فعال بودن حالت «شمارش کور» در تنظیمات عملیاتی، چاپ تعداد سیستم روی لیبل‌ها قفل شده است.</ng-container>
-                    <ng-container *ngIf="!blindCount">فعال. تعداد سیستم روی لیبل چاپ خواهد شد (مناسب برای انبارداری عادی و مغایر با انبارگردانی).</ng-container>
-                  </p>
-                </div>
-              </label>
-            </div>
-
-          </div>
-        </div>
-
-        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-slate-50 border-b border-slate-100 p-4">
-            <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              امنیت و رهگیری تغییرات (Audit)
-            </h4>
-          </div>
-          <div class="p-5 space-y-4">
-            
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
-              <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">نیاز به تایید دو مرحله‌ای رکوردها</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">هیچ رکوردی بدون تایید سلسله‌مراتبی سرپرست مستقیماً وارد جداول اصلی دیتابیس نشود.</p>
-              </div>
-              <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [(ngModel)]="twoStepAuth" (change)="handleToggleChange('twoStepAuth')">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            
-            <div class="border-t border-slate-100 pt-4 mt-2">
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">مدت زمان نگهداری لاگ‌های سیستمی (Retention Policy)</label>
-              <select [(ngModel)]="logRetention" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
-                <option value="30">۳۰ روز (پاکسازی خودکار ماهانه)</option>
-                <option value="90">۹۰ روز (استاندارد بازرسی)</option>
-                <option value="180">۶ ماه</option>
-                <option value="forever">بایگانی دائم (نیازمند فضای سرور بالا)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
       </div>
     </div>
-  </div>
+
+    <!-- Label Designer Section -->
+    <div *ngIf="!isLoading" class="mt-6">
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div class="bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </div>
+            <div>
+              <h4 class="font-black text-slate-700 text-xs">طراح لیبل (Global)</h4>
+              <p class="text-[10px] text-slate-400 mt-0.5">تنظیمات پیش‌فرض چاپ و طراحی لیبل در کل سیستم</p>
+            </div>
+          </div>
+        </div>
+        <div class="p-5">
+          <app-label-designer></app-label-designer>
+        </div>
+      </div>
+    </div>
+</div>

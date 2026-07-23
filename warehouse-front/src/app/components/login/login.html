@@ -20,16 +20,16 @@
             </svg>
           </div>
           <h1 class="text-xl font-black text-white text-center leading-tight">اتوماسیون هوشمند انبار</h1>
-          <p class="text-xs text-slate-400 mt-1.5 text-center">سامانه یکپارچه مدیریت انبارگردانی شیراز</p>
+          <p class="text-xs text-slate-400 mt-1.5 text-center">سامانه یکپارچه مدیریت انبارگردانی فارس عالیش</p>
           <div class="flex items-center gap-2 mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
-            <span class="text-[10px] text-emerald-400 font-medium">سیستم آنلاین · نسخه ۱.۰</span>
+            <span class="text-[10px] text-emerald-400 font-medium">سیستم آنلاین · نسخه {{ systemVersion }}</span>
           </div>
         </div>
 
-        <div *ngIf="loginError" class="mb-4 p-3 rounded-xl text-xs flex items-center gap-2.5" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#fca5a5">
+        <div *ngIf="loginErrorMessage" class="mb-4 p-3 rounded-xl text-xs flex items-center gap-2.5" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#fca5a5">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-          <span>نام کاربری یا رمز عبور اشتباه است.</span>
+          <span>{{ loginErrorMessage }}</span>
         </div>
 
         <div class="space-y-4">
@@ -60,10 +60,10 @@
           </div>
           <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
             <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked="" class="rounded border-slate-600 bg-slate-700 text-indigo-500">
+              <input type="checkbox" [(ngModel)]="rememberMe" class="rounded border-slate-600 bg-slate-700 text-indigo-500">
               <span>مرا به خاطر بسپار</span>
             </label>
-            <a href="#" class="text-indigo-400 hover:text-indigo-300 transition-colors">فراموشی رمز عبور</a>
+            <a href="#" (click)="showForgotPasswordDialog($event)" class="text-indigo-400 hover:text-indigo-300 transition-colors">فراموشی رمز عبور</a>
           </div>
 
           <button [disabled]="isLoggingIn" (click)="handleLogin()" class="w-full py-3 rounded-xl text-sm font-bold text-white transition-all active:scale-[.98] mt-1 flex items-center justify-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 8px 25px rgba(99,102,241,.4)" [style.opacity]="isLoggingIn ? '0.85' : '1'">
@@ -77,17 +77,19 @@
           </button>
         </div>
 
-        <div class="text-right text-[10px] text-slate-500 mt-6 bg-slate-950/40 p-2.5 rounded-xl border border-white/5 space-y-1">
-          <p class="font-bold text-slate-400 mb-1">راهنمای کاربران (رمز همگی: 123456)</p>
-          <p>· مدیریت کل: <span class="text-indigo-400 font-mono">saman_admin</span></p>
-          <p>· مدیر پروژه: <span class="text-indigo-400 font-mono">heydari_manager</span></p>
-          <p>· واحد اجرایی: <span class="text-indigo-400 font-mono">ghasemi_exec</span></p>
-          <p>· واحد مدارک: <span class="text-indigo-400 font-mono">rezaei_docs</span></p>
-          <p>· واحد تغذیه: <span class="text-indigo-400 font-mono">karimi_feed</span></p>
-        </div>
-      </div>
-    </div>
-
-    <p class="text-center text-[10px] text-slate-600 mt-4">سامان تقوی سوق · مدیریت پروژه انبارگردانی شیراز</p>
+    <p class="text-center text-[10px] text-slate-600 mt-4">شرکت فارس عالیش</p>
   </div>
 </div>
+
+<!-- فراموشی رمز عبور مودال -->
+<div *ngIf="showForgotModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+  <div class="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl relative">
+    <div class="w-12 h-12 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-indigo-400">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    </div>
+    <h3 class="text-white text-base font-bold mb-2">بازیابی رمز عبور</h3>
+    <p class="text-slate-300 text-xs leading-relaxed mb-6">جهت بازیابی یا تغییر رمز عبور خود، لطفا با مدیر سیستم یا پشتیبانی فناوری اطلاعات تماس بگیرید.</p>
+    <button (click)="showForgotModal = false" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-colors">متوجه شدم</button>
+  </div>
+</div>
+

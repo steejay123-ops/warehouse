@@ -1,12 +1,12 @@
-﻿from rest_framework import viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
-from .models import Item, ImportLog, ImportHistory
-from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer
+from .models import Item, ImportLog, ImportHistory, ItemFieldDefinition
+from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer
 from django.forms.models import model_to_dict
 from warehouses.models import Warehouse
 from .models import CountTask, DocTask
@@ -69,6 +69,34 @@ class PriorityOrderingFilter(filters.OrderingFilter):
             return queryset.order_by(*ordering)
         return queryset
 
+class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
+    queryset = ItemFieldDefinition.objects.all()
+    serializer_class = ItemFieldDefinitionSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['warehouse']
+    search_fields = ['name', 'label']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        old_instance = self.get_object()
+        old_name = old_instance.name
+        new_instance = serializer.save(modified_by=self.request.user)
+        new_name = new_instance.name
+        
+        # If the system name changed, migrate all item data in this warehouse
+        if old_name != new_name:
+            items_to_update = []
+            items = Item.objects.filter(warehouse=new_instance.warehouse)
+            for item in items:
+                if item.dynamic_data and old_name in item.dynamic_data:
+                    item.dynamic_data[new_name] = item.dynamic_data.pop(old_name)
+                    items_to_update.append(item)
+            
+            if items_to_update:
+                Item.objects.bulk_update(items_to_update, ['dynamic_data'])
+
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
@@ -114,6 +142,73 @@ class ItemViewSet(viewsets.ModelViewSet):
             
         return permission_classes
 
+
+    @action(detail=False, methods=['post'])
+    def export_excel(self, request):
+        import openpyxl
+        from django.http import HttpResponse
+        
+        data_scope = request.data.get('data_scope', 'all')
+        columns_scope = request.data.get('columns_scope', 'all_db')
+        columns_list = request.data.get('columns_list', [])
+        
+        if data_scope == 'selected':
+            selected_ids = request.data.get('selected_ids', [])
+            queryset = self.get_queryset().filter(id__in=selected_ids)
+            queryset = self.filter_queryset(queryset)
+        else:
+            queryset = self.filter_queryset(self.get_queryset())
+            
+        valid_fields = {f.name: f for f in Item._meta.fields}
+        
+        if columns_scope == 'all_db':
+            headers = list(valid_fields.keys())
+        elif columns_scope in ['visible', 'custom']:
+            headers = [c for c in columns_list if c in valid_fields]
+            if not headers:
+                headers = list(valid_fields.keys())
+        else:
+            headers = list(valid_fields.keys())
+            
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Export"
+        
+        # Write headers
+        ws.append([valid_fields[h].verbose_name if h in valid_fields and hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h for h in headers])
+        ws.append([h for h in headers])
+        
+        for item in queryset.iterator():
+            row = []
+            for h in headers:
+                val = getattr(item, h, '')
+                if val is None:
+                    val = ''
+                elif hasattr(val, 'username'):
+                    val = f"{val.first_name} {val.last_name}".strip() or val.username
+                elif val.__class__.__name__ == 'Warehouse':
+                    val = str(val)
+                elif hasattr(val, 'project_name') and getattr(val, 'project_name'):
+                    val = getattr(val, 'project_name')
+                else:
+                    val = str(val)
+                row.append(val)
+            ws.append(row)
+            
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="export.xlsx"'
+        wb.save(response)
+        
+        return response
+
+    @action(detail=False, methods=['get'])
+    def export_columns(self, request):
+        valid_fields = Item._meta.fields
+        columns = []
+        for f in valid_fields:
+            label = getattr(f, 'verbose_name', '') or f.name
+            columns.append({"key": f.name, "label": str(label)})
+        return Response(columns)
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):

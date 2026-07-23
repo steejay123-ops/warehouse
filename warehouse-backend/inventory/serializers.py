@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Item, CountTask, CountTaskHistory, DocTask, DocTaskHistory
+from .models import Item, CountTask, CountTaskHistory, DocTask, DocTaskHistory, ItemFieldDefinition
 
 class ItemSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
@@ -18,6 +18,19 @@ class ItemSerializer(serializers.ModelSerializer):
     def get_modified_by_name(self, obj):
         if obj.modified_by:
             return f"{obj.modified_by.first_name} {obj.modified_by.last_name}".strip() or obj.modified_by.username
+        return None
+
+class ItemFieldDefinitionSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ItemFieldDefinition
+        fields = ['id', 'warehouse', 'name', 'label', 'field_type', 'default_value', 'is_required', 'is_active', 'created_by_name']
+        read_only_fields = ['id']
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
 
 class CountTaskHistorySerializer(serializers.ModelSerializer):

@@ -5,10 +5,11 @@ import { SettingsService } from '../../services/settings';
 import { ToastService, ConfirmDialogService } from '../../shared';
 import { AuthStore } from '../../core/stores/auth.store';
 import { LabelDesigner } from '../label-designer/label-designer';
+import { DynamicFields } from '../dynamic-fields/dynamic-fields';
 
 @Component({
   selector: 'app-wh-settings',
-  imports: [CommonModule, FormsModule, LabelDesigner],
+  imports: [CommonModule, FormsModule, LabelDesigner, DynamicFields],
   templateUrl: './wh-settings.html',
   styleUrl: './wh-settings.css'
 })

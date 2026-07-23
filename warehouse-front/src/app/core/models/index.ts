@@ -8,3 +8,5 @@ export * from './project.model';
 export * from './item.model';
 export * from './audit-log.model';
 export * from './api-response.model';
+export * from './count-task.model';
+export * from './dynamic-field.model';

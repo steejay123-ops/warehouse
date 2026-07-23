@@ -63,6 +63,15 @@ export class ApiService {
     });
   }
 
+  /**
+   * دانلود فایل با درخواست POST
+   */
+  downloadPost(endpoint: string, body: unknown = {}): Observable<Blob> {
+    return this.http.post(this.url(endpoint), body, {
+      responseType: 'blob'
+    });
+  }
+
   /** ساخت URL کامل با trailing slash (مورد نیاز DRF) */
   private url(endpoint: string): string {
     const cleanEndpoint = endpoint.replace(/^\/|\/$/g, '');

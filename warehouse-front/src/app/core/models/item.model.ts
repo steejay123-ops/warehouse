@@ -44,6 +44,7 @@ export interface Item {
   assigned_to?: string;
   field_assignee?: string;
   doc_assignee?: string;
+  dynamic_data?: { [key: string]: any };
   created_at?: string;
   updated_at?: string;
   created_by?: number;

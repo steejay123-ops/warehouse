@@ -1,4 +1,4 @@
-﻿import { Component, OnInit, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { firstValueFrom, Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -6,15 +6,17 @@ import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { DataTableComponent, TableColumnDirective } from '../../shared';
 import { ItemApiService } from '../../core/api/item-api.service';
+import { DynamicFieldApiService } from '../../core/api/dynamic-field-api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { ConfirmDialogService } from '../../shared';
 import { PersianDatePipe } from '../../shared';
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { SettingsService } from '../../services/settings';
+import { DraggableDirective } from '../../shared/directives/draggable.directive';
 
 @Component({
   selector: 'app-dispatch',
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css'
 })
@@ -53,6 +55,22 @@ export class Dispatch implements OnInit {
   showCountedItems = false;
   showCountingItems = false;
 
+  // Export Modal State
+  isExportModalOpen = false;
+  exportDataScope: 'all' | 'selected' = 'all';
+  exportColumnScope: 'all_db' | 'visible' | 'custom' = 'all_db';
+  selectedExportColumns: Set<string> = new Set();
+  isExporting = false;
+  exportSubscription?: Subscription;
+
+  // Dynamic Fields State
+  dynamicFields: any[] = [];
+  isDynamicModalOpen = false;
+  dynamicFormData: any = {};
+  selectedItemIdForDynamic: any = null;
+
+  availableExportColumns: {key: string, label: string}[] = [];
+
   getRowClass = (row: any) => {
     if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-slate-800';
     if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-slate-800';
@@ -68,10 +86,15 @@ export class Dispatch implements OnInit {
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService,
     private accountsService: AccountsHttpService,
-    private settingsService: SettingsService
+    private settingsService: SettingsService,
+    private dynamicFieldApi: DynamicFieldApiService
   ) {}
 
   ngOnInit() {
+    this.itemApi.getExportColumns().subscribe(cols => {
+      this.availableExportColumns = cols;
+    });
+
     this.accountsService.getUsers().subscribe(users => {
       this.state.appState.users = users;
       this.fieldWorkers = users.filter((u: any) => u.roles?.includes('counter') || u.role_titles?.some((t: string) => t.includes('انبارگردان') || t.includes('انباردار میدانی')));
@@ -97,6 +120,7 @@ export class Dispatch implements OnInit {
     }
 
     this.loadItems();
+    this.loadDynamicFields();
 
     // خواندن تنظیم تایید سرپرست برای انبار فعال
     const whId = this.state.appState.activeWarehouseId;
@@ -637,6 +661,98 @@ export class Dispatch implements OnInit {
     return tagStr ? tagStr.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
   }
 
+  // ────────── Export Methods ──────────
+  openExportModal() {
+    this.isExportModalOpen = true;
+    this.exportDataScope = this.selectedItemIds.size > 0 ? 'selected' : 'all';
+    this.exportColumnScope = 'all_db';
+    this.selectedExportColumns.clear();
+  }
+
+  closeExportModal() {
+    this.isExporting = false;
+    this.isExportModalOpen = false;
+    
+    if (this.exportSubscription) {
+      try {
+        this.exportSubscription.unsubscribe();
+      } catch (e) {
+        console.error('Error unsubscribing', e);
+      }
+      this.exportSubscription = undefined;
+    }
+    
+    try {
+      this.cdr.detectChanges();
+    } catch(e) {}
+  }
+
+  onDataScopeChange(scope: string) {
+    if (scope === 'all') {
+      this.exportColumnScope = 'all_db';
+    } else if (scope === 'selected') {
+      this.exportColumnScope = 'visible';
+    }
+  }
+
+  toggleExportColumn(key: string) {
+    if (this.selectedExportColumns.has(key)) {
+      this.selectedExportColumns.delete(key);
+    } else {
+      this.selectedExportColumns.add(key);
+    }
+  }
+
+  executeExport() {
+    this.isExporting = true;
+    
+    const payload: any = {
+      data_scope: this.exportDataScope,
+      columns_scope: this.exportColumnScope,
+    };
+    
+    if (this.exportDataScope === 'selected') {
+      payload.selected_ids = Array.from(this.selectedItemIds);
+    }
+    
+    if (this.exportColumnScope === 'visible') {
+      payload.columns_list = this.state.appState.dispatchSettings.visibleCols || [];
+    } else if (this.exportColumnScope === 'custom') {
+      payload.columns_list = Array.from(this.selectedExportColumns);
+    }
+    
+    const filters = { ...this.state.appState.dispatchSettings.filters, page_size: 100000 };
+    if (!this.showCountedItems) filters['show_counted'] = 'false';
+    if (!this.showCountingItems) filters['show_counting'] = 'false';
+    
+    this.exportSubscription = this.itemApi.exportExcel({ ...payload, ...filters }).subscribe({
+      next: (blob) => {
+        try {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `export_${new Date().getTime()}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } catch(e) {
+          console.error('File download error', e);
+        }
+        
+        this.isExporting = false;
+        this.closeExportModal();
+        this.toast.show('success', 'فایل اکسل با موفقیت دانلود شد.');
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Export error:', err);
+        this.toast.show('error', 'خطا در دریافت فایل خروجی');
+        this.isExporting = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
 
 
   async confirmLeave(): Promise<boolean> {
@@ -671,6 +787,56 @@ export class Dispatch implements OnInit {
       }
     }
     return true;
+  }
+
+  // ---- Dynamic Fields Methods ----
+  loadDynamicFields() {
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL') {
+      this.dynamicFieldApi.getFields(Number(whId)).subscribe({
+        next: (res: any) => {
+          this.dynamicFields = res.results || res;
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  openDynamicFieldsModal() {
+    if (this.selectedItemIds.size !== 1) {
+      this.toast.show('warning', 'برای ثبت اطلاعات تکمیلی لطفاً دقیقاً یک رکورد را انتخاب کنید.');
+      return;
+    }
+    const id = Array.from(this.selectedItemIds)[0];
+    const item = this.items.find(i => i.id === id);
+    if (!item) return;
+
+    this.selectedItemIdForDynamic = id;
+    this.dynamicFormData = item.dynamic_data ? { ...item.dynamic_data } : {};
+    this.isDynamicModalOpen = true;
+  }
+
+  closeDynamicFieldsModal() {
+    this.isDynamicModalOpen = false;
+    this.selectedItemIdForDynamic = null;
+    this.dynamicFormData = {};
+  }
+
+  saveDynamicFields() {
+    if (!this.selectedItemIdForDynamic) return;
+    
+    this.itemApi.update(this.selectedItemIdForDynamic.toString(), {
+      dynamic_data: this.dynamicFormData
+    }).subscribe({
+      next: (res) => {
+        const item = this.items.find(i => i.id === this.selectedItemIdForDynamic);
+        if (item) item.dynamic_data = res.dynamic_data;
+        this.toast.show('success', 'اطلاعات تکمیلی با موفقیت ذخیره شد');
+        this.closeDynamicFieldsModal();
+        this.cdr.detectChanges();
+      },
+      error: () => this.toast.show('error', 'خطا در ذخیره اطلاعات تکمیلی')
+    });
   }
 }
 

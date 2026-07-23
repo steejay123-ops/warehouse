@@ -5,6 +5,36 @@ from django.utils import timezone
 
 from django.contrib.postgres.indexes import GinIndex
 
+class ItemFieldDefinition(models.Model):
+    FIELD_TYPE_CHOICES = [
+        ('text', 'متن (Text)'),
+        ('number', 'عدد (Number)'),
+        ('boolean', 'بله/خیر (Boolean)'),
+        ('date', 'تاریخ (Date)'),
+    ]
+
+    warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='field_definitions', verbose_name="انبار", null=True, blank=True)
+    name = models.CharField(max_length=100, verbose_name="نام سیستمی (انگلیسی)")
+    label = models.CharField(max_length=200, verbose_name="عنوان نمایشی (فارسی)")
+    field_type = models.CharField(max_length=20, choices=FIELD_TYPE_CHOICES, default='text', verbose_name="نوع داده")
+    default_value = models.CharField(max_length=255, null=True, blank=True, verbose_name="مقدار پیش‌فرض")
+    is_required = models.BooleanField(default=False, verbose_name="اجباری است؟")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    
+    # Auditing
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_field_defs')
+
+    class Meta:
+        ordering = ['created_at']
+        unique_together = ('warehouse', 'name')
+        verbose_name = "تعریف فیلد پویا"
+        verbose_name_plural = "تعاریف فیلدهای پویا"
+
+    def __str__(self):
+        return f"{self.label} ({self.name})"
+
 class Item(models.Model):
     # Tracking & IDs
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items', verbose_name="انبار")
@@ -64,6 +94,9 @@ class Item(models.Model):
     
     # Custom Tags
     tag = models.CharField(max_length=500, null=True, blank=True, verbose_name="تگ‌ها")
+    
+    # Dynamic Data
+    dynamic_data = models.JSONField(default=dict, blank=True, verbose_name="اطلاعات متغیر (پویا)")
     
     field_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به (میدانی)")
     doc_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به (مدارک و قیمت)")

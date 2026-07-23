@@ -120,8 +120,13 @@ export class ItemApiService {
   // ────────── خروجی ──────────
 
   /** خروجی Excel رکوردها */
-  exportExcel(filters?: any): Observable<Blob> {
-    return this.api.download('reports/records/excel', filters as globalThis.Record<string, unknown>);
+  exportExcel(payload: any): Observable<Blob> {
+    return this.api.downloadPost(`${this.endpoint}/export_excel/`, payload);
+  }
+
+  /** دریافت نام و عنوان فیلدهای قابل استخراج */
+  getExportColumns(): Observable<{key: string, label: string}[]> {
+    return this.api.get<{key: string, label: string}[]>(`${this.endpoint}/export_columns/`);
   }
 
   /** خروجی PDF رکوردها */

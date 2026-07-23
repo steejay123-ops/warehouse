@@ -10,3 +10,5 @@ export { DashboardApiService } from './dashboard-api.service';
 export { AuditApiService } from './audit-api.service';
 export { FeedingApiService } from './feeding-api.service';
 export { TagApiService } from './tag-api.service';
+export { CountTaskApiService } from './count-task-api.service';
+export { DynamicFieldApiService } from './dynamic-field-api.service';

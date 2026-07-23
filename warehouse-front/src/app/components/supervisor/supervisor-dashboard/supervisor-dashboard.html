@@ -126,7 +126,7 @@
           <button *ngIf="task.history && task.history.length > 0" (click)="openHistoryDialog(task)" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="مشاهده تاریخچه">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
           </button>
-          <button *appHasPermission="'perm_rec_recount'" (click)="openRejectDialog(task)" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="رد کردن (بازشماری)">
+          <button *appHasPermission="'view_sys_recounts'" (click)="openRejectDialog(task)" class="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="رد کردن (بازشماری)">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <button (click)="approveSingle(task)" class="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-100 hover:border-emerald-200 ml-1" title="تایید">

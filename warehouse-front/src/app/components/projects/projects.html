@@ -100,7 +100,7 @@
             
             <div *ngIf="openDropdownId == p.id" class="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-[99] py-1 text-right fade-in">
               <ng-container *ngIf="!p.is_active">
-                <button *appHasPermission="'perm_wh_freeze'" (click)="restoreWarehouse(p.id)" class="w-full text-right px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 font-bold transition-colors">
+                <button *appHasPermission="'view_sys_projects'" (click)="restoreWarehouse(p.id)" class="w-full text-right px-4 py-2.5 text-xs text-emerald-600 hover:bg-emerald-50 flex items-center gap-2 font-bold transition-colors">
                   <span>♻️</span> بازیابی و فعال‌سازی مجدد
                 </button>
               </ng-container>
@@ -108,8 +108,8 @@
                 <button (click)="openEditModal(p.id)" class="w-full text-right px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 font-semibold">
                   <span>✏️</span> ویرایش مشخصات انبار
                 </button>
-                <div class="border-t border-slate-100 my-1" *appHasPermission="'perm_wh_freeze'"></div>
-                <button *appHasPermission="'perm_wh_freeze'" (click)="archiveWarehouse(p.id)" class="w-full text-right px-4 py-2 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2 font-bold">
+                <div class="border-t border-slate-100 my-1" *appHasPermission="'view_sys_projects'"></div>
+                <button *appHasPermission="'view_sys_projects'" (click)="archiveWarehouse(p.id)" class="w-full text-right px-4 py-2 text-xs text-amber-600 hover:bg-amber-50 flex items-center gap-2 font-bold">
                   <span>⏸️</span> غیرفعال کردن انبار
                 </button>
               </ng-container>

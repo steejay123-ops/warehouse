@@ -179,7 +179,7 @@
                 <button (click)="approveTask()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-3 rounded-xl shadow-md transition-colors">
                     تایید نهایی شمارش
                 </button>
-                <button *appHasPermission="'perm_rec_recount'" (click)="rejectTask()" class="flex-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-sm py-3 rounded-xl transition-colors border border-rose-200">
+                <button *appHasPermission="'view_sys_recounts'" (click)="rejectTask()" class="flex-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-sm py-3 rounded-xl transition-colors border border-rose-200">
                     درخواست بازشماری مجدد
                 </button>
             </div>

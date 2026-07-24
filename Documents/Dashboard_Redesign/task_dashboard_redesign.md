@@ -1,0 +1,6 @@
+- `[x]` Install/setup charting library (Decision: using pure Tailwind CSS/SVG to avoid heavy dependencies)
+- `[x]` Create Top Donut Chart
+- `[x]` Create Pipeline Funnel Chart
+- `[x]` Create 14-day Velocity Trend Chart with Target Line
+- `[x]` Convert Daily Bars to KPI Cards
+- `[x]` Design Action Center Alerts

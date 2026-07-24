@@ -63,7 +63,41 @@ export class Dashboard implements OnInit {
     });
   }
 
+  dailyTarget = 1000; // Default daily target
+
+  get totalCounted() {
+    const isWh = this.state.appState.activeWarehouseId && this.state.appState.activeWarehouseId !== 'ALL';
+    const projects = this.state.appState.projects || [];
+    if (isWh) {
+      const p = projects.find((x: any) => x.id === Number(this.state.appState.activeWarehouseId));
+      return p ? p.counted_quantity : 0;
+    }
+    return projects.reduce((sum: number, p: any) => sum + (p.counted_quantity || 0), 0);
+  }
+
+  get totalPercent() {
+    if (!this.overallStats.total) return 0;
+    return Math.min(100, Math.round((this.totalCounted / this.overallStats.total) * 100));
+  }
+
+  get donutDashArray() {
+    return `${this.totalPercent}, 100`;
+  }
+
+  get todayTrend() {
+    const today = this.todayStats.count || 0;
+    const yesterday = this.yesterdayStats.count || 0;
+    if (yesterday === 0) return { val: 0, dir: 'up' };
+    const diff = today - yesterday;
+    return {
+      val: Math.round(Math.abs(diff / yesterday) * 100),
+      dir: diff >= 0 ? 'up' : 'down'
+    };
+  }
+
   getHeight(val: number): string {
-    return Math.max((val / this.overallMax) * 100, 4) + '%';
+    // Relative to a reasonable max or target to make the chart meaningful
+    const max = Math.max(this.overallMax, this.dailyTarget);
+    return Math.max((val / max) * 100, 2) + '%';
   }
 }

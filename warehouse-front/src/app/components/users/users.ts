@@ -8,6 +8,7 @@ import { AccountsHttpService, User, Role, Permission } from '../../core/http/acc
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
 import { IdCards } from '../id-cards/id-cards';
+import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-users',
@@ -53,7 +54,8 @@ export class Users implements OnInit {
     private toast: ToastService, 
     private accountsService: AccountsHttpService, 
     private whService: WarehouseHttpService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   ngOnInit() {
@@ -198,10 +200,17 @@ export class Users implements OnInit {
     });
   }
 
-  resetPassword(id: number) {
+  async resetPassword(id: number) {
     this.closeMenus();
     const u = this.state.appState.users.find((x: any) => x.id === id);
-    if (confirm(`آیا مطمئن هستید که می‌خواهید رمز عبور ${u.first_name} ${u.last_name} را به حالت پیش‌فرض (123456) بازنشانی کنید؟`)) {
+    const confirmed = await this.confirmDialog.open({
+      title: 'ریست رمز عبور',
+      message: `آیا مطمئن هستید که می‌خواهید رمز عبور ${u.first_name} ${u.last_name} را به حالت پیش‌فرض (123456) بازنشانی کنید؟`,
+      confirmText: 'بله، بازنشانی',
+      cancelText: 'انصراف',
+      type: 'warning',
+    });
+    if (confirmed) {
         this.accountsService.adminResetPassword(id).subscribe(res => {
             this.toast.show('success', res.message || 'رمز عبور با موفقیت به مقدار پیش‌فرض تغییر یافت و کاربر برای حفظ امنیت از سیستم خارج شد.');
         });

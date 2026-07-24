@@ -151,7 +151,10 @@
               <div class="flex items-center gap-2">
                 <svg *ngIf="importService.currentState.foundFields.includes(field.id) || importService.currentState.foundFields.length === 0" width="14" height="14" viewBox="0 0 24 24" fill="none" [attr.stroke]="importService.currentState.foundFields.includes(field.id) ? '#10b981' : '#4f46e5'" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 <svg *ngIf="importService.currentState.foundFields.length > 0 && !importService.currentState.foundFields.includes(field.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                {{field.name}}
+                <div class="flex flex-col">
+                  <span>{{field.name}}</span>
+                  <span class="text-[9px] font-mono opacity-60 font-medium" dir="ltr">({{field.id}})</span>
+                </div>
               </div>
             </div>
           </ng-container>
@@ -362,6 +365,34 @@
         class="flex-1 py-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm border">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         بله، حذف کن
+      </button>
+    </div>
+  </div>
+</app-modal>
+
+<app-modal size="md" [isOpen]="isWarningModalOpen" (closed)="isWarningModalOpen = false">
+  <div class="p-6 text-center">
+    <div class="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4 border-4 border-amber-50 shadow-sm">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    
+    <h3 class="text-xl font-black text-slate-800 mb-2">
+      فیلدهای حساس شناسایی شد
+    </h3>
+    
+    <p class="text-sm font-semibold text-slate-600 mb-6 leading-relaxed">
+      فایل شما حاوی فیلدهای سیستمی یا حساسی است که تغییر آن‌ها از طریق فایل اکسل برای حساب کاربری شما مجاز نیست. در صورت ادامه پردازش، این فیلدها به صورت خودکار نادیده گرفته شده و تنها اطلاعات مجاز در سیستم ثبت خواهند شد.<br><br>آیا با نادیده گرفتن این فیلدها و ادامه پردازش موافق هستید؟
+    </p>
+
+    <div class="flex gap-3">
+      <button (click)="isWarningModalOpen = false" class="flex-1 py-3.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors border border-slate-200 text-sm">
+        انصراف
+      </button>
+      
+      <button 
+        (click)="executeImport()"
+        class="flex-1 py-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-sm border bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/30 border-amber-500">
+        بله، نادیده بگیر و پردازش کن
       </button>
     </div>
   </div>

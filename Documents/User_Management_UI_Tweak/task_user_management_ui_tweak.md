@@ -1,0 +1,2 @@
+- `[x]` Rename the page title from "کاربران و گیت‌پاس" to "کاربران و نقش ها" in layout.ts.
+- `[x]` Replace the native confirm box with the custom `ConfirmDialogService` modal in users.ts.

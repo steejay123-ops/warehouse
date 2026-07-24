@@ -1,0 +1,2 @@
+- `[x]` Add `progressStats` getter to `layout.ts`
+- `[x]` Update `layout.html` header UI to use `progressStats`

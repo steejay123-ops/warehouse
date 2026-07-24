@@ -55,7 +55,7 @@ export class Layout implements OnInit {
 
   private SYSTEM_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
-    {id:'users', label:'کاربران و گیت‌پاس', icon:'users', permission: 'view_sys_users'},
+    {id:'users', label:'کاربران و نقش ها', icon:'users', permission: 'view_sys_users'},
     {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
     {id:'customs', label:'کارتابل مالی', icon:'folder', permission: 'view_wh_customs'},
@@ -175,6 +175,44 @@ export class Layout implements OnInit {
     }
     this.store.setWarehouseContext(false);
     this.router.navigate(['/projects']);
+  }
+
+  get progressStats() {
+    const isWh = this.store.isWarehouseContext();
+    const projects = this.state.appState.projects || [];
+    
+    let total = 0;
+    let counted = 0;
+    
+    if (isWh) {
+      const activeId = this.store.activeWarehouseId();
+      const current = projects.find((x: any) => x.id === Number(activeId));
+      if (current) {
+        total = current.total_quantity || 0;
+        counted = current.counted_quantity || 0;
+      }
+    } else {
+      total = projects.reduce((sum: number, p: any) => sum + (p.total_quantity || 0), 0);
+      counted = projects.reduce((sum: number, p: any) => sum + (p.counted_quantity || 0), 0);
+    }
+    
+    const percent = total > 0 ? Math.round((counted / total) * 100) : 0;
+    
+    let colorClass = 'bg-indigo-600';
+    if (percent === 100) colorClass = 'bg-emerald-500';
+    else if (percent > 70) colorClass = 'bg-blue-500';
+    else if (percent > 30) colorClass = 'bg-indigo-500';
+    else if (percent > 0) colorClass = 'bg-amber-500';
+    else colorClass = 'bg-slate-400';
+    
+    return {
+      total,
+      counted,
+      percent,
+      colorClass,
+      label: isWh ? 'پیشرفت انبار:' : 'پیشرفت کل پروژه:',
+      tooltip: `شمارش شده: ${counted} از ${total} ردیف`
+    };
   }
 
   /** ──── Logout & Settings ──── */

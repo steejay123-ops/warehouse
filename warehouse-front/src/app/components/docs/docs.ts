@@ -27,6 +27,9 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   existingTags: string[] = [];
   expandedSection: string | null = null;
   
+  showRestrictedWarning: boolean = false;
+  isWarningModalOpen: boolean = false;
+  
   showLeaveModal: boolean = false;
   private leavePromiseResolver: ((value: boolean) => void) | null = null;
 
@@ -56,47 +59,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
     this.leavePromiseResolver = null;
   }
 
-  ALL_FIELDS = [
-    {id: 'id', name: 'شناسه (ID)'},
-    {id: 'fa_unic_code', name: 'کد سیستم (FA-UNIC CODE)'},
-    {id: 'plpkitem', name: 'کد ترکیبی (plpkitem)'},
-    {id: 'pl', name: 'پکینگ لیست (PL)'},
-    {id: 'po', name: 'سفارش خرید (PO)'},
-    {id: 'pk_number', name: 'پکیج (PK)'},
-    {id: 'item_no', name: 'ردیف (Item)'},
-    {id: 'description', name: 'شرح کالا (Description)'},
-    {id: 'unit', name: 'واحد سنجش (Unit)'},
-    {id: 'scope_discipline', name: 'دیسیپلین کاری (Scope-Desipline)'},
-    {id: 'balance', name: 'موجودی فیزیکی (Balance)'},
-    {id: 'bal4miv', name: 'موجودی مجاز MIV (Bal4MIV)'},
-    {id: 'old_location', name: 'لوکیشن قبلی (OLD Location)'},
-    {id: 'new_location', name: 'لوکیشن جدید (NEW Location)'},
-    {id: 'hov_no', name: 'شماره (HOVNo)'},
-    {id: 'hov_date', name: 'تاریخ (HOVDate)'},
-    {id: 'msr_status', name: 'وضعیت (MSRStatus)'},
-    {id: 'vendor', name: 'سازنده (Vendor)'},
-    {id: 'supplier', name: 'تامین کننده (Supplier)'},
-    {id: 'irn_no', name: 'شماره (IRNNo)'},
-    {id: 'item2', name: 'ردیف فرعی (ITEM2)'},
-    {id: 'inventory_status', name: 'طبقه‌بندی انبار (INVENTORY)'},
-    {id: 'indent', name: 'تقاضای خرید (INDENT)'},
-    {id: 'remark', name: 'ملاحظات (Remark)'},
-    {id: 'price_amount', name: 'مبلغ (Price Amount)'},
-    {id: 'currency', name: 'ارز (Currency)'},
-    {id: 'invoice_file', name: 'آدرس فایل فاکتور (Invoice File)'},
-    {id: 'invoice_page', name: 'صفحه فاکتور (Invoice Page)'},
-    {id: 'customs_field', name: 'فیلد گمرکی (Customs Field)'},
-    {id: 'customs_file', name: 'آدرس فایل گمرکی (Customs File)'},
-    {id: 'customs_file_page', name: 'صفحه گمرک (Customs File Page)'},
-    {id: 'price_remark', name: 'توضیحات قیمت (PriceRemark)'},
-    {id: 'issue_remark', name: 'ملاحظات صدور (Issue Remark)'},
-    {id: 'created_at', name: 'تاریخ ایجاد (createAt)'},
-    {id: 'updated_at', name: 'تاریخ ویرایش (updateAt)'},
-    {id: 'created_by', name: 'ایجاد کننده (createdBy)'},
-    {id: 'modified_by', name: 'ویرایش کننده (modifyBy)'},
-    {id: 'warehouse', name: 'انبار (Warehouse)'},
-    {id: 'tag', name: 'تگ‌ها (Tag)'}
-  ];
+  ALL_FIELDS: {id: string, name: string}[] = [];
 
   constructor(
     public state: StateService,
@@ -113,8 +76,26 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
 
   private stateSub?: Subscription;
   private lastCheckedWarehouseId: number | null = null;
+  private isFetchingFields: boolean = false;
+
+  loadDynamicFields(warehouseId?: number) {
+    if (this.isFetchingFields) return;
+    this.isFetchingFields = true;
+    this.itemApi.getExportColumns(warehouseId).subscribe({
+      next: (cols) => {
+        this.ALL_FIELDS = cols.map(c => ({ id: c.key, name: c.label }));
+        this.isFetchingFields = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isFetchingFields = false;
+      }
+    });
+  }
 
   ngOnInit() {
+    this.loadDynamicFields(this.state.appState.activeWarehouseId || undefined);
+    
     const tagsSet = new Set<string>();
     this.state.appState.items.forEach((r: any) => {
       if (r.tag) r.tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
@@ -131,6 +112,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
     if (currentWId && currentWId !== this.lastCheckedWarehouseId) {
       this.lastCheckedWarehouseId = currentWId;
       this.importService.checkLatestImport(currentWId);
+      this.loadDynamicFields(currentWId);
     }
   }
 
@@ -171,6 +153,12 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
             if (res && res.status === 'success') {
               this.importService.currentState.foundFields = res.found_fields || [];
               this.importService.currentState.missingFields = res.missing_fields || [];
+              
+              if (res.has_restricted_fields && !res.is_superuser) {
+                this.showRestrictedWarning = true;
+              } else {
+                this.showRestrictedWarning = false;
+              }
             }
             this.cdr.detectChanges();
           }
@@ -188,16 +176,34 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   resetForm() {
     this.importService.resetForm();
     this.expandedSection = null;
+    this.showRestrictedWarning = false;
+    this.isWarningModalOpen = false;
     this.cdr.detectChanges();
   }
 
   downloadTemplate() {
-    const link = document.createElement('a');
-    link.href = '/assets/template.xlsx';
-    link.download = 'Warehouse_Template.xlsx';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    let wId: number | string | undefined = undefined;
+    
+    // Determine the active warehouse ID
+    if (this.hasWarehouse) {
+        wId = this.state.appState.activeWarehouseId;
+    }
+
+    this.itemApi.downloadTemplate(wId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Warehouse_Template.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در دریافت قالب نمونه.');
+      }
+    });
   }
 
   downloadLog() {
@@ -255,7 +261,19 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
       this.toast.show('error', 'لطفاً ابتدا یک انبار را انتخاب کنید.');
       return;
     }
+    
+    if (this.showRestrictedWarning) {
+      this.isWarningModalOpen = true;
+      return;
+    }
 
+    this.executeImport();
+  }
+
+  executeImport() {
+    this.isWarningModalOpen = false;
+    this.showRestrictedWarning = false;
+    
     const warehouseId = this.state.appState.activeWarehouseId;
     if (warehouseId) {
       this.importService.simulateImportProcess(warehouseId);

@@ -125,8 +125,15 @@ export class ItemApiService {
   }
 
   /** دریافت نام و عنوان فیلدهای قابل استخراج */
-  getExportColumns(): Observable<{key: string, label: string}[]> {
-    return this.api.get<{key: string, label: string}[]>(`${this.endpoint}/export_columns/`);
+  getExportColumns(warehouseId?: string | number): Observable<{key: string, label: string}[]> {
+    const params = warehouseId ? { warehouse_id: warehouseId } : {};
+    return this.api.get<{key: string, label: string}[]>(`${this.endpoint}/export_columns/`, params);
+  }
+
+  /** دریافت فایل قالب نمونه */
+  downloadTemplate(warehouseId?: string | number): Observable<Blob> {
+    const params = warehouseId ? { warehouse_id: warehouseId } : {};
+    return this.api.download(`${this.endpoint}/download_template/`, params);
   }
 
   /** خروجی PDF رکوردها */

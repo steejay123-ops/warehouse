@@ -1,0 +1,2 @@
+- `[ ]` Update `dashboard.ts` `getHeight` function
+- `[ ]` Add tooltips to `dashboard.html` horizontal bars

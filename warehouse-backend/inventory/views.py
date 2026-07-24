@@ -126,8 +126,11 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess
+        from rest_framework.permissions import AllowAny
         
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['download_import_log', 'download_template']:
+            permission_classes = [AllowAny()]
+        elif self.action in ['list', 'retrieve']:
             permission_classes = [HasMenuAccess('view_wh_docs') | HasMenuAccess('view_sys_counter')]
         elif self.action == 'bulk_assign':
             permission_classes = [HasMenuAccess('perm_rec_dispatch')]
@@ -208,7 +211,119 @@ class ItemViewSet(viewsets.ModelViewSet):
         for f in valid_fields:
             label = getattr(f, 'verbose_name', '') or f.name
             columns.append({"key": f.name, "label": str(label)})
+            
+        warehouse_id = request.query_params.get('warehouse_id')
+        if warehouse_id:
+            dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
+            for d in dynamic_defs:
+                columns.append({"key": d.name, "label": f"{d.name} (داینامیک)"})
+                
         return Response(columns)
+
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        import openpyxl
+        from openpyxl.styles import PatternFill
+        from django.http import HttpResponse
+
+        warehouse_id = request.query_params.get('warehouse_id')
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Template"
+
+        expected_fields = self.get_expected_fields()
+        headers = list(expected_fields.keys())
+
+        # Add dynamic fields if warehouse_id is provided
+        dynamic_fields = []
+        if warehouse_id:
+            dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
+            for d in dynamic_defs:
+                if d.name not in headers:
+                    headers.append(d.name)
+                    dynamic_fields.append(d)
+
+        # Write headers
+        ws.append(headers)
+
+        # Color system fields in the header
+        from warehouses.services import get_setting
+        restricted_fields = get_setting('SENSITIVE_EXCEL_FIELDS', warehouse_id) or ['doc_status', 'field_status', 'tag_status']
+        
+        system_fields = ['id', 'created_at', 'updated_at', 'created_by', 'modified_by'] + restricted_fields
+        sys_fill = PatternFill(start_color="FFE699", end_color="FFE699", fill_type="solid") # Warning color (yellow/orange)
+        for col_idx, h in enumerate(headers, 1):
+            if h in system_fields:
+                ws.cell(row=1, column=col_idx).fill = sys_fill
+
+        # Write sample data
+        sample_row_1 = []
+        sample_row_2 = []
+        valid_fields_dict = {f.name: f for f in Item._meta.fields}
+
+        for h in headers:
+            field = valid_fields_dict.get(h)
+            
+            # System fields mock data
+            if h in system_fields:
+                if h == 'id':
+                    sample_row_1.append(101)
+                    sample_row_2.append(102)
+                elif h in ['created_at', 'updated_at']:
+                    sample_row_1.append('2023-10-01 12:00')
+                    sample_row_2.append('2023-10-01 12:05')
+                elif h in ['created_by', 'modified_by']:
+                    sample_row_1.append('سیستم / کاربر ۱')
+                    sample_row_2.append('سیستم / کاربر ۲')
+                else:
+                    sample_row_1.append('مقدار سیستمی')
+                    sample_row_2.append('مقدار سیستمی')
+                continue
+                
+            # Dynamic fields mock data
+            dyn_field = next((df for df in dynamic_fields if df.name == h), None)
+            if dyn_field:
+                if dyn_field.field_type == 'number':
+                    sample_row_1.append(10)
+                    sample_row_2.append(25)
+                elif dyn_field.field_type == 'boolean':
+                    sample_row_1.append(True)
+                    sample_row_2.append(False)
+                elif dyn_field.field_type == 'date':
+                    sample_row_1.append('1402/05/10')
+                    sample_row_2.append('1402/06/15')
+                else:
+                    sample_row_1.append('مقدار تست ۱')
+                    sample_row_2.append('مقدار تست ۲')
+                continue
+
+            if h == 'fa_unic_code':
+                sample_row_1.append('FA-10001')
+                sample_row_2.append('FA-10002')
+            elif h == 'warehouse':
+                sample_row_1.append('انبار مرکزی')
+                sample_row_2.append('انبار مرکزی')
+            elif h in ['balance', 'bal4miv']:
+                sample_row_1.append(100.0)
+                sample_row_2.append(50.5)
+            elif field and field.get_internal_type() == 'BooleanField':
+                sample_row_1.append(False)
+                sample_row_2.append(True)
+            elif field and field.get_internal_type() == 'DateField':
+                sample_row_1.append('2023-01-01')
+                sample_row_2.append('2023-02-01')
+            else:
+                sample_row_1.append('نمونه داده')
+                sample_row_2.append('نمونه داده ۲')
+
+        ws.append(sample_row_1)
+        ws.append(sample_row_2)
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="Warehouse_Template.xlsx"'
+        wb.save(response)
+
+        return response
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):
@@ -428,24 +543,23 @@ class ItemViewSet(viewsets.ModelViewSet):
         return Response({'status': 'success', 'updated': updated_count})
 
     def get_expected_fields(self):
-        return {
-            'id': 'id', 'fa_unic_code': 'fa_unic_code', 'plpkitem': 'plpkitem', 'pl': 'pl', 'po': 'po',
-            'pk_number': 'pk_number', 'item_no': 'item_no', 'description': 'description',
-            'unit': 'unit', 'scope_discipline': 'scope_discipline', 'balance': 'balance',
-            'bal4miv': 'bal4miv', 'old_location': 'old_location', 'new_location': 'new_location',
-            'hov_no': 'hov_no', 'hov_date': 'hov_date', 'msr_status': 'msr_status', 'vendor': 'vendor',
-            'supplier': 'supplier', 'irn_no': 'irn_no', 'item2': 'item2', 'inventory_status': 'inventory_status',
-            'indent': 'indent', 'remark': 'remark', 'price_amount': 'price_amount', 'currency': 'currency',
-            'invoice_file': 'invoice_file', 'invoice_page': 'invoice_page', 'customs_field': 'customs_field',
-            'customs_file': 'customs_file', 'customs_file_page': 'customs_file_page',
-            'price_remark': 'price_remark', 'issue_remark': 'issue_remark',
-            'created_at': 'created_at', 'updated_at': 'updated_at', 'created_by': 'created_by',
-            'modified_by': 'modified_by', 'warehouse': 'warehouse', 'tag': 'tag'
-        }
+        fields = {}
+        for f in Item._meta.fields:
+            name = f.name
+            if name == 'warehouse':
+                fields['warehouse'] = 'warehouse'
+            elif name in ['created_by', 'modified_by']:
+                fields[name] = name
+            else:
+                fields[name] = name
+        return fields
 
     @action(detail=False, methods=['post'])
     def parse_headers(self, request):
+        from warehouses.services import get_setting
         file_obj = request.FILES.get('file')
+        warehouse_id = request.data.get('warehouse_id')
+        
         if not file_obj:
             return Response({'error': 'هیچ فایلی ارسال نشده است.'}, status=400)
             
@@ -460,7 +574,8 @@ class ItemViewSet(viewsets.ModelViewSet):
             
             # Read only the first row for headers to maximize speed
             first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])
-            raw_headers = [str(val).strip() if val is not None else '' for val in first_row]
+            # Convert to lower case to remove case sensitivity
+            raw_headers = [str(val).strip().lower() if val is not None else '' for val in first_row]
             
             wb.close()
             try:
@@ -477,7 +592,19 @@ class ItemViewSet(viewsets.ModelViewSet):
             
             all_expected = set(expected_fields.values())
             missing_fields = list(all_expected - set(found_fields))
-            return Response({'status': 'success', 'found_fields': list(set(found_fields)), 'missing_fields': list(set(missing_fields))})
+            
+            # Check for sensitive fields
+            restricted_fields = get_setting('SENSITIVE_EXCEL_FIELDS', warehouse_id) or ['doc_status', 'field_status', 'tag_status']
+            has_restricted = any(f in found_fields for f in restricted_fields)
+            is_superuser = request.user.is_superuser if request.user and request.user.is_authenticated else False
+            
+            return Response({
+                'status': 'success', 
+                'found_fields': list(set(found_fields)), 
+                'missing_fields': list(set(missing_fields)),
+                'has_restricted_fields': has_restricted,
+                'is_superuser': is_superuser
+            })
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
@@ -489,7 +616,7 @@ class ItemViewSet(viewsets.ModelViewSet):
             return Response({'status': 'cancelled'})
         return Response({'error': 'import_id required'}, status=400)
 
-    @action(detail=False, methods=['get'], permission_classes=[])
+    @action(detail=False, methods=['get'], permission_classes=[], authentication_classes=[])
     def download_import_log(self, request):
         import_id = request.query_params.get('import_id')
         if not import_id:
@@ -540,7 +667,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 wb = openpyxl.load_workbook(temp_path, data_only=True)
                 ws = wb.active
                 
-                raw_headers = [str(cell.value).strip() if cell.value else '' for cell in ws[1]]
+                raw_headers = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
                 expected_fields = self.get_expected_fields()
                 
                 found_fields = []
@@ -571,6 +698,10 @@ class ItemViewSet(viewsets.ModelViewSet):
                 skipped = 0
                 failed = 0
                 error_details = []
+                
+                # Fetch sensitive fields settings and user permissions
+                restricted_fields = get_setting('SENSITIVE_EXCEL_FIELDS', warehouse_id) or ['doc_status', 'field_status', 'tag_status']
+                is_superuser = request.user.is_superuser if request.user and request.user.is_authenticated else False
                 
                 # Setup output workbook for log
                 out_wb = openpyxl.Workbook(write_only=True)
@@ -609,8 +740,11 @@ class ItemViewSet(viewsets.ModelViewSet):
                             for db_field, col_idx in col_indices.items():
                                 row_data[db_field] = row[col_idx]
                             
-                            fa_unic_code = row_data.get('fa_unic_code')
-                            item_id = row_data.pop('id', None)
+                            raw_fa = row_data.get('fa_unic_code')
+                            fa_unic_code = str(raw_fa).strip() if raw_fa is not None and str(raw_fa).strip() != '' else None
+                            
+                            raw_id = row_data.pop('id', None)
+                            item_id = str(raw_id).strip() if raw_id is not None and str(raw_id).strip() != '' else None
                             
                             if not fa_unic_code and not item_id:
                                 failed += 1
@@ -620,9 +754,14 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
                                 continue
                             
-                            # Ignore Excel data for these fields
+                            # Ignore Excel data for core system fields
                             for ignore_field in ['created_at', 'updated_at', 'created_by', 'modified_by']:
                                 row_data.pop(ignore_field, None)
+                                
+                            # Ignore sensitive fields if not superuser
+                            if not is_superuser:
+                                for ignore_field in restricted_fields:
+                                    row_data.pop(ignore_field, None)
                                 
                             if 'hov_date' in row_data:
                                 date_val = row_data['hov_date']
@@ -669,10 +808,35 @@ class ItemViewSet(viewsets.ModelViewSet):
                             
                             existing_item = None
                             if item_id:
-                                existing_item = Item.objects.filter(id=item_id).first()
+                                try:
+                                    clean_id = int(float(item_id))
+                                except ValueError:
+                                    clean_id = item_id
+                                    
+                                existing_item = Item.objects.filter(id=clean_id).first()
+                                
+                                # Check if ID points to a different fa_unic_code
+                                if existing_item and fa_unic_code:
+                                    db_code = str(existing_item.fa_unic_code).strip() if existing_item.fa_unic_code else ""
+                                    if db_code and db_code != fa_unic_code:
+                                        failed += 1
+                                        err_msg = f"مغایرت شناسه: کالا با id={clean_id} دارای کد {db_code} است ولی اکسل کد {fa_unic_code} را ارسال کرده است."
+                                        error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                        append_colored_row(row, 'err', err_msg)
+                                        q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
+                                        continue
                             
                             if not existing_item and fa_unic_code and target_warehouse_id:
                                 existing_item = Item.objects.filter(fa_unic_code=fa_unic_code, warehouse_id=target_warehouse_id).first()
+                                # Check if fa_unic_code points to a different ID
+                                if existing_item and item_id:
+                                    if str(existing_item.id) != str(item_id).split('.')[0]: # split to handle '1.0'
+                                        failed += 1
+                                        err_msg = f"مغایرت شناسه: کد {fa_unic_code} متعلق به id={existing_item.id} است ولی اکسل id={item_id} را ارسال کرده است."
+                                        error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                        append_colored_row(row, 'err', err_msg)
+                                        q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
+                                        continue
                                 
                             item_display_code = fa_unic_code or f"ID:{item_id}"
                             

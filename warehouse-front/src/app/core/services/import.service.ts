@@ -190,6 +190,16 @@ export class ImportService {
       const state = this.states.get(wId);
       if (state) {
         state.logs = [];
+        state.latestCreatedLogs = [];
+        state.latestUpdatedLogs = [];
+        state.latestWarnLogs = [];
+        state.latestErrLogs = [];
+        state.errorDetailsList = [];
+        state.errCount = 0;
+        state.warnCount = 0;
+        state.createdCount = 0;
+        state.updatedCount = 0;
+        state.showErrorDetails = false;
         this.stateUpdated.next();
       }
     }

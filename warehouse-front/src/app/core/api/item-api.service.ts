@@ -101,9 +101,12 @@ export class ItemApiService {
     return this.api.post(`${this.endpoint}/cancel_import/`, { import_id: importId });
   }
 
-  parseHeaders(file: File): Observable<HttpEvent<any>> {
+  parseHeaders(file: File, warehouseId?: string | number): Observable<HttpEvent<any>> {
     const formData = new FormData();
     formData.append('file', file);
+    if (warehouseId) {
+      formData.append('warehouse_id', warehouseId.toString());
+    }
     return this.api.uploadWithProgress(`${this.endpoint}/parse_headers/`, formData);
   }
 

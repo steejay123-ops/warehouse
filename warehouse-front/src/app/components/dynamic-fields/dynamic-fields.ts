@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -27,10 +27,19 @@ export class DynamicFields implements OnInit {
   editingFieldId: number | null = null;
   editFieldData: Partial<DynamicFieldDefinition> = {};
 
+  showCopyModal = false;
+  sourceWarehouseId: number | null = null;
+  isCopying = false;
+
+  get otherWarehouses() {
+    return this.state.appState.projects?.filter((w: any) => w.id !== this.state.appState.activeWarehouseId) || [];
+  }
+
   constructor(
     public state: StateService,
     private toast: ToastService,
-    private fieldApi: DynamicFieldApiService
+    private fieldApi: DynamicFieldApiService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -46,10 +55,12 @@ export class DynamicFields implements OnInit {
       next: (res: any) => {
         this.fields = res.results || res;
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         this.toast.show('error', 'خطا در دریافت لیست فیلدها');
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -134,5 +145,39 @@ export class DynamicFields implements OnInit {
         error: () => this.toast.show('error', 'خطا در حذف فیلد')
       });
     }
+  }
+
+  openCopyModal() {
+    if (this.otherWarehouses.length > 0) {
+      this.sourceWarehouseId = this.otherWarehouses[0].id;
+    }
+    this.showCopyModal = true;
+    this.cdr.detectChanges();
+  }
+
+  closeCopyModal() {
+    this.showCopyModal = false;
+    this.cdr.detectChanges();
+  }
+
+  confirmCopy() {
+    if (!this.sourceWarehouseId) return;
+    const targetId = this.state.appState.activeWarehouseId;
+    if (!targetId) return;
+
+    this.isCopying = true;
+    this.fieldApi.copyFields(this.sourceWarehouseId, targetId).subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'فیلدها با موفقیت کپی شدند');
+        this.isCopying = false;
+        this.showCopyModal = false;
+        this.loadFields(); // Reload fields to show the new ones
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در کپی فیلدها');
+        this.isCopying = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

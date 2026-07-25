@@ -13,7 +13,11 @@ export interface Permission {
 export interface Role {
   id: number;
   name: string;
+  title: string;
+  color: string;
+  parent: number | null;
   permissions: number[];
+  children?: Role[];
 }
 
 export interface User {
@@ -40,8 +44,12 @@ export class AccountsHttpService {
 
   constructor(private http: HttpClient) {}
 
-  getUsers(): Observable<User[]> {
-    return this.http.get<any>(`${this.apiUrl}/auth/users/`).pipe(
+  getUsers(has_perm?: string): Observable<User[]> {
+    let url = `${this.apiUrl}/auth/users/`;
+    if (has_perm) {
+      url += `?has_perm=${has_perm}`;
+    }
+    return this.http.get<any>(url).pipe(
       map(res => res.results !== undefined ? res.results : res)
     );
   }

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import Group, Permission
-from .models import CustomUser
+from .models import CustomUser, CustomRole
 from warehouses.models import Warehouse
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -9,12 +9,12 @@ class PermissionSerializer(serializers.ModelSerializer):
         model = Permission
         fields = ['id', 'name', 'codename']
 
-class GroupSerializer(serializers.ModelSerializer):
+class CustomRoleSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
-    
+
     class Meta:
-        model = Group
-        fields = ['id', 'name', 'permissions']
+        model = CustomRole
+        fields = ['id', 'name', 'title', 'color', 'parent', 'permissions']
 
 class UserSerializer(serializers.ModelSerializer):
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
@@ -41,17 +41,31 @@ class UserSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
-        # Add roles as list of group names
-        ret['roles'] = list(instance.groups.values_list('name', flat=True))
-        # Admin gets all warehouses logic
-        if instance.is_superuser or instance.groups.filter(name='admin').exists():
+        # Build rich role objects from CustomRole
+        role_data = []
+        for group in instance.groups.all():
+            try:
+                cr = group.customrole
+                role_data.append({
+                    'id': cr.id, 'name': cr.name,
+                    'title': cr.title, 'color': cr.color,
+                })
+            except CustomRole.DoesNotExist:
+                role_data.append({
+                    'id': group.id, 'name': group.name,
+                    'title': group.name, 'color': '#94a3b8',
+                })
+        ret['roles'] = [r['name'] for r in role_data]
+        ret['role_objects'] = role_data
+        # Admin/superuser gets all warehouses
+        if instance.is_superuser:
             ret['assigned_warehouses'] = list(Warehouse.objects.values_list('id', flat=True))
         return ret
 
     def create(self, validated_data):
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
-            is_req_admin = request.user.is_superuser or request.user.groups.filter(name='admin').exists()
+            is_req_admin = request.user.is_superuser
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
                 
@@ -82,28 +96,28 @@ class UserSerializer(serializers.ModelSerializer):
         
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
-            is_req_admin = request.user.is_superuser or request.user.groups.filter(name='admin').exists()
+            is_req_admin = request.user.is_superuser
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
                 
         roles = validated_data.pop('roles', None)
         
-        # Check if the user is currently an admin
-        was_admin = instance.is_superuser or instance.groups.filter(name='admin').exists()
+        # Check if the user is currently an admin (superuser only)
+        was_admin = instance.is_superuser
         
         # Determine new states
         new_is_active = validated_data.get('is_active', instance.is_active)
         new_is_superuser = validated_data.get('is_superuser', instance.is_superuser)
-        new_has_admin_role = instance.groups.filter(name='admin').exists()
+        new_has_admin_role = False  # Admin protection is based on is_superuser now
         if roles is not None:
-            new_has_admin_role = 'admin' in roles
+            new_has_admin_role = False  # Role name no longer determines admin status
             
         will_be_admin = new_is_active and (new_is_superuser or new_has_admin_role)
         
         if was_admin and not will_be_admin:
             # Check if there are other active admins
-            active_admins = CustomUser.objects.filter(is_active=True).filter(
-                Q(is_superuser=True) | Q(groups__name='admin')
+            active_admins = CustomUser.objects.filter(
+                is_active=True, is_superuser=True
             ).exclude(id=instance.id).count()
             
             if active_admins == 0:
@@ -152,14 +166,25 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         if user.is_superuser:
             user_perms.add('admin_all') # Or all permissions
             
+        # Build role info from CustomRole
+        role_names = []
+        role_titles = []
+        for group in user.groups.all():
+            role_names.append(group.name)
+            try:
+                cr = group.customrole
+                role_titles.append(cr.title)
+            except Exception:
+                role_titles.append(group.name)
+
         data['user'] = {
             'id': user.id,
             'username': user.username,
             'first_name': user.first_name,
             'last_name': user.last_name,
             'avatar_letter': user.first_name[0] if user.first_name else 'U',
-            'roles': list(user.groups.values_list('name', flat=True)),
-            'role_titles': list(user.groups.values_list('name', flat=True)),
+            'roles': role_names,
+            'role_titles': role_titles,
             'email': user.email,
             'national_code': user.national_code,
             'phone_number': user.phone_number,

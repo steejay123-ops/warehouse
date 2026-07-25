@@ -17,6 +17,7 @@ export class WhSettings implements OnInit {
   isLoading = true;
   settings: any = {};
   warehouseId: number | null = null;
+  activeTab: 'operations' | 'label' | 'dynamic' = 'operations';
 
   constructor(
     private settingsService: SettingsService,
@@ -31,6 +32,11 @@ export class WhSettings implements OnInit {
     if (this.warehouseId) {
       this.loadSettings();
     }
+  }
+
+  setTab(tab: 'operations' | 'label' | 'dynamic') {
+    this.activeTab = tab;
+    this.cdr.detectChanges();
   }
 
   loadSettings() {

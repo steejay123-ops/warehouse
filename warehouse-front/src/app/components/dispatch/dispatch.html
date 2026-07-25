@@ -86,7 +86,7 @@
             <option *ngIf="requireDocSupervisor" value="">-- همه سرپرست‌های اسناد (استخر مشترک) --</option>
             <option value="skip">-- بدون نیاز به سرپرست --</option>
             <option *ngIf="!requireDocSupervisor" value="">-- همه سرپرست‌های اسناد (استخر مشترک) --</option>
-            <option *ngFor="let s of supervisors" [value]="s.id">{{s.first_name}} {{s.last_name}}</option>
+            <option *ngFor="let s of docSupervisors" [value]="s.id">{{s.first_name}} {{s.last_name}}</option>
           </select>
           <select [(ngModel)]="selectedDocManager" class="w-full bg-slate-50 border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 outline-none appearance-none cursor-pointer focus:border-amber-400">
             <option value="">-- همه مدیران (استخر مشترک) --</option>

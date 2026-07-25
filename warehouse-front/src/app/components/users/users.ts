@@ -33,7 +33,7 @@ export class Users implements OnInit {
   // Role Form
   editingRole: any = null;
   roleForm = {
-    id: null as number | null, title: '', permissions: [] as number[]
+    id: null as number | null, name: '', title: '', parent: null as number | null, color: '#94a3b8', permissions: [] as number[]
   };
 
   // User Form
@@ -68,7 +68,8 @@ export class Users implements OnInit {
       
       const mainMenuPerms = res.filter((p: any) => p.codename.startsWith('view_sys_'));
       const warehouseMenuPerms = res.filter((p: any) => p.codename.startsWith('view_wh_'));
-      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_'));
+      const workflowPerms = res.filter((p: any) => p.codename.startsWith('can_act_as_'));
+      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_') && !p.codename.startsWith('can_act_as_'));
 
       this.systemPermissionGroups = [
         {
@@ -82,8 +83,13 @@ export class Users implements OnInit {
           items: warehouseMenuPerms
         },
         {
+          key: 'WORKFLOW',
+          title: 'دسترسی‌های فرآیندی و کارتابل‌ها',
+          items: workflowPerms
+        },
+        {
           key: 'BACKEND',
-          title: 'دسترسی‌های عملیاتی و بک‌اند',
+          title: 'سایر دسترسی‌های عملیاتی',
           items: backendPerms
         }
       ];
@@ -91,6 +97,16 @@ export class Users implements OnInit {
 
     this.accountsService.getRoles().subscribe(res => {
       this.state.appState.roles = res;
+      // Build rolesMap dynamically from API data (backward compatibility)
+      const map: any = {};
+      const flattenRoles = (roles: any[]) => {
+        for (const r of roles) {
+          map[r.name] = { title: r.title, color: r.color };
+          if (r.children?.length) flattenRoles(r.children);
+        }
+      };
+      flattenRoles(res);
+      this.state.appState.rolesMap = map;
     });
 
     this.isLoading = true;
@@ -119,21 +135,12 @@ export class Users implements OnInit {
   }
 
   get rootRoles() {
-    return this.state.appState.roles;
+    return this.state.appState.roles.filter((r: any) => !r.parent);
   }
 
-  get systemRoles() {
-    const sys = ['admin', 'manager', 'supervisor', 'counter'];
-    return this.rootRoles.filter((r: any) => sys.includes(r.name));
-  }
 
-  get customRoles() {
-    const sys = ['admin', 'manager', 'supervisor', 'counter'];
-    return this.rootRoles.filter((r: any) => !sys.includes(r.name));
-  }
-
-  getRoleChildren(parentId: string) {
-    return [];
+  getRoleChildren(parentId: number) {
+    return this.state.appState.roles.filter((r: any) => r.parent === parentId);
   }
 
   getUsersInRoleCount(roleId: number) {
@@ -144,8 +151,7 @@ export class Users implements OnInit {
     const userRolesArr = u.groups || [];
     const r = this.state.appState.roles?.find((r: any) => r.id === userRolesArr[0]);
     if (!r) return {name: 'نامشخص', color: '#94a3b8'};
-    const mapInfo = this.state.appState.rolesMap[r.name];
-    return { name: mapInfo?.title || r.name, color: mapInfo?.color || '#94a3b8' };
+    return { name: r.title || r.name, color: r.color || '#94a3b8' };
   }
 
   getUserRoles(u: any) {
@@ -153,8 +159,7 @@ export class Users implements OnInit {
     return userRolesArr.map((rId: any) => {
       const r = this.state.appState.roles?.find((r: any) => r.id === rId);
       if (!r) return {name: 'نامشخص', color: '#94a3b8'};
-      const mapInfo = this.state.appState.rolesMap[r.name];
-      return { name: mapInfo?.title || r.name, color: mapInfo?.color || '#94a3b8' };
+      return { name: r.title || r.name, color: r.color || '#94a3b8' };
     });
   }
 
@@ -276,20 +281,43 @@ export class Users implements OnInit {
     }
   }
 
+  inheritedPermissions: number[] = [];
+
   openRoleModal(id: number | null = null) {
     this.closeMenus();
     if (id) {
       const r = this.state.appState.roles.find((x: any) => x.id === id);
       this.editingRole = r;
-      this.roleForm = { ...r, title: r.name };
+      this.roleForm = { ...r, title: r.title || r.name, color: r.color || '#94a3b8' };
       if (!this.roleForm.permissions) this.roleForm.permissions = [];
+      
+      const inherited = new Set<number>();
+      const addChildrenPerms = (roleObj: any) => {
+        const children = this.getRoleChildren(roleObj.id);
+        if (children && children.length > 0) {
+           children.forEach((child: any) => {
+              if (child.permissions) {
+                 child.permissions.forEach((p: number) => inherited.add(p));
+              }
+              addChildrenPerms(child);
+           });
+        }
+      };
+      addChildrenPerms(r);
+      this.inheritedPermissions = Array.from(inherited);
+
     } else {
       this.editingRole = null;
-      this.roleForm = { id: null, title: '', permissions: [] };
+      this.roleForm = { id: null, name: '', title: '', parent: null, color: '#94a3b8', permissions: [] };
+      this.inheritedPermissions = [];
     }
     this.activePermTab = 'MAIN_MENU';
     this.isRoleModalOpen = true;
     this.cdr.detectChanges();
+  }
+
+  isPermissionInherited(permId: number): boolean {
+      return this.inheritedPermissions.includes(permId);
   }
 
   toggleRolePermission(permId: number, event: Event) {
@@ -324,11 +352,14 @@ export class Users implements OnInit {
 
   saveRole() {
     const payload = {
-        name: this.roleForm.title,
+        name: this.roleForm.name,
+        title: this.roleForm.title,
+        color: this.roleForm.color,
+        parent: this.roleForm.parent || null,
         permissions: this.roleForm.permissions
     };
 
-    if (!payload.name) return this.toast.show('error', 'عنوان نقش الزامی است.');
+    if (!payload.name || !payload.title) return this.toast.show('error', 'عنوان و کد سیستمی نقش الزامی است.');
 
     if (this.editingRole) {
       this.accountsService.updateRole(this.editingRole.id, payload).subscribe(res => {
@@ -348,12 +379,7 @@ export class Users implements OnInit {
   deleteRole(id: number) {
     const role = this.state.appState.roles.find((r: any) => r.id === id);
     if (!role) return;
-    
-    const keyRoles = ['admin', 'manager', 'supervisor', 'counter'];
-    if (keyRoles.includes(role.name)) {
-        return this.toast.show('error', 'امکان حذف نقش‌های سیستمی و کلیدی وجود ندارد.');
-    }
-    
+
     this.roleToDelete = role;
     this.usersCountToDelete = this.getUsersInRoleCount(id);
     this.isDeleteConfirmModalOpen = true;
@@ -395,6 +421,6 @@ export class Users implements OnInit {
     }
   }
   getRoleTitleForForm(r: any) {
-    return this.state.appState.rolesMap[r.name]?.title || r.name;
+    return r.title || r.name;
   }
 }

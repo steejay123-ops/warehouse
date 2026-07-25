@@ -30,7 +30,8 @@ export class Dispatch implements OnInit {
   supervisors: any[] = [];
   managers: any[] = [];
   docWorkers: any[] = [];
-  
+  docSupervisors: any[] = [];
+
   selectedFieldWorker = '';
   selectedSupervisor = '';
   selectedManager = '';
@@ -95,14 +96,17 @@ export class Dispatch implements OnInit {
       this.availableExportColumns = cols;
     });
 
+    // Load full user list for App State (used for ID lookups)
     this.accountsService.getUsers().subscribe(users => {
       this.state.appState.users = users;
-      this.fieldWorkers = users.filter((u: any) => u.roles?.includes('counter') || u.role_titles?.some((t: string) => t.includes('انبارگردان') || t.includes('انباردار میدانی')));
-      this.supervisors = users.filter((u: any) => u.roles?.includes('supervisor') || u.role_titles?.some((t: string) => t.includes('سرپرست')));
-      this.managers = users.filter((u: any) => u.roles?.includes('manager') || u.role_titles?.some((t: string) => t.includes('مدیر')));
-      this.docWorkers = users.filter((u: any) => u.roles?.includes('document_expert') || u.roles?.includes('feeding_operator') || u.role_titles?.some((t: string) => t.includes('مدارک') || t.includes('تغذیه')));
-      this.cdr.detectChanges();
     });
+    
+    // Load granular role lists based on RBAC Permissions
+    this.accountsService.getUsers('can_act_as_counter').subscribe(users => { this.fieldWorkers = users; this.cdr.detectChanges(); });
+    this.accountsService.getUsers('can_act_as_supervisor').subscribe(users => { this.supervisors = users; this.cdr.detectChanges(); });
+    this.accountsService.getUsers('can_act_as_manager').subscribe(users => { this.managers = users; this.cdr.detectChanges(); });
+    this.accountsService.getUsers('can_act_as_doc_worker').subscribe(users => { this.docWorkers = users; this.cdr.detectChanges(); });
+    this.accountsService.getUsers('can_act_as_doc_supervisor').subscribe(users => { this.docSupervisors = users; this.cdr.detectChanges(); });
     
     // Load column preferences
     const prefs = this.auth.user()?.ui_preferences?.dispatchSettings;

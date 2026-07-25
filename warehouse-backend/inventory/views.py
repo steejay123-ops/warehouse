@@ -97,6 +97,41 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
             if items_to_update:
                 Item.objects.bulk_update(items_to_update, ['dynamic_data'])
 
+    @action(detail=False, methods=['post'])
+    def copy_from_warehouse(self, request):
+        source_warehouse_id = request.data.get('source_warehouse_id')
+        target_warehouse_id = request.data.get('target_warehouse_id')
+        
+        if not source_warehouse_id or not target_warehouse_id:
+            return Response({'error': 'شناسه انبار مبدأ و مقصد الزامی است.'}, status=400)
+            
+        try:
+            with transaction.atomic():
+                source_fields = ItemFieldDefinition.objects.filter(warehouse_id=source_warehouse_id)
+                target_existing_names = set(ItemFieldDefinition.objects.filter(warehouse_id=target_warehouse_id).values_list('name', flat=True))
+                
+                new_fields = []
+                for field in source_fields:
+                    if field.name not in target_existing_names:
+                        new_field = ItemFieldDefinition(
+                            warehouse_id=target_warehouse_id,
+                            name=field.name,
+                            label=field.label,
+                            field_type=field.field_type,
+                            is_required=field.is_required,
+                            default_value=field.default_value,
+                            is_active=field.is_active,
+                            created_by=request.user
+                        )
+                        new_fields.append(new_field)
+                
+                if new_fields:
+                    ItemFieldDefinition.objects.bulk_create(new_fields)
+                    
+                return Response({'message': f'{len(new_fields)} فیلد با موفقیت کپی شد.'}, status=200)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
 class ItemViewSet(viewsets.ModelViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
@@ -154,6 +189,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         data_scope = request.data.get('data_scope', 'all')
         columns_scope = request.data.get('columns_scope', 'all_db')
         columns_list = request.data.get('columns_list', [])
+        warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
         
         if data_scope == 'selected':
             selected_ids = request.data.get('selected_ids', [])
@@ -162,29 +198,34 @@ class ItemViewSet(viewsets.ModelViewSet):
         else:
             queryset = self.filter_queryset(self.get_queryset())
             
-        valid_fields = {f.name: f for f in Item._meta.fields}
+        expected_fields_dict = self.get_expected_fields(warehouse_id)
+        valid_fields = {f.name: f for f in Item._meta.fields if f.name != 'dynamic_data'}
         
         if columns_scope == 'all_db':
-            headers = list(valid_fields.keys())
+            headers = list(expected_fields_dict.keys())
         elif columns_scope in ['visible', 'custom']:
-            headers = [c for c in columns_list if c in valid_fields]
+            headers = [c for c in columns_list if c in expected_fields_dict]
             if not headers:
-                headers = list(valid_fields.keys())
+                headers = list(expected_fields_dict.keys())
         else:
-            headers = list(valid_fields.keys())
+            headers = list(expected_fields_dict.keys())
             
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Export"
         
         # Write headers
-        ws.append([valid_fields[h].verbose_name if h in valid_fields and hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h for h in headers])
+        ws.append([(valid_fields[h].verbose_name if hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h) if h in valid_fields else f"{h} (داینامیک)" for h in headers])
         ws.append([h for h in headers])
         
         for item in queryset.iterator():
             row = []
             for h in headers:
-                val = getattr(item, h, '')
+                if h in valid_fields:
+                    val = getattr(item, h, '')
+                else:
+                    val = item.dynamic_data.get(h, '') if item.dynamic_data else ''
+                    
                 if val is None:
                     val = ''
                 elif hasattr(val, 'username'):
@@ -209,6 +250,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         valid_fields = Item._meta.fields
         columns = []
         for f in valid_fields:
+            if f.name == 'dynamic_data': continue
             label = getattr(f, 'verbose_name', '') or f.name
             columns.append({"key": f.name, "label": str(label)})
             
@@ -231,7 +273,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         ws = wb.active
         ws.title = "Template"
 
-        expected_fields = self.get_expected_fields()
+        expected_fields = self.get_expected_fields(warehouse_id)
         headers = list(expected_fields.keys())
 
         # Add dynamic fields if warehouse_id is provided
@@ -239,9 +281,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         if warehouse_id:
             dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
             for d in dynamic_defs:
-                if d.name not in headers:
-                    headers.append(d.name)
-                    dynamic_fields.append(d)
+                dynamic_fields.append(d)
 
         # Write headers
         ws.append(headers)
@@ -542,16 +582,24 @@ class ItemViewSet(viewsets.ModelViewSet):
             
         return Response({'status': 'success', 'updated': updated_count})
 
-    def get_expected_fields(self):
+    def get_expected_fields(self, warehouse_id=None):
         fields = {}
         for f in Item._meta.fields:
             name = f.name
+            if name == 'dynamic_data': continue
             if name == 'warehouse':
                 fields['warehouse'] = 'warehouse'
             elif name in ['created_by', 'modified_by']:
                 fields[name] = name
             else:
                 fields[name] = name
+                
+        if warehouse_id:
+            from .models import ItemFieldDefinition
+            dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
+            for d in dynamic_defs:
+                fields[d.name] = d.name
+                
         return fields
 
     @action(detail=False, methods=['post'])
@@ -583,7 +631,7 @@ class ItemViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
             
-            expected_fields = self.get_expected_fields()
+            expected_fields = self.get_expected_fields(warehouse_id)
             
             found_fields = []
             for h in raw_headers:
@@ -668,7 +716,11 @@ class ItemViewSet(viewsets.ModelViewSet):
                 ws = wb.active
                 
                 raw_headers = [str(cell.value).strip().lower() if cell.value else '' for cell in ws[1]]
-                expected_fields = self.get_expected_fields()
+                expected_fields = self.get_expected_fields(warehouse_id)
+                
+                dynamic_fields_keys = []
+                if warehouse_id:
+                    dynamic_fields_keys = [d.name for d in ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)]
                 
                 found_fields = []
                 col_indices = {}
@@ -802,6 +854,13 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {fa_unic_code}: {err_msg}"}) + "\n")
                                     continue
 
+                            # Extract dynamic data
+                            dynamic_data_updates = {}
+                            if target_warehouse_id:
+                                for d_key in dynamic_fields_keys:
+                                    if d_key in row_data and row_data[d_key] is not None:
+                                        dynamic_data_updates[d_key] = row_data.pop(d_key)
+
                             defaults = {k: v for k, v in row_data.items() if k != 'fa_unic_code' and v is not None}
                             if target_warehouse_id: defaults['warehouse_id'] = target_warehouse_id
                             if user_id: defaults['modified_by_id'] = user_id
@@ -840,6 +899,16 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 
                             item_display_code = fa_unic_code or f"ID:{item_id}"
                             
+                            # Build merged dynamic_data for this item if needed
+                            final_dynamic_data = {}
+                            if existing_item and existing_item.dynamic_data:
+                                final_dynamic_data = existing_item.dynamic_data.copy()
+                            if dynamic_data_updates:
+                                final_dynamic_data.update(dynamic_data_updates)
+                            
+                            if final_dynamic_data:
+                                defaults['dynamic_data'] = final_dynamic_data
+                                
                             if existing_item:
                                 if conflict_strategy == 'ignore':
                                     skipped += 1
@@ -1331,13 +1400,13 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             if not show_completed:
                 queryset = queryset.exclude(status='FINAL_APPROVED')
         else:
-            # Fallback to group checking if as_role is not provided
-            if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists():
+            # Fallback to permission checking if as_role is not provided
+            if user.is_superuser or user.has_perm('accounts.can_act_as_manager') or user.has_perm('inventory.can_act_as_manager'):
                 from django.db.models import Q
                 queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
-            elif user.groups.filter(name='supervisor').exists():
+            elif user.has_perm('accounts.can_act_as_supervisor') or user.has_perm('inventory.can_act_as_supervisor'):
                 queryset = queryset.filter(supervisor=user)
-            elif user.groups.filter(name='counter').exists():
+            elif user.has_perm('accounts.can_act_as_counter') or user.has_perm('inventory.can_act_as_counter'):
                 queryset = queryset.filter(counter=user)
             else:
                 queryset = CountTask.objects.none()
@@ -1637,7 +1706,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         
         # Similar permissions to counting but using doc permissions if they existed
         # Actually for now, since we have the roles doc_worker, doc_supervisor, let's use the counting permissions for now, 
-        # or just allow IsAuthenticated and rely on s_role filtering since roles are new.
+        # or just allow IsAuthenticated and rely on  s_role filtering since roles are new.
         if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks']:
             permission_classes = [IsAuthenticated()]
         elif self.action == 'bulk_submit':

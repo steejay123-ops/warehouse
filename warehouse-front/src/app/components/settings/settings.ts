@@ -14,6 +14,7 @@ import { LabelDesigner } from '../label-designer/label-designer';
 export class Settings implements OnInit {
   isLoading = true;
   settings: any = {};
+  activeTab: 'operations' | 'label' = 'operations';
 
   constructor(
     private settingsService: SettingsService,
@@ -23,6 +24,11 @@ export class Settings implements OnInit {
 
   ngOnInit() {
     this.loadSettings();
+  }
+
+  setTab(tab: 'operations' | 'label') {
+    this.activeTab = tab;
+    this.cdr.detectChanges();
   }
 
   loadSettings() {

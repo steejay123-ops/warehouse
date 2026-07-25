@@ -4,11 +4,11 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, CustomTokenObtainPairView, GroupViewSet, PermissionViewSet
+from .views import UserViewSet, CustomTokenObtainPairView, CustomRoleViewSet, PermissionViewSet
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'roles', GroupViewSet, basename='role')
+router.register(r'roles', CustomRoleViewSet, basename='role')
 router.register(r'permissions', PermissionViewSet, basename='permission')
 
 urlpatterns = [

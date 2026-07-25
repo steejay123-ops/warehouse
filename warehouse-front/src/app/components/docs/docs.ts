@@ -142,7 +142,8 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
       this.importService.currentState.uploadProgress = 0;
       this.cdr.detectChanges();
       
-      this.itemApi.parseHeaders(file).subscribe({
+      const wId = this.state.appState.activeWarehouseId || undefined;
+      this.itemApi.parseHeaders(file, wId).subscribe({
         next: (event: any) => {
           if (event.type === HttpEventType.UploadProgress) {
             this.importService.currentState.uploadProgress = Math.round(100 * event.loaded / event.total);

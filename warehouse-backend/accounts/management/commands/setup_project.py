@@ -24,56 +24,23 @@ class Command(BaseCommand):
         else:
             self.stdout.write('Superuser already exists.')
 
-        # 3. Create Default Warehouse
-        self.stdout.write('Checking default warehouse...')
-        warehouse, created = Warehouse.objects.get_or_create(
-            name='انبار مرکزی',
-            defaults={
-                'type': 'Main',
-                'description': 'انبار مرکزی پیش‌فرض ایجاد شده توسط سیستم',
-                'capacity': 10000,
-                'color': '#6366f1'
-            }
-        )
-        if created:
-            self.stdout.write(self.style.SUCCESS(f'Default warehouse created (ID: {warehouse.id}).'))
-        else:
-            self.stdout.write('Default warehouse already exists.')
+        # 3. Seed Permissions
+        self.stdout.write('Seeding core permissions...')
+        call_command('seed_permissions')
 
-        # 4. Create Test Users for different roles
-        self.stdout.write('Setting up test users for roles...')
-        test_users = {
-            'مدیر سیستم': 'sysadmin',
-            'سرپرست انبار': 'whmanager',
-            'انباردار': 'clerk',
-            'سرپرست شمارش': 'supervisor',
-            'شمارشگر': 'counter',
-            'مدیر پروژه': 'manager',
-            'اپراتور صدور': 'exporter'
-        }
+        # 4. Initialize System Roles
+        self.stdout.write('Initializing system roles...')
+        call_command('init_roles')
 
-        for role_name, username in test_users.items():
-            user, u_created = User.objects.get_or_create(
-                username=username,
-                defaults={
-                    'is_staff': True,
-                    'is_active': True,
-                    'requires_password_change': False
-                }
-            )
-            if u_created:
-                user.set_password('123456')
-                user.save()
-                self.stdout.write(self.style.SUCCESS(f'User "{username}" created (password: 123456).'))
-            
-            # Assign to group
-            try:
-                group = Group.objects.get(name=role_name)
-                user.groups.add(group)
-                # Assign to warehouse if it's a warehouse-related role
-                if role_name in ['سرپرست انبار', 'انباردار', 'سرپرست شمارش', 'شمارشگر']:
-                    user.assigned_warehouses.add(warehouse)
-            except Group.DoesNotExist:
-                self.stdout.write(self.style.WARNING('A required Group was not found. Did migrations run?'))
+        # Also assign admin role to superuser for completeness
+        admin_user = User.objects.get(username='admin')
+        try:
+            from accounts.models import CustomRole
+            admin_role = CustomRole.objects.get(name='admin')
+            if not admin_user.groups.filter(name='admin').exists():
+                admin_user.groups.add(admin_role)
+                self.stdout.write(self.style.SUCCESS('Assigned admin role to superuser.'))
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'Could not assign admin role: {e}'))
 
-        self.stdout.write(self.style.SUCCESS('Project setup complete!'))
+        self.stdout.write(self.style.SUCCESS('Project setup complete! System is ready for production deployment.'))

@@ -37,4 +37,11 @@ export class DynamicFieldApiService {
   deleteField(id: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}${id}/`);
   }
+
+  copyFields(sourceWarehouseId: number, targetWarehouseId: number): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}copy_from_warehouse/`, {
+      source_warehouse_id: sourceWarehouseId,
+      target_warehouse_id: targetWarehouseId
+    });
+  }
 }

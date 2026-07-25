@@ -15,49 +15,79 @@
       </button>
     </div>
 
-    <div *ngIf="!isLoading" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Tabs Navigation -->
+    <div *ngIf="!isLoading" class="mb-6 flex overflow-x-auto bg-white rounded-2xl border border-slate-200 p-1.5 shadow-sm gap-2 relative z-10">
+      <button 
+        type="button"
+        (click)="setTab('operations')"
+        [class.bg-indigo-50]="activeTab === 'operations'"
+        [class.text-indigo-700]="activeTab === 'operations'"
+        [class.font-black]="activeTab === 'operations'"
+        [class.text-slate-500]="activeTab !== 'operations'"
+        [class.hover:bg-slate-50]="activeTab !== 'operations'"
+        class="flex-1 min-w-[200px] px-5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5 whitespace-nowrap outline-none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'operations' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        قوانین عملیاتی و انبارگردانی فیزیکی
+      </button>
+      
+      <button 
+        type="button"
+        (click)="setTab('label')"
+        [class.bg-indigo-50]="activeTab === 'label'"
+        [class.text-indigo-700]="activeTab === 'label'"
+        [class.font-black]="activeTab === 'label'"
+        [class.text-slate-500]="activeTab !== 'label'"
+        [class.hover:bg-slate-50]="activeTab !== 'label'"
+        class="flex-1 min-w-[200px] px-5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5 whitespace-nowrap outline-none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'label' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        طراح لیبل (Global)
+      </button>
+    </div>
+
+    <!-- Tabs Content -->
+    <div *ngIf="!isLoading" class="w-full">
       
       <!-- فرآیندهای انبارگردانی -->
-      <div class="space-y-6">
+      <div *ngIf="activeTab === 'operations'" class="space-y-6 fade-in">
         <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-slate-50 border-b border-slate-100 p-4">
-            <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <div class="bg-slate-50 border-b border-slate-100 p-5">
+            <h4 class="font-black text-slate-800 text-[13px] flex items-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               قوانین عملیاتی و انبارگردانی فیزیکی
             </h4>
           </div>
-          <div class="p-5 space-y-5">
+          <div class="p-6 space-y-6">
             
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">تایید نهایی شمارش توسط مدیریت</label>
-              <select [(ngModel)]="settings.manager_approval_mode" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">تایید نهایی شمارش توسط مدیریت</label>
+              <select [(ngModel)]="settings.manager_approval_mode" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option value="any_manager">امکان تایید توسط همه مدیران (استخر مشترک)</option>
                 <option value="assigned_manager_only">فقط مدیری که کار را ارجاع داده مجاز به تایید است</option>
               </select>
             </div>
 
-            <div class="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-indigo-200 transition-colors shadow-sm">
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.require_supervisor_approval = !settings.require_supervisor_approval">
               <div class="pl-4">
-                <h5 class="text-xs font-black text-slate-800">تایید اجباری سرپرست</h5>
-                <p class="text-[9px] text-slate-500 mt-1.5 leading-relaxed font-medium">آیا کارهای شمارش شده قبل از رسیدن به دست مدیر باید توسط سرپرست نیز تایید شوند؟</p>
+                <h5 class="text-[13px] font-black text-slate-800">تایید اجباری سرپرست</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">آیا کارهای شمارش شده قبل از رسیدن به دست مدیر باید توسط سرپرست نیز تایید شوند؟</p>
               </div>
-              <label class="toggle-switch shrink-0 mr-auto">
-                <input type="checkbox" [checked]="settings.require_supervisor_approval" (change)="settings.require_supervisor_approval = !settings.require_supervisor_approval">
+              <label class="toggle-switch shrink-0 mr-auto pointer-events-none">
+                <input type="checkbox" [checked]="settings.require_supervisor_approval">
                 <span class="toggle-slider"></span>
               </label>
             </div>
 
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">حالت نمایش موجودی سیستمی (شمارش کور)</label>
-              <select [(ngModel)]="settings.blind_counting" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">حالت نمایش موجودی سیستمی (شمارش کور)</label>
+              <select [(ngModel)]="settings.blind_counting" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option value="blind">کور (شمارشگر موجودی سیستمی را نبیند)</option>
                 <option value="visible">قابل مشاهده برای شمارشگر</option>
               </select>
             </div>
 
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">حداکثر دفعات مجاز بازشماری</label>
-              <select [(ngModel)]="settings.max_recounts" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">حداکثر دفعات مجاز بازشماری</label>
+              <select [(ngModel)]="settings.max_recounts" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option [ngValue]="-1">بی‌نهایت (بدون محدودیت)</option>
                 <option [ngValue]="1">یک بار</option>
                 <option [ngValue]="2">دو بار</option>
@@ -65,23 +95,18 @@
               </select>
             </div>
 
-          </div>
-        </div>
-      </div>
-
-      <!-- واردات اکسل و لیبل -->
-      <div class="space-y-6">
-        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-slate-50 border-b border-slate-100 p-4">
-            <h4 class="font-black text-slate-800 text-sm flex items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-              یکپارچگی داده‌ها (آپلود اکسل)
-            </h4>
-          </div>
-          <div class="p-5 space-y-5">
+            <div class="h-px bg-slate-200 w-full my-6"></div>
+            
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">رفتار پیش‌فرض هنگام تداخل رکوردهای اکسل</label>
-              <select [(ngModel)]="settings.default_conflict_strategy" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <h5 class="font-black text-slate-800 text-[13px] flex items-center gap-2 mb-4">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                یکپارچگی داده‌ها (آپلود اکسل)
+              </h5>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">رفتار پیش‌فرض هنگام تداخل رکوردهای اکسل</label>
+              <select [(ngModel)]="settings.default_conflict_strategy" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option value="ignore">نادیده گرفتن رکورد تکراری (حفظ داده‌های فعلی سیستم)</option>
                 <option value="replace">جایگزینی اجباری (Over-write)</option>
                 <option value="update_empty">تکمیل مقادیر خالی بدون تغییر مقادیر موجود</option>
@@ -90,36 +115,32 @@
             </div>
 
             <div>
-              <label class="block text-[11px] font-bold text-slate-700 mb-2">وضعیت پیش‌فرض لیبل برای کالاهای جدید</label>
-              <select [(ngModel)]="settings.default_tag_status" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">وضعیت پیش‌فرض لیبل برای کالاهای جدید</label>
+              <select [(ngModel)]="settings.default_tag_status" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option value="عدم نیاز به چاپ">عدم نیاز به چاپ</option>
                 <option value="چاپ نشده">نیاز به چاپ (چاپ نشده)</option>
                 <option value="چاپ شده">چاپ شده</option>
               </select>
             </div>
-            
-          </div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Label Designer Section -->
-    <div *ngIf="!isLoading" class="mt-6">
-      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <div class="bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-            </div>
-            <div>
-              <h4 class="font-black text-slate-700 text-xs">طراح لیبل (Global)</h4>
-              <p class="text-[10px] text-slate-400 mt-0.5">تنظیمات پیش‌فرض چاپ و طراحی لیبل در کل سیستم</p>
-            </div>
           </div>
         </div>
-        <div class="p-5">
-          <app-label-designer></app-label-designer>
+      </div>
+
+      <!-- Label Designer Section -->
+      <div *ngIf="activeTab === 'label'" class="fade-in">
+        <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 p-5">
+            <h4 class="font-black text-slate-800 text-[13px] flex items-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              طراح لیبل (Global)
+            </h4>
+          </div>
+          <div class="p-6">
+            <app-label-designer></app-label-designer>
+          </div>
         </div>
       </div>
+
     </div>
 </div>

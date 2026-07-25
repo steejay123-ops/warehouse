@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, Group
 
 from django.utils import timezone
 
@@ -49,3 +49,24 @@ class CustomUser(AbstractUser):
             ("view_wh_audit", "دسترسی به تب رهگیری تغییرات (انبار)"),
             ("view_wh_settings", "دسترسی به تب تنظیمات انبار"),
         ]
+
+
+class CustomRole(Group):
+    """
+    نقش سازمانی سفارشی — توسعه مدل Group جنگو
+    فیلدهای اضافه: عنوان فارسی، رنگ سازمانی، والد (سلسله‌مراتب)، نقش سیستمی
+    """
+    title = models.CharField(max_length=150, verbose_name="عنوان فارسی")
+    color = models.CharField(max_length=7, default="#94a3b8", verbose_name="رنگ سازمانی")
+    parent = models.ForeignKey(
+        'self', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='children',
+        verbose_name="نقش والد"
+    )
+
+    class Meta:
+        verbose_name = "نقش سازمانی"
+        verbose_name_plural = "نقش‌های سازمانی"
+
+    def __str__(self):
+        return self.title or self.name

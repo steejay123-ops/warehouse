@@ -180,7 +180,7 @@ SIMPLE_JWT = {
 # Axes settings
 AUTHENTICATION_BACKENDS = [
     'axes.backends.AxesStandaloneBackend',
-    'django.contrib.auth.backends.ModelBackend',
+    'accounts.backends.RoleInheritanceBackend',
 ]
 
 AXES_FAILURE_LIMIT = 5

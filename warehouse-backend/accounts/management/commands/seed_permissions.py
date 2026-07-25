@@ -26,6 +26,12 @@ class Command(BaseCommand):
             {'codename': 'perm_usr_add', 'name': 'ثبت پرسنل جدید'},
             {'codename': 'perm_usr_edit', 'name': 'ویرایش پرونده پرسنلی'},
             {'codename': 'perm_usr_role', 'name': 'تغییر ساختار سازمانی و نقش‌ها'},
+            # Operations (Phase 5 RBAC)
+            {'codename': 'can_act_as_counter', 'name': 'مجوز دریافت کار و انبارگردانی میدانی'},
+            {'codename': 'can_act_as_supervisor', 'name': 'مجوز کارتابل سرپرست (تأیید مغایرت‌ها)'},
+            {'codename': 'can_act_as_manager', 'name': 'مجوز کارتابل مدیر (تأیید نهایی)'},
+            {'codename': 'can_act_as_doc_worker', 'name': 'مجوز کارتابل کارشناس اسناد'},
+            {'codename': 'can_act_as_doc_supervisor', 'name': 'مجوز کارتابل سرپرست اسناد'},
         ]
 
         count = 0

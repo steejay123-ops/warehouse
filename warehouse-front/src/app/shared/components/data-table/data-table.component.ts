@@ -22,6 +22,7 @@ import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
+import { TableViewApiService, TableViewState } from '../../../core/api/table-view-api.service';
 
 // ══════════════════════════════════════════════════
 //  Column Definition Directive
@@ -136,6 +137,58 @@ export interface PageEvent {
                   </div>
                 }
               </div>
+
+              <!-- View Manager Popup -->
+              @if (tableName) {
+                <div class="relative ml-1">
+                  <button (click)="isViewManagerOpen = !isViewManagerOpen" class="text-[10px] font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors bg-white border border-slate-200 px-2 py-1.5 rounded-lg shadow-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    مدیریت نماها
+                  </button>
+                  @if (isViewManagerOpen) {
+                    <!-- Backdrop -->
+                    <div class="fixed inset-0 z-[45]" (click)="isViewManagerOpen = false"></div>
+                    <div class="absolute top-full left-0 mt-1 w-64 bg-white border border-slate-200 shadow-xl rounded-xl z-50 p-3 text-right">
+                      <div class="text-[10px] font-black text-slate-400 mb-2 border-b border-slate-100 pb-2">مدیریت وضعیت ستون‌ها</div>
+                      
+                      <!-- Save Current View -->
+                      <div class="flex items-center gap-1 mb-1">
+                        <input type="text" [(ngModel)]="newViewName" (ngModelChange)="saveError = null" placeholder="نام نمای جدید..." class="flex-1 text-[10px] px-2 py-1.5 rounded border border-slate-200 focus:border-indigo-400 outline-none">
+                        <button (click)="saveCurrentView()" [disabled]="!newViewName || isSavingView" class="px-2 py-1.5 bg-indigo-600 text-white text-[10px] font-bold rounded hover:bg-indigo-700 disabled:opacity-50">ذخیره</button>
+                      </div>
+                      @if (saveError) {
+                        <div class="text-[9px] text-rose-500 mb-2 font-bold px-1">{{ saveError }}</div>
+                      }
+                      
+                      <!-- Saved Views List -->
+                      <div class="max-h-[40vh] overflow-y-auto space-y-1 mt-2">
+                        @for (v of savedViews; track v.id) {
+                          <div (click)="applyView(v)" class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded border border-transparent hover:border-slate-100 cursor-pointer group">
+                            <span class="text-xs font-bold text-slate-700 flex-1 truncate" [class.text-indigo-600]="v.is_last_selected">{{ v.view_name }}</span>
+                            
+                            @if (viewToDelete === v.id) {
+                              <div class="flex items-center gap-1" (click)="$event.stopPropagation()">
+                                <span class="text-[9px] text-slate-500 ml-1">حذف شود؟</span>
+                                <button (click)="deleteView(v.id!); $event.stopPropagation()" class="text-[9px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">بله</button>
+                                <button (click)="viewToDelete = null; $event.stopPropagation()" class="text-[9px] font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">خیر</button>
+                              </div>
+                            } @else {
+                              <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button (click)="viewToDelete = v.id!; $event.stopPropagation()" class="text-rose-500 hover:text-rose-700 p-0.5 rounded hover:bg-rose-50" title="حذف نما">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"></path></svg>
+                                </button>
+                              </div>
+                            }
+                          </div>
+                        }
+                        @if (savedViews.length === 0) {
+                          <div class="text-center text-[10px] text-slate-400 py-2">هیچ نمایی ذخیره نشده است</div>
+                        }
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
             }
             @if (showClearFilters && hasActiveFilters) {
               <button
@@ -605,9 +658,101 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  // View Manager State
+  @Input() tableName: string = '';
+  isViewManagerOpen = false;
+  savedViews: TableViewState[] = [];
+  newViewName = '';
+  isSavingView = false;
+  viewToDelete: number | null = null;
+  saveError: string | null = null;
+
+  constructor(private cdr: ChangeDetectorRef, private tableViewApi: TableViewApiService) {}
 
   ngOnInit() {
+    if (this.tableName) {
+      this.loadSavedViews();
+    }
+  }
+
+  loadSavedViews() {
+    this.tableViewApi.getAll(this.tableName).subscribe(views => {
+      this.savedViews = views;
+      const defaultView = views.find(v => v.is_last_selected);
+      if (defaultView) {
+        this.applyView(defaultView, true); // true = silent apply
+      }
+      this.cdr.detectChanges();
+    });
+  }
+
+  saveCurrentView() {
+    if (!this.newViewName) return;
+    this.saveError = null;
+    
+    // Check for duplicate name
+    if (this.savedViews.some(v => v.view_name.trim() === this.newViewName.trim())) {
+      this.saveError = 'این نام تکراری است. لطفاً نام دیگری انتخاب کنید.';
+      return;
+    }
+    
+    this.isSavingView = true;
+    
+    // Ensure allColumns exist so we save their keys
+    const currentCols = this.visibleColumns ? this.visibleColumns : this.allColumns.map(c => c.key);
+    
+    const payload: TableViewState = {
+      table_name: this.tableName,
+      view_name: this.newViewName,
+      columns_state: currentCols
+    };
+    
+    this.tableViewApi.create(payload).subscribe({
+      next: (res) => {
+        this.newViewName = '';
+        this.isSavingView = false;
+        this.isViewManagerOpen = false;
+        this.saveError = null;
+        this.cdr.detectChanges();
+        this.loadSavedViews(); // Reload list to get the new view with ID
+      },
+      error: () => {
+        this.isSavingView = false;
+      }
+    });
+  }
+
+  applyView(view: TableViewState, silent = false) {
+    if (view.columns_state && view.columns_state.length > 0) {
+      this.visibleColumns = [...view.columns_state];
+      if (!silent) {
+        this.visibleColumnsChanged.emit(this.visibleColumns);
+        this.isViewManagerOpen = false;
+        
+        // Tell backend this is the last selected
+        if (view.id) {
+          this.tableViewApi.setLastSelected(view.id).subscribe(() => {
+            this.savedViews.forEach(v => v.is_last_selected = (v.id === view.id));
+          });
+        }
+      }
+    }
+  }
+
+  deleteView(id: number) {
+    // Optimistic UI update
+    this.savedViews = this.savedViews.filter(v => v.id !== id);
+    this.viewToDelete = null;
+    this.cdr.detectChanges();
+    
+    this.tableViewApi.delete(id).subscribe({
+      next: () => {
+        this.loadSavedViews();
+      },
+      error: () => {
+        this.loadSavedViews(); // reload on error to restore the deleted view
+      }
+    });
   }
 
   ngAfterViewInit() {

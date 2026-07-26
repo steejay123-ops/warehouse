@@ -202,3 +202,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             },
             'user': data['user']
         }
+
+
+from .models import CustomUser, CustomRole, UserTableViewState
+
+class UserTableViewStateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserTableViewState
+        fields = ['id', 'table_name', 'view_name', 'columns_state', 'is_last_selected', 'created_at']
+        read_only_fields = ['id', 'created_at']
+        
+    def create(self, validated_data):
+        user = self.context['request'].user
+        validated_data['user'] = user
+        return super().create(validated_data)

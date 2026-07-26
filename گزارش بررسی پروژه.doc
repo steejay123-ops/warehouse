@@ -1,0 +1,91 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<title>گزارش بررسی کد — پروژه انبارداری</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>
+  @page { size: A4; margin: 2.5cm 2cm; mso-page-orientation: portrait; }
+  body { font-family: "Tahoma", "Segoe UI", sans-serif; direction: rtl; text-align: right; font-size: 11pt; line-height: 1.7; color: #1a1a1a; }
+  h1 { font-size: 20pt; color: #1f3a5f; border-bottom: 3px solid #1f3a5f; padding-bottom: 8px; }
+  h2 { font-size: 15pt; color: #1f3a5f; margin-top: 28px; border-bottom: 1px solid #c9d6e8; padding-bottom: 4px; }
+  h3 { font-size: 12pt; color: #2e5285; margin-top: 18px; }
+  table { border-collapse: collapse; width: 100%; font-size: 10pt; margin: 10px 0; }
+  th { background: #1f3a5f; color: #fff; padding: 7px 9px; border: 1px solid #999; text-align: right; }
+  td { padding: 6px 9px; border: 1px solid #bbb; vertical-align: top; }
+  .crit { background: #fde8e8; color: #9b1c1c; font-weight: bold; }
+  .high { background: #fef3e2; color: #92400e; font-weight: bold; }
+  .med  { background: #fefce8; color: #854d0e; font-weight: bold; }
+  .low  { background: #eef7ee; color: #14532d; font-weight: bold; }
+  code, .path { font-family: "Consolas", monospace; font-size: 9.5pt; direction: ltr; unicode-bidi: embed; background: #f1f5f9; padding: 1px 4px; }
+  .summary-box { background: #f0f4fa; border: 1px solid #c9d6e8; padding: 12px 16px; margin: 14px 0; }
+  .meta { color: #555; font-size: 10pt; }
+</style>
+</head>
+<body>
+
+<h1>گزارش بررسی کد — سامانه مدیریت انبار</h1>
+<p class="meta">تاریخ بررسی: ۳ مرداد ۱۴۰۵ (۲۵ ژوئیه ۲۰۲۶) — محدوده بررسی: فرانت‌اند Angular در پوشه <span class="path">warehouse-front</span></p>
+
+<h2>۱. خلاصه مدیریتی</h2>
+<div class="summary-box">
+<p>پروژه یک اپلیکیشن Angular 22 با ساختار نسبتاً مدرن (Signals، Standalone Components، Interceptorهای تابعی) است و پایه‌ی معماری آن قابل قبول است. با این حال در بررسی، <b>۴ ایراد بحرانی، ۶ ایراد پرخطر و تعدادی ایراد متوسط و جزئی</b> شناسایی شد. مهم‌ترین مشکلات: آدرس API نسخه production روی localhost است، کاربران آزمایشی با رمز عبور داخل کد قرار دارند، اتصال WebSocket بدون احراز هویت است، و نشت حافظه (Memory Leak) گسترده به‌دلیل عدم لغو اشتراک‌های RxJS در ترکیب با کش‌شدن کامپوننت‌ها وجود دارد. پیش از استقرار در محیط عملیاتی، رفع موارد بحرانی و پرخطر ضروری است.</p>
+</div>
+
+<h2>۲. ایرادات بحرانی (Critical)</h2>
+<table>
+<tr><th style="width:28px">#</th><th style="width:70px">شدت</th><th>شرح ایراد</th><th style="width:220px">محل</th></tr>
+<tr><td>۱</td><td class="crit">بحرانی</td><td>آدرس API در محیط <b>production</b> برابر <code>http://localhost:8000/api</code> است؛ یعنی build نهایی روی سرور واقعی کار نخواهد کرد. همچنین از HTTP استفاده شده نه HTTPS، که توکن‌ها را در شبکه قابل شنود می‌کند.</td><td><span class="path">src/environments/environment.ts</span> خط ۷</td></tr>
+<tr><td>۲</td><td class="crit">بحرانی</td><td>پنج حساب کاربری آزمایشی (mock) با رمز عبور <code>123456</code> به‌صورت هاردکد در سرویس احراز هویت قرار دارند و در باندل نهایی به مرورگر همه کاربران ارسال می‌شوند. این کد ساختار نقش‌ها، مجوزها و نام کاربران واقعی را افشا می‌کند.</td><td><span class="path">core/auth/auth.service.ts</span> خطوط ۴۱ تا ۸۲</td></tr>
+<tr><td>۳</td><td class="crit">بحرانی</td><td>اتصال WebSocket به آدرس هاردکد <code>ws://localhost:8000</code> و <b>بدون هیچ توکن احراز هویتی</b> برقرار می‌شود. علاوه بر این، متد <code>disconnect()</code> عملاً کار نمی‌کند: بستن اتصال باعث اجرای <code>onclose</code> و اتصال مجدد خودکار بعد از ۵ ثانیه می‌شود — حتی بعد از خروج کاربر.</td><td><span class="path">core/http/websocket.service.ts</span> خطوط ۱۹ و ۴۰ تا ۴۴</td></tr>
+<tr><td>۴</td><td class="crit">بحرانی</td><td><b>نشت حافظه گسترده:</b> حدود ۸۰ فراخوانی <code>subscribe()</code> در ۱۷ کامپوننت وجود دارد، اما فقط ۲ فایل ساز‌وکار لغو اشتراک (<code>ngOnDestroy / takeUntil</code>) دارند. این مشکل با <code>CustomRouteReuseStrategy</code> تشدید می‌شود، چون کامپوننت‌های دارای <code>reuse: true</code> (مثل dispatch و counter) هرگز destroy نمی‌شوند و اشتراک‌ها مدام انباشته می‌شوند.</td><td><span class="path">components/*</span> و <span class="path">core/strategies/custom-route-reuse-strategy.ts</span></td></tr>
+</table>
+
+<h2>۳. ایرادات پرخطر (High)</h2>
+<table>
+<tr><th style="width:28px">#</th><th style="width:70px">شدت</th><th>شرح ایراد</th><th style="width:220px">محل</th></tr>
+<tr><td>۵</td><td class="high">پرخطر</td><td>توکن‌های access و refresh و پروفایل کامل کاربر (شامل لیست مجوزها) در <code>localStorage</code> ذخیره می‌شوند. در صورت هر آسیب‌پذیری XSS، توکن‌ها قابل سرقت هستند و کاربر می‌تواند با ویرایش localStorage مجوزهای سمت کلاینت خود را دستکاری کند (کنترل واقعی باید حتماً سمت سرور باشد).</td><td><span class="path">core/auth/auth.service.ts</span> خطوط ۱۳ تا ۱۵ و ۲۲۵ تا ۲۳۱</td></tr>
+<tr><td>۶</td><td class="high">پرخطر</td><td>در Interceptor احراز هویت، هیچ محافظتی در برابر refresh همزمان وجود ندارد: اگر چند درخواست هم‌زمان 401 بگیرند، چند بار متد refresh فراخوانی می‌شود (Race Condition) که با فعال‌بودن Rotation توکن در بک‌اند باعث خروج ناخواسته کاربر می‌شود.</td><td><span class="path">core/auth/auth.interceptor.ts</span> خطوط ۳۶ تا ۵۰</td></tr>
+<tr><td>۷</td><td class="high">پرخطر</td><td>چند مسیر (Route) در نگاشت مجوزهای <code>ROUTE_PERMISSIONS</code> وجود ندارند و هر کاربر لاگین‌شده‌ای به آن‌ها دسترسی دارد؛ از جمله: <code>wh-settings</code>، <code>field</code>، <code>count-tracking</code>، <code>tasks</code> و <code>approvals</code>.</td><td><span class="path">core/auth/auth.guard.ts</span> خطوط ۸ تا ۲۸ در مقایسه با <span class="path">app.routes.ts</span></td></tr>
+<tr><td>۸</td><td class="high">پرخطر</td><td>حالت سخت‌گیرانه TypeScript فعال نیست (<code>"strict": true</code> و <code>strictTemplates</code> وجود ندارند) و ۱۸۹ مورد استفاده از <code>any</code> در ۳۰ فایل شمارش شد. این یعنی بخش بزرگی از خطاهای تایپی در زمان کامپایل کشف نمی‌شوند.</td><td><span class="path">tsconfig.json</span> — بیشترین موارد: <span class="path">users.ts</span> (۳۷)، <span class="path">dispatch.ts</span> (۳۱)</td></tr>
+<tr><td>۹</td><td class="high">پرخطر</td><td>کتابخانه <code>puppeteer</code> (همراه با مرورگر Chromium با حجم چند صد مگابایت) به‌عنوان وابستگی اصلی (dependencies) فرانت‌اند تعریف شده است؛ در حالی‌که در کد فرانت هیچ استفاده‌ای از آن ممکن نیست. باید حذف یا به devDependencies منتقل شود.</td><td><span class="path">package.json</span> خط ۲۲</td></tr>
+<tr><td>۱۰</td><td class="high">پرخطر</td><td>هیچ تست واقعی وجود ندارد: تمام فایل‌های <code>*.spec.ts</code> فقط اسکلت پیش‌فرض «should create» هستند. برای سیستمی که موجودی انبار و خروج کالا را مدیریت می‌کند، نبود تست منطق تجاری ریسک جدی است.</td><td>تمام فایل‌های <span class="path">*.spec.ts</span></td></tr>
+</table>
+
+<h2>۴. ایرادات متوسط (Medium)</h2>
+<table>
+<tr><th style="width:28px">#</th><th style="width:70px">شدت</th><th>شرح ایراد</th><th style="width:220px">محل</th></tr>
+<tr><td>۱۱</td><td class="med">متوسط</td><td>هیچ‌کدام از مسیرها Lazy Loading ندارند؛ همه ۲۰+ کامپوننت در <code>app.routes.ts</code> به‌صورت eager ایمپورت شده‌اند که حجم باندل اولیه و زمان بارگذاری اول را بالا می‌برد.</td><td><span class="path">app.routes.ts</span> خطوط ۴ تا ۲۱</td></tr>
+<tr><td>۱۲</td><td class="med">متوسط</td><td>باگ منطقی در فیلتر پارامترها: شرط <code>if (params[key])</code> مقادیر معتبرِ <code>0</code> و <code>false</code> را هم حذف می‌کند؛ یعنی فیلترهایی مثل «تعداد صفر» یا «غیرفعال» هرگز به سرور ارسال نمی‌شوند.</td><td><span class="path">core/http/record-http.service.ts</span> خط ۳۷</td></tr>
+<tr><td>۱۳</td><td class="med">متوسط</td><td>ساختار دوگانه و موازی برای لایه ارتباط با سرور: هم <span class="path">core/http/</span> و هم <span class="path">core/api/</span> سرویس‌های HTTP دارند، به‌علاوه شیم‌های منسوخ <span class="path">services/auth.service.ts</span> و <span class="path">guards/auth.guard.ts</span> و سرویس‌های قدیمی <span class="path">services/state.service.ts</span>. این دوگانگی نگهداری را دشوار و خطای ایمپورت اشتباه را محتمل می‌کند.</td><td><span class="path">src/app/core/http</span>، <span class="path">src/app/core/api</span>، <span class="path">src/app/services</span></td></tr>
+<tr><td>۱۴</td><td class="med">متوسط</td><td>Interceptor خطا، متن خام خطاهای اعتبارسنجی بک‌اند (نام فیلد + پیام انگلیسی DRF) را مستقیم به کاربر نمایش می‌دهد؛ هم تجربه کاربری فارسی را خراب می‌کند و هم جزئیات ساختار داخلی API را افشا می‌کند.</td><td><span class="path">core/error/error.interceptor.ts</span> خطوط ۴۲ تا ۵۱</td></tr>
+<tr><td>۱۵</td><td class="med">متوسط</td><td>منطق تشخیص «عدم دسترسی» بعد از لاگین به‌صورت هک انجام شده: بعد از <code>navigate</code> بررسی می‌شود که آیا URL هنوز login است یا نه. این روش شکننده است و به‌جای آن باید قبل از هدایت، مجوزها بررسی شوند.</td><td><span class="path">components/login/login.ts</span> خطوط ۷۴ تا ۸۰</td></tr>
+<tr><td>۱۶</td><td class="med">متوسط</td><td>Redirect پیش‌فرض روت دارای عارضه جانبی (Side Effect) است: داخل تابع <code>redirectTo</code> وضعیت Store تغییر داده می‌شود که الگوی ضد-الگو (anti-pattern) محسوب می‌شود.</td><td><span class="path">app.routes.ts</span> خطوط ۶۶ تا ۷۳</td></tr>
+<tr><td>۱۷</td><td class="med">متوسط</td><td>ذخیره‌سازی توکن بین <code>sessionStorage</code> و <code>localStorage</code> ترکیبی است و متد <code>setItem</code> هنگام refresh توکن بدون پارامتر rememberMe صدا زده می‌شود؛ منطق fallback آن مستعد ناهماهنگی بین دو Storage است.</td><td><span class="path">core/auth/auth.service.ts</span> خطوط ۱۸۰ تا ۱۹۶</td></tr>
+</table>
+
+<h2>۵. ایرادات جزئی (Low)</h2>
+<table>
+<tr><th style="width:28px">#</th><th style="width:70px">شدت</th><th>شرح ایراد</th><th style="width:220px">محل</th></tr>
+<tr><td>۱۸</td><td class="low">جزئی</td><td>استفاده از <code>bypassSecurityTrustHtml</code> برای آیکون‌های سایدبار و بایند <code>[innerHTML]</code> برای پیام دیالوگ تأیید. فعلاً محتوا ثابت است، اما اگر روزی متن پیام از داده کاربر ساخته شود، ریسک XSS ایجاد می‌شود.</td><td><span class="path">components/layout/layout.ts</span> خط ۹۷، <span class="path">shared/components/confirm-dialog</span> خط ۹۳</td></tr>
+<tr><td>۱۹</td><td class="low">جزئی</td><td>دور زدن کش با افزودن <code>?t=timestamp</code> به URL؛ راه استاندارد استفاده از هدرهای Cache-Control است.</td><td><span class="path">core/http/warehouse-http.service.ts</span> خط ۴۰</td></tr>
+<tr><td>۲۰</td><td class="low">جزئی</td><td>پوشه‌های اضافی داخل مخزن: نسخه قدیمی کامل برنامه در <span class="path">Archive_Docs/warehouse-old</span>، خروجی build در <span class="path">dist/</span> و فایل‌های <span class="path">desktop.ini</span> ویندوز. این‌ها بهتر است از مخزن حذف یا در gitignore قرار گیرند.</td><td>ریشه پروژه</td></tr>
+<tr><td>۲۱</td><td class="low">جزئی</td><td>باقی‌ماندن <code>console.log</code> در کد WebSocket و نبود Backoff افزایشی برای اتصال مجدد (هر ۵ ثانیه تلاش دائمی).</td><td><span class="path">core/http/websocket.service.ts</span></td></tr>
+<tr><td>۲۲</td><td class="low">جزئی</td><td>کاربر بدون مجوز توسط <code>RoleGuard</code> به داشبورد هدایت می‌شود، اما اگر مجوز داشبورد را هم نداشته باشد <code>AuthGuard</code> او را به login می‌فرستد در حالی که هنوز لاگین است — تجربه کاربری گیج‌کننده.</td><td><span class="path">core/auth/role.guard.ts</span> خط ۲۷</td></tr>
+</table>
+
+<h2>۶. نقاط قوت پروژه</h2>
+<p>برای انصاف باید گفت پروژه نقاط قوت قابل توجهی هم دارد: استفاده از Angular Signals و کامپوننت‌های Standalone (الگوی مدرن)، جداسازی نسبی لایه core/shared/components، وجود Interceptor متمرکز برای خطا و احراز هویت، پشتیبانی کامل RTL و تاریخ شمسی، سیستم مجوزدهی نسبتاً کامل در سطح UI (دایرکتیو permission و گارد مسیر)، و مستندسازی فارسی خوب داخل کد.</p>
+
+<h2>۷. اولویت‌بندی پیشنهادی برای رفع</h2>
+<table>
+<tr><th style="width:90px">اولویت</th><th>اقدام</th></tr>
+<tr><td class="crit">فوری</td><td>اصلاح <code>environment.ts</code> با آدرس واقعی سرور و HTTPS — حذف کامل کاربران mock از کد — افزودن توکن به WebSocket و رفع باگ reconnect</td></tr>
+<tr><td class="high">قبل از استقرار</td><td>رفع نشت حافظه با <code>takeUntilDestroyed</code> — قفل refresh همزمان در Interceptor — تکمیل نگاشت مجوز همه مسیرها — حذف puppeteer</td></tr>
+<tr><td class="med">کوتاه‌مدت</td><td>فعال‌کردن strict mode و حذف تدریجی <code>any</code> — Lazy Loading مسیرها — یکپارچه‌سازی لایه http/api — رفع باگ فیلتر مقادیر صفر</td></tr>
+<tr><td class="low">میان‌مدت</td><td>نوشتن تست برای منطق‌های حیاتی (ورود/خروج کالا، شمارش) — پاک‌سازی مخزن از dist و آرشیو — بهبود پیام‌های خطای فارسی</td></tr>
+</table>
+
+<p class="meta" style="margin-top:30px; border-top: 1px solid #ccc; padding-top: 8px;">این گزارش صرفاً بر اساس بررسی ایستای کد فرانت‌اند تهیه شده است. بررسی بک‌اند (Django) و تست در زمان اجرا در محدوده این گزارش نبود.</p>
+
+</body>
+</html>

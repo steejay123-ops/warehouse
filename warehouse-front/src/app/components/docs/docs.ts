@@ -29,6 +29,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   
   showRestrictedWarning: boolean = false;
   isWarningModalOpen: boolean = false;
+  showEmptyTagWarning: boolean = false;
   
   showLeaveModal: boolean = false;
   private leavePromiseResolver: ((value: boolean) => void) | null = null;
@@ -268,6 +269,16 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
       return;
     }
 
+    if (!this.importService.currentState.importTag || this.importService.currentState.importTag.trim() === '') {
+      this.showEmptyTagWarning = true;
+      return;
+    }
+
+    this.executeImport();
+  }
+  
+  confirmEmptyTagImport() {
+    this.showEmptyTagWarning = false;
     this.executeImport();
   }
 

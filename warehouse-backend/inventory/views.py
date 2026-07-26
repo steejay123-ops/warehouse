@@ -143,21 +143,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        
-        show_counted = self.request.query_params.get('show_counted') == 'true'
-        show_counting = self.request.query_params.get('show_counting') == 'true'
-        
-        excluded_statuses = []
-        if not show_counted:
-            excluded_statuses.append('done')
-        if not show_counting:
-            excluded_statuses.extend(['counting', 'recount'])
-            
-        if excluded_statuses:
-            queryset = queryset.exclude(field_status__in=excluded_statuses)
-            
-        return queryset
+        return super().get_queryset()
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess
@@ -191,12 +177,25 @@ class ItemViewSet(viewsets.ModelViewSet):
         columns_list = request.data.get('columns_list', [])
         warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
         
-        if data_scope == 'selected':
-            selected_ids = request.data.get('selected_ids', [])
-            queryset = self.get_queryset().filter(id__in=selected_ids)
-            queryset = self.filter_queryset(queryset)
-        else:
-            queryset = self.filter_queryset(self.get_queryset())
+        from django.http import QueryDict
+        original_query_params = request._request.GET
+        try:
+            q = QueryDict(mutable=True)
+            for k, v in request.data.items():
+                if isinstance(v, list):
+                    q.setlist(k, [str(x) for x in v])
+                else:
+                    q[k] = str(v)
+            request._request.GET = q
+            
+            if data_scope == 'selected':
+                selected_ids = request.data.get('selected_ids', [])
+                queryset = self.get_queryset().filter(id__in=selected_ids)
+                queryset = self.filter_queryset(queryset)
+            else:
+                queryset = self.filter_queryset(self.get_queryset())
+        finally:
+            request._request.GET = original_query_params
             
         expected_fields_dict = self.get_expected_fields(warehouse_id)
         valid_fields = {f.name: f for f in Item._meta.fields if f.name != 'dynamic_data'}
@@ -824,19 +823,20 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     
                             excel_tag = row_data.pop('tag', '')
                             if not excel_tag: excel_tag = ''
-                            excel_tag = str(excel_tag).strip()
+                            excel_tag = str(excel_tag).strip().replace(',', '،')
                             
                             final_tags = []
                             if excel_tag:
                                 final_tags.extend([t.strip() for t in excel_tag.split('،') if t.strip()])
-                                final_tags.extend([t.strip() for t in excel_tag.split(',') if t.strip()])
                             if import_tag:
-                                final_tags.extend([t.strip() for t in import_tag.split('،') if t.strip()])
-                                final_tags.extend([t.strip() for t in import_tag.split(',') if t.strip()])
+                                import_tag_clean = import_tag.replace(',', '،')
+                                final_tags.extend([t.strip() for t in import_tag_clean.split('،') if t.strip()])
                             
                             unique_tags = list(set(final_tags))
                             if unique_tags:
                                 row_data['tag'] = '،'.join(unique_tags)
+                            else:
+                                row_data['tag'] = ''
 
                             warehouse_str = row_data.pop('warehouse', None)
                             target_warehouse_id = int(warehouse_id) if warehouse_id else None
@@ -910,6 +910,13 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 defaults['dynamic_data'] = final_dynamic_data
                                 
                             if existing_item:
+                                # Append new tags to existing item's tags
+                                if existing_item.tag:
+                                    existing_tags = [t.strip() for t in existing_item.tag.split('،') if t.strip()]
+                                    new_tags = [t.strip() for t in defaults.get('tag', '').split('،') if t.strip()]
+                                    combined_tags = list(set(existing_tags + new_tags))
+                                    defaults['tag'] = '،'.join(combined_tags) if combined_tags else ''
+
                                 if conflict_strategy == 'ignore':
                                     skipped += 1
                                     append_colored_row(row, 'warn', 'نادیده گرفتن رکورد تکراری')
@@ -926,6 +933,9 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     # Always update fa_unic_code if empty
                                     if fa_unic_code and not existing_item.fa_unic_code:
                                         new_defaults['fa_unic_code'] = fa_unic_code
+                                    # Always update tag since we append them
+                                    if defaults.get('tag') and defaults.get('tag') != existing_item.tag:
+                                        new_defaults['tag'] = defaults['tag']
                                         
                                     if new_defaults:
                                         from django.core.serializers.json import DjangoJSONEncoder

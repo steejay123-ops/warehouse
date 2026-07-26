@@ -143,6 +143,25 @@ export class Users implements OnInit {
     return this.state.appState.roles.filter((r: any) => r.parent === parentId);
   }
 
+  getSelectableParents() {
+    if (!this.roleForm || !this.roleForm.id) return this.state.appState.roles;
+    
+    // Build a set of all descendant IDs to exclude them from the dropdown
+    const invalidIds = new Set<number>();
+    invalidIds.add(this.roleForm.id);
+    
+    const addDescendants = (parentId: number) => {
+      const children = this.getRoleChildren(parentId);
+      children.forEach((c: any) => {
+        invalidIds.add(c.id);
+        addDescendants(c.id);
+      });
+    };
+    addDescendants(this.roleForm.id);
+    
+    return this.state.appState.roles.filter((r: any) => !invalidIds.has(r.id));
+  }
+
   getUsersInRoleCount(roleId: number) {
     return this.state.appState.users.filter((u: any) => u.groups && u.groups.includes(roleId)).length;
   }

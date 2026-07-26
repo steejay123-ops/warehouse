@@ -110,15 +110,45 @@
                پاک کردن فیلترها ✕
             </button>
           }
-          <div class="flex items-center gap-3 mr-4 border-r border-slate-200 pr-4">
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" [(ngModel)]="showCountedItems" (change)="loadItems()" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5">
-              <span class="text-[10px] font-bold text-emerald-700">شمرده شده</span>
-            </label>
-            <label class="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" [(ngModel)]="showCountingItems" (change)="loadItems()" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5">
-              <span class="text-[10px] font-bold text-blue-700">در حال شمارش</span>
-            </label>
+          <div class="flex items-center gap-3 mr-4 border-r border-slate-200 pr-4 relative">
+            <button (click)="isQuickFilterModalOpen = !isQuickFilterModalOpen" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm relative">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+              فیلتر سریع
+              <span *ngIf="selectedQuickFilters.length > 0" class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-indigo-500 text-white rounded-full flex items-center justify-center text-[9px] shadow-sm">{{selectedQuickFilters.length}}</span>
+            </button>
+
+            @if (isQuickFilterModalOpen) {
+              <!-- Backdrop to close dropdown on outside click -->
+              <div class="fixed inset-0 z-[45]" (click)="isQuickFilterModalOpen = false"></div>
+              <div class="absolute top-full right-4 mt-2 w-72 bg-white border border-slate-200 shadow-xl rounded-xl z-50 p-3 text-right">
+                <div class="text-[10px] font-black text-slate-400 mb-2 px-1 border-b border-slate-100 pb-2 flex justify-between items-center">
+                  انتخاب وضعیت‌ها
+                  <button (click)="selectedQuickFilters = ['waiting']; loadItems()" class="text-[9px] text-rose-500 hover:text-rose-700 transition-colors">
+                    پیش‌فرض
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-2">
+                  <button (click)="toggleQuickFilter('waiting')" 
+                          class="px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm flex items-center gap-1"
+                          [ngClass]="selectedQuickFilters.includes('waiting') ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
+                     <svg *ngIf="selectedQuickFilters.includes('waiting')" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                     در انتظار تخصیص
+                  </button>
+                  <button (click)="toggleQuickFilter('counting')" 
+                          class="px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm flex items-center gap-1"
+                          [ngClass]="selectedQuickFilters.includes('counting') ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
+                     <svg *ngIf="selectedQuickFilters.includes('counting')" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                     در حال شمارش
+                  </button>
+                  <button (click)="toggleQuickFilter('counted')" 
+                          class="px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all border shadow-sm flex items-center gap-1"
+                          [ngClass]="selectedQuickFilters.includes('counted') ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'">
+                     <svg *ngIf="selectedQuickFilters.includes('counted')" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                     شمرده شده
+                  </button>
+                </div>
+              </div>
+            }
           </div>
         </div>
         
@@ -137,6 +167,7 @@
       <div class="w-full relative">
         <app-data-table 
           [data]="items" 
+          [tableName]="'dispatch_items'"
           [totalCount]="totalItems" 
           [pageSize]="100" 
           [selectable]="true" 
@@ -404,5 +435,7 @@
       </div>
     </div>
   </div>
+
+
 
   </div>

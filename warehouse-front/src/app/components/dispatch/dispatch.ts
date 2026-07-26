@@ -53,8 +53,10 @@ export class Dispatch implements OnInit {
   isLoading = false;
   requireSupervisor = true;
   requireDocSupervisor = true; // پیش‌فرض: سرپرست اجباری
-  showCountedItems = false;
-  showCountingItems = false;
+
+  // Quick Filter Modal
+  isQuickFilterModalOpen = false;
+  selectedQuickFilters: string[] = ['waiting'];
 
   // Export Modal State
   isExportModalOpen = false;
@@ -201,8 +203,7 @@ export class Dispatch implements OnInit {
     return Array.from(modifiers).map(a => ({label: a, value: a}));
   }
 
-  loadItems() {
-    this.isLoading = true;
+  buildApiFilters(includePagination: boolean = true): any {
     const filters: any = {};
     if (this.state.appState.activeWarehouseId !== 'ALL') {
       filters['warehouse'] = this.state.appState.activeWarehouseId;
@@ -246,9 +247,11 @@ export class Dispatch implements OnInit {
       }
     });
 
-    // Add pagination
-    filters['page'] = this.currentPage;
-    filters['page_size'] = this.pageSize;
+    if (includePagination) {
+      // Add pagination
+      filters['page'] = this.currentPage;
+      filters['page_size'] = this.pageSize;
+    }
 
     // Add search
     const globalSearch = this.state.appState.dispatchSettings.search;
@@ -256,14 +259,38 @@ export class Dispatch implements OnInit {
       filters['search'] = globalSearch;
     }
 
-    filters['show_counted'] = this.showCountedItems ? 'true' : 'false';
-    filters['show_counting'] = this.showCountingItems ? 'true' : 'false';
+    // Merge Quick Filters with column filters to properly exclude "waiting" if unselected
+    let allowedQuickStatuses: string[] = [];
+    if (this.selectedQuickFilters.includes('waiting')) allowedQuickStatuses.push('waiting');
+    if (this.selectedQuickFilters.includes('counting')) allowedQuickStatuses.push('counting', 'recount');
+    if (this.selectedQuickFilters.includes('counted')) allowedQuickStatuses.push('done');
+    
+    if (allowedQuickStatuses.length === 0) {
+      filters['field_status__in'] = '__NONE__';
+    } else {
+      const existingFilter = filters['field_status__in'];
+      if (existingFilter) {
+        // Intersect
+        const existingArray = Array.isArray(existingFilter) ? existingFilter : existingFilter.split(',');
+        const intersection = allowedQuickStatuses.filter(s => existingArray.includes(s));
+        filters['field_status__in'] = intersection.length > 0 ? intersection.join(',') : '__NONE__';
+      } else {
+        filters['field_status__in'] = allowedQuickStatuses.join(',');
+      }
+    }
 
     // Add sorting
     const sort = this.state.appState.dispatchSettings.sort;
     if (sort.key) {
       filters['ordering'] = sort.dir === 'desc' ? `-${sort.key}` : sort.key;
     }
+
+    return filters;
+  }
+
+  loadItems() {
+    this.isLoading = true;
+    const filters = this.buildApiFilters(true);
 
     if (this.loadSubscription) {
       this.loadSubscription.unsubscribe();
@@ -360,12 +387,23 @@ export class Dispatch implements OnInit {
     this.state.appState.dispatchSettings.search = '';
     this.state.appState.dispatchSettings.filters = {};
     this.state.appState.dispatchSettings.sort = { key: null, dir: 'asc' };
+    this.selectedQuickFilters = ['waiting'];
     if (this.dataTable) {
       this.dataTable.clearAllFilters(false);
     }
     this.currentPage = 1;
     this.loadItems();
     this.savePreferences();
+  }
+
+  toggleQuickFilter(filter: string) {
+    const index = this.selectedQuickFilters.indexOf(filter);
+    if (index === -1) {
+      this.selectedQuickFilters.push(filter);
+    } else {
+      this.selectedQuickFilters.splice(index, 1);
+    }
+    this.loadItems();
   }
 
   onSelectionChange(selectedIds: Set<string>) {
@@ -721,13 +759,12 @@ export class Dispatch implements OnInit {
     
     if (this.exportColumnScope === 'visible') {
       payload.columns_list = this.state.appState.dispatchSettings.visibleCols || [];
-    } else if (this.exportColumnScope === 'custom') {
+    } else    if (this.exportColumnScope === 'custom') {
       payload.columns_list = Array.from(this.selectedExportColumns);
     }
     
-    const filters = { ...this.state.appState.dispatchSettings.filters, page_size: 100000 };
-    if (!this.showCountedItems) filters['show_counted'] = 'false';
-    if (!this.showCountingItems) filters['show_counting'] = 'false';
+    const filters = this.buildApiFilters(false);
+    filters['page_size'] = 100000;
     
     this.exportSubscription = this.itemApi.exportExcel({ ...payload, ...filters }).subscribe({
       next: (blob) => {

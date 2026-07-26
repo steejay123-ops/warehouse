@@ -148,3 +148,37 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
         from .permissions import HasMenuAccess
         return [HasMenuAccess('perm_usr_role')]
 
+
+from rest_framework.permissions import IsAuthenticated
+from .models import UserTableViewState
+from .serializers import UserTableViewStateSerializer
+
+class UserTableViewStateViewSet(viewsets.ModelViewSet):
+    serializer_class = UserTableViewStateSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        # Only return views for the current user
+        qs = UserTableViewState.objects.filter(user=self.request.user)
+        table_name = self.request.query_params.get('table_name')
+        if table_name:
+            qs = qs.filter(table_name=table_name)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def set_last_selected(self, request, pk=None):
+        view_state = self.get_object()
+        
+        # Reset others for the same table
+        UserTableViewState.objects.filter(
+            user=request.user, 
+            table_name=view_state.table_name
+        ).update(is_last_selected=False)
+        
+        # Set this one
+        view_state.is_last_selected = True
+        view_state.save()
+        
+        return Response({'status': 'success', 'message': 'نمای انتخاب شده با موفقیت ذخیره شد.'})
+

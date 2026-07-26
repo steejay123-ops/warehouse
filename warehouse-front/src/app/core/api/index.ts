@@ -12,3 +12,4 @@ export { FeedingApiService } from './feeding-api.service';
 export { TagApiService } from './tag-api.service';
 export { CountTaskApiService } from './count-task-api.service';
 export { DynamicFieldApiService } from './dynamic-field-api.service';
+export { TableViewApiService } from './table-view-api.service';

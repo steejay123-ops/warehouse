@@ -1,0 +1,4 @@
+Role: مدیریت کل سیستم (admin) - Parent: None
+Role: سرپرست اجرا / شمارش (supervisor) - Parent: مدیریت پروژه (manager)
+Role: مدیریت پروژه (manager) - Parent: سرپرست اجرا / شمارش (supervisor)
+Role: انباردار میدانی / انبارگردان (counter) - Parent: مدیریت کل سیستم (admin)

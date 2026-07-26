@@ -68,5 +68,40 @@ class CustomRole(Group):
         verbose_name = "نقش سازمانی"
         verbose_name_plural = "نقش‌های سازمانی"
 
+    def clean(self):
+        super().clean()
+        from django.core.exceptions import ValidationError
+        
+        # Prevent circular dependency in parent
+        current = self.parent
+        while current:
+            if current.id == self.id:
+                raise ValidationError({"parent": "حلقه بی‌نهایت! یک نقش نمی‌تواند زیرمجموعه فرزندان خودش باشد."})
+            current = current.parent
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.title or self.name
+
+
+class UserTableViewState(models.Model):
+    """
+    ذخیره‌سازی وضعیت ستون‌های جداول (نمای سفارشی کاربر)
+    """
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='table_views')
+    table_name = models.CharField(max_length=100)
+    view_name = models.CharField(max_length=100)
+    columns_state = models.JSONField(default=list)
+    is_last_selected = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "نمای جدول"
+        verbose_name_plural = "نماهای جدول"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.table_name} - {self.view_name}"

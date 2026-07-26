@@ -1,40 +1,30 @@
-<div dir="rtl" align="right">
+# برنامه پیاده‌سازی اصلاح خطاهای Label PDF Generator
 
-# بهبود رندرینگ لیبل‌های PDF (حل مشکلات RTL)
+این برنامه جهت برطرف کردن خطای تایپ خروجی QR کد و اصلاح ماژول تاریخ جلالی در فایل `label_pdf_generator.py` تهیه شده است.
 
-این طرح اجرایی با هدف برطرف کردن مشکل چیدمان و جدایی حروف زبان فارسی در پرینت لیبل‌ها با استفاده از `reportlab` و رفع ایرادات جزئی دیگر تدوین شده است.
+## User Review Required
 
-> [!NOTE]
-> با پیاده‌سازی این تغییرات، متون فارسی به‌صورت یکپارچه و راست‌به‌چپ در فایل‌های PDF چاپ می‌شوند و کدهای QR مربوط به فیلدهای دینامیک هم به درستی عمل خواهند کرد.
+> [!IMPORTANT]
+> - اصلاح خط ۲۱۱: حذف پارامتر `format='PNG'` از `qr_img.save()` جهت سازگاری با تابع `save` در کلاس `PyPNGImage` کتابخانه `qrcode`.
+> - اصلاح خط ۲۲۵: تغییر `from jalali_ts import jdatetime` به `import jdatetime` زیرا `jalali_ts` مربوط به اکوسیستم JavaScript/TypeScript است نه Python.
 
-## نیازمند تایید کاربر (User Review Required)
+## Proposed Changes
 
-> [!WARNING]
-> برای اجرای این طرح پکیج‌های `arabic_reshaper` و `python-bidi` به محیط بک‌اند اضافه خواهند شد. این پکیج‌ها سبک هستند و تداخلی با سایر ماژول‌ها ندارند، آیا با نصب این پکیج‌ها موافقید؟
-
-## تغییرات پیشنهادی
-
-### بک‌اند (Backend)
-
-#### [MODIFY] [requirements.txt](file:///e:/warehouse%20project/warehouse-backend/requirements.txt)
-پکیج‌های جا افتاده و جدید برای رندر فارسی به فایل اضافه می‌شوند:
-| پکیج | توضیح |
-|------|-------|
-| `reportlab` | برای تولید PDF (از قبل استفاده می‌شده اما در فایل نبود) |
-| `qrcode` | برای تولید بارکد (از قبل استفاده می‌شده اما در فایل نبود) |
-| `jalali_ts` | برای تاریخ شمسی (از قبل استفاده می‌شده اما در فایل نبود) |
-| `arabic-reshaper` | برای چسباندن حروف فارسی به یکدیگر |
-| `python-bidi` | برای اصلاح جهت‌گیری (RTL) متون |
+### Warehouse Backend (`warehouses`)
 
 #### [MODIFY] [label_pdf_generator.py](file:///e:/warehouse%20project/warehouse-backend/warehouses/label_pdf_generator.py)
-تغییرات زیر در این کلاس اعمال خواهند شد:
-1. **ایمپورت‌ها:** افزودن ماژول‌های `arabic_reshaper` و `bidi.algorithm`.
-2. **شکل‌دهی متن:** متد `_draw_label` تغییر می‌کند تا متن‌ها (ترکیب شده با پیشوند و پسوند) از داخل فیلترهای `reshape` و `get_display` عبور کنند.
-3. **تولید QR:** متد `_draw_qr` اصلاح می‌شود تا به‌جای `getattr` ساده، از متد `self._resolve_field(item, qr_field)` برای خواندن دیتا استفاده کند تا مشکل فیلدهای `dynamic__` برطرف شود.
 
-## مراحل تایید (Verification Plan)
-- نصب نیازمندی‌ها (`pip install -r requirements.txt`).
-- تست مجدد ایجاد لیبل در پنل دیسپچ برای اقلامی که فیلد دینامیک و مقادیر فارسی دارند.
-- بررسی پی‌دی‌اف نهایی برای صحت اتصال حروف فارسی و درست بودن بارکد.
+| مکان خطا | تغییر پیشنهادی | علت تغییر |
+| :--- | :--- | :--- |
+| **Line 211** | حذف `format='PNG'` از فراخوانی `qr_img.save(img_buffer)` | هماهنگی با امضای متد `save` در `PyPNGImage` |
+| **Line 225** | جایگزینی `import jdatetime` به جای `from jalali_ts import jdatetime` | رفع خطای عدم وجود ماژول `jalali_ts` در پایتون |
 
-</div>
+---
+
+## Verification Plan
+
+### Automated / Syntax Check
+- چک کردن لایو لاگ‌های سرور جنگو در ترمینال (`.\venv\Scripts\python manage.py runserver 8000`).
+
+### Manual Verification
+- درخواست تست تولید PDF برچسب جهت اطمینان از عملکرد درست QR کد و تاریخ چاپ.

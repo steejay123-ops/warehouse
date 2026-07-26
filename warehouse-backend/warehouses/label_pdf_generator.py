@@ -208,7 +208,7 @@ class LabelPdfGenerator:
 
         # Convert to ImageReader
         img_buffer = io.BytesIO()
-        qr_img.save(img_buffer, format='PNG')
+        qr_img.save(img_buffer)
         img_buffer.seek(0)
         img = ImageReader(img_buffer)
 
@@ -222,8 +222,8 @@ class LabelPdfGenerator:
         # Special fields
         if field_key == '__print_date__':
             try:
-                from jalali_ts import jdatetime
-                return jdatetime.now().strftime('%Y/%m/%d %H:%M')
+                import jdatetime
+                return jdatetime.datetime.now().strftime('%Y/%m/%d %H:%M')
             except ImportError:
                 return datetime.now().strftime('%Y/%m/%d %H:%M')
 

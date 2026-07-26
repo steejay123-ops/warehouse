@@ -1,227 +1,453 @@
-<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 fade-in text-right pb-10" dir="rtl">
-    
-    <div class="xl:col-span-5 space-y-5">
-      
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-slate-50 border-b border-slate-100 p-4">
-          <h3 class="font-black text-slate-800 text-sm flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            ۱. منبع داده و مپینگ (Data Source)
-          </h3>
+<div class="label-designer-wrapper" dir="rtl" (keydown)="onKeyDown($event)" tabindex="0">
+
+  <!-- Loading State -->
+  <div *ngIf="isLoading" class="flex items-center justify-center p-12">
+    <span class="animate-spin w-8 h-8 border-3 border-indigo-500 border-t-transparent rounded-full"></span>
+  </div>
+
+  <div *ngIf="!isLoading" class="space-y-4">
+
+    <!-- ─── Template Management Bar ─── -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="bg-gradient-to-l from-violet-50 to-white border-b border-slate-100 p-3 flex items-center gap-2 flex-wrap">
+        <!-- Icon -->
+        <div class="w-7 h-7 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
         </div>
-        
-        <div class="p-5 space-y-4">
-          <div class="grid grid-cols-2 gap-3">
-            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="labelDesignerState.dataSource === 'db' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-indigo-300'" (click)="toggleLabelSource('db')">
-              <input type="radio" name="lbl_source" [checked]="labelDesignerState.dataSource === 'db'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-              <div>
-                <span class="block text-xs font-bold" [ngClass]="labelDesignerState.dataSource === 'db' ? 'text-indigo-900' : 'text-slate-700'">دیتابیس انبار جاری</span>
-                <span class="block text-[9px] text-slate-500 mt-1">تغذیه از رکوردهای {{activeWh.name}}</span>
-              </div>
-            </label>
-            
-            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="labelDesignerState.dataSource === 'external' ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-indigo-300'" (click)="toggleLabelSource('external')">
-              <input type="radio" name="lbl_source" [checked]="labelDesignerState.dataSource === 'external'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-              <div>
-                <span class="block text-xs font-bold" [ngClass]="labelDesignerState.dataSource === 'external' ? 'text-indigo-900' : 'text-slate-700'">فایل خارجی (آفلاین)</span>
-                <span class="block text-[9px] text-slate-500 mt-1">آپلود اکسل/CSV سفارشی</span>
-              </div>
-            </label>
+        <span class="font-black text-slate-700 text-[11px] shrink-0">تمپلیت فعال:</span>
+
+        <!-- Template Switcher Dropdown -->
+        <div class="flex-1 min-w-[140px]">
+          <select *ngIf="!isRenaming && !isCopying"
+            [ngModel]="template.id"
+            (ngModelChange)="switchTemplate($event)"
+            class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-violet-400 appearance-none cursor-pointer">
+            <option *ngFor="let t of templates" [ngValue]="t.id">
+              {{ t.name }}{{ t.is_active ? ' ⭐' : '' }}
+            </option>
+            <option *ngIf="templates.length === 0" [ngValue]="undefined">پیش‌فرض (ذخیره‌نشده)</option>
+          </select>
+
+          <!-- Inline rename input -->
+          <div *ngIf="isRenaming" class="flex items-center gap-1">
+            <input #renameInput type="text" [(ngModel)]="renameValue"
+              (keydown.enter)="confirmRename()"
+              (keydown.escape)="cancelRename()"
+              class="flex-1 px-2 py-1.5 bg-white border border-violet-400 rounded-lg text-xs font-bold outline-none"
+              placeholder="نام جدید..." autofocus>
+            <button (click)="confirmRename()" class="px-2 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700">✓</button>
+            <button (click)="cancelRename()" class="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
           </div>
 
-          <div *ngIf="labelDesignerState.dataSource === 'external'" id="lbl-external-box" class="space-y-4 mt-4 pt-4 border-t border-slate-100 fade-in">
-            <div class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-slate-50 transition-colors" (click)="simulateExcelUploadForLabels()">
-              <span class="text-3xl mb-2 block">📄</span>
-              <p class="text-xs font-bold text-slate-700">فایل اکسل خود را اینجا رها کنید</p>
-              <p class="text-[9px] text-slate-400 mt-1">کلیک برای آپلود (شبیه‌ساز)</p>
-            </div>
-            
-            <div *ngIf="showMappingSection" id="lbl-mapping-section" class="bg-slate-50 border border-slate-200 rounded-xl p-4 fade-in">
-              <p class="text-[10px] font-black text-indigo-700 mb-3 flex items-center gap-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg> تخصیص ستون‌های فایل (Mapping)</p>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">کلید اصلی (QR Code) *</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1" selected>Column B (شرح)</option><option value="2">Column C (لوکیشن)</option><option value="3">Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">شرح کالا (Description)</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1">Column B (شرح)</option><option value="2" selected>Column C (لوکیشن)</option><option value="3">Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">لوکیشن / موقعیت</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">Column A (کد کالا)</option><option value="1">Column B (شرح)</option><option value="2">Column C (لوکیشن)</option><option value="3" selected>Column D (مقدار)</option><option value="4">Column E (ملاحظات)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
+          <!-- Inline copy input -->
+          <div *ngIf="isCopying" class="flex items-center gap-1">
+            <input #copyInput type="text" [(ngModel)]="copyValue"
+              (keydown.enter)="confirmCopy()"
+              (keydown.escape)="cancelCopy()"
+              class="flex-1 px-2 py-1.5 bg-white border border-sky-400 rounded-lg text-xs font-bold outline-none"
+              placeholder="نام کپی..." autofocus>
+            <button (click)="confirmCopy()" class="px-2 py-1.5 bg-sky-600 text-white rounded-lg text-xs font-bold hover:bg-sky-700">✓</button>
+            <button (click)="cancelCopy()" class="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
+          </div>
+        </div>
+
+        <!-- Action Buttons (only in settings mode) -->
+        <div *ngIf="mode === 'settings'" class="flex items-center gap-1 shrink-0 flex-wrap">
+          <!-- New -->
+          <button (click)="startCreateNew()" title="تمپلیت جدید"
+            class="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            جدید
+          </button>
+          <!-- Rename -->
+          <button (click)="startRename()" [disabled]="!template.id" title="تغییر نام"
+            class="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            نام
+          </button>
+          <!-- Clone -->
+          <button *ngIf="template.id && !isCopying" (click)="startCopy()" title="کپی گرفتن از این تمپلیت"
+            class="flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-lg text-[10px] font-bold hover:bg-sky-100 transition-colors">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            کپی
+          </button>
+          <!-- Delete -->
+          <button *ngIf="template.id && deleteConfirmId !== template.id"
+            (click)="askDeleteConfirm(template.id!)" title="حذف تمپلیت"
+            class="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-colors">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            حذف
+          </button>
+          <!-- Delete confirm inline -->
+          <div *ngIf="template.id && deleteConfirmId === template.id"
+            class="flex items-center gap-1 bg-rose-50 border border-rose-300 rounded-lg px-2 py-1">
+            <span class="text-[10px] font-bold text-rose-700">مطمئنی؟</span>
+            <button (click)="confirmDelete(template.id!)" class="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-black hover:bg-rose-700">بله</button>
+            <button (click)="cancelDelete()" class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300">خیر</button>
+          </div>
+          <!-- Save Top Button -->
+          <button *ngIf="template.id" (click)="saveTemplate()" [disabled]="isSaving" title="ذخیره تمپلیت"
+            class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed mr-2">
+            <span *ngIf="isSaving" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
+            <svg *ngIf="!isSaving" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            ذخیره
+          </button>
+        </div>
+      </div>
+
+      <!-- Inline create new template form -->
+      <div *ngIf="isCreatingNew" class="p-3 border-t border-slate-100 bg-emerald-50/50 flex items-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        <input type="text" [(ngModel)]="newTemplateName"
+          (keydown.enter)="confirmCreate()"
+          (keydown.escape)="cancelCreate()"
+          class="flex-1 px-3 py-1.5 bg-white border border-emerald-400 rounded-lg text-xs font-bold outline-none placeholder:text-slate-400"
+          placeholder="نام تمپلیت جدید..." autofocus>
+        <button (click)="confirmCreate()" [disabled]="!newTemplateName.trim()"
+          class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">ایجاد</button>
+        <button (click)="cancelCreate()" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200">انصراف</button>
+      </div>
+
+      <!-- No templates yet prompt -->
+      <div *ngIf="templates.length === 0 && !isCreatingNew" class="px-4 py-2.5 text-[10px] text-slate-500 font-medium">
+        هنوز تمپلیتی ذخیره نشده است. روی «جدید» کلیک کنید یا مستقیماً بوم را ویرایش و ذخیره کنید.
+      </div>
+    </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+
+    <!-- ─── LEFT PANEL: Fields + Settings (5/12) ─── -->
+    <div class="xl:col-span-5 space-y-4">
+
+      <!-- QR Source Field -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-slate-800 text-[12px]">فیلد QR Code</h4>
+            <p class="text-[9px] text-slate-400 mt-0.5">کدام فیلد جدول داخل QR رمزنگاری شود؟</p>
+          </div>
+        </div>
+        <div class="p-3.5 space-y-2.5">
+          <select [(ngModel)]="template.qr_source_field" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+            <option *ngFor="let f of qrFieldOptions" [value]="f.key">{{f.label}}</option>
+          </select>
+          <button (click)="addQrElement()" class="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
+            [ngClass]="hasQrElement ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>
+            {{ hasQrElement ? 'بازنشانی QR روی بوم' : 'افزودن QR به بوم' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Label Dimensions -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-slate-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          </div>
+          <h4 class="font-black text-slate-800 text-[12px]">ابعاد لیبل</h4>
+        </div>
+        <div class="p-3.5 grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">عرض (mm)</label>
+            <input type="number" [(ngModel)]="template.width_mm" (ngModelChange)="onDimensionChange()" min="20" max="200" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">ارتفاع (mm)</label>
+            <input type="number" [(ngModel)]="template.height_mm" (ngModelChange)="onDimensionChange()" min="15" max="150" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
         </div>
       </div>
 
+      <!-- Print Settings -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-slate-50 border-b border-slate-100 p-4">
-          <h3 class="font-black text-slate-800 text-sm flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-            ۲. ابعاد کاغذ و تنظیمات شبکه (Grid)
-          </h3>
+        <div class="bg-gradient-to-l from-blue-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          </div>
+          <h4 class="font-black text-slate-800 text-[12px]">تنظیمات چاپ</h4>
         </div>
-        
-        <div class="p-5 space-y-4">
+        <div class="p-3.5 grid grid-cols-2 gap-2.5">
           <div>
-            <label class="block text-[11px] font-bold text-slate-500 mb-2">نوع کاغذ چاپی</label>
-            <select [(ngModel)]="labelDesignerState.paperType" (ngModelChange)="togglePaperSettings($event)" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
-              <option value="A4">کاغذ استاندارد A4</option>
-              <option value="A3">کاغذ بزرگ A3</option>
-              <option value="A2">پلات / شیت A2</option>
-              <option value="A1">پلات / شیت A1</option>
-              <option value="roll">رول حرارتی (لیبل پرینتر)</option>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">نوع کاغذ</label>
+            <select [(ngModel)]="template.paper_type" (ngModelChange)="onDimensionChange()" class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+              <option value="A4">A4</option>
+              <option value="A3">A3</option>
+              <option value="roll">رول حرارتی</option>
             </select>
           </div>
-
-          <div *ngIf="labelDesignerState.paperType !== 'roll'" id="lbl-sheet-settings" class="grid grid-cols-3 gap-3 pt-2 border-t border-slate-100 fade-in">
-            <div>
-              <label class="block text-[10px] font-bold text-slate-500 mb-1">تعداد سطر (Row)</label>
-              <input type="number" value="4" min="1" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-500 mb-1">تعداد ستون (Col)</label>
-              <input type="number" value="3" min="1" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-500 mb-1">حاشیه (mm)</label>
-              <input type="number" value="5" min="0" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
-            </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">حاشیه (mm)</label>
+            <input type="number" [(ngModel)]="template.margin_mm" (ngModelChange)="onDimensionChange()" min="0" max="30" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
-
-          <div *ngIf="labelDesignerState.paperType === 'roll'" id="lbl-roll-settings" class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 fade-in">
-            <div>
-              <label class="block text-[10px] font-bold text-slate-500 mb-1">عرض لیبل (Width mm)</label>
-              <input type="number" value="50" min="10" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-500 mb-1">ارتفاع لیبل (Height mm)</label>
-              <input type="number" value="30" min="10" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
-            </div>
+          <div *ngIf="template.paper_type !== 'roll'">
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">سطر</label>
+            <input type="number" [(ngModel)]="template.grid_rows" (ngModelChange)="onManualGridChange()" min="1" max="20" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+          </div>
+          <div *ngIf="template.paper_type !== 'roll'">
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">ستون</label>
+            <input type="number" [(ngModel)]="template.grid_cols" (ngModelChange)="onManualGridChange()" min="1" max="10" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+          </div>
+          <div *ngIf="gridWarning" class="col-span-2 mt-1 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-[10.5px] font-bold flex items-start gap-2 fade-in">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span class="leading-relaxed">{{gridWarning}}</span>
           </div>
         </div>
       </div>
 
+      <!-- Available Fields -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-slate-50 border-b border-slate-100 p-4 flex justify-between items-center">
-          <h3 class="font-black text-slate-800 text-sm">۳. محتوای چاپی لیبل</h3>
+        <div class="bg-gradient-to-l from-emerald-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </div>
+          <h4 class="font-black text-slate-800 text-[12px]">فیلدهای موجود</h4>
         </div>
-        
-        <div class="p-5 space-y-3">
-          
-          <div class="flex items-center gap-2">
-            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.mesc" disabled class="rounded text-indigo-600 focus:ring-0 opacity-50 cursor-not-allowed">
-            <label class="text-xs font-semibold text-slate-700 opacity-70">کد کالا / شناسه یکتا (الزامی) <span class="text-[9px] text-slate-400 mr-1">(الزامی)</span></label>
-          </div>
-          
-          <div class="flex items-center gap-2">
-            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.desc" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-            <label class="text-xs font-semibold text-slate-700 cursor-pointer">شرح و نام کالا</label>
-          </div>
-          
-          <div class="flex items-center gap-2">
-            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.loc" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-            <label class="text-xs font-semibold text-slate-700 cursor-pointer">موقعیت فیزیکی (Location)</label>
-          </div>
-          
-          <div class="flex items-center gap-2">
-            <input type="checkbox" [(ngModel)]="labelDesignerState.fields.project" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-            <label class="text-xs font-semibold text-slate-700 cursor-pointer">نام پروژه / انبار</label>
-          </div>
 
-          <div class="pt-2 border-t border-slate-100">
-            <div class="flex items-center gap-2 text-indigo-700 bg-indigo-50/50 p-2 rounded-lg">
-              <input type="checkbox" [(ngModel)]="labelDesignerState.fields.date" (change)="updateCurrentDate()" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <label class="text-xs font-semibold cursor-pointer">چاپ تاریخ لحظه شمارش/پرینت (خودکار)</label>
-            </div>
-          </div>
+        <div class="p-3 border-b border-slate-100">
+          <input type="text" [(ngModel)]="fieldSearch" placeholder="جستجوی فیلد..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-400 placeholder:text-slate-400">
+        </div>
 
-          <div class="p-3 bg-rose-50 border border-rose-100 rounded-xl mt-2 relative overflow-hidden">
-            <div class="absolute top-0 right-0 w-1 h-full bg-rose-400"></div>
-            <div class="flex items-start gap-2">
-              <input type="checkbox" [(ngModel)]="labelDesignerState.fields.qty" class="mt-0.5 rounded text-rose-600 focus:ring-0 cursor-pointer">
-              <div>
-                <label class="text-xs font-bold text-rose-900 cursor-pointer">تعداد دفتری (Qty)</label>
-                <p class="text-[9px] text-rose-600 mt-1 font-semibold leading-relaxed">هشدار: بر اساس منطق شمارش کور، چاپ تعداد موجودی سیستم روی لیبل مجاز نیست و ممکن است باعث خطای انسانی شود.</p>
-              </div>
-            </div>
+        <div class="max-h-[280px] overflow-y-auto p-2 space-y-2 field-list-scroll">
+          <div *ngFor="let group of filteredFieldGroups" class="space-y-1">
+            <p class="text-[9px] font-black text-slate-400 uppercase tracking-wider px-2 pt-1">{{group.name}}</p>
+            <button *ngFor="let f of group.fields"
+              (click)="addElement(f)"
+              [disabled]="isFieldOnCanvas(f.key) && f.key !== '__print_date__'"
+              class="w-full text-right px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center justify-between gap-2"
+              [ngClass]="isFieldOnCanvas(f.key)
+                ? 'bg-emerald-50 text-emerald-600 cursor-not-allowed opacity-60'
+                : 'bg-white text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-100'">
+              <span class="truncate">{{f.label}}</span>
+              <svg *ngIf="!isFieldOnCanvas(f.key)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 opacity-40"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <svg *ngIf="isFieldOnCanvas(f.key)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
           </div>
         </div>
       </div>
-      
-      <button (click)="executeLabelPrint()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black shadow-lg shadow-indigo-200 transition-all active:scale-[0.98] flex justify-center items-center gap-2">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        تولید و ارسال به پرینتر
+
+      <!-- Save Button -->
+      <button *ngIf="mode === 'settings'" (click)="saveTemplate()" [disabled]="isSaving"
+        class="w-full py-3.5 rounded-xl text-sm font-black text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+        style="background: linear-gradient(135deg, #4f46e5, #7c3aed)">
+        <span *ngIf="isSaving" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+        <svg *ngIf="!isSaving" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        ذخیره ساختار لیبل
+      </button>
+
+      <!-- Print Button (in print mode) -->
+      <button *ngIf="mode === 'print'" (click)="requestPrint()" [disabled]="isPrinting"
+        class="w-full py-3.5 rounded-xl text-sm font-black text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700">
+        <span *ngIf="isPrinting" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+        <svg *ngIf="!isPrinting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        دانلود PDF ({{selectedItemIds.length}} رکورد)
       </button>
 
     </div>
 
-    <div class="xl:col-span-7">
-      <div class="bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-6 md:p-10 h-full flex flex-col relative min-h-[500px]">
+    <!-- ─── RIGHT PANEL: Canvas (7/12) ─── -->
+    <div class="xl:col-span-7 flex flex-col gap-4">
+      
+      <!-- Toolbar (Above Canvas) -->
+      <div *ngIf="selectedElement" class="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden flex flex-col p-3 gap-2 fade-in">
         
-        <div class="flex items-center justify-between mb-8 z-20">
-          <h3 class="font-black text-slate-700 text-sm">پیش‌نمایش زنده یک واحد لیبل (Live Preview)</h3>
-          <span class="px-3 py-1 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold animate-pulse">آپدیت در لحظه</span>
-        </div>
-        
-        <div class="flex-1 flex items-center justify-center relative z-10" id="lbl-preview-canvas">
-          
-          <div id="lbl-live-card" class="bg-white rounded shadow-2xl overflow-hidden transition-all duration-300 border border-slate-400 relative flex p-3 ring-8 ring-white ring-opacity-40" [ngStyle]="{'width': labelDesignerState.paperType === 'roll' ? '280px' : '360px', 'height': labelDesignerState.paperType === 'roll' ? '180px' : '200px'}">
+        <!-- Row 1: Title, Font Settings, Actions -->
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+              <div class="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </div>
+              <span class="font-black text-slate-800 text-xs whitespace-nowrap">{{selectedElement.label}}</span>
+            </div>
             
-            <div class="flex w-full gap-3 relative z-10 h-full">
-              <div class="flex-1 flex flex-col text-right justify-between">
-                
-                <div class="space-y-1">
-                  <div *ngIf="labelDesignerState.fields.project" class="font-black text-[9px] text-slate-500 bg-slate-100 inline-block px-1.5 py-0.5 rounded">
-                    {{activeWh.name}}
-                  </div>
-                  
-                  <div *ngIf="labelDesignerState.fields.mesc" class="font-mono font-black text-base text-slate-900 mt-1">
-                    85.12.34.567.8
-                  </div>
-                  
-                  <div *ngIf="labelDesignerState.fields.desc" class="text-[11px] font-bold text-slate-800 leading-snug line-clamp-2 pr-1">
-                    شیر فلکه کشویی فولادی کلاس ۱۵۰ فلنج‌دار سایز ۸ اینچ
-                  </div>
-                </div>
-                
-                <div class="flex items-end justify-between mt-2 pt-2 border-t border-dashed border-slate-300">
-                  <div class="space-y-1">
-                    <div *ngIf="labelDesignerState.fields.loc" class="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                      LOC: WH-02-A-14
-                    </div>
-                    <div *ngIf="labelDesignerState.fields.date" class="text-[9px] font-mono text-slate-400 font-bold">
-                       Date: <span>{{currentDate}}</span>
-                    </div>
-                  </div>
-                  
-                  <div *ngIf="labelDesignerState.fields.qty" class="text-[12px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                    Qty: 15
-                  </div>
-                </div>
+            <!-- Font settings (only text) -->
+            <div class="flex items-center gap-2" *ngIf="selectedElement.type !== 'qrcode'">
+              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                <span class="text-[10px] text-slate-400 font-bold">سایز:</span>
+                <input type="number" [(ngModel)]="selectedElement.fontSize" title="سایز فونت" class="w-12 text-center bg-transparent text-xs font-bold outline-none focus:text-amber-600">
               </div>
               
-              <div class="w-[90px] shrink-0 flex flex-col items-center justify-center border-r border-slate-200 pr-2">
-                <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMTAgMTBoMjB2MjBIMTB6TTMwIDEwaDIwdjIwSDMwek01MCAxMGgyMHYyMEg1MHpNNzAgMTBoMjB2MjBINzB6TTEwIDMwaDIwdjIwSDEwek0zMCAzMGgyMHYyMEgzMHpNNTAgMzBoMjB2MjBINTB6TTcwIDMwaDIwdjIwSDcwek0xMCA1MGgyMHYyMEgxMHpNMzAgNTBoMjB2MjBIMzB6TTUwIDUwaDIwdjIwSDUwek03MCA1MGgyMHYyMEg3MHpNMTAgNzBoMjB2MjBIMTB6TTMwIDcwaDIwdjIwSDMwek01MCA3MGgyMHYyMEg1MHpNNzAgNzBoMjB2MjBINzB6IiBvcGFjaXR5PSIuMSIvPjxwYXRoIGZpbGw9IiMxZTFlMWUiIGQ9Ik0xMCAxMGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNSA1aDEwdjEwSDUwem0xNS0xMGgzMHYzMEg2MHptNSA1aDIwdjIwSDY1ek0xMCA2MGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNS0xMGgxMHYxMEg1MHptMTUtMTBoMTB2MTBINjV6bTAtMTVWMzBINTB2MTBoMTV2MTVoMTVWNDBoLTE1em0xNSAzNWgxMHYxMEg4MHptLTE1IDEwaDEwdjEwSDY1em0tMTUgMGgxMHYxMEg1MHoiLz48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMjAgMjBoMTB2MTBIMjB6TTY1IDIwaDEwdjEwSDY1ek0yMCA3MGgxMHYxMEgyMHpNNDAgNDBoMTB2MTBINDB6TTQ1IDY1aDEwdjEwSDQ1eiIvPjwvc3ZnPg==" alt="QR Code" class="w-full h-auto mix-blend-multiply">
+              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                <span class="text-[10px] text-slate-400 font-bold">وزن:</span>
+                <select [(ngModel)]="selectedElement.fontWeight" title="وزن فونت" class="bg-transparent text-xs font-bold outline-none focus:text-amber-600 appearance-none cursor-pointer">
+                  <option value="normal">عادی</option>
+                  <option value="bold">بولد</option>
+                </select>
               </div>
+              
+              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                <span class="text-[10px] text-slate-400 font-bold">تراز:</span>
+                <select [(ngModel)]="selectedElement.textAlign" title="تراز متن" class="bg-transparent text-xs font-bold outline-none focus:text-amber-600 appearance-none cursor-pointer">
+                  <option value="right">راست</option>
+                  <option value="center">وسط</option>
+                  <option value="left">چپ</option>
+                </select>
+              </div>
+              
+              <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+                <input type="checkbox" [(ngModel)]="selectedElement.wrapText" class="w-3.5 h-3.5 text-amber-500 rounded border-slate-300"> 
+                شکستن متن
+              </label>
+            </div>
+          </div>
+          
+          <!-- Delete Action -->
+          <button (click)="removeElement(selectedElement)" class="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 border border-rose-100 transition-colors" title="حذف المان">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
+        </div>
+
+        <!-- Row 2: Prefix, Suffix, Position -->
+        <div class="flex items-center justify-between border-t border-slate-100 pt-2">
+          
+          <!-- Prefix/Suffix/Wrap (only text) -->
+          <div class="flex items-center gap-3" *ngIf="selectedElement.type !== 'qrcode'">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold text-slate-500">پیشوند:</span>
+              <input type="text" [(ngModel)]="selectedElement.prefix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400">
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold text-slate-500">پسوند:</span>
+              <input type="text" [(ngModel)]="selectedElement.suffix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400">
+            </div>
+          </div>
+          
+          <!-- Empty spacer for QR -->
+          <div *ngIf="selectedElement.type === 'qrcode'" class="flex-1"></div>
+
+          <!-- Position & Size for all elements -->
+          <div class="flex items-center gap-2 text-xs font-mono text-slate-500">
+            <div class="flex items-center gap-1">
+              <span>X:</span>
+              <input type="number" [(ngModel)]="selectedElement.x" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+            </div>
+            <div class="flex items-center gap-1">
+              <span>Y:</span>
+              <input type="number" [(ngModel)]="selectedElement.y" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+            </div>
+            <div class="flex items-center gap-1 ml-2">
+              <span>W:</span>
+              <input type="number" [(ngModel)]="selectedElement.width" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+            </div>
+            <div class="flex items-center gap-1">
+              <span>H:</span>
+              <input type="number" [(ngModel)]="selectedElement.height" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
             </div>
           </div>
           
         </div>
-        
-        <div class="absolute bottom-6 left-0 w-full text-center z-20">
-          <p class="text-[10px] text-slate-500 font-bold bg-slate-100/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">این بوم بر اساس تنظیمات گرید (ردیف/ستون) یا رول، در زمان چاپ تکرار خواهد شد.</p>
+      </div>
+
+      <div class="canvas-container bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-6 md:p-8 relative min-h-[420px] flex flex-col flex-1">
+
+
+        <!-- Canvas Header -->
+        <div class="flex items-center justify-between mb-5 z-10">
+          <h3 class="font-black text-slate-700 text-[13px] flex items-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            بوم طراحی لیبل
+          </h3>
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-full text-[9px] font-bold">
+              {{template.width_mm}}×{{template.height_mm}} mm
+            </span>
+            <span class="px-2.5 py-1 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-full text-[9px] font-bold animate-pulse">
+              پیش‌نمایش زنده
+            </span>
+          </div>
         </div>
+
+        <!-- The Canvas -->
+        <div class="flex-1 flex items-center justify-center">
+          <div #canvas
+            class="label-canvas relative bg-white shadow-2xl rounded border border-slate-300 overflow-hidden cursor-crosshair ring-8 ring-white/50"
+            [style.width.px]="canvasWidth"
+            [style.height.px]="canvasHeight"
+            (click)="deselectAll()">
+
+            <!-- Grid lines -->
+            <div class="canvas-grid absolute inset-0 pointer-events-none"></div>
+
+            <!-- Elements -->
+            <div *ngFor="let el of template.elements; trackBy: trackById"
+              class="canvas-element absolute flex items-center overflow-hidden cursor-move select-none transition-shadow"
+              [ngClass]="{
+                'ring-2 ring-indigo-500 shadow-lg z-20': selectedElementId === el.id,
+                'hover:ring-1 hover:ring-slate-300 z-10': selectedElementId !== el.id,
+                'canvas-element--qr': el.type === 'qrcode'
+              }"
+              [ngStyle]="getElementPxStyle(el)"
+              (mousedown)="onMouseDown($event, el, 'drag')"
+              (click)="selectElement(el, $event)">
+
+              <!-- Text Element -->
+              <div *ngIf="el.type !== 'qrcode'" class="w-full h-full flex px-1 text-slate-800 overflow-hidden"
+                [ngClass]="el.wrapText ? 'items-start whitespace-normal break-words' : 'items-center whitespace-nowrap text-ellipsis'"
+                [style.fontSize.px]="getFontPx(el.fontSize)"
+                [style.fontWeight]="el.fontWeight"
+                [style.textAlign]="el.textAlign"
+                [style.justifyContent]="el.textAlign === 'right' ? 'flex-start' : el.textAlign === 'center' ? 'center' : 'flex-end'">
+                <span [ngClass]="el.wrapText ? '' : 'truncate'">
+                  <span *ngIf="el.prefix" class="whitespace-pre">{{el.prefix}}</span>{{ getPreviewValue(el.field) }}<span *ngIf="el.suffix" class="whitespace-pre">{{el.suffix}}</span>
+                </span>
+              </div>
+
+              <!-- QR Element -->
+              <div *ngIf="el.type === 'qrcode'" class="w-full h-full flex items-center justify-center bg-white">
+                <div class="qr-placeholder flex flex-col items-center justify-center">
+                  <svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#1e1e1e" stroke-width="1.5">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                    <rect x="5" y="5" width="3" height="3" fill="#1e1e1e"/><rect x="16" y="5" width="3" height="3" fill="#1e1e1e"/>
+                    <rect x="5" y="16" width="3" height="3" fill="#1e1e1e"/>
+                  </svg>
+                  <span class="text-[7px] font-bold text-slate-400 mt-0.5">QR Code</span>
+                </div>
+              </div>
+
+              <!-- Resize handle -->
+              <div *ngIf="selectedElementId === el.id"
+                class="resize-handle absolute bottom-0 left-0 w-3 h-3 bg-indigo-500 cursor-nwse-resize rounded-tr-sm"
+                (mousedown)="onMouseDown($event, el, 'resize')">
+              </div>
+
+              <!-- Label badge -->
+              <div *ngIf="selectedElementId === el.id"
+                class="absolute -top-5 right-0 bg-indigo-600 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-t whitespace-nowrap">
+                {{el.label}}
+              </div>
+            </div>
+
+            <!-- Empty state -->
+            <div *ngIf="template.elements.length === 0" class="absolute inset-0 flex items-center justify-center">
+              <div class="text-center">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" class="mx-auto mb-2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                <p class="text-sm font-bold text-slate-400">فیلدها را از پنل سمت راست به بوم اضافه کنید</p>
+                <p class="text-[10px] text-slate-400 mt-1">یا روی هر فیلد کلیک کنید</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Canvas Footer -->
+        <div class="mt-5 text-center z-10">
+          <p class="text-[10px] text-slate-500 font-bold bg-slate-100/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
+            <span *ngIf="template.elements.length > 0">{{template.elements.length}} المان روی بوم</span>
+            <span *ngIf="template.elements.length === 0">بوم خالی — فیلدها را اضافه کنید</span>
+             · کلید Delete برای حذف · Escape برای لغو انتخاب
+          </p>
+        </div>
+
       </div>
     </div>
-    
-  </div>
+
+  </div><!-- /grid -->
+  </div><!-- /space-y-4 -->
+</div>

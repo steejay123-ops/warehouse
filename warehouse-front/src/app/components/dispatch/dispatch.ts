@@ -13,10 +13,11 @@ import { PersianDatePipe } from '../../shared';
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { SettingsService } from '../../services/settings';
 import { DraggableDirective } from '../../shared/directives/draggable.directive';
+import { LabelDesigner } from '../label-designer/label-designer';
 
 @Component({
   selector: 'app-dispatch',
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective, LabelDesigner],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css'
 })
@@ -71,6 +72,9 @@ export class Dispatch implements OnInit {
   isDynamicModalOpen = false;
   dynamicFormData: any = {};
   selectedItemIdForDynamic: any = null;
+
+  // Label Print Modal State
+  isLabelModalOpen = false;
 
   availableExportColumns: {key: string, label: string}[] = [];
 
@@ -439,12 +443,29 @@ export class Dispatch implements OnInit {
       this.toast.show('warning', 'ابتدا رکوردهایی که قصد چاپ لیبل آن‌ها را دارید انتخاب کنید.');
       return;
     }
-    // Update labels via backend or just local for now if backend doesn't support it directly.
-    // Assuming we have bulkTag or bulk_assign can handle label_status. But for now, we'll just show the toast and not send to backend since we don't have an endpoint for label printing status update yet.
-    // Actually, wait, bulkTag exists. Let's just mock the printing or call bulk_assign with tag_status? The user didn't ask to fix printing right now. I'll leave it local to not break it.
-    selected.forEach((r: any) => { r.labelStatus = 'printed'; });
-    this.toast.show('success', `دستور چاپ لیبل و ساخت QR Code برای ${selected.length} رکورد صادر شد.`);
+    this.isLabelModalOpen = true;
+  }
+
+  closeLabelModal() {
+    this.isLabelModalOpen = false;
+  }
+
+  onLabelPrintComplete() {
+    // Update label status for selected items locally
+    this.selectedItems.forEach((r: any) => { r.labelStatus = 'printed'; });
+    this.isLabelModalOpen = false;
     this.selectedItemIds = new Set(this.selectedItemIds);
+    this.cdr.detectChanges();
+  }
+
+  get labelPrintItemIds(): (string | number)[] {
+    return Array.from(this.selectedItemIds);
+  }
+
+  get activeWarehouseIdNumber(): number | null {
+    const id = this.state.appState.activeWarehouseId;
+    if (id && id !== 'ALL') return Number(id);
+    return null;
   }
 
   async executeFieldDispatch() {

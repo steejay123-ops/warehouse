@@ -59,3 +59,60 @@ class SystemSetting(models.Model):
         
     def __str__(self):
         return f"{self.key} - {'Global' if not self.warehouse else self.warehouse.name}"
+
+
+class LabelTemplate(models.Model):
+    """
+    Stores label layout design.
+    If warehouse is null → Global default template.
+    If warehouse is set → Override for that specific warehouse.
+    """
+    PAPER_CHOICES = [
+        ('A4', 'کاغذ A4'),
+        ('A3', 'کاغذ A3'),
+        ('roll', 'رول حرارتی'),
+    ]
+
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='label_templates', verbose_name="انبار"
+    )
+    name = models.CharField(max_length=100, default="پیش‌فرض", verbose_name="نام تمپلیت")
+
+    # Label physical dimensions (mm)
+    width_mm = models.IntegerField(default=70, verbose_name="عرض لیبل (mm)")
+    height_mm = models.IntegerField(default=40, verbose_name="ارتفاع لیبل (mm)")
+
+    # QR Code source field (which Item field to encode)
+    qr_source_field = models.CharField(
+        max_length=100, default='fa_unic_code',
+        verbose_name="فیلد منبع QR Code"
+    )
+
+    # Canvas elements: JSON array of positioned elements
+    # Each element: { field, x, y, width, height, fontSize, fontWeight, textAlign, type }
+    # type: 'text' | 'qrcode' | 'special'
+    # field: Item model field name, or special: '__print_date__', '__warehouse_name__', '__project_name__'
+    elements = models.JSONField(default=list, blank=True, verbose_name="المان‌های بوم")
+
+    # Print grid settings
+    paper_type = models.CharField(
+        max_length=10, choices=PAPER_CHOICES, default='A4',
+        verbose_name="نوع کاغذ"
+    )
+    grid_rows = models.IntegerField(default=7, verbose_name="تعداد سطر")
+    grid_cols = models.IntegerField(default=3, verbose_name="تعداد ستون")
+    margin_mm = models.IntegerField(default=5, verbose_name="حاشیه (mm)")
+
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "قالب لیبل"
+        verbose_name_plural = "قالب‌های لیبل"
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        scope = 'Global' if not self.warehouse else self.warehouse.name
+        return f"{self.name} ({scope})"

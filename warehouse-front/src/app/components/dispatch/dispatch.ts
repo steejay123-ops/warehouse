@@ -6,7 +6,6 @@ import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { DataTableComponent, TableColumnDirective } from '../../shared';
 import { ItemApiService } from '../../core/api/item-api.service';
-import { DynamicFieldApiService } from '../../core/api/dynamic-field-api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { ConfirmDialogService } from '../../shared';
 import { PersianDatePipe } from '../../shared';
@@ -43,7 +42,6 @@ export class Dispatch implements OnInit {
   selectedItemIds: Set<string> = new Set();
   availableTagsList: {label: string, value: string}[] = [];
 
-  isTagModalOpen = false;
   selectedItemsTags: string[] = [];
 
   // Server-side state
@@ -67,14 +65,9 @@ export class Dispatch implements OnInit {
   isExporting = false;
   exportSubscription?: Subscription;
 
-  // Dynamic Fields State
-  dynamicFields: any[] = [];
-  isDynamicModalOpen = false;
-  dynamicFormData: any = {};
-  selectedItemIdForDynamic: any = null;
-
   // Label Print Modal State
   isLabelModalOpen = false;
+  printItemsToPass: any[] = [];
 
   availableExportColumns: {key: string, label: string}[] = [];
 
@@ -93,8 +86,7 @@ export class Dispatch implements OnInit {
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService,
     private accountsService: AccountsHttpService,
-    private settingsService: SettingsService,
-    private dynamicFieldApi: DynamicFieldApiService
+    private settingsService: SettingsService
   ) {}
 
   ngOnInit() {
@@ -130,7 +122,6 @@ export class Dispatch implements OnInit {
     }
 
     this.loadItems();
-    this.loadDynamicFields();
 
     // خواندن تنظیم تایید سرپرست برای انبار فعال
     const whId = this.state.appState.activeWarehouseId;
@@ -311,15 +302,24 @@ export class Dispatch implements OnInit {
           docAssignee: r.doc_assignee || 'ثبت نشده'
         }));
         this.totalItems = res.count;
-        this.isLoading = false;
-        this.updateAvailableTags();
         
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.updateAvailableTags();
+          if (this.selectedItemIds.size > 0) {
+            this.updateSelectedItemsTags();
+          }
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
+        });
       },
       error: () => {
         this.toast.show('error', 'خطا در دریافت اطلاعات');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.markForCheck();
+          this.cdr.detectChanges();
+        });
       }
     });
   }
@@ -411,7 +411,9 @@ export class Dispatch implements OnInit {
   }
 
   onSelectionChange(selectedIds: Set<string>) {
-    this.selectedItemIds = selectedIds;
+    this.selectedItemIds = new Set(selectedIds);
+    this.updateSelectedItemsTags();
+    this.cdr.detectChanges();
   }
 
   onBulkUpdate(changedRows: any[]) {
@@ -443,6 +445,7 @@ export class Dispatch implements OnInit {
       this.toast.show('warning', 'ابتدا رکوردهایی که قصد چاپ لیبل آن‌ها را دارید انتخاب کنید.');
       return;
     }
+    this.printItemsToPass = [...selected];
     this.isLabelModalOpen = true;
   }
 
@@ -655,24 +658,13 @@ export class Dispatch implements OnInit {
       next: (res) => {
         this.newTagInput = '';
         this.toast.show('success', `تگ "${val}" با موفقیت به ${res.updated} رکورد افزوده شد.`);
-        if (this.isTagModalOpen && !this.selectedItemsTags.includes(val)) {
+        if (!this.selectedItemsTags.includes(val)) {
           this.selectedItemsTags.push(val);
         }
         this.loadItems();
       },
       error: () => this.toast.show('error', 'خطا در تگ‌گذاری')
     });
-  }
-
-  openTagModal() {
-    if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
-    this.updateSelectedItemsTags();
-    this.isTagModalOpen = true;
-  }
-
-  closeTagModal() {
-    this.isTagModalOpen = false;
-    this.newTagInput = '';
   }
 
   updateSelectedItemsTags() {
@@ -722,6 +714,45 @@ export class Dispatch implements OnInit {
 
   getSplitTags(tagStr: string) {
     return tagStr ? tagStr.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
+  }
+
+  filterByTag(tag: string, event: MouseEvent) {
+    event.stopPropagation();
+    
+    // Checkbox text filter uses the column key for the checkbox selections (comma separated)
+    const currentStr = this.state.appState.dispatchSettings.filters['tag'] || '';
+    const currentTags = currentStr.split(',').map((t: string) => t.trim()).filter((t: string) => t);
+    let newTags: string[] = [];
+
+    if (event.shiftKey) {
+      if (currentTags.includes(tag)) {
+        newTags = currentTags.filter((t: string) => t !== tag);
+      } else {
+        newTags = [...currentTags, tag];
+      }
+    } else {
+      if (currentTags.length === 1 && currentTags[0] === tag) {
+        newTags = [];
+      } else {
+        newTags = [tag];
+      }
+    }
+
+    const newValue = newTags.join(',');
+
+    this.state.appState.dispatchSettings.filters = {
+      ...this.state.appState.dispatchSettings.filters,
+      tag: newValue,
+      tag_search: ''
+    };
+    
+    if (this.dataTable) {
+      this.dataTable.filters = { ...this.state.appState.dispatchSettings.filters };
+    }
+    
+    this.currentPage = 1;
+    this.loadItems();
+    this.savePreferences();
   }
 
   // ────────── Export Methods ──────────
@@ -851,54 +882,6 @@ export class Dispatch implements OnInit {
     return true;
   }
 
-  // ---- Dynamic Fields Methods ----
-  loadDynamicFields() {
-    const whId = this.state.appState.activeWarehouseId;
-    if (whId && whId !== 'ALL') {
-      this.dynamicFieldApi.getFields(Number(whId)).subscribe({
-        next: (res: any) => {
-          this.dynamicFields = res.results || res;
-          this.cdr.detectChanges();
-        }
-      });
-    }
-  }
 
-  openDynamicFieldsModal() {
-    if (this.selectedItemIds.size !== 1) {
-      this.toast.show('warning', 'برای ثبت اطلاعات تکمیلی لطفاً دقیقاً یک رکورد را انتخاب کنید.');
-      return;
-    }
-    const id = Array.from(this.selectedItemIds)[0];
-    const item = this.items.find(i => i.id === id);
-    if (!item) return;
-
-    this.selectedItemIdForDynamic = id;
-    this.dynamicFormData = item.dynamic_data ? { ...item.dynamic_data } : {};
-    this.isDynamicModalOpen = true;
-  }
-
-  closeDynamicFieldsModal() {
-    this.isDynamicModalOpen = false;
-    this.selectedItemIdForDynamic = null;
-    this.dynamicFormData = {};
-  }
-
-  saveDynamicFields() {
-    if (!this.selectedItemIdForDynamic) return;
-    
-    this.itemApi.update(this.selectedItemIdForDynamic.toString(), {
-      dynamic_data: this.dynamicFormData
-    }).subscribe({
-      next: (res) => {
-        const item = this.items.find(i => i.id === this.selectedItemIdForDynamic);
-        if (item) item.dynamic_data = res.dynamic_data;
-        this.toast.show('success', 'اطلاعات تکمیلی با موفقیت ذخیره شد');
-        this.closeDynamicFieldsModal();
-        this.cdr.detectChanges();
-      },
-      error: () => this.toast.show('error', 'خطا در ذخیره اطلاعات تکمیلی')
-    });
-  }
 }
 

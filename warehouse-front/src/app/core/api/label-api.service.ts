@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { SKIP_GLOBAL_ERROR_TOAST } from '../error/error.interceptor';
 
 export interface LabelElement {
   id: string;
@@ -68,22 +69,37 @@ export class LabelApiService {
     return this.http.post<LabelTemplate>(`${this.apiUrl}/`, template);
   }
 
-  /** Update an existing template */
-  updateTemplate(id: number, template: Partial<LabelTemplate>): Observable<LabelTemplate> {
-    return this.http.put<LabelTemplate>(`${this.apiUrl}/${id}/`, template);
+  /** Update an existing template — warehouseId is passed as query param for backend protection */
+  updateTemplate(id: number, template: Partial<LabelTemplate>, warehouseId?: number | null): Observable<LabelTemplate> {
+    const params: any = {};
+    if (warehouseId) params.warehouse = warehouseId;
+    return this.http.put<LabelTemplate>(`${this.apiUrl}/${id}/`, template, { params });
   }
 
   /** Save (create or update) */
-  saveTemplate(template: Partial<LabelTemplate>): Observable<LabelTemplate> {
+  saveTemplate(template: Partial<LabelTemplate>, warehouseId?: number | null): Observable<LabelTemplate> {
     if (template.id) {
-      return this.updateTemplate(template.id, template);
+      return this.updateTemplate(template.id, template, warehouseId);
     }
     return this.createTemplate(template);
   }
 
-  /** Delete a template */
-  deleteTemplate(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}/`);
+  /** Delete a template — warehouseId is passed as query param for backend protection */
+  deleteTemplate(id: number, warehouseId?: number | null): Observable<void> {
+    const params: any = {};
+    if (warehouseId) params.warehouse = warehouseId;
+    return this.http.delete<void>(`${this.apiUrl}/${id}/`, { params });
+  }
+
+  /**
+   * Copy a template (Global or from another warehouse) to the target warehouse.
+   * The copy is created as inactive (is_active=false) and is fully independent.
+   */
+  copyToWarehouse(templateId: number, warehouseId: number, name?: string): Observable<LabelTemplate> {
+    return this.http.post<LabelTemplate>(
+      `${this.apiUrl}/${templateId}/copy-to-warehouse/`,
+      { warehouse_id: warehouseId, name }
+    );
   }
 
   /** Get available fields for label design */
@@ -94,12 +110,15 @@ export class LabelApiService {
   }
 
   /** Generate PDF for printing */
-  generatePdf(templateId: number, itemIds: (string | number)[]): Observable<Blob> {
+  generatePdf(templateId: number, itemsConfig: {id: string|number, quantity: number}[], customRemark?: string, printSettings?: any): Observable<Blob> {
     return this.http.post(`${this.apiUrl}/generate-pdf/`, {
       template_id: templateId,
-      item_ids: itemIds
+      items_config: itemsConfig,
+      custom_remark: customRemark,
+      print_settings: printSettings
     }, {
-      responseType: 'blob'
+      responseType: 'blob',
+      context: new HttpContext().set(SKIP_GLOBAL_ERROR_TOAST, true)
     });
   }
 }

@@ -1,8 +1,11 @@
-import { Component, OnInit, Input, Output, EventEmitter, ChangeDetectorRef, ElementRef, ViewChild } from '@angular/core';
+import { Component, OnInit, Input, Output, EventEmitter, ChangeDetectorRef, ElementRef, ViewChild, OnChanges, SimpleChanges, OnDestroy } from '@angular/core';
+import { Subject, Subscription, of } from 'rxjs';
+import { debounceTime, switchMap, catchError } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LabelApiService, LabelTemplate, LabelElement, AvailableField } from '../../core/api/label-api.service';
 import { ToastService } from '../../services/toast.service';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 @Component({
   selector: 'app-label-designer',
@@ -10,15 +13,15 @@ import { ToastService } from '../../services/toast.service';
   templateUrl: './label-designer.html',
   styleUrl: './label-designer.css'
 })
-export class LabelDesigner implements OnInit {
+export class LabelDesigner implements OnInit, OnChanges, OnDestroy {
   /** null = Global context, number = warehouse-specific */
   @Input() warehouseId: number | null = null;
 
   /** 'settings' = design mode in settings page, 'print' = print modal from dispatch */
   @Input() mode: 'settings' | 'print' = 'settings';
 
-  /** Item IDs to print (only used in 'print' mode) */
-  @Input() selectedItemIds: (string | number)[] = [];
+  /** Items to print (only used in 'print' mode) */
+  @Input() printItems: any[] = [];
 
   @Output() printComplete = new EventEmitter<void>();
 
@@ -31,6 +34,32 @@ export class LabelDesigner implements OnInit {
   isLoading = true;
   isSaving = false;
   isPrinting = false;
+
+  // Print Settings State
+  itemsConfig: { id: number | string, name: string, quantity: number }[] = [];
+  customRemark: string = '';
+  pdfPreviewUrl: SafeResourceUrl | null = null;
+  isGeneratingPreview = false;
+  
+  bulkQuantity: number = 1;
+  tempPrintSettings: {
+    paper_type: string;
+    margin_mm: number;
+    landscape: boolean;
+    scale: number;
+    collation: 'group' | 'collate';
+  } = {
+    paper_type: 'A4',
+    margin_mm: 5,
+    landscape: false,
+    scale: 100,
+    collation: 'group'
+  };
+
+  private previewSubject = new Subject<void>();
+  private previewSub?: Subscription;
+  private currentPreviewReq?: Subscription;
+  private currentBlobUrl?: string;
 
   // ─── Multi-template management ───────────────────────────────
   templates: LabelTemplate[] = [];          // all templates for this scope
@@ -71,12 +100,106 @@ export class LabelDesigner implements OnInit {
   constructor(
     private labelApi: LabelApiService,
     private toast: ToastService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit() {
     this.loadAllTemplates();
     this.loadFields();
+
+    this.previewSub = this.previewSubject.pipe(
+      debounceTime(600),
+      switchMap(() => {
+        if (!this.template.id || this.itemsConfig.length === 0) {
+          return of(null);
+        }
+        this.isGeneratingPreview = true;
+        this.cdr.detectChanges();
+
+        const configPayload = this.itemsConfig.map(c => ({ id: c.id, quantity: this.bulkQuantity }));
+        return this.labelApi.generatePdf(this.template.id, configPayload, this.customRemark, this.tempPrintSettings).pipe(
+          catchError(err => {
+            this.isGeneratingPreview = false;
+            if (err.status !== 0) {
+              this.toast.show('error', 'خطا در بارگذاری پیش‌نمایش PDF');
+            }
+            this.cdr.detectChanges();
+            return of(null);
+          })
+        );
+      })
+    ).subscribe((blob: Blob | null) => {
+      if (blob) {
+        if (this.currentBlobUrl) {
+          window.URL.revokeObjectURL(this.currentBlobUrl);
+        }
+        this.currentBlobUrl = window.URL.createObjectURL(blob);
+        this.pdfPreviewUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.currentBlobUrl);
+        this.isGeneratingPreview = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.previewSub) {
+      this.previewSub.unsubscribe();
+    }
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['printItems'] && this.printItems) {
+      this.initItemsConfig();
+    }
+  }
+
+  initItemsConfig() {
+    this.itemsConfig = this.printItems.map(item => ({
+      id: item.id,
+      name: item.fa_unic_code || item.plpkitem || `آیتم ${item.id}`,
+      quantity: 1
+    }));
+    this.bulkQuantity = 1;
+  }
+
+  onPrintSettingChange() {
+    // Sync bulk quantity to all items
+    this.itemsConfig.forEach(item => item.quantity = this.bulkQuantity);
+    this.previewSubject.next();
+  }
+
+  // ─── Global Template Helpers ─────────────────────────────────
+
+  /** آیا این لیبل از نوع Global است (بدون انبار مشخص)؟ */
+  isGlobalTemplate(t: LabelTemplate): boolean {
+    return !t.warehouse;
+  }
+
+  /**
+   * آیا لیبل فعلی در context انبار فقط‌خواندنی است؟
+   * (وقتی در منوی انبار هستیم ولی لیبل انتخاب‌شده Global است)
+   */
+  get isCurrentTemplateReadOnly(): boolean {
+    return this.warehouseId !== null && this.isGlobalTemplate(this.template);
+  }
+
+  /** کپی لیبل Global (یا هر لیبل دیگری) به انبار جاری */
+  copyToThisWarehouse(t: LabelTemplate) {
+    if (!this.warehouseId || !t.id) return;
+    const name = `کپی ${t.name}`;
+    this.labelApi.copyToWarehouse(t.id, this.warehouseId, name).subscribe({
+      next: (saved) => {
+        this.templates.push(saved);
+        this.activateTemplate(saved);
+        this.toast.show('success', `لیبل "${saved.name}" برای این انبار کپی شد. اکنون می‌توانید آن را ویرایش کنید.`);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در کپی لیبل. لطفاً دوباره تلاش کنید.');
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   getDefaultTemplate(): LabelTemplate {
@@ -207,12 +330,30 @@ export class LabelDesigner implements OnInit {
     this.isCopying = false;
     this.deleteConfirmId = null;
     this.checkGridWarning();
+
+    this.tempPrintSettings = {
+      paper_type: this.template.paper_type || 'A4',
+      margin_mm: this.template.margin_mm ?? 5,
+      landscape: false,
+      scale: 100,
+      collation: 'group'
+    };
+
+    // Auto-refresh preview when in print mode
+    if (this.mode === 'print' && this.itemsConfig.length > 0) {
+      setTimeout(() => this.refreshPreview(), 100);
+    }
   }
 
   /** Switch to another template by id */
   switchTemplate(id: number) {
     const found = this.templates.find(t => t.id === id);
-    if (found) this.activateTemplate(found);
+    if (found) {
+      this.activateTemplate(found);
+      if (this.mode === 'print') {
+        this.refreshPreview();
+      }
+    }
     this.cdr.detectChanges();
   }
 
@@ -351,7 +492,16 @@ export class LabelDesigner implements OnInit {
 
   /** Actually delete template */
   confirmDelete(id: number) {
-    this.labelApi.deleteTemplate(id).subscribe({
+    // محافظت: لیبل‌های Global در context انبار قابل حذف نیستند
+    const t = this.templates.find(x => x.id === id);
+    if (t && this.warehouseId !== null && this.isGlobalTemplate(t)) {
+      this.toast.show('warning', 'لیبل‌های Global از منوی انبار قابل حذف نیستند. از دکمه «کپی به این انبار» استفاده کنید.');
+      this.deleteConfirmId = null;
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.labelApi.deleteTemplate(id, this.warehouseId).subscribe({
       next: () => {
         this.templates = this.templates.filter(t => t.id !== id);
         this.deleteConfirmId = null;
@@ -476,6 +626,7 @@ export class LabelDesigner implements OnInit {
   }
 
   selectElement(el: LabelElement, event: MouseEvent) {
+    if (this.mode === 'print') return;
     event.stopPropagation();
     this.selectedElementId = el.id;
     this.cdr.detectChanges();
@@ -489,6 +640,7 @@ export class LabelDesigner implements OnInit {
   // ─── Drag & Drop (Mouse Events) ─────────────────────────────
 
   onMouseDown(event: MouseEvent, el: LabelElement, action: 'drag' | 'resize') {
+    if (this.mode === 'print') return;
     event.preventDefault();
     event.stopPropagation();
     this.selectedElementId = el.id;
@@ -543,10 +695,15 @@ export class LabelDesigner implements OnInit {
   // ─── Save & Print ────────────────────────────────────────────
 
   saveTemplate() {
+    // محافظت: لیبل‌های Global در context انبار قابل ذخیره نیستند
+    if (this.isCurrentTemplateReadOnly) {
+      this.toast.show('warning', 'لیبل Global فقط‌خواندنی است. برای سفارشی‌سازی از دکمه «کپی به این انبار» استفاده کنید.');
+      return;
+    }
     this.isSaving = true;
     this.template.warehouse = this.warehouseId;
 
-    this.labelApi.saveTemplate(this.template).subscribe({
+    this.labelApi.saveTemplate(this.template, this.warehouseId).subscribe({
       next: (saved) => {
         this.template = saved;
         if (!Array.isArray(this.template.elements)) this.template.elements = [];
@@ -569,18 +726,49 @@ export class LabelDesigner implements OnInit {
     });
   }
 
+  refreshPreview() {
+    if (!this.template.id || this.itemsConfig.length === 0) return;
+    this.previewSubject.next();
+  }
+
+  directPrint() {
+    if (!this.template.id || this.itemsConfig.length === 0) return;
+    this.isPrinting = true;
+    const configPayload = this.itemsConfig.map(c => ({ id: c.id, quantity: this.bulkQuantity }));
+    
+    this.labelApi.generatePdf(this.template.id, configPayload, this.customRemark, this.tempPrintSettings).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        
+        this.isPrinting = false;
+        this.printComplete.emit();
+        this.cdr.detectChanges();
+        
+        setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+      },
+      error: () => {
+        this.isPrinting = false;
+        this.toast.show('error', 'خطا در پرینت PDF.');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   requestPrint() {
     if (!this.template.id) {
       this.toast.show('warning', 'ابتدا ساختار لیبل را ذخیره کنید.');
       return;
     }
-    if (!this.selectedItemIds.length) {
+    if (this.itemsConfig.length === 0) {
       this.toast.show('warning', 'رکوردی برای چاپ انتخاب نشده است.');
       return;
     }
 
     this.isPrinting = true;
-    this.labelApi.generatePdf(this.template.id, this.selectedItemIds).subscribe({
+    const configPayload = this.itemsConfig.map(c => ({ id: c.id, quantity: this.bulkQuantity }));
+
+    this.labelApi.generatePdf(this.template.id, configPayload, this.customRemark, this.tempPrintSettings).subscribe({
       next: (blob) => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -592,7 +780,7 @@ export class LabelDesigner implements OnInit {
         window.URL.revokeObjectURL(url);
 
         this.isPrinting = false;
-        this.toast.show('success', `فایل PDF لیبل‌ها (${this.selectedItemIds.length} رکورد) دانلود شد.`);
+        this.toast.show('success', `فایل PDF لیبل‌ها دانلود شد.`);
         this.printComplete.emit();
         this.cdr.detectChanges();
       },
@@ -627,9 +815,10 @@ export class LabelDesigner implements OnInit {
       'irn_no': 'IRN-2024-078',
       'tag': 'فوری، مهم',
       'remark': 'بررسی شود',
-      '__print_date__': '۱۴۰۵/۰۵/۰۴ ۱۲:۴۵',
-      '__warehouse_name__': 'انبار اصلی فارس',
-      '__project_name__': 'پالایشگاه بیدبلند',
+      '__print_date__': '۱۴۰۳/۰۵/۰۷ ۱۰:۳۰',
+      '__warehouse_name__': 'انبار قطعات اصلی',
+      '__project_name__': 'پالایشگاه ستاره',
+      '__custom_remark__': this.customRemark || 'توضیحات ویژه...',
     };
     return previews[field] || field;
   }
@@ -657,8 +846,14 @@ export class LabelDesigner implements OnInit {
     return this.template.elements.some(e => e.type === 'qrcode');
   }
 
+  /** Check if custom remark field exists on canvas */
+  get hasCustomRemarkField(): boolean {
+    return this.template.elements.some(e => e.field === '__custom_remark__');
+  }
+
   /** Keyboard shortcut: Delete selected element */
   onKeyDown(event: KeyboardEvent) {
+    if (this.mode === 'print') return;
     if (event.key === 'Delete' && this.selectedElement) {
       this.removeElement(this.selectedElement);
     }

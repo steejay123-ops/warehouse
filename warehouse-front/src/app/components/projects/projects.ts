@@ -6,10 +6,13 @@ import { StateService } from '../../services/state.service';
 import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponent, HasPermissionDirective } from '../../shared';
 import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
+import { ImportResult } from '../../core/http/accounts-http.service';
+import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-projects',
-  imports: [CommonModule, FormsModule, ModalComponent, HasPermissionDirective],
+  imports: [CommonModule, FormsModule, ModalComponent, HasPermissionDirective, ExcelImportModal],
   templateUrl: './projects.html',
   styleUrl: './projects.css'
 })
@@ -24,6 +27,11 @@ export class Projects implements OnInit {
   openDropdownId: number | null = null;
   
   projects: Warehouse[] = [];
+
+  // Excel Import/Export
+  isExcelModalOpen = false;
+  excelImportFn!: (file: File) => Observable<ImportResult>;
+  excelTemplateFn!: () => void;
 
   // Edit Model
   editingProject: any = null;
@@ -207,5 +215,47 @@ export class Projects implements OnInit {
 
   goToDocs() {
     this.router.navigate(['/docs']);
+  }
+
+  // ── Excel Import/Export ──────────────────────────────────────────
+  private triggerDownloadBlob(blob: Blob, filename: string) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  exportWarehousesExcel() {
+    this.whService.exportExcel().subscribe(blob => {
+      this.triggerDownloadBlob(blob, 'warehouses_export.xlsx');
+      this.toast.show('success', 'فایل اکسل انبارها با موفقیت دانلود شد.');
+    });
+  }
+
+  openWarehouseImportModal() {
+    this.excelImportFn = (file: File) => this.whService.importExcel(file);
+    this.excelTemplateFn = () => this.downloadWarehouseTemplate();
+    this.isExcelModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  downloadWarehouseTemplate() {
+    this.whService.downloadTemplate().subscribe(blob => {
+      this.triggerDownloadBlob(blob, 'warehouses_template.xlsx');
+    });
+  }
+
+  onExcelImported(result: ImportResult) {
+    if (result.success && result.summary.created > 0) {
+      this.toast.show('success', `${result.summary.created} انبار با موفقیت ایجاد شد.`);
+      this.loadWarehouses();
+    }
+  }
+
+  closeExcelModal() {
+    this.isExcelModalOpen = false;
+    this.cdr.detectChanges();
   }
 }

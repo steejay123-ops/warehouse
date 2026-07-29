@@ -53,13 +53,17 @@ def _register_font():
 
 
 class LabelPdfGenerator:
-    def __init__(self, template, items):
+    def __init__(self, template, items, custom_remark='', print_settings=None):
         """
         template: LabelTemplate model instance
         items: list of Item model instances
+        custom_remark: string for __custom_remark__ field
+        print_settings: dict containing temporary layout/paper overrides
         """
         self.template = template
         self.items = items
+        self.custom_remark = custom_remark
+        self.print_settings = print_settings or {}
 
     def generate(self):
         """Generate PDF and return BytesIO buffer."""
@@ -67,34 +71,58 @@ class LabelPdfGenerator:
 
         buffer = io.BytesIO()
 
-        if self.template.paper_type == 'roll':
-            page_size = (self.template.width_mm * mm, self.template.height_mm * mm)
-        elif self.template.paper_type == 'A3':
+        paper_type = self.print_settings.get('paper_type', self.template.paper_type)
+        margin_mm_val = float(self.print_settings.get('margin_mm', self.template.margin_mm))
+        landscape_mode = bool(self.print_settings.get('landscape', False))
+        scale_pct = float(self.print_settings.get('scale', 100))
+        scale_factor = max(0.5, min(1.5, scale_pct / 100.0))
+
+        # Label dimensions from template, adjusted by scale
+        width_mm = float(self.template.width_mm) * scale_factor
+        height_mm = float(self.template.height_mm) * scale_factor
+
+        if paper_type == 'roll':
+            page_size = (width_mm * mm, height_mm * mm)
+            margin_mm_val = 0
+        elif paper_type == 'A3':
             page_size = A3
         else:
             page_size = A4
 
+        if landscape_mode and paper_type != 'roll':
+            from reportlab.lib.pagesizes import landscape as rl_landscape
+            page_size = rl_landscape(page_size)
+
         c = canvas.Canvas(buffer, pagesize=page_size)
         page_w, page_h = page_size
 
-        if self.template.paper_type == 'roll':
+        if paper_type == 'roll':
             # One label per page for roll printers
             for item in self.items:
-                self._draw_label(c, item, 0, 0,
-                                 self.template.width_mm * mm,
-                                 self.template.height_mm * mm)
+                self._draw_label(c, item, 0, 0, width_mm * mm, height_mm * mm, scale_factor)
                 c.showPage()
         else:
-            # Grid layout on sheet paper
-            label_w = self.template.width_mm * mm
-            label_h = self.template.height_mm * mm
-            margin = self.template.margin_mm * mm
-            cols = self.template.grid_cols
-            rows = self.template.grid_rows
+            # Auto-calculate grid from page size and label dimensions
+            label_w = width_mm * mm
+            label_h = height_mm * mm
+            margin = margin_mm_val * mm
 
-            # Calculate actual spacing
+            # We want a gap equal to `margin` between labels. 
+            # Number of cols: (cols * label_w) + (cols-1)*margin <= page_w - 2*margin
+            # => cols * (label_w + margin) - margin <= page_w - 2*margin
+            # => cols * (label_w + margin) <= page_w - margin
+            # cols = int((page_w - margin) / (label_w + margin))
+            
+            usable_w = page_w - margin
+            usable_h = page_h - margin
+
+            cols = max(1, int(usable_w / (label_w + margin)))
+            rows = max(1, int(usable_h / (label_h + margin)))
+
+            # Center the grid on the page
             total_w = cols * label_w + (cols - 1) * margin
             total_h = rows * label_h + (rows - 1) * margin
+            
             offset_x = (page_w - total_w) / 2
             offset_y = page_h - (page_h - total_h) / 2 - label_h
 
@@ -106,7 +134,7 @@ class LabelPdfGenerator:
                             break
                         x = offset_x + col * (label_w + margin)
                         y = offset_y - row * (label_h + margin)
-                        self._draw_label(c, self.items[item_index], x, y, label_w, label_h)
+                        self._draw_label(c, self.items[item_index], x, y, label_w, label_h, scale_factor)
                         item_index += 1
                     if item_index >= len(self.items):
                         break
@@ -116,16 +144,17 @@ class LabelPdfGenerator:
         buffer.seek(0)
         return buffer
 
-    def _draw_label(self, c, item, x, y, w, h):
+    def _draw_label(self, c, item, x, y, w, h, scale_factor):
         """Draw a single label at position (x, y) with dimensions (w, h)."""
         # Draw border
         c.setStrokeColorRGB(0.7, 0.7, 0.7)
         c.setLineWidth(0.5)
         c.rect(x, y, w, h)
 
-        # Scale factor: template dimensions in mm → points
-        scale_x = w / (self.template.width_mm if self.template.width_mm > 0 else 70)
-        scale_y = h / (self.template.height_mm if self.template.height_mm > 0 else 40)
+        # Elements coordinates in DB are in mm, we convert to points (mm = 2.8346 pts)
+        # Also apply the user scale_factor.
+        scale_x = scale_factor * mm
+        scale_y = scale_factor * mm
 
         for element in self.template.elements:
             el_type = element.get('type', 'text')
@@ -138,7 +167,7 @@ class LabelPdfGenerator:
                 self._draw_qr(c, item, el_x, el_y, min(el_w, el_h))
             else:
                 value = self._resolve_field(item, element.get('field', ''))
-                font_size = element.get('fontSize', 9)
+                font_size = element.get('fontSize', 9) * scale_factor
                 font_weight = element.get('fontWeight', 'normal')
 
                 font_name = _FONT_NAME
@@ -232,6 +261,9 @@ class LabelPdfGenerator:
 
         if field_key == '__project_name__':
             return item.warehouse.project_name if item.warehouse else ''
+
+        if field_key == '__custom_remark__':
+            return self.custom_remark
 
         # Dynamic fields
         if field_key.startswith('dynamic__'):

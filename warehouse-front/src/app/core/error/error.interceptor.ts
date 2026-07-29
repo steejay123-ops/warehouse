@@ -4,9 +4,12 @@ import {
   HttpRequest,
   HttpHandlerFn,
   HttpErrorResponse,
+  HttpContextToken,
 } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../../services/toast.service';
+
+export const SKIP_GLOBAL_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
 
 /**
  * Global Error Interceptor — خطاهای HTTP را catch کرده و toast مناسب نمایش می‌دهد
@@ -20,6 +23,10 @@ export const errorInterceptor: HttpInterceptorFn = (
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
+      if (req.context.get(SKIP_GLOBAL_ERROR_TOAST)) {
+        return throwError(() => error);
+      }
+
       // 401 توسط auth interceptor مدیریت می‌شود
       if (error.status === 401) {
         return throwError(() => error);

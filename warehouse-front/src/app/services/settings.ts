@@ -39,4 +39,20 @@ export class SettingsService {
   resetWarehouseSettings(warehouseId: number, keys: string[]): Observable<any> {
     return this.http.delete(`${this.apiUrl}/warehouses/${warehouseId}/settings/`, { body: { keys } });
   }
+
+  downloadBackup(password: string): Observable<Blob> {
+    return this.http.post(
+      `${this.apiUrl}/backup/create/`,
+      { password },
+      { responseType: 'blob' }
+    );
+  }
+
+  restoreBackup(file: File, password: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('password', password);
+    return this.http.post(`${this.apiUrl}/backup/restore/`, formData);
+  }
 }
+

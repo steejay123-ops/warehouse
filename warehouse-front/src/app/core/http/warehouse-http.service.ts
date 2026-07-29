@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { ImportResult } from './accounts-http.service';
 
 export interface Warehouse {
   id: number;
@@ -58,5 +59,20 @@ export class WarehouseHttpService {
 
   toggleArchive(id: number): Observable<Warehouse> {
     return this.http.patch<Warehouse>(`${this.baseUrl}${id}/toggle_archive/`, {});
+  }
+
+  // ── Excel Import/Export ────────────────────────────────────────────
+  exportExcel(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}export_excel/`, { responseType: 'blob' });
+  }
+
+  importExcel(file: File): Observable<ImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<ImportResult>(`${this.baseUrl}import_excel/`, formData);
+  }
+
+  downloadTemplate(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}download_template/`, { responseType: 'blob' });
   }
 }

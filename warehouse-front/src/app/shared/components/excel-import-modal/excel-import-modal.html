@@ -1,0 +1,160 @@
+<!-- Backdrop -->
+<div class="modal-backdrop" (click)="close()"></div>
+
+<!-- Modal -->
+<div class="modal-container" dir="rtl">
+  <!-- Header -->
+  <div class="modal-header">
+    <h2>{{ title }}</h2>
+    <button class="close-btn" (click)="close()" title="بستن">✕</button>
+  </div>
+
+  <!-- Body -->
+  <div class="modal-body">
+
+    <!-- Step 1: File Selection (before upload) -->
+    <div *ngIf="!result" class="upload-section">
+
+      <!-- Drag & Drop Zone -->
+      <div
+        class="drop-zone"
+        [class.dragging]="isDragging"
+        [class.has-file]="!!selectedFile"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave($event)"
+        (drop)="onDrop($event)"
+        (click)="fileInput.click()"
+      >
+        <input
+          #fileInput
+          type="file"
+          accept=".xlsx"
+          (change)="onFileSelect($event)"
+          style="display: none"
+        />
+
+        <div *ngIf="!selectedFile && !isUploading" class="drop-placeholder">
+          <div class="drop-icon">📥</div>
+          <p class="drop-text">فایل اکسل را اینجا رها کنید</p>
+          <p class="drop-subtext">یا برای انتخاب فایل کلیک کنید</p>
+          <span class="drop-badge">.xlsx</span>
+        </div>
+
+        <div *ngIf="selectedFile && !isUploading" class="file-preview">
+          <div class="file-icon">📊</div>
+          <div class="file-info">
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+          </div>
+          <button class="remove-file-btn" (click)="removeFile(); $event.stopPropagation()" title="حذف فایل">✕</button>
+        </div>
+
+        <!-- Uploading State -->
+        <div *ngIf="isUploading" class="uploading-state">
+          <div class="spinner"></div>
+          <p class="uploading-text">در حال پردازش فایل...</p>
+          <div class="progress-bar-container">
+            <div class="progress-bar" [style.width.%]="uploadProgress"></div>
+          </div>
+          <span class="progress-text">{{ uploadProgress | number:'1.0-0' }}%</span>
+        </div>
+      </div>
+
+      <!-- File Error -->
+      <div *ngIf="fileError" class="file-error">
+        <span class="error-icon">⚠️</span>
+        {{ fileError }}
+      </div>
+
+      <!-- Template Download Hint -->
+      <div class="template-hint">
+        <span class="hint-icon">💡</span>
+        <span>ساختار فایل آپلودی باید مطابق فایل قالب باشد.</span>
+        <button class="template-link" (click)="downloadTemplate(); $event.stopPropagation()">
+          دانلود فایل نمونه
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Results -->
+    <div *ngIf="result" class="result-section">
+
+      <!-- Success Summary -->
+      <div *ngIf="result.success" class="result-summary success">
+        <div class="summary-icon">✅</div>
+        <div class="summary-details">
+          <h3>آپلود با موفقیت انجام شد</h3>
+          <div class="summary-stats">
+            <div class="stat">
+              <span class="stat-value">{{ result.summary.total_rows }}</span>
+              <span class="stat-label">کل سطرها</span>
+            </div>
+            <div class="stat stat-success">
+              <span class="stat-value">{{ result.summary.created }}</span>
+              <span class="stat-label">ایجاد شده</span>
+            </div>
+            <div class="stat stat-warning" *ngIf="result.summary.skipped > 0">
+              <span class="stat-value">{{ result.summary.skipped }}</span>
+              <span class="stat-label">رد شده</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Summary (when file-level error or all failed) -->
+      <div *ngIf="!result.success" class="result-summary error">
+        <div class="summary-icon">❌</div>
+        <div class="summary-details">
+          <h3>خطا در پردازش فایل</h3>
+        </div>
+      </div>
+
+      <!-- Error Details Table -->
+      <div *ngIf="result.errors && result.errors.length > 0" class="errors-section">
+        <h4 class="errors-title">
+          <span class="errors-icon">📋</span>
+          جزئیات خطاها ({{ result.errors.length }} مورد)
+        </h4>
+        <div class="errors-table-wrapper">
+          <table class="errors-table">
+            <thead>
+              <tr>
+                <th>ردیف</th>
+                <th>فیلد</th>
+                <th>توضیح خطا</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let err of result.errors">
+                <td class="row-num">{{ err.row > 0 ? err.row : '-' }}</td>
+                <td class="field-name">{{ err.field }}</td>
+                <td class="error-msg">{{ err.message }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Upload Another -->
+      <button class="upload-another-btn" (click)="removeFile()">
+        آپلود فایل دیگر
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="modal-footer" *ngIf="!result">
+    <button class="btn btn-secondary" (click)="close()">انصراف</button>
+    <button
+      class="btn btn-primary"
+      [disabled]="!selectedFile || isUploading"
+      (click)="startUpload()"
+    >
+      <span *ngIf="!isUploading">شروع آپلود</span>
+      <span *ngIf="isUploading">در حال پردازش...</span>
+    </button>
+  </div>
+  <div class="modal-footer" *ngIf="result">
+    <button class="btn btn-primary" (click)="close()">بستن</button>
+  </div>
+</div>

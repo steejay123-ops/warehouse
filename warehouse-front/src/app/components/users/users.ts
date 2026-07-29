@@ -4,15 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { AuthService } from '../../core/auth/auth.service';
-import { AccountsHttpService, User, Role, Permission } from '../../core/http/accounts-http.service';
+import { AccountsHttpService, User, Role, Permission, ImportResult } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
 import { IdCards } from '../id-cards/id-cards';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, FormsModule, ClickOutsideDirective, IdCards],
+  imports: [CommonModule, FormsModule, ClickOutsideDirective, IdCards, ExcelImportModal],
   templateUrl: './users.html',
   styleUrl: './users.css'
 })
@@ -47,6 +49,12 @@ export class Users implements OnInit {
   systemPermissions: Permission[] = [];
   systemPermissionGroups: { key: string, title: string, items: Permission[] }[] = [];
   isLoading = false;
+
+  // Excel Import/Export
+  isExcelModalOpen = false;
+  excelModalTitle = '';
+  excelImportFn!: (file: File) => Observable<ImportResult>;
+  excelTemplateFn!: () => void;
 
   constructor(
     public state: StateService,
@@ -441,5 +449,69 @@ export class Users implements OnInit {
   }
   getRoleTitleForForm(r: any) {
     return r.title || r.name;
+  }
+
+  // ── Excel Import/Export ──────────────────────────────────────────
+  private triggerDownload(blob: Blob, filename: string) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  exportUsersExcel() {
+    this.accountsService.exportUsersExcel().subscribe(blob => {
+      this.triggerDownload(blob, 'users_export.xlsx');
+      this.toast.show('success', 'فایل اکسل کاربران با موفقیت دانلود شد.');
+    });
+  }
+
+  openUsersImportModal() {
+    this.excelModalTitle = 'آپلود دسته‌جمعی کاربران';
+    this.excelImportFn = (file: File) => this.accountsService.importUsersExcel(file);
+    this.excelTemplateFn = () => this.downloadUsersTemplate();
+    this.isExcelModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  downloadUsersTemplate() {
+    this.accountsService.downloadUsersTemplate().subscribe(blob => {
+      this.triggerDownload(blob, 'users_template.xlsx');
+    });
+  }
+
+  exportRolesExcel() {
+    this.accountsService.exportRolesExcel().subscribe(blob => {
+      this.triggerDownload(blob, 'roles_export.xlsx');
+      this.toast.show('success', 'فایل اکسل نقش‌ها با موفقیت دانلود شد.');
+    });
+  }
+
+  openRolesImportModal() {
+    this.excelModalTitle = 'آپلود دسته‌جمعی نقش‌ها';
+    this.excelImportFn = (file: File) => this.accountsService.importRolesExcel(file);
+    this.excelTemplateFn = () => this.downloadRolesTemplate();
+    this.isExcelModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  downloadRolesTemplate() {
+    this.accountsService.downloadRolesTemplate().subscribe(blob => {
+      this.triggerDownload(blob, 'roles_template.xlsx');
+    });
+  }
+
+  onExcelImported(result: ImportResult) {
+    if (result.success && result.summary.created > 0) {
+      this.toast.show('success', `${result.summary.created} رکورد با موفقیت ایجاد شد.`);
+      this.loadData();
+    }
+  }
+
+  closeExcelModal() {
+    this.isExcelModalOpen = false;
+    this.cdr.detectChanges();
   }
 }

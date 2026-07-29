@@ -38,9 +38,9 @@ class UserViewSet(viewsets.ModelViewSet):
         
         if self.action in ['change_password', 'update_preferences']:
             permission_classes = [IsAuthenticated()]
-        elif self.action in ['list', 'retrieve']:
+        elif self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
             permission_classes = [HasMenuAccess('view_sys_users')]
-        elif self.action == 'create':
+        elif self.action in ['create', 'import_excel']:
             permission_classes = [HasMenuAccess('perm_usr_add')]
         else: # update, partial_update, destroy, toggle_status
             permission_classes = [HasMenuAccess('perm_usr_edit')]
@@ -125,6 +125,68 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({'status': 'success', 'preferences': user.ui_preferences})
         return Response({'error': 'Invalid preferences format'}, status=400)
 
+    # ── Excel Import/Export Actions ──────────────────────────────────
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Download all users as an Excel file."""
+        from .excel_utils import generate_users_excel
+        queryset = self.get_queryset()
+        return generate_users_excel(queryset)
+
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download an empty Excel template with sample data."""
+        from .excel_utils import generate_users_template
+        return generate_users_template()
+
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Upload an Excel file and bulk-create users."""
+        from .excel_utils import parse_users_excel
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فایلی انتخاب نشده است.'}]}, status=400)
+
+        if not file.name.endswith('.xlsx'):
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
+
+        result = parse_users_excel(file)
+
+        # If there are file-level errors (row=0), return immediately
+        file_errors = [e for e in result['errors'] if e['row'] == 0]
+        if file_errors:
+            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
+
+        created_count = 0
+        for row_data in result['valid_rows']:
+            roles = row_data.pop('roles', [])
+            warehouses = row_data.pop('warehouses', [])
+            password = row_data.get('national_code') or '123456'
+
+            user = CustomUser(**row_data)
+            user.set_password(password)
+            user.requires_password_change = True
+            if request.user and request.user.is_authenticated:
+                user.created_by = request.user
+            user.save()
+
+            if roles:
+                user.groups.set(roles)
+            if warehouses:
+                user.assigned_warehouses.set(warehouses)
+            created_count += 1
+
+        total_rows = created_count + len(result['errors'])
+        return Response({
+            'success': True,
+            'summary': {
+                'total_rows': total_rows,
+                'created': created_count,
+                'skipped': len(result['errors'])
+            },
+            'errors': result['errors']
+        })
+
 class CustomRoleViewSet(viewsets.ModelViewSet):
     queryset = CustomRole.objects.all()
     serializer_class = CustomRoleSerializer
@@ -136,6 +198,70 @@ class CustomRoleViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return CustomRole.objects.all()
+
+    # ── Excel Import/Export Actions ──────────────────────────────────
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Download all roles as an Excel file."""
+        from .roles_excel_utils import generate_roles_excel
+        queryset = self.get_queryset()
+        return generate_roles_excel(queryset)
+
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download an empty Excel template with sample data."""
+        from .roles_excel_utils import generate_roles_template
+        return generate_roles_template()
+
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Upload an Excel file and bulk-create roles."""
+        from .roles_excel_utils import parse_roles_excel
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فایلی انتخاب نشده است.'}]}, status=400)
+
+        if not file.name.endswith('.xlsx'):
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
+
+        result = parse_roles_excel(file)
+
+        file_errors = [e for e in result['errors'] if e['row'] == 0]
+        if file_errors:
+            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
+
+        created_count = 0
+        # Two-pass creation: first create roles without parents, then set parents
+        created_roles = {}
+        for row_data in result['valid_rows']:
+            permissions = row_data.pop('permissions', [])
+            parent_name = row_data.pop('parent_name', None)
+
+            role = CustomRole(name=row_data['name'], title=row_data['title'], color=row_data['color'])
+            role.save()
+            if permissions:
+                role.permissions.set(permissions)
+            created_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
+            created_count += 1
+
+        # Second pass: resolve parents
+        for name, info in created_roles.items():
+            if info['parent_name']:
+                parent = CustomRole.objects.filter(name=info['parent_name']).first()
+                if parent:
+                    info['role'].parent = parent
+                    info['role'].save()
+
+        total_rows = created_count + len(result['errors'])
+        return Response({
+            'success': True,
+            'summary': {
+                'total_rows': total_rows,
+                'created': created_count,
+                'skipped': len(result['errors'])
+            },
+            'errors': result['errors']
+        })
 
 
 

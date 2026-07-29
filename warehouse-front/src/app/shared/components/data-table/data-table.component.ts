@@ -397,7 +397,7 @@ export interface PageEvent {
             }
           </thead>
 
-          <tbody class="divide-y divide-slate-100 bg-white">
+          <tbody class="divide-y divide-slate-100 bg-white transition-opacity duration-300" [class.opacity-50]="isLoading" [class.pointer-events-none]="isLoading">
             @for (row of data; track trackByFn(row); let i = $index) {
               <tr
                 class="transition-colors group"

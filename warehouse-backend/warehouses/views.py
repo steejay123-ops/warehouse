@@ -13,9 +13,9 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         from rest_framework.permissions import IsAuthenticated
         from accounts.permissions import HasMenuAccess
         
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
             permission_classes = [IsAuthenticated()]
-        elif self.action == 'create':
+        elif self.action in ['create', 'import_excel']:
             permission_classes = [HasMenuAccess('perm_wh_create')]
         elif self.action == 'toggle_archive':
             permission_classes = [HasMenuAccess('perm_wh_freeze')]
@@ -37,6 +37,56 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         warehouse.is_active = not warehouse.is_active
         warehouse.save()
         return Response(self.get_serializer(warehouse).data)
+
+    # ── Excel Import/Export Actions ──────────────────────────────────
+    @action(detail=False, methods=['get'])
+    def export_excel(self, request):
+        """Download all warehouses as an Excel file."""
+        from .excel_utils import generate_warehouses_excel
+        queryset = self.get_queryset()
+        return generate_warehouses_excel(queryset)
+
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Download an empty Excel template with sample data."""
+        from .excel_utils import generate_warehouses_template
+        return generate_warehouses_template()
+
+    @action(detail=False, methods=['post'])
+    def import_excel(self, request):
+        """Upload an Excel file and bulk-create warehouses."""
+        from .excel_utils import parse_warehouses_excel
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فایلی انتخاب نشده است.'}]}, status=400)
+
+        if not file.name.endswith('.xlsx'):
+            return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
+
+        result = parse_warehouses_excel(file)
+
+        file_errors = [e for e in result['errors'] if e['row'] == 0]
+        if file_errors:
+            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
+
+        created_count = 0
+        for row_data in result['valid_rows']:
+            wh = Warehouse(**row_data)
+            if request.user and request.user.is_authenticated:
+                wh.created_by = request.user
+            wh.save()
+            created_count += 1
+
+        total_rows = created_count + len(result['errors'])
+        return Response({
+            'success': True,
+            'summary': {
+                'total_rows': total_rows,
+                'created': created_count,
+                'skipped': len(result['errors'])
+            },
+            'errors': result['errors']
+        })
 
 class SettingsViewSet(viewsets.ViewSet):
     def get_permissions(self):

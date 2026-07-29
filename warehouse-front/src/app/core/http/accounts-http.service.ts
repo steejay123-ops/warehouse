@@ -38,6 +38,12 @@ export interface User {
   assigned_warehouses: string[];
 }
 
+export interface ImportResult {
+  success: boolean;
+  summary: { total_rows: number; created: number; skipped: number };
+  errors: { row: number; field: string; message: string }[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class AccountsHttpService {
   private apiUrl = environment.apiUrl;
@@ -96,5 +102,35 @@ export class AccountsHttpService {
     return this.http.get<any>(`${this.apiUrl}/auth/permissions/`).pipe(
       map(res => res.results !== undefined ? res.results : res)
     );
+  }
+
+  // ── Users Excel ──────────────────────────────────────────────────
+  exportUsersExcel(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/auth/users/export_excel/`, { responseType: 'blob' });
+  }
+
+  importUsersExcel(file: File): Observable<ImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<ImportResult>(`${this.apiUrl}/auth/users/import_excel/`, formData);
+  }
+
+  downloadUsersTemplate(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/auth/users/download_template/`, { responseType: 'blob' });
+  }
+
+  // ── Roles Excel ──────────────────────────────────────────────────
+  exportRolesExcel(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/auth/roles/export_excel/`, { responseType: 'blob' });
+  }
+
+  importRolesExcel(file: File): Observable<ImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<ImportResult>(`${this.apiUrl}/auth/roles/import_excel/`, formData);
+  }
+
+  downloadRolesTemplate(): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/auth/roles/download_template/`, { responseType: 'blob' });
   }
 }

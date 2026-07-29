@@ -23,7 +23,7 @@
             (ngModelChange)="switchTemplate($event)"
             class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-violet-400 appearance-none cursor-pointer">
             <option *ngFor="let t of templates" [ngValue]="t.id">
-              {{ t.name }}{{ t.is_active ? ' ⭐' : '' }}
+              {{ isGlobalTemplate(t) ? '🌐 [اصلی] ' : '' }}{{ t.name }}{{ t.is_active ? ' ⭐' : '' }}
             </option>
             <option *ngIf="templates.length === 0" [ngValue]="undefined">پیش‌فرض (ذخیره‌نشده)</option>
           </select>
@@ -51,51 +51,64 @@
           </div>
         </div>
 
-        <!-- Action Buttons (only in settings mode) -->
+        <!-- دکمه‌های عملیاتی (فقط در حالت تنظیمات) -->
         <div *ngIf="mode === 'settings'" class="flex items-center gap-1 shrink-0 flex-wrap">
-          <!-- New -->
+          
+          <!-- دکمه جدید (همیشه فعال) -->
           <button (click)="startCreateNew()" title="تمپلیت جدید"
             class="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             جدید
           </button>
-          <!-- Rename -->
-          <button (click)="startRename()" [disabled]="!template.id" title="تغییر نام"
-            class="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            نام
-          </button>
-          <!-- Clone -->
-          <button *ngIf="template.id && !isCopying" (click)="startCopy()" title="کپی گرفتن از این تمپلیت"
-            class="flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-lg text-[10px] font-bold hover:bg-sky-100 transition-colors">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            کپی
-          </button>
-          <!-- Delete -->
-          <button *ngIf="template.id && deleteConfirmId !== template.id"
-            (click)="askDeleteConfirm(template.id!)" title="حذف تمپلیت"
-            class="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-colors">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            حذف
-          </button>
-          <!-- Delete confirm inline -->
-          <div *ngIf="template.id && deleteConfirmId === template.id"
-            class="flex items-center gap-1 bg-rose-50 border border-rose-300 rounded-lg px-2 py-1">
-            <span class="text-[10px] font-bold text-rose-700">مطمئنی؟</span>
-            <button (click)="confirmDelete(template.id!)" class="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-black hover:bg-rose-700">بله</button>
-            <button (click)="cancelDelete()" class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300">خیر</button>
-          </div>
-          <!-- Save Top Button -->
-          <button *ngIf="template.id" (click)="saveTemplate()" [disabled]="isSaving" title="ذخیره تمپلیت"
-            class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed mr-2">
-            <span *ngIf="isSaving" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
-            <svg *ngIf="!isSaving" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-            ذخیره
-          </button>
+
+          <!-- دکمه کپی به این انبار (فقط برای لیبل‌های فقط‌خواندنی) -->
+          <ng-container *ngIf="warehouseId && isCurrentTemplateReadOnly">
+            <button (click)="copyToThisWarehouse(template)" title="کپی این لیبل Global برای این انبار"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold hover:bg-indigo-700 transition-colors shadow-sm ml-1">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              کپی به این انبار
+            </button>
+          </ng-container>
+
+          <!-- دکمه‌های ویرایش (برای لیبل‌های قابل ویرایش) -->
+          <ng-container *ngIf="!(warehouseId && isCurrentTemplateReadOnly)">
+            <!-- Rename -->
+            <button (click)="startRename()" [disabled]="!template.id" title="تغییر نام"
+              class="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              نام
+            </button>
+            <!-- Clone -->
+            <button *ngIf="template.id && !isCopying" (click)="startCopy()" title="کپی گرفتن از این تمپلیت"
+              class="flex items-center gap-1 px-2.5 py-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-lg text-[10px] font-bold hover:bg-sky-100 transition-colors">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              کپی
+            </button>
+            <!-- Delete -->
+            <button *ngIf="template.id && deleteConfirmId !== template.id"
+              (click)="askDeleteConfirm(template.id!)" title="حذف تمپلیت"
+              class="flex items-center gap-1 px-2.5 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-[10px] font-bold hover:bg-rose-100 transition-colors">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              حذف
+            </button>
+            <!-- Delete confirm inline -->
+            <div *ngIf="template.id && deleteConfirmId === template.id"
+              class="flex items-center gap-1 bg-rose-50 border border-rose-300 rounded-lg px-2 py-1">
+              <span class="text-[10px] font-bold text-rose-700">مطمئنی؟</span>
+              <button (click)="confirmDelete(template.id!)" class="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-black hover:bg-rose-700">بله</button>
+              <button (click)="cancelDelete()" class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300">خیر</button>
+            </div>
+            <!-- Save Top Button -->
+            <button *ngIf="template.id" (click)="saveTemplate()" [disabled]="isSaving" title="ذخیره تمپلیت"
+              class="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed mr-2">
+              <span *ngIf="isSaving" class="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
+              <svg *ngIf="!isSaving" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              ذخیره
+            </button>
+          </ng-container>
         </div>
       </div>
 
-      <!-- Inline create new template form -->
       <div *ngIf="isCreatingNew" class="p-3 border-t border-slate-100 bg-emerald-50/50 flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
         <input type="text" [(ngModel)]="newTemplateName"
@@ -117,7 +130,7 @@
   <div class="grid grid-cols-1 xl:grid-cols-12 gap-5">
 
     <!-- ─── LEFT PANEL: Fields + Settings (5/12) ─── -->
-    <div class="xl:col-span-5 space-y-4">
+    <div *ngIf="mode === 'settings'" class="xl:col-span-5 space-y-4">
 
       <!-- QR Source Field -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -195,6 +208,11 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span class="leading-relaxed">{{gridWarning}}</span>
           </div>
+          <!-- توضیحات ویژه برای طراحی -->
+          <div class="col-span-2 space-y-1 pt-2 border-t border-slate-100">
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">نمونه توضیحات ویژه (تستی)</label>
+            <input type="text" [(ngModel)]="customRemark" placeholder="متن تستی برای پیش‌نمایش در بوم..." class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400 placeholder:text-slate-400">
+          </div>
         </div>
       </div>
 
@@ -238,21 +256,108 @@
         ذخیره ساختار لیبل
       </button>
 
-      <!-- Print Button (in print mode) -->
-      <button *ngIf="mode === 'print'" (click)="requestPrint()" [disabled]="isPrinting"
-        class="w-full py-3.5 rounded-xl text-sm font-black text-white shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700">
-        <span *ngIf="isPrinting" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
-        <svg *ngIf="!isPrinting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        دانلود PDF ({{selectedItemIds.length}} رکورد)
-      </button>
-
     </div>
 
-    <!-- ─── RIGHT PANEL: Canvas (7/12) ─── -->
-    <div class="xl:col-span-7 flex flex-col gap-4">
+    <!-- ─── LEFT PANEL: Print Settings (3/12 — Sticky) ─── -->
+    <div *ngIf="mode === 'print'" class="xl:col-span-3 space-y-3">
+      <div class="sticky top-0 space-y-3">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-3 flex items-center gap-2">
+            <div class="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            </div>
+            <h4 class="font-black text-slate-800 text-[11px]">تنظیمات چاپ</h4>
+          </div>
+          <div class="p-3 space-y-3">
+
+            <!-- تعداد کپی -->
+            <div class="space-y-1">
+              <label class="block text-[10px] font-bold text-slate-600">تعداد کپی هر آیتم</label>
+              <input type="number" min="1" [(ngModel)]="bulkQuantity" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            </div>
+
+            <!-- نوع کاغذ -->
+            <div class="space-y-1">
+              <label class="block text-[10px] font-bold text-slate-600">نوع کاغذ</label>
+              <select [(ngModel)]="tempPrintSettings.paper_type" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
+                <option value="A4">A4</option>
+                <option value="A3">A3</option>
+                <option value="roll">رول حرارتی</option>
+              </select>
+            </div>
+
+            <!-- حاشیه -->
+            <div class="space-y-1" *ngIf="tempPrintSettings.paper_type !== 'roll'">
+              <label class="block text-[10px] font-bold text-slate-600">حاشیه (mm)</label>
+              <input type="number" [(ngModel)]="tempPrintSettings.margin_mm" (ngModelChange)="onPrintSettingChange()" min="0" max="30" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
+            </div>
+
+            <!-- مقیاس (Scale) -->
+            <div class="space-y-1" dir="ltr">
+              <label class="block text-[10px] font-bold text-slate-600 text-right" dir="rtl">مقیاس: {{tempPrintSettings.scale}}٪</label>
+              <input type="range" min="50" max="150" step="5" [(ngModel)]="tempPrintSettings.scale" (change)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+              <div class="flex justify-between text-[8px] text-slate-400 font-bold px-0.5">
+                <span>50%</span><span>100%</span><span>150%</span>
+              </div>
+            </div>
+
+            <!-- Landscape -->
+            <div class="flex items-center gap-2" *ngIf="tempPrintSettings.paper_type !== 'roll'">
+              <input type="checkbox" id="landscapeMode" [(ngModel)]="tempPrintSettings.landscape" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
+              <label for="landscapeMode" class="text-[10px] font-bold text-slate-700 cursor-pointer">افقی (Landscape)</label>
+            </div>
+
+            <!-- Collation -->
+            <div class="space-y-1.5 pt-2 border-t border-slate-100" *ngIf="bulkQuantity > 1">
+              <label class="block text-[10px] font-bold text-slate-600">نحوه چیدمان</label>
+              <div class="flex gap-1">
+                <button (click)="tempPrintSettings.collation = 'group'; onPrintSettingChange()"
+                  class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
+                  [ngClass]="tempPrintSettings.collation === 'group' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                  دسته‌ای
+                </button>
+                <button (click)="tempPrintSettings.collation = 'collate'; onPrintSettingChange()"
+                  class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
+                  [ngClass]="tempPrintSettings.collation === 'collate' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                  مجموعه‌ای
+                </button>
+              </div>
+              <p class="text-[8px] text-slate-400 leading-relaxed">
+                {{ tempPrintSettings.collation === 'group' ? 'هر کالا پشت سر هم: A,A,A, B,B,B' : 'ست کامل تکرار: A,B, A,B, A,B' }}
+              </p>
+            </div>
+
+            <!-- توضیحات ویژه -->
+            <div class="space-y-1 pt-2 border-t border-slate-100">
+              <label class="block text-[10px] font-bold text-slate-600">توضیحات ویژه (موقت)</label>
+              <input type="text" [(ngModel)]="customRemark" (ngModelChange)="onPrintSettingChange()" placeholder="مثال: بخش فنی" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] outline-none focus:border-indigo-400 placeholder:text-slate-400">
+              <!-- هشدار عدم وجود فیلد روی بوم -->
+              <div *ngIf="customRemark && !hasCustomRemarkField" class="px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[9px] font-bold flex items-start gap-1.5">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>فیلد «توضیحات لحظه‌ای» روی بوم این تمپلیت قرار نگرفته. این متن در خروجی نمایش داده نخواهد شد.</span>
+              </div>
+            </div>
+
+            <!-- دکمه چاپ -->
+            <div class="pt-3 border-t border-slate-100 mt-4">
+              <button (click)="directPrint()" [disabled]="isPrinting"
+                class="w-full py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700">
+                <span *ngIf="isPrinting" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                <svg *ngIf="!isPrinting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                <span>چاپ لیبل ({{itemsConfig.length}} آیتم)</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── RIGHT PANEL: Canvas / PDF Preview (9/12) ─── -->
+    <div class="flex flex-col gap-4" [ngClass]="mode === 'print' ? 'xl:col-span-9' : 'xl:col-span-7'">
       
       <!-- Toolbar (Above Canvas) -->
-      <div *ngIf="selectedElement" class="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden flex flex-col p-3 gap-2 fade-in">
+      <div *ngIf="selectedElement && mode === 'settings'" class="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden flex flex-col p-3 gap-2 fade-in">
         
         <!-- Row 1: Title, Font Settings, Actions -->
         <div class="flex items-center justify-between">
@@ -342,7 +447,7 @@
         </div>
       </div>
 
-      <div class="canvas-container bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-6 md:p-8 relative min-h-[420px] flex flex-col flex-1">
+      <div class="canvas-container bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-4 md:p-6 relative flex flex-col flex-1" [style.minHeight]="mode === 'print' ? 'calc(95vh - 180px)' : '420px'">
 
 
         <!-- Canvas Header -->
@@ -361,8 +466,21 @@
           </div>
         </div>
 
+        <!-- PDF Preview Area -->
+        <div *ngIf="mode === 'print'" class="flex-1 flex flex-col items-center justify-center w-full" style="min-height: 0;">
+          <div *ngIf="isGeneratingPreview" class="flex flex-col items-center text-slate-500">
+             <span class="animate-spin w-8 h-8 border-4 border-slate-300 border-t-indigo-600 rounded-full mb-3"></span>
+             <p class="text-sm font-bold">در حال آماده‌سازی پیش‌نمایش...</p>
+          </div>
+          <iframe *ngIf="!isGeneratingPreview && pdfPreviewUrl" [src]="pdfPreviewUrl" class="w-full flex-1 border-0 rounded" style="min-height: 0;" title="PDF Preview"></iframe>
+          <div *ngIf="!isGeneratingPreview && !pdfPreviewUrl" class="flex flex-col items-center text-slate-400">
+            <span class="animate-spin w-6 h-6 border-3 border-slate-300 border-t-indigo-500 rounded-full mb-2"></span>
+            <p class="text-sm font-bold">در حال بارگذاری پیش‌نمایش...</p>
+          </div>
+        </div>
+
         <!-- The Canvas -->
-        <div class="flex-1 flex items-center justify-center">
+        <div *ngIf="mode === 'settings'" class="flex-1 flex items-center justify-center">
           <div #canvas
             class="label-canvas relative bg-white shadow-2xl rounded border border-slate-300 overflow-hidden cursor-crosshair ring-8 ring-white/50"
             [style.width.px]="canvasWidth"
@@ -374,8 +492,9 @@
 
             <!-- Elements -->
             <div *ngFor="let el of template.elements; trackBy: trackById"
-              class="canvas-element absolute flex items-center overflow-hidden cursor-move select-none transition-shadow"
+              class="canvas-element absolute flex items-center overflow-hidden select-none transition-shadow"
               [ngClass]="{
+                'cursor-move': true,
                 'ring-2 ring-indigo-500 shadow-lg z-20': selectedElementId === el.id,
                 'hover:ring-1 hover:ring-slate-300 z-10': selectedElementId !== el.id,
                 'canvas-element--qr': el.type === 'qrcode'
@@ -437,7 +556,7 @@
         </div>
 
         <!-- Canvas Footer -->
-        <div class="mt-5 text-center z-10">
+        <div *ngIf="mode === 'settings'" class="mt-5 text-center z-10">
           <p class="text-[10px] text-slate-500 font-bold bg-slate-100/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
             <span *ngIf="template.elements.length > 0">{{template.elements.length}} المان روی بوم</span>
             <span *ngIf="template.elements.length === 0">بوم خالی — فیلدها را اضافه کنید</span>
@@ -450,4 +569,3 @@
 
   </div><!-- /grid -->
   </div><!-- /space-y-4 -->
-</div>

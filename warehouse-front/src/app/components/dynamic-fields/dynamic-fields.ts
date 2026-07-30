@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
+import { ConfirmDialogService } from '../../shared';
 import { DynamicFieldApiService } from '../../core/api';
 import { DynamicFieldDefinition } from '../../core/models';
 
@@ -39,7 +40,8 @@ export class DynamicFields implements OnInit {
     public state: StateService,
     private toast: ToastService,
     private fieldApi: DynamicFieldApiService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   ngOnInit() {
@@ -68,6 +70,12 @@ export class DynamicFields implements OnInit {
   addField() {
     if (!this.newField.name || !this.newField.label) {
       this.toast.show('error', 'نام و عنوان فیلد الزامی است');
+      return;
+    }
+
+    const nameRegex = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+    if (!nameRegex.test(this.newField.name)) {
+      this.toast.show('error', 'نام سیستمی فقط باید شامل حروف انگلیسی، اعداد و خط تیره (_) باشد و با حرف شروع شود');
       return;
     }
     
@@ -104,6 +112,12 @@ export class DynamicFields implements OnInit {
       return;
     }
 
+    const nameRegex = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+    if (!nameRegex.test(this.editFieldData.name)) {
+      this.toast.show('error', 'نام سیستمی فقط باید شامل حروف انگلیسی، اعداد و خط تیره (_) باشد و با حرف شروع شود');
+      return;
+    }
+
     this.isLoading = true;
     this.fieldApi.updateField(this.editingFieldId!, this.editFieldData).subscribe({
       next: (res) => {
@@ -135,8 +149,16 @@ export class DynamicFields implements OnInit {
     });
   }
 
-  deleteField(field: DynamicFieldDefinition) {
-    if (confirm(`آیا از حذف فیلد "${field.label}" اطمینان دارید؟ داده‌های ثبت شده برای این فیلد در کالاها مخفی خواهند شد.`)) {
+  async deleteField(field: DynamicFieldDefinition) {
+    const confirmed = await this.confirmDialog.open({
+      title: 'حذف فیلد داینامیک',
+      message: `آیا از حذف فیلد "${field.label}" اطمینان دارید؟ داده‌های ثبت شده برای این فیلد در کالاها مخفی خواهند شد.`,
+      confirmText: 'بله، حذف شود',
+      cancelText: 'انصراف',
+      type: 'danger'
+    });
+
+    if (confirmed) {
       this.fieldApi.deleteField(field.id!).subscribe({
         next: () => {
           this.fields = this.fields.filter(f => f.id !== field.id);

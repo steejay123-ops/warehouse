@@ -12,7 +12,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
                 <div>
                     <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام سیستمی (انگلیسی بدون فاصله)</label>
-                    <input type="text" [(ngModel)]="newField.name" placeholder="مثلاً: brand_name" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400">
+                    <input type="text" [(ngModel)]="newField.name" placeholder="مثلاً: brand_name" pattern="[a-zA-Z][a-zA-Z0-9_]*" dir="ltr" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-400 font-mono text-left">
                 </div>
                 <div>
                     <label class="block text-[11px] font-bold text-slate-600 mb-1.5">عنوان نمایشی (فارسی)</label>
@@ -91,7 +91,7 @@
                             <td class="px-4 py-3 text-xs text-slate-400 font-mono">{{i+1}}</td>
                             <td class="px-4 py-3">
                                 <input type="text" [(ngModel)]="editFieldData.label" class="w-full px-2 py-1 bg-white border border-indigo-200 rounded text-xs outline-none mb-1" placeholder="عنوان (فارسی)">
-                                <input type="text" [(ngModel)]="editFieldData.name" class="w-full px-2 py-1 bg-white border border-indigo-200 rounded text-[10px] font-mono outline-none" placeholder="نام سیستمی (انگلیسی)">
+                                <input type="text" [(ngModel)]="editFieldData.name" pattern="[a-zA-Z][a-zA-Z0-9_]*" dir="ltr" class="w-full px-2 py-1 bg-white border border-indigo-200 rounded text-[10px] font-mono outline-none text-left" placeholder="نام سیستمی (انگلیسی)">
                             </td>
                             <td class="px-4 py-3">
                                 <select [(ngModel)]="editFieldData.field_type" class="w-full px-2 py-1 bg-white border border-indigo-200 rounded text-xs outline-none">

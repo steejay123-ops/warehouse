@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { CountTaskApiService } from '../../core/api/count-task-api.service';
+import { SettingsService } from '../../services/settings';
 
 @Component({
   selector: 'app-field',
@@ -18,16 +19,27 @@ export class Field implements OnInit {
   selectedTask: any = null;
   countedQty: number | null = null;
   counterNote = '';
+  isBlindCounting = false;
 
   constructor(
     public state: StateService, 
     private toast: ToastService,
     private countTaskApi: CountTaskApiService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private settingsService: SettingsService
   ) {}
 
   ngOnInit() {
     this.loadTasks();
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL') {
+        this.settingsService.getWarehouseSettings(Number(whId)).subscribe({
+          next: (res: any) => {
+            this.isBlindCounting = res?.blind_counting?.value === 'blind';
+            this.cdr.detectChanges();
+          }
+        });
+    }
   }
 
   loadTasks() {

@@ -52,6 +52,7 @@ export class Dispatch implements OnInit {
   isLoading = false;
   requireSupervisor = true;
   requireDocSupervisor = true; // پیش‌فرض: سرپرست اجباری
+  isBlindCounting = false;
 
   // Quick Filter Modal
   isQuickFilterModalOpen = false;
@@ -130,6 +131,7 @@ export class Dispatch implements OnInit {
           next: (res: any) => {
             this.requireSupervisor = res?.require_supervisor_approval?.value ?? true;
             this.requireDocSupervisor = res?.require_doc_supervisor_approval?.value ?? true;
+            this.isBlindCounting = res?.blind_counting?.value === 'blind';
             if (this.requireSupervisor === false) {
               this.selectedSupervisor = 'skip';
             if (this.requireDocSupervisor === false) {
@@ -618,6 +620,15 @@ export class Dispatch implements OnInit {
 
   requestRecount() {
     if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
+
+    const invalidItems = this.items.filter(item => 
+      this.selectedItemIds.has(item.id) && 
+      (item.field_status === 'waiting' || item.field_status === 'counting')
+    );
+
+    if (invalidItems.length > 0) {
+      return this.toast.show('error', 'برخی از رکوردهای انتخاب شده هنوز شمرده نشده‌اند و قابل بازشماری نیستند.');
+    }
 
     const payload = {
       item_ids: Array.from(this.selectedItemIds),

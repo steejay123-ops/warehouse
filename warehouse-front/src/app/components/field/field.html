@@ -61,9 +61,13 @@
           </div>
         </div>
         
-        <div class="mb-4 bg-slate-50 border border-slate-200 text-slate-500 p-3 rounded-xl text-center flex items-center justify-center gap-2">
+        <div *ngIf="isBlindCounting" class="mb-4 bg-indigo-50 border border-indigo-200 text-indigo-700 p-3 rounded-xl text-center flex items-center justify-center gap-2">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            <span class="text-[10px] font-bold">شمارش کور (Blind Count)</span>
+            <span class="text-[10px] font-bold">شمارش کور (Blind Count) فعال است</span>
+        </div>
+        <div *ngIf="!isBlindCounting" class="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 rounded-xl text-center flex items-center justify-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            <span class="text-[10px] font-bold">موجودی سیستمی قابل مشاهده است</span>
         </div>
 
         <div class="space-y-4">

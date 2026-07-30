@@ -9,9 +9,13 @@
         <p class="text-[11px] text-slate-500 mt-1.5">مدیریت چاپ لیبل، ارجاع موازی به تیم‌های میدانی و مدارک، و رهگیری مغایرت‌ها</p>
       </div>
       <div class="flex items-center gap-2">
-         <div class="bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-2">
+         <div *ngIf="isBlindCounting" class="bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-2">
            <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
            <span class="text-[10px] font-bold text-indigo-700">شمارش کور (Blind Count) فعال است</span>
+         </div>
+         <div *ngIf="!isBlindCounting" class="bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-lg flex items-center gap-2">
+           <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+           <span class="text-[10px] font-bold text-emerald-700">موجودی سیستمی قابل مشاهده است</span>
          </div>
       </div>
     </div>

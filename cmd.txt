@@ -3,3 +3,18 @@ cd "e:\warehouse project\warehouse-backend"
 
 cd "e:\warehouse project\warehouse-front"
 npm run start
+
+
+npm run build
+npx serve dist/warehouse-app/browser -s -p 4200
+
+
+باز کردن پورت
+New-NetFirewallRule -DisplayName "Open Port 4200 for Angular" -Direction Inbound -LocalPort 4200 -Protocol TCP -Action Allow
+
+
+
+.\venv\Scripts\python manage.py runserver 0.0.0.0:8000
+
+
+node server.js

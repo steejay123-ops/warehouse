@@ -1,0 +1,19 @@
+{
+  "status": "commited",
+  "type": "frontend",
+  "scope": "codebase",
+  "localEndpoint": "http://localhost:4200",
+  "loginUser": "admin",
+  "loginPassword": "123456",
+  "executionArgs": {
+    "projectName": "warehouse project",
+    "projectPath": "e:\\warehouse project",
+    "testIds": [],
+    "additionalInstruction": "Please use 'admin' as the username and '123456' as the password for all login attempts.",
+    "serverMode": "production",
+    "envs": {
+      "API_KEY": "sk-user-SWPSvOYLYhFxDUdAXQ3sNjHs4LaG2WuSiF8wJZS9u5w0FmyfBd4tw23wDFJXKjE8pl6Tj7QQDpqBkQH79iUDVYWt1AJhBQUGAtzMuIE6yhk7dN7naECHI2A8a4kXsMoyQrE"
+    }
+  },
+  "serverPort": 49682
+}

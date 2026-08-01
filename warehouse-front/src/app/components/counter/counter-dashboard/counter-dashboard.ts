@@ -7,6 +7,7 @@ import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { StateService } from '../../../services/state.service';
 import { WarehouseSelectorComponent } from '../../../shared/components/warehouse-selector/warehouse-selector.component';
+import { OfflinePendingBadgeComponent } from '../../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { AuthService } from '../../../core/auth/auth.service';
 import { AuthStore } from '../../../core/stores/auth.store';
 import { HttpClient } from '@angular/common/http';
@@ -18,7 +19,7 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 @Component({
   selector: 'app-counter-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent],
   templateUrl: './counter-dashboard.html',
   styleUrl: './counter-dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -170,7 +171,7 @@ export class CounterDashboard implements OnInit {
   }
 
   trackByTaskId(index: number, task: CountTask): number {
-    return task.id;
+    return task.id ?? (task as any)._offlineId ?? index;
   }
 
 

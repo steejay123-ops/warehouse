@@ -86,7 +86,8 @@ export class Field implements OnInit {
         this.selectedTask = null;
         this.loadTasks();
       },
-      error: () => this.toast.show('error', 'خطا در ثبت شمارش')
+      // پیام خطا از errorInterceptor می‌آید؛ توست محلی روی آن سوار می‌شد.
+      error: () => {}
     });
   }
 }

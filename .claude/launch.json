@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend-django",
+      "runtimeExecutable": "E:\\warehouse project\\warehouse-backend\\venv\\Scripts\\python.exe",
+      "runtimeArgs": ["E:\\warehouse project\\warehouse-backend\\manage.py", "runserver", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "frontend-angular-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start", "--prefix", "E:\\warehouse project\\warehouse-front"],
+      "port": 4200
+    },
+    {
+      "name": "frontend-prod-express",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["E:\\warehouse project\\warehouse-front\\server.js"],
+      "port": 4200
+    }
+  ]
+}

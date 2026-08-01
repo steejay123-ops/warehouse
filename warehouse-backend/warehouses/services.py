@@ -8,6 +8,8 @@ DEFAULT_SETTINGS = {
     'default_conflict_strategy': 'ignore',
     'default_tag_status': 'عدم نیاز به چاپ',
     'system_version': '1.0',
+    'offline_sync_interval_minutes': 15,
+    'offline_cache_ttl_minutes': 60,
 }
 
 def get_setting(key, warehouse_id=None):

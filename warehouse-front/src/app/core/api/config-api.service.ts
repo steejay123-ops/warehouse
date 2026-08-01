@@ -5,6 +5,8 @@ import { ApiService } from './api.service';
 export interface PublicConfig {
   system_version: string;
   system_name: string;
+  offline_sync_interval_minutes?: number;
+  offline_cache_ttl_minutes?: number;
 }
 
 @Injectable({ providedIn: 'root' })

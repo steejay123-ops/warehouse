@@ -67,8 +67,9 @@
     <div *ngFor="let task of tasks" 
          class="bg-white rounded-xl p-4 border transition-all shadow-sm flex flex-col gap-3"
          [ngClass]="{
-           'border-indigo-400 ring-1 ring-indigo-400/30 bg-indigo-50/20': selectedTasks.has(task.id),
-           'border-slate-200': !selectedTasks.has(task.id)
+           'border-sky-400 ring-1 ring-sky-400/30 bg-sky-50/40': task._offlinePending,
+           'border-indigo-400 ring-1 ring-indigo-400/30 bg-indigo-50/20': !task._offlinePending && selectedTasks.has(task.id),
+           'border-slate-200': !task._offlinePending && !selectedTasks.has(task.id)
          }">
       
       <!-- Top Row: Checkbox, Status & Code -->
@@ -78,6 +79,7 @@
           <div>
             <h3 class="font-bold text-slate-800 text-sm leading-snug">{{task.item_details?.description}}</h3>
             <div class="text-[11px] text-slate-400 font-mono mt-1">{{task.item_details?.fa_unic_code}}</div>
+            <app-offline-pending-badge *ngIf="task._offlinePending" class="inline-block mt-1.5" />
           </div>
         </div>
         <div class="shrink-0 flex flex-col items-end gap-1">
@@ -177,9 +179,12 @@
 
     <!-- Pool List -->
     <div class="space-y-3 pb-20 px-2" *ngIf="!isLoading && poolTasks.length > 0">
-      <div *ngFor="let task of poolTasks" 
+      <div *ngFor="let task of poolTasks"
            class="bg-white border-2 border-slate-100 rounded-2xl p-4 transition-all"
-           [ngClass]="{'border-indigo-500 shadow-md ring-4 ring-indigo-500/10': selectedPoolTasks.has(task.id)}">
+           [ngClass]="{
+             'border-indigo-500 shadow-md ring-4 ring-indigo-500/10': !task._offlinePending && selectedPoolTasks.has(task.id),
+             'border-sky-400 ring-1 ring-sky-400/30 bg-sky-50/40': task._offlinePending
+           }">
         
         <div class="flex gap-4">
           <!-- Checkbox Area -->
@@ -195,6 +200,7 @@
             <div class="flex justify-between items-start mb-2">
               <div class="flex gap-2 items-center">
                 <span class="font-black text-slate-800 tracking-wide font-mono text-base">{{task.item_details?.fa_unic_code}}</span>
+                <app-offline-pending-badge *ngIf="task._offlinePending" />
               </div>
             </div>
             

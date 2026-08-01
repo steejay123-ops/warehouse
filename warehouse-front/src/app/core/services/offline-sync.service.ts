@@ -1,0 +1,681 @@
+import { offlineDb, SyncQueueEntry, SyncErrorEntry } from './offline-db';
+import { NetworkStatusService } from './network-status.service';
+import { isServerUnreachable } from './server-reachability';
+import { BehaviorSubject, Subject, Subscription, filter } from 'rxjs';
+import { environment } from '../../../environments/environment';
+
+/**
+ * نتیجه یک عملیات همگام‌سازی
+ *
+ * تفاوت کلیدی: «آفلاین بودن» شکست نیست — هیچ تلاشی انجام نشده است.
+ * شکست فقط وقتی معنا دارد که واقعاً به سرور وصل شده باشیم.
+ */
+export type SyncOutcome =
+  /** مرورگر آفلاین است — هیچ درخواستی ارسال نشد */
+  | { status: 'offline' }
+  /** مرورگر آنلاین است ولی سرور پاسخ نمی‌دهد — داده‌ها دست‌نخورده در صف ماندند */
+  | { status: 'server-unreachable'; synced: number }
+  /** نشست منقضی شده — نیاز به ورود مجدد */
+  | { status: 'auth-required'; synced: number }
+  /** صف خالی بود */
+  | { status: 'nothing-to-sync' }
+  /** همه چیز با موفقیت ارسال شد */
+  | { status: 'completed'; synced: number }
+  /** بخشی ارسال شد؛ بخشی رد شد یا باقی ماند */
+  | { status: 'partial'; synced: number; rejected: number; remaining: number };
+
+/**
+ * نتیجه ارسال یک رکورد از صف
+ *
+ * • sent             → سرور پذیرفت (۲xx) → از صف حذف شد
+ * • rejected         → سرور صریحاً رد کرد (۴xx) → به صندوق خطاها رفت
+ * • auth-failed      → نشست منقضی → در صف ماند
+ * • server-error     → خطای ۵xx → در صف ماند
+ * • transport-failed → اصلاً به سرور نرسید → در صف ماند (بدون افزایش شمارنده تلاش)
+ */
+type EntryResult = 'sent' | 'rejected' | 'auth-failed' | 'server-error' | 'transport-failed';
+
+/**
+ * OfflineSyncService — سرویس پیشرفته همگام‌سازی آفلاین
+ *
+ * وظایف:
+ * 1. درخواست‌های تغییری (POST/PATCH/PUT/DELETE) را در صف ذخیره می‌کند
+ * 2. پاسخ‌های GET را در کش ذخیره می‌کند (با TTL قابل تنظیم)
+ * 3. به محض آنلاین شدن، صف را پردازش می‌کند
+ * 4. همگام‌سازی خودکار با اینتروال قابل تنظیم
+ * 5. همگام‌سازی دستی (forceSync)
+ * 6. انتقال خطاهای 4xx به صندوق خطا (syncErrors)
+ */
+export class OfflineSyncService {
+  private static instance: OfflineSyncService;
+  private network = NetworkStatusService.getInstance();
+  private subscription: Subscription | null = null;
+  private autoSyncTimer: any = null;
+
+  /** حداکثر تعداد تلاش مجدد برای هر درخواست */
+  private readonly MAX_RETRIES = 3;
+
+  /** مدت زمان پیش‌فرض اعتبار کش (۱ ساعت) */
+  private readonly DEFAULT_CACHE_TTL = 60 * 60 * 1000;
+
+  /** فاصله پیش‌فرض همگام‌سازی خودکار (۱۵ دقیقه) */
+  private readonly DEFAULT_SYNC_INTERVAL = 15 * 60 * 1000;
+
+  // ─── Observables عمومی ───
+
+  /** آیا الان در حال همگام‌سازی هست؟ */
+  private _isSyncing$ = new BehaviorSubject<boolean>(false);
+  readonly isSyncing$ = this._isSyncing$.asObservable();
+
+  /** تعداد درخواست‌های در صف انتظار */
+  private _pendingCount$ = new BehaviorSubject<number>(0);
+  readonly pendingCount$ = this._pendingCount$.asObservable();
+
+  /** تعداد خطاهای خوانده‌نشده در صندوق */
+  private _errorCount$ = new BehaviorSubject<number>(0);
+  readonly errorCount$ = this._errorCount$.asObservable();
+
+  /** آخرین زمان همگام‌سازی موفقیت‌آمیز */
+  private _lastSyncTime$ = new BehaviorSubject<number | null>(null);
+  readonly lastSyncTime$ = this._lastSyncTime$.asObservable();
+
+  /**
+   * نتیجه هر دور پردازش صف — شامل دورهای خودکار (پس از بازگشت اتصال) که
+   * کاربر دکمه‌ای نزده و بدون این جریان هیچ بازخوردی نمی‌گرفت.
+   */
+  private _syncOutcome$ = new Subject<SyncOutcome>();
+  readonly syncOutcome$ = this._syncOutcome$.asObservable();
+
+  private constructor() {}
+
+  /** دریافت نمونه سینگلتون */
+  static getInstance(): OfflineSyncService {
+    if (!OfflineSyncService.instance) {
+      OfflineSyncService.instance = new OfflineSyncService();
+    }
+    return OfflineSyncService.instance;
+  }
+
+  // ─── مقادیر لحظه‌ای ───
+  get isSyncing(): boolean { return this._isSyncing$.value; }
+  get pendingCount(): number { return this._pendingCount$.value; }
+  get errorCount(): number { return this._errorCount$.value; }
+
+  /**
+   * راه‌اندازی اولیه — در app initializer فراخوانی می‌شود
+   */
+  initialize(): void {
+    // رکوردهای گیرکرده در وضعیت sending (مثلا بسته شدن برنامه وسط ارسال) را آزاد کن
+    offlineDb.syncQueue
+      .where('status')
+      .equals('sending')
+      .modify({ status: 'pending' })
+      .catch(() => {});
+
+    // وقتی اتصال کامل (مرورگر + سرور) برقرار شد، صف را پردازش کن
+    this.subscription = this.network.state$
+      .pipe(filter((state) => state === 'online'))
+      .subscribe(() => {
+        this.processQueue();
+      });
+
+    // اگر الان آنلاین هستیم، صف باقی‌مانده را پردازش کن
+    if (this.network.isBrowserOnline) {
+      this.processQueue();
+    }
+
+    // راه‌اندازی تایمر همگام‌سازی خودکار
+    this.startAutoSync();
+
+    // به‌روزرسانی شمارنده‌ها
+    this.refreshCounts();
+
+    console.log('[OfflineSync] ✅ سرویس همگام‌سازی آفلاین راه‌اندازی شد');
+  }
+
+  // ════════════════════════════════════════════
+  //  TTL — مدت اعتبار کش (قابل تنظیم)
+  // ════════════════════════════════════════════
+
+  /** خواندن TTL از localStorage یا مقدار پیش‌فرض (صفر = بدون انقضا) */
+  getCacheTTL(): number {
+    const stored = localStorage.getItem('wh_cache_ttl');
+    if (stored) {
+      const val = parseInt(stored, 10);
+      if (!isNaN(val) && val >= 0) return val;
+    }
+    return this.DEFAULT_CACHE_TTL;
+  }
+
+  /** تنظیم TTL (به میلی‌ثانیه) */
+  setCacheTTL(ttlMs: number): void {
+    localStorage.setItem('wh_cache_ttl', String(ttlMs));
+  }
+
+  // ════════════════════════════════════════════
+  //  Auto Sync — همگام‌سازی خودکار
+  // ════════════════════════════════════════════
+
+  /** خواندن فاصله زمانی اتوسینک از localStorage یا مقدار پیش‌فرض */
+  getSyncInterval(): number {
+    const stored = localStorage.getItem('wh_sync_interval');
+    if (stored) {
+      const val = parseInt(stored, 10);
+      if (!isNaN(val) && val > 0) return val;
+    }
+    return this.DEFAULT_SYNC_INTERVAL;
+  }
+
+  /** تنظیم فاصله زمانی همگام‌سازی خودکار (به میلی‌ثانیه) و ری‌استارت تایمر */
+  setSyncInterval(intervalMs: number): void {
+    localStorage.setItem('wh_sync_interval', String(intervalMs));
+    this.stopAutoSync();
+    this.startAutoSync();
+  }
+
+  /**
+   * اعمال تنظیمات ادمین از public config.
+   * عمداً مسدودکننده نیست: بوت آفلاین این endpoint را نمی‌گیرد و localStorage
+   * آخرین مقدار شناخته‌شده را نگه می‌دارد.
+   */
+  applyRemoteConfig(cfg: {
+    offline_sync_interval_minutes?: number;
+    offline_cache_ttl_minutes?: number;
+  }): void {
+    const clamp = (val: unknown, low: number, high: number): number | null => {
+      const num = Number(val);
+      if (!Number.isFinite(num)) return null;
+      return Math.max(low, Math.min(high, Math.round(num)));
+    };
+
+    const syncMinutes = clamp(cfg.offline_sync_interval_minutes, 1, 1440);
+    if (syncMinutes !== null && syncMinutes * 60_000 !== this.getSyncInterval()) {
+      this.setSyncInterval(syncMinutes * 60_000);
+      console.log(`[OfflineSync] ⚙️ بازه همگام‌سازی خودکار: ${syncMinutes} دقیقه`);
+    }
+
+    // صفر = «هیچ‌وقت کهنه نشود»، پس کف بازه صفر است نه یک
+    const ttlMinutes = clamp(cfg.offline_cache_ttl_minutes, 0, 10080);
+    if (ttlMinutes !== null && ttlMinutes * 60_000 !== this.getCacheTTL()) {
+      // فقط روی نوشتن‌های آینده اثر دارد؛ expiresAt لحظه نوشتن مهر می‌شود.
+      this.setCacheTTL(ttlMinutes * 60_000);
+      console.log(
+        `[OfflineSync] ⚙️ عمر کش آفلاین: ${ttlMinutes === 0 ? 'بدون انقضا' : ttlMinutes + ' دقیقه'}`
+      );
+    }
+  }
+
+  /** شروع تایمر همگام‌سازی خودکار */
+  private startAutoSync(): void {
+    this.stopAutoSync();
+    const interval = this.getSyncInterval();
+    this.autoSyncTimer = setInterval(() => {
+      if (this.network.isBrowserOnline && !this.isSyncing) {
+        console.log('[OfflineSync] ⏰ اجرای خودکار همگام‌سازی...');
+        this.processQueue();
+      }
+    }, interval);
+    console.log(`[OfflineSync] ⏰ تایمر خودکار تنظیم شد: هر ${Math.round(interval / 60000)} دقیقه`);
+  }
+
+  /** متوقف کردن تایمر */
+  private stopAutoSync(): void {
+    if (this.autoSyncTimer) {
+      clearInterval(this.autoSyncTimer);
+      this.autoSyncTimer = null;
+    }
+  }
+
+  // ════════════════════════════════════════════
+  //  Force Sync — همگام‌سازی دستی
+  // ════════════════════════════════════════════
+
+  /**
+   * اجرای فوری همگام‌سازی — توسط کاربر (از دکمه UI) فراخوانی می‌شود
+   *
+   * بررسی پیش‌پرواز: اگر مرورگر آفلاین باشد، هیچ تلاشی انجام نمی‌شود و
+   * نتیجه «offline» برمی‌گردد — این «شکست» نیست، فقط «هنوز نه».
+   */
+  async forceSync(): Promise<SyncOutcome> {
+    if (!this.network.isBrowserOnline) {
+      console.log('[OfflineSync] 📴 آفلاین — همگام‌سازی انجام نشد (داده‌ها محفوظ است)');
+      return { status: 'offline' };
+    }
+
+    return this.processQueue();
+  }
+
+  // ════════════════════════════════════════════
+  //  صف همگام‌سازی (Sync Queue)
+  // ════════════════════════════════════════════
+
+  /**
+   * افزودن یک درخواست تغییری به صف همگام‌سازی
+   */
+  async enqueue(method: string, url: string, body: any): Promise<SyncQueueEntry> {
+    const entry: SyncQueueEntry = {
+      method,
+      url,
+      body,
+      createdAt: Date.now(),
+      retryCount: 0,
+      status: 'pending',
+    };
+    const id = await offlineDb.syncQueue.add(entry);
+    entry.id = id;
+    console.log(`[OfflineSync] 📥 درخواست ${method} ${url} به صف اضافه شد (id: ${id})`);
+    await this.refreshCounts();
+    return entry;
+  }
+
+  /**
+   * دریافت تمام رکوردهای صف (برای ادغام با کش)
+   */
+  async getQueueEntries(): Promise<SyncQueueEntry[]> {
+    return offlineDb.syncQueue
+      .where('status')
+      .anyOf(['pending', 'failed'])
+      .sortBy('createdAt');
+  }
+
+  // ════════════════════════════════════════════
+  //  کش API (با TTL قابل تنظیم)
+  // ════════════════════════════════════════════
+
+  /**
+   * ذخیره پاسخ GET در کش.
+   *
+   * پاسخ تهی هرگز جایگزین کش سالم نمی‌شود: روی شبکه ضعیف ممکن است سرور
+   * ۲۰۰ با بدنه خالی برگرداند و تنها نسخه‌ای که کاربر آفلاین در اختیار دارد
+   * از بین برود. جایگزینی فقط با داده واقعی انجام می‌شود.
+   */
+  async cacheResponse(url: string, response: any): Promise<void> {
+    if (response === null || response === undefined) return;
+
+    const ttl = this.getCacheTTL();
+    await offlineDb.apiCache.put({
+      url,
+      response,
+      cachedAt: Date.now(),
+      // TTL صفر یعنی «هیچ‌وقت کهنه نشود»
+      expiresAt: ttl === 0 ? Number.MAX_SAFE_INTEGER : Date.now() + ttl,
+    });
+  }
+
+  /**
+   * خواندن رکورد کش‌شده GET.
+   *
+   * کش فقط در حالت آفلاین خوانده می‌شود، پس تنها نسخه‌ای است که کاربر در
+   * اختیار دارد و هرگز حذف نمی‌شود — حتی وقتی از TTL گذشته باشد. گذشتن
+   * از TTL فقط یعنی «کهنه است»، نه «دور انداخته شود».
+   */
+  async getCachedEntry(url: string): Promise<{ response: any; cachedAt: number; isStale: boolean } | null> {
+    const entry = await offlineDb.apiCache.get(url);
+    if (!entry) return null;
+    return {
+      response: entry.response,
+      cachedAt: entry.cachedAt,
+      isStale: entry.expiresAt < Date.now(),
+    };
+  }
+
+  // ════════════════════════════════════════════
+  //  صندوق خطای همگام‌سازی (Sync Error Inbox)
+  // ════════════════════════════════════════════
+
+  /** دریافت تمام خطاهای خوانده‌نشده */
+  async getErrors(): Promise<SyncErrorEntry[]> {
+    const errors = await offlineDb.syncErrors
+      .where('dismissed')
+      .equals(0)
+      .sortBy('failedAt');
+    return errors.reverse();
+  }
+
+  /** دریافت تمام خطاها (حتی خوانده‌شده‌ها) */
+  async getAllErrors(): Promise<SyncErrorEntry[]> {
+    return offlineDb.syncErrors.reverse().sortBy('failedAt');
+  }
+
+  /** حذف (Dismiss) یک خطا */
+  async dismissError(id: number): Promise<void> {
+    await offlineDb.syncErrors.update(id, { dismissed: 1 });
+    await this.refreshCounts();
+  }
+
+  /** حذف تمام خطاها */
+  async dismissAllErrors(): Promise<void> {
+    await offlineDb.syncErrors.toCollection().modify({ dismissed: 1 });
+    await this.refreshCounts();
+  }
+
+  /** حذف دائمی یک خطا از دیتابیس */
+  async deleteError(id: number): Promise<void> {
+    await offlineDb.syncErrors.delete(id);
+    await this.refreshCounts();
+  }
+
+  /** حذف دائمی تمام خطاها */
+  async clearAllErrors(): Promise<void> {
+    await offlineDb.syncErrors.clear();
+    await this.refreshCounts();
+  }
+
+  // ════════════════════════════════════════════
+  //  پردازش صف (Process Queue)
+  // ════════════════════════════════════════════
+
+  /**
+   * پردازش صف همگام‌سازی — درخواست‌ها را به ترتیب ارسال می‌کند
+   *
+   * قوانین حذف از صف (صف = کار ناتمام کاربر و مقدس است):
+   * • فقط وقتی حذف می‌شود که سرور صریحاً بپذیرد (۲xx) یا صریحاً رد کند (۴xx)
+   * • خطای شبکه یا ۵xx هرگز باعث از دست رفتن داده نمی‌شود
+   */
+  async processQueue(): Promise<SyncOutcome> {
+    const outcome = await this.runQueue();
+    this._syncOutcome$.next(outcome);
+    return outcome;
+  }
+
+  private async runQueue(): Promise<SyncOutcome> {
+    if (this.isSyncing) return { status: 'nothing-to-sync' };
+
+    // بررسی پیش‌پرواز — آفلاین یعنی «تلاشی انجام نشد»، نه «شکست خورد»
+    if (!this.network.isBrowserOnline) return { status: 'offline' };
+
+    this._isSyncing$.next(true);
+    let synced = 0;
+    let rejected = 0;
+    let transportAborted = false;
+    let authRequired = false;
+
+    console.log('[OfflineSync] 🔄 شروع پردازش صف همگام‌سازی...');
+
+    try {
+      const pendingEntries = await offlineDb.syncQueue
+        .where('status')
+        .anyOf(['pending', 'failed'])
+        .sortBy('createdAt');
+
+      if (pendingEntries.length === 0) {
+        console.log('[OfflineSync] ✅ صف خالی است');
+        this._lastSyncTime$.next(Date.now());
+        return { status: 'nothing-to-sync' };
+      }
+
+      console.log(`[OfflineSync] 📋 ${pendingEntries.length} درخواست در صف`);
+
+      for (const entry of pendingEntries) {
+        if (!this.network.isBrowserOnline) {
+          console.log('[OfflineSync] 📴 اتصال قطع شد — پردازش متوقف شد (داده‌ها محفوظ است)');
+          transportAborted = true;
+          break;
+        }
+
+        const result = await this.sendEntry(entry);
+        await this.refreshCounts();
+
+        if (result === 'sent') {
+          synced++;
+          continue;
+        }
+        if (result === 'rejected') {
+          rejected++;
+          continue;
+        }
+        if (result === 'auth-failed') {
+          // ادامه دادن بی‌فایده است — همه درخواست‌ها با همین توکن رد می‌شوند
+          authRequired = true;
+          break;
+        }
+        // transport-failed یا server-error — سرور در دسترس نیست یا مشکل دارد؛
+        // ادامه دادن فقط سرور را می‌کوبد. متوقف شو و بعداً دوباره تلاش کن.
+        transportAborted = true;
+        break;
+      }
+
+      // زمان آخرین همگام‌سازی فقط وقتی معنا دارد که واقعاً با سرور حرف زده باشیم
+      if (!transportAborted) {
+        this._lastSyncTime$.next(Date.now());
+      }
+    } catch (error) {
+      console.error('[OfflineSync] ❌ خطا در پردازش صف:', error);
+    } finally {
+      this._isSyncing$.next(false);
+      await this.refreshCounts();
+    }
+
+    // ─── تعیین نتیجه ───
+    if (!this.network.isBrowserOnline) return { status: 'offline' };
+    if (authRequired) return { status: 'auth-required', synced };
+    if (transportAborted) return { status: 'server-unreachable', synced };
+
+    const remaining = await this.getPendingCount();
+    if (rejected > 0 || remaining > 0) {
+      return { status: 'partial', synced, rejected, remaining };
+    }
+    if (synced === 0) return { status: 'nothing-to-sync' };
+    return { status: 'completed', synced };
+  }
+
+  /**
+   * ارسال یک درخواست از صف به سرور
+   * @returns نتیجه دقیق ارسال (نگاه کنید به EntryResult)
+   */
+  private async sendEntry(entry: SyncQueueEntry, hasRetriedAuth = false): Promise<EntryResult> {
+    if (!entry.id) return 'rejected';
+
+    try {
+      // علامت‌گذاری به عنوان در حال ارسال
+      await offlineDb.syncQueue.update(entry.id, { status: 'sending' });
+
+      // ساخت و ارسال درخواست fetch
+      const token = sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const fetchOptions: RequestInit = {
+        method: entry.method,
+        headers,
+      };
+
+      // برای DELETE بدنه ارسال نمی‌کنیم
+      if (entry.method !== 'DELETE' && entry.body) {
+        fetchOptions.body = JSON.stringify(entry.body);
+      }
+
+      const response = await fetch(entry.url, fetchOptions);
+
+      // پاسخ گرفتن با «به بک‌اند رسیدن» یکی نیست: یک 502 از Cloudflare هم یک
+      // پاسخ کامل HTTP است، در حالی که origin اصلاً بالا نیست. اگر اینجا
+      // reachable گزارش کنیم، رابط کاربری خود را آنلاین نشان می‌دهد در حالی
+      // که هیچ درخواستی واقعاً به بک‌اند نمی‌رسد.
+      if (isServerUnreachable(response.status)) {
+        this.network.reportServerUnreachable();
+      } else {
+        this.network.reportServerReachable();
+      }
+
+      if (response.ok) {
+        // موفقیت‌آمیز — حذف از صف
+        await offlineDb.syncQueue.delete(entry.id);
+        console.log(`[OfflineSync] ✅ ارسال موفق: ${entry.method} ${entry.url}`);
+        return 'sent';
+      } else if (response.status === 401) {
+        // توکن منقضی — تلاش برای refresh و ارسال مجدد (فقط یک بار)
+        if (!hasRetriedAuth && (await this.tryRefreshToken())) {
+          return this.sendEntry(entry, true);
+        }
+        // refresh ناموفق — رکورد در صف بماند تا بعد از login مجدد ارسال شود
+        await offlineDb.syncQueue.update(entry.id, {
+          status: 'pending',
+          lastError: 'نشست منقضی شده — پس از ورود مجدد ارسال می‌شود',
+        });
+        console.warn(`[OfflineSync] 🔒 توکن منقضی — ${entry.url} در صف ماند`);
+        return 'auth-failed';
+      } else if (response.status >= 400 && response.status < 500) {
+        // خطای کلاینت (4xx) — انتقال به صندوق خطاها
+        let serverMessage = `خطای ${response.status}`;
+        try {
+          const errorBody = await response.json();
+          if (errorBody.detail) {
+            serverMessage = errorBody.detail;
+          } else if (typeof errorBody === 'object') {
+            const firstField = Object.keys(errorBody)[0];
+            const firstError = errorBody[firstField];
+            serverMessage = Array.isArray(firstError)
+              ? `${firstField}: ${firstError[0]}`
+              : String(firstError);
+          }
+        } catch { /* ignore JSON parse error */ }
+
+        // ذخیره در صندوق خطاها
+        const syncError: SyncErrorEntry = {
+          method: entry.method,
+          url: entry.url,
+          body: entry.body,
+          statusCode: response.status,
+          serverMessage,
+          failedAt: Date.now(),
+          dismissed: 0,
+        };
+        await offlineDb.syncErrors.add(syncError);
+
+        // حذف از صف — سرور صریحاً رد کرده و تکرار آن بی‌فایده است
+        await offlineDb.syncQueue.delete(entry.id);
+        console.error(`[OfflineSync] ❌ خطای ${response.status} برای ${entry.url} — منتقل به صندوق خطاها`);
+        return 'rejected';
+      } else {
+        // خطای سرور (5xx) — در صف می‌ماند، بعداً دوباره تلاش می‌شود
+        await this.handleRetry(entry, `خطای سرور (${response.status})`);
+        return 'server-error';
+      }
+    } catch (error: any) {
+      // اصلاً به سرور نرسیدیم (قطع شبکه / سرور خاموش)
+      // این «شکست همگام‌سازی» نیست — فقط هنوز فرصتش نشده است.
+      this.network.reportServerUnreachable();
+      await this.markTransportFailure(entry, error?.message || 'اتصال برقرار نشد');
+      return 'transport-failed';
+    }
+  }
+
+  /**
+   * تلاش برای تازه‌سازی access token با استفاده از refresh token
+   * @returns true = توکن جدید گرفته شد / false = ناموفق
+   */
+  private async tryRefreshToken(): Promise<boolean> {
+    const refresh = sessionStorage.getItem('wh_refresh_token') || localStorage.getItem('wh_refresh_token');
+    if (!refresh) return false;
+
+    try {
+      const response = await fetch(`${environment.apiUrl}/auth/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh }),
+      });
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      if (!data?.access) return false;
+
+      // توکن جدید را همان‌جایی ذخیره کن که توکن قبلی بود
+      if (sessionStorage.getItem('wh_access_token')) {
+        sessionStorage.setItem('wh_access_token', data.access);
+      } else {
+        localStorage.setItem('wh_access_token', data.access);
+      }
+      console.log('[OfflineSync] 🔑 توکن با موفقیت تازه‌سازی شد');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * مدیریت خطای سرور (۵xx) — رکورد هرگز حذف نمی‌شود
+   *
+   * صف، کار ناتمام کاربر است. تنها دو چیز آن را حذف می‌کند:
+   * پذیرش صریح سرور (۲xx) یا رد صریح سرور (۴xx).
+   * خطای موقت سرور فقط شمارنده تلاش را بالا می‌برد.
+   */
+  private async handleRetry(entry: SyncQueueEntry, errorMessage: string): Promise<void> {
+    if (!entry.id) return;
+    const newRetryCount = entry.retryCount + 1;
+
+    await offlineDb.syncQueue.update(entry.id, {
+      status: 'failed',
+      retryCount: newRetryCount,
+      lastError:
+        newRetryCount >= this.MAX_RETRIES
+          ? `${errorMessage} — پس از ${newRetryCount} تلاش هنوز ارسال نشده (داده‌ها محفوظ است)`
+          : errorMessage,
+    });
+
+    console.warn(
+      `[OfflineSync] ⚠️ تلاش ${newRetryCount} ناموفق: ${entry.url} — ${errorMessage} (در صف باقی ماند)`
+    );
+  }
+
+  /**
+   * خطای انتقال (به سرور نرسیدیم) — رکورد بدون هیچ تغییری به صف برمی‌گردد
+   *
+   * مهم: retryCount افزایش نمی‌یابد. قطعی اینترنت تقصیر داده نیست و
+   * نباید رکورد را به سمت «سوختن» ببرد.
+   */
+  private async markTransportFailure(entry: SyncQueueEntry, errorMessage: string): Promise<void> {
+    if (!entry.id) return;
+    await offlineDb.syncQueue.update(entry.id, {
+      status: 'pending',
+      lastError: `در انتظار اتصال: ${errorMessage}`,
+    });
+    console.log(`[OfflineSync] 📴 ${entry.url} ارسال نشد — در صف ماند تا اتصال برقرار شود`);
+  }
+
+  // ════════════════════════════════════════════
+  //  ابزارهای کمکی
+  // ════════════════════════════════════════════
+
+  /** به‌روزرسانی شمارنده‌های Observable */
+  async refreshCounts(): Promise<void> {
+    try {
+      const pending = await offlineDb.syncQueue
+        .where('status')
+        .anyOf(['pending', 'failed'])
+        .count();
+      this._pendingCount$.next(pending);
+
+      const errors = await offlineDb.syncErrors
+        .where('dismissed')
+        .equals(0)
+        .count();
+      this._errorCount$.next(errors);
+    } catch (e) {
+      // DB may not be ready
+    }
+  }
+
+  /** دریافت تعداد درخواست‌های در صف */
+  async getPendingCount(): Promise<number> {
+    return offlineDb.syncQueue
+      .where('status')
+      .anyOf(['pending', 'failed'])
+      .count();
+  }
+
+  /** تخلیه کامل صف (برای حالت‌های اضطراری) */
+  async clearQueue(): Promise<void> {
+    await offlineDb.syncQueue.clear();
+    await this.refreshCounts();
+    console.log('[OfflineSync] 🗑️ صف همگام‌سازی پاک شد');
+  }
+
+  destroy(): void {
+    this.subscription?.unsubscribe();
+    this.stopAutoSync();
+  }
+}

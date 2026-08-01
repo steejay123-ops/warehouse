@@ -9,11 +9,11 @@
     "projectName": "warehouse project",
     "projectPath": "e:\\warehouse project",
     "testIds": [],
-    "additionalInstruction": "Please use 'admin' as the username and '123456' as the password for all login attempts.",
+    "additionalInstruction": "Please generate and run a test to verify that the PWA features are active. Specifically, verify that the application loads, that /manifest.webmanifest loads correctly and contains the app name 'اتوماسیون انبار', and that /ngsw-worker.js (the Angular service worker) loads successfully.",
     "serverMode": "production",
     "envs": {
       "API_KEY": "sk-user-SWPSvOYLYhFxDUdAXQ3sNjHs4LaG2WuSiF8wJZS9u5w0FmyfBd4tw23wDFJXKjE8pl6Tj7QQDpqBkQH79iUDVYWt1AJhBQUGAtzMuIE6yhk7dN7naECHI2A8a4kXsMoyQrE"
     }
   },
-  "serverPort": 49682
+  "serverPort": 50367
 }

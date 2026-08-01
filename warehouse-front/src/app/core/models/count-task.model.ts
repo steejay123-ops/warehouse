@@ -42,4 +42,8 @@ export interface CountTask {
   item_details?: Item;
   history?: CountTaskHistory[];
   is_blind?: boolean;
+
+  // توسط offlineInterceptor روی رکوردهای صف‌شده اضافه می‌شود
+  _offlinePending?: boolean;
+  _offlineId?: number;
 }

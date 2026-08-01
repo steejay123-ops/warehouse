@@ -18,3 +18,26 @@ New-NetFirewallRule -DisplayName "Open Port 4200 for Angular" -Direction Inbound
 
 
 node server.js
+
+ساخت سرور ایترنت
+
+npx localtunnel --port 4200
+
+npx localtunnel --port 4200 --subdomain my-warehouse-app
+
+npx cloudflared tunnel --url http://localhost:4200
+
+ssh -p 443 -R0:localhost:4200 a.pinggy.io
+
+
+کلاد فلر با دامنه خودت
+npx cloudflared tunnel login
+npx cloudflared tunnel create warehouse
+npx cloudflared tunnel route dns warehouse app.farsalish.ir
+
+npx cloudflared tunnel run --url http://localhost:4200 warehouse
+
+
+
+
+

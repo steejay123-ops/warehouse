@@ -4,15 +4,18 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../core/auth/auth.service';
 import { ToastService } from '../../shared/components/toast/toast.component';
-import { ChangeDetectorRef, OnInit } from '@angular/core';
+import { ChangeDetectorRef, OnInit, OnDestroy } from '@angular/core';
 import { ConfigApiService } from '../../core/api/config-api.service';
+import { OfflineSyncService } from '../../core/services/offline-sync.service';
+import { NetworkStatusService, ConnectionState } from '../../core/services/network-status.service';
+import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-login',
   imports: [CommonModule, FormsModule],
   templateUrl: './login.html',
   styleUrl: './login.css'
 })
-export class Login implements OnInit {
+export class Login implements OnInit, OnDestroy {
   username = '';
   password = '';
   passwordFieldType = 'password';
@@ -31,9 +34,36 @@ export class Login implements OnInit {
 
   systemVersion: string = '۱.۰';
 
+  /**
+   * وضعیت واقعی اتصال. قبلاً این نشان به‌صورت ثابت «سیستم آنلاین» بود و حتی
+   * وقتی تونل Cloudflare خاموش بود (۵۳۰) هم سبز می‌ماند — یعنی درست در لحظه‌ای
+   * که کاربر بیشترین نیاز را به دانستن وضعیت داشت، به او دروغ می‌گفت.
+   */
+  connectionState: ConnectionState = 'online';
+  private stateSub?: Subscription;
+
+  /** متن و رنگ نشان بالای فرم ورود */
+  get statusLabel(): string {
+    if (this.connectionState === 'offline') return 'آفلاین — اتصال اینترنت قطع است';
+    if (this.connectionState === 'server-unreachable') return 'سرور در دسترس نیست';
+    return 'سیستم آنلاین';
+  }
+
+  get statusIsHealthy(): boolean {
+    return this.connectionState === 'online';
+  }
+
   ngOnInit() {
+    const network = NetworkStatusService.getInstance();
+    this.connectionState = network.state;
+    this.stateSub = network.state$.subscribe((state) => {
+      this.connectionState = state;
+      this.cdr.detectChanges();
+    });
+
     this.configApi.getPublicConfig().subscribe({
       next: (config) => {
+        OfflineSyncService.getInstance().applyRemoteConfig(config);
         if (config.system_version) {
           this.systemVersion = config.system_version;
           this.cdr.detectChanges();
@@ -41,6 +71,10 @@ export class Login implements OnInit {
       },
       error: (err) => console.error('Failed to load public config', err)
     });
+  }
+
+  ngOnDestroy() {
+    this.stateSub?.unsubscribe();
   }
 
   togglePassword() {

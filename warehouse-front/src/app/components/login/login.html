@@ -21,9 +21,14 @@
           </div>
           <h1 class="text-xl font-black text-white text-center leading-tight">اتوماسیون هوشمند انبار</h1>
           <p class="text-xs text-slate-400 mt-1.5 text-center">سامانه یکپارچه مدیریت انبارگردانی فارس عالیش</p>
-          <div class="flex items-center gap-2 mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span>
-            <span class="text-[10px] text-emerald-400 font-medium">سیستم آنلاین · نسخه {{ systemVersion }}</span>
+          <div class="flex items-center gap-2 mt-3 rounded-full px-3 py-1 border"
+               [ngClass]="statusIsHealthy
+                 ? 'bg-emerald-500/10 border-emerald-500/20'
+                 : 'bg-amber-500/10 border-amber-500/25'">
+            <span class="w-1.5 h-1.5 rounded-full pulse-dot"
+                  [ngClass]="statusIsHealthy ? 'bg-emerald-400' : 'bg-amber-400'"></span>
+            <span class="text-[10px] font-medium"
+                  [ngClass]="statusIsHealthy ? 'text-emerald-400' : 'text-amber-300'">{{ statusLabel }} · نسخه {{ systemVersion }}</span>
           </div>
         </div>
 

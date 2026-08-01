@@ -1,8 +1,8 @@
 [
   {
     "id": "TC001",
-    "title": "Sign in and reach the dashboard",
-    "description": "A user can authenticate with valid credentials and land in the authenticated area with the dashboard displayed.",
+    "title": "Log in successfully and reach the authenticated app",
+    "description": "This test verifies that a user can submit valid credentials on the login page and enter the authenticated area with access to the app shell.",
     "category": "User Login",
     "steps": [
       {
@@ -23,20 +23,20 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the authenticated area is displayed"
+        "description": "Verify the user lands in the authenticated app"
       },
       {
         "type": "assertion",
-        "description": "Verify the dashboard is displayed"
+        "description": "Verify access to the dashboard is available"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC002",
-    "title": "Block unauthenticated access to protected routes",
-    "description": "A user without a session is redirected or blocked from protected pages and sent to the login page.",
-    "category": "User Login",
+    "title": "Block direct access to the dashboard when signed out",
+    "description": "This test verifies that an unauthenticated visitor who opens the dashboard is redirected or blocked from protected content.",
+    "category": "Session Gating",
     "steps": [
       {
         "type": "action",
@@ -44,19 +44,20 @@
       },
       {
         "type": "assertion",
-        "description": "Verify access is blocked"
-      },
-      {
-        "type": "assertion",
         "description": "Verify the login page is displayed"
-      },
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Block direct access to protected management pages when signed out",
+    "description": "This test verifies that an unauthenticated visitor who opens protected management pages is redirected or blocked from access.",
+    "category": "Session Gating",
+    "steps": [
       {
         "type": "action",
         "description": "Navigate to /projects"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify access is blocked"
       },
       {
         "type": "assertion",
@@ -68,19 +69,11 @@
       },
       {
         "type": "assertion",
-        "description": "Verify access is blocked"
-      },
-      {
-        "type": "assertion",
         "description": "Verify the login page is displayed"
       },
       {
         "type": "action",
         "description": "Navigate to /users"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify access is blocked"
       },
       {
         "type": "assertion",
@@ -90,9 +83,9 @@
     "priority": "High"
   },
   {
-    "id": "TC003",
-    "title": "Edit a dispatch record and keep the changes visible",
-    "description": "An authenticated user can update a dispatch record and see the updated dispatch information afterward.",
+    "id": "TC004",
+    "title": "Edit a dispatch item and see the updated information",
+    "description": "This test verifies that an authenticated user can change a dispatch record and see the updated dispatch information reflected in the UI.",
     "category": "Dispatch Management",
     "steps": [
       {
@@ -113,19 +106,19 @@
       },
       {
         "type": "action",
-        "description": "Click the link to access dispatch"
+        "description": "Click the dispatch link in the authenticated app"
       },
       {
         "type": "action",
-        "description": "Open a dispatch record for editing"
+        "description": "Open a dispatch item for editing"
       },
       {
         "type": "action",
-        "description": "Change an editable dispatch field to a valid new value"
+        "description": "Update the dispatch item details"
       },
       {
         "type": "action",
-        "description": "Save the dispatch changes"
+        "description": "Save the dispatch item"
       },
       {
         "type": "assertion",
@@ -135,9 +128,9 @@
     "priority": "High"
   },
   {
-    "id": "TC004",
+    "id": "TC005",
     "title": "View dashboard metrics after signing in",
-    "description": "An authenticated user can open the dashboard and see overview metrics rendered successfully.",
+    "description": "This test verifies that an authenticated user can open the dashboard and see operational overview content.",
     "category": "Dashboard",
     "steps": [
       {
@@ -158,7 +151,7 @@
       },
       {
         "type": "action",
-        "description": "Click the link to access the dashboard"
+        "description": "Click the dashboard link in the authenticated app"
       },
       {
         "type": "assertion",
@@ -168,9 +161,9 @@
     "priority": "High"
   },
   {
-    "id": "TC005",
-    "title": "Open dispatch from the signed-in area",
-    "description": "An authenticated user can move from the dashboard to dispatch and see the dispatch list displayed.",
+    "id": "TC006",
+    "title": "View dispatch records after signing in",
+    "description": "This test verifies that an authenticated user can open dispatch management and see the dispatch list.",
     "category": "Dispatch Management",
     "steps": [
       {
@@ -191,61 +184,20 @@
       },
       {
         "type": "action",
-        "description": "Click the link to access dispatch"
+        "description": "Click the dispatch link in the authenticated app"
       },
       {
         "type": "assertion",
-        "description": "Verify the dispatch list is displayed"
+        "description": "Verify dispatch records are displayed"
       }
     ],
     "priority": "High"
   },
   {
-    "id": "TC006",
-    "title": "Move across projects and users after signing in",
-    "description": "An authenticated user can navigate to projects and users and each protected page loads within the same session.",
-    "category": "Projects and Users Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the link to access projects"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the projects page is displayed"
-      },
-      {
-        "type": "action",
-        "description": "Click the link to access users"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the users page is displayed"
-      }
-    ],
-    "priority": "Medium"
-  },
-  {
     "id": "TC007",
-    "title": "Open projects and users from the dashboard",
-    "description": "An authenticated user can navigate from the dashboard to projects and users without losing access to protected pages.",
-    "category": "Projects and Users Management",
+    "title": "Move from dashboard to dispatch after signing in",
+    "description": "This test verifies that an authenticated user can navigate from the dashboard to dispatch management without losing access.",
+    "category": "Dashboard",
     "steps": [
       {
         "type": "action",
@@ -265,31 +217,68 @@
       },
       {
         "type": "action",
-        "description": "Click the link to access the dashboard"
+        "description": "Click the dashboard link in the authenticated app"
       },
       {
         "type": "action",
-        "description": "Click the link to access projects"
+        "description": "Click the dispatch link in the authenticated app"
       },
       {
         "type": "assertion",
-        "description": "Verify the projects page is displayed"
-      },
-      {
-        "type": "action",
-        "description": "Click the link to access users"
+        "description": "Verify dispatch records are displayed"
       },
       {
         "type": "assertion",
-        "description": "Verify the users page is displayed"
+        "description": "Verify the user remains authenticated"
       }
     ],
-    "priority": "Medium"
+    "priority": "High"
   },
   {
     "id": "TC008",
-    "title": "See required-field validation on login",
-    "description": "A user who submits the login form without required credentials sees validation feedback and stays on the login page.",
+    "title": "Navigate across protected sections without being logged out",
+    "description": "This test verifies that an authenticated user can move between projects and users sections in the protected app shell without losing access.",
+    "category": "Projects and Users",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the projects link in the authenticated app"
+      },
+      {
+        "type": "action",
+        "description": "Click the users link in the authenticated app"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the users management page is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the user remains authenticated"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC009",
+    "title": "See validation feedback when required login fields are left blank",
+    "description": "This test verifies that submitting the login form without required credentials shows validation feedback and does not enter the authenticated area.",
     "category": "User Login",
     "steps": [
       {
@@ -302,13 +291,74 @@
       },
       {
         "type": "assertion",
-        "description": "Verify validation feedback is displayed"
+        "description": "Verify login validation feedback is visible"
       },
       {
         "type": "assertion",
-        "description": "Verify the login page remains displayed"
+        "description": "Verify the user remains on the login page"
       }
     ],
     "priority": "Low"
+  }
+  ,{
+    "id": "TC010",
+    "title": "Edit a dispatch item while offline and verify sync",
+    "description": "This test verifies that an authenticated user can edit a dispatch record while offline, see the offline banner, and then have it sync when online.",
+    "category": "Offline Sync",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the dispatch link in the authenticated app"
+      },
+      {
+        "type": "action",
+        "description": "Disable network connection to simulate offline mode"
+      },
+      {
+        "type": "action",
+        "description": "Open a dispatch item for editing"
+      },
+      {
+        "type": "action",
+        "description": "Update the dispatch item details"
+      },
+      {
+        "type": "action",
+        "description": "Save the dispatch item"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the offline banner is visible indicating changes are saved locally"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated dispatch information is displayed in the list"
+      },
+      {
+        "type": "action",
+        "description": "Re-enable network connection to simulate online mode"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the changes sync to the server successfully"
+      }
+    ],
+    "priority": "High"
   }
 ]

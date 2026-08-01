@@ -164,7 +164,8 @@ export class DynamicFields implements OnInit {
           this.fields = this.fields.filter(f => f.id !== field.id);
           this.toast.show('success', 'فیلد حذف شد');
         },
-        error: () => this.toast.show('error', 'خطا در حذف فیلد')
+        // پیام خطا از errorInterceptor می‌آید؛ توست محلی روی آن سوار می‌شد.
+        error: () => {}
       });
     }
   }

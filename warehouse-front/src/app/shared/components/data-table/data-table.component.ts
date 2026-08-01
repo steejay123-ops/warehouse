@@ -23,6 +23,7 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
 import { TableViewApiService, TableViewState } from '../../../core/api/table-view-api.service';
+import { OfflinePendingBadgeComponent } from '../offline-pending-badge/offline-pending-badge.component';
 
 // ══════════════════════════════════════════════════
 //  Column Definition Directive
@@ -65,7 +66,7 @@ export interface PageEvent {
 @Component({
   selector: 'app-data-table',
   standalone: true,
-  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgPersianDatepickerModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgPersianDatepickerModule, OfflinePendingBadgeComponent],
   template: `
     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
       <!-- Header Actions -->
@@ -401,7 +402,7 @@ export interface PageEvent {
             @for (row of data; track trackByFn(row); let i = $index) {
               <tr
                 class="transition-colors group"
-                [ngClass]="rowClass(row) || 'hover:bg-indigo-50/30'"
+                [ngClass]="rowClasses(row)"
                 [class.bg-indigo-50/50]="isRowSelected(row)"
               >
                 @if (selectable) {
@@ -419,7 +420,7 @@ export interface PageEvent {
                     {{ (currentPage - 1) * pageSize + i + 1 }}
                   </td>
                 }
-                @for (col of columns; track col.key) {
+                @for (col of columns; track col.key; let firstCol = $first) {
                   <td class="px-3 py-2.5 text-slate-700 relative group/cell" [class.bg-yellow-50]="pendingChanges.has(row)">
                     @if (col.editable) {
                       @if (isEditing(row, col.key)) {
@@ -444,6 +445,9 @@ export interface PageEvent {
                         [ngTemplateOutlet]="col.template"
                         [ngTemplateOutletContext]="{ $implicit: row, row: row, value: row[col.key], index: i }"
                       ></ng-container>
+                    }
+                    @if (firstCol && row._offlinePending) {
+                      <app-offline-pending-badge class="block mt-1" />
                     }
                   </td>
                 }
@@ -594,6 +598,15 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   @Input() globalSearch: string = '';
   @Input() tableHeightClass: string = 'max-h-[60vh]';
   @Input() rowClass: (row: any) => string = () => '';
+
+  /**
+   * `rowClass` متعلق به مصرف‌کننده است، پس بازنویسی نمی‌شود؛ کلاس رکوردهای
+   * در صف آفلاین روی خروجی آن سوار می‌شود.
+   */
+  rowClasses = (row: any) => [
+    this.rowClass(row) || 'hover:bg-indigo-50/30',
+    row?._offlinePending ? 'bg-sky-50 ring-1 ring-inset ring-sky-200' : '',
+  ];
 
   @Output() sortChanged = new EventEmitter<SortState>();
   @Output() filterChanged = new EventEmitter<Record<string, string>>();
@@ -1082,7 +1095,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   get isAllSelected(): boolean {
-    return this.data.length > 0 && this.data.every((row) => this.selectedIds.has(row[this.trackByKey]));
+    return this.data.length > 0 && this.data.every((row) => this.selectedIds.has(this.getRowKey(row)));
   }
 
   get selectedCount(): number {
@@ -1116,7 +1129,14 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     return pages;
   }
 
-  trackByFn = (row: any) => row[this.trackByKey];
+  /**
+   * رکوردهای ساخته‌شده در حالت آفلاین هنوز `id` سرور را ندارند و فقط
+   * `_offlineId` دارند. بازگشت خود شیء به‌عنوان آخرین fallback تضمین می‌کند
+   * کلید هرگز تکراری نشود (وگرنه @for خطای NG0955 می‌دهد).
+   */
+  getRowKey = (row: any) => row?.[this.trackByKey] ?? row?.['_offlineId'] ?? row;
+
+  trackByFn = (row: any) => this.getRowKey(row);
 
   handleSort(key: string): void {
     if (this.sort.key === key) {
@@ -1166,9 +1186,9 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     const checked = (event.target as HTMLInputElement).checked;
     const newSet = new Set(this.selectedIds);
     if (checked) {
-      this.data.forEach((row) => newSet.add(row[this.trackByKey]));
+      this.data.forEach((row) => newSet.add(this.getRowKey(row)));
     } else {
-      this.data.forEach((row) => newSet.delete(row[this.trackByKey]));
+      this.data.forEach((row) => newSet.delete(this.getRowKey(row)));
     }
     this.selectedIds = newSet;
     this.selectionChanged.emit(newSet);
@@ -1178,16 +1198,16 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     const checked = (event.target as HTMLInputElement).checked;
     const newSet = new Set(this.selectedIds);
     if (checked) {
-      newSet.add(row[this.trackByKey]);
+      newSet.add(this.getRowKey(row));
     } else {
-      newSet.delete(row[this.trackByKey]);
+      newSet.delete(this.getRowKey(row));
     }
     this.selectedIds = newSet;
     this.selectionChanged.emit(newSet);
   }
 
   isRowSelected(row: any): boolean {
-    return this.selectedIds.has(row[this.trackByKey]);
+    return this.selectedIds.has(this.getRowKey(row));
   }
 
   goToPage(page: number): void {

@@ -1,8 +1,9 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, of, throwError, tap, catchError, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
 import {
   AuthTokens,
   LoginPayload,
@@ -92,7 +93,9 @@ export class AuthService {
     }
 
     return this.http
-      .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, { username, password })
+      .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, { username, password }, {
+        context: new HttpContext().set(SKIP_OFFLINE, true),
+      })
       .pipe(
         tap((response) => this.handleLoginSuccess(response, rememberMe)),
         catchError((err) => {
@@ -123,7 +126,9 @@ export class AuthService {
     }
 
     return this.http
-      .post<{ access: string }>(`${environment.apiUrl}/auth/refresh/`, { refresh })
+      .post<{ access: string }>(`${environment.apiUrl}/auth/refresh/`, { refresh }, {
+        context: new HttpContext().set(SKIP_OFFLINE, true),
+      })
       .pipe(
         tap((response) => this.setItem(TOKEN_KEY, response.access)),
         catchError((err) => {

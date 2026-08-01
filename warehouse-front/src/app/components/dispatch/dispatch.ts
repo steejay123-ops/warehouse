@@ -641,7 +641,9 @@ export class Dispatch implements OnInit {
         this.selectedItemIds.clear();
         this.loadItems();
       },
-      error: () => this.toast.show('error', 'خطا در درخواست بازشماری')
+      // پیام خطا فقط از errorInterceptor می‌آید — او تفکیک «به سرور نرسیدیم» از
+      // «سرور رد کرد» را می‌داند و متن دقیق DRF را هم نشان می‌دهد.
+      error: () => {}
     });
   }
 
@@ -674,7 +676,7 @@ export class Dispatch implements OnInit {
         }
         this.loadItems();
       },
-      error: () => this.toast.show('error', 'خطا در تگ‌گذاری')
+      error: () => {}
     });
   }
 
@@ -705,7 +707,7 @@ export class Dispatch implements OnInit {
         this.selectedItemsTags = this.selectedItemsTags.filter((t: string) => t !== tagToRemove);
         this.loadItems();
       },
-      error: () => this.toast.show('error', 'خطا در حذف تگ')
+      error: () => {}
     });
   }
 
@@ -719,7 +721,7 @@ export class Dispatch implements OnInit {
         this.selectedItemsTags = [];
         this.loadItems();
       },
-      error: () => this.toast.show('error', 'خطا در پاک کردن تگ‌ها')
+      error: () => {}
     });
   }
 

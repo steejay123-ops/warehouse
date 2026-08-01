@@ -1,13 +1,18 @@
-import { Component, OnInit, computed, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { filter } from 'rxjs';
+import { filter, Subscription } from 'rxjs';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthStore } from '../../core/stores/auth.store';
 import { StateService } from '../../services/state.service';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
+import { NetworkStatusService, ConnectionState } from '../../core/services/network-status.service';
+import { OfflineSyncService } from '../../core/services/offline-sync.service';
+import { SyncErrorEntry } from '../../core/services/offline-db';
+import { ConfigApiService } from '../../core/api/config-api.service';
+import { ToastService } from '../../shared/components/toast/toast.component';
 
 @Component({
   selector: 'app-layout',
@@ -15,11 +20,26 @@ import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
-export class Layout implements OnInit {
+export class Layout implements OnInit, OnDestroy {
 
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
   isDesktopSidebarCollapsed = localStorage.getItem('desktopSidebarCollapsed') === 'true';
+
+  // ─── Offline / Sync UI ───
+  /** وضعیت سه‌حالته اتصال: online | server-unreachable | offline */
+  connectionState: ConnectionState = 'online';
+  isOffline = false;
+  isSyncing = false;
+  pendingCount = 0;
+  syncErrorCount = 0;
+  syncErrors: SyncErrorEntry[] = [];
+  isSyncErrorsOpen = false;
+  lastSyncTime: number | null = null;
+  syncSuccessMessage: string | null = null;
+  private syncSuccessTimer: any = null;
+  private baseTitle = document.title;
+  private offlineSubs: Subscription[] = [];
 
   toggleDesktopSidebar() {
     this.isDesktopSidebarCollapsed = !this.isDesktopSidebarCollapsed;
@@ -98,7 +118,9 @@ export class Layout implements OnInit {
     private router: Router,
     private sanitizer: DomSanitizer,
     private whService: WarehouseHttpService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private toast: ToastService,
+    private configApi: ConfigApiService
   ) {
     // Sanitize icons
     for (const k in this.rawIcons) {
@@ -123,14 +145,180 @@ export class Layout implements OnInit {
         
         const storedId = this.store.activeWarehouseId();
         if (data.length > 0 && !storedId) {
-          // اگر انباری انتخاب نشده بود، اولین انبار را انتخاب کن
           this.onWarehouseChanged(data[0].id);
         } else if (storedId) {
-          // اگر در استور موجود بود (مثلا از localStorage) حتماً سینک کن
           this.state.appState.activeWarehouseId = storedId === 'ALL' ? 'ALL' : Number(storedId);
         }
       }
     });
+
+    // ─── Subscribe to offline/sync observables ───
+    const network = NetworkStatusService.getInstance();
+    const syncService = OfflineSyncService.getInstance();
+
+    // نشست‌های طولانی ممکن است روزها باز بمانند و تنظیمات ادمین را از دست بدهند
+    this.configApi.getPublicConfig().subscribe({
+      next: (config) => syncService.applyRemoteConfig(config),
+      error: () => {},
+    });
+
+    this.offlineSubs.push(
+      network.state$.subscribe((state) => {
+        this.connectionState = state;
+        // «آفلاین» از دید کاربر یعنی «سرور در دسترس نیست» —
+        // چه اینترنت قطع باشد چه سرور خاموش
+        this.isOffline = state !== 'online';
+        document.title = this.isOffline ? `📴 آفلاین — ${this.baseTitle}` : this.baseTitle;
+        this.cdr.detectChanges();
+      })
+    );
+
+    // بازخورد همگام‌سازی خودکار (وقتی کاربر دکمه‌ای نزده و اتصال خودش برگشته)
+    this.offlineSubs.push(
+      syncService.syncOutcome$.subscribe((outcome) => {
+        if (outcome.status !== 'completed') return;
+        this.syncSuccessMessage = `${outcome.synced} مورد با موفقیت به سرور ارسال شد.`;
+        clearTimeout(this.syncSuccessTimer);
+        this.syncSuccessTimer = setTimeout(() => {
+          this.syncSuccessMessage = null;
+          this.cdr.detectChanges();
+        }, 5000);
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.isSyncing$.subscribe((syncing) => {
+        this.isSyncing = syncing;
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.pendingCount$.subscribe((count) => {
+        this.pendingCount = count;
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.errorCount$.subscribe((count) => {
+        this.syncErrorCount = count;
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.lastSyncTime$.subscribe((time) => {
+        this.lastSyncTime = time;
+        this.cdr.detectChanges();
+      })
+    );
+  }
+
+  ngOnDestroy() {
+    this.offlineSubs.forEach((s) => s.unsubscribe());
+    clearTimeout(this.syncSuccessTimer);
+    document.title = this.baseTitle;
+  }
+
+  // ─── Sync Actions ───
+
+  /**
+   * همگام‌سازی دستی
+   *
+   * قانون: «شکست» فقط وقتی اعلام می‌شود که واقعاً به سرور وصل شده باشیم.
+   * وقتی آفلاین هستیم، هیچ تلاشی انجام نمی‌شود و فقط به کاربر
+   * اطلاع می‌دهیم که اینترنتش را بررسی کند.
+   */
+  async onForceSync() {
+    const syncService = OfflineSyncService.getInstance();
+    const outcome = await syncService.forceSync();
+
+    switch (outcome.status) {
+      case 'offline':
+        this.toast.show(
+          'warning',
+          'اینترنت شما وصل نیست. لطفاً اتصال خود را بررسی کنید. داده‌های شما محفوظ است و به‌محض برقراری اتصال ارسال می‌شود.'
+        );
+        break;
+
+      case 'server-unreachable':
+        this.toast.show(
+          'warning',
+          outcome.synced > 0
+            ? `${outcome.synced} مورد ارسال شد، اما ارتباط با سرور قطع شد. بقیه موارد محفوظ است و بعداً ارسال می‌شود.`
+            : 'سرور در حال حاضر در دسترس نیست. داده‌های شما محفوظ است و به‌صورت خودکار دوباره تلاش می‌شود.'
+        );
+        break;
+
+      case 'auth-required':
+        this.toast.show(
+          'warning',
+          'نشست شما منقضی شده است. لطفاً دوباره وارد شوید تا داده‌ها ارسال شوند.'
+        );
+        break;
+
+      case 'nothing-to-sync':
+        this.toast.show('info', 'همه چیز به‌روز است — موردی برای ارسال وجود ندارد.');
+        break;
+
+      // 'completed' عمداً اینجا نیست — بنر سبز در layout آن را نشان می‌دهد
+      // (هم برای همگام‌سازی دستی هم خودکار) تا پیام دوتایی نشود.
+
+      case 'partial':
+        if (outcome.rejected > 0) {
+          this.toast.show(
+            'error',
+            `${outcome.synced} مورد ارسال شد، ${outcome.rejected} مورد توسط سرور رد شد — به صندوق خطاها مراجعه کنید.`
+          );
+        } else {
+          this.toast.show(
+            'warning',
+            `${outcome.synced} مورد ارسال شد، ${outcome.remaining} مورد باقی ماند و دوباره تلاش می‌شود.`
+          );
+        }
+        break;
+    }
+  }
+
+  toggleSyncErrors() {
+    this.isSyncErrorsOpen = !this.isSyncErrorsOpen;
+    if (this.isSyncErrorsOpen) {
+      this.loadSyncErrors();
+    }
+    this.cdr.detectChanges();
+  }
+
+  closeSyncErrors() {
+    this.isSyncErrorsOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  async loadSyncErrors() {
+    const syncService = OfflineSyncService.getInstance();
+    this.syncErrors = await syncService.getErrors();
+    this.cdr.detectChanges();
+  }
+
+  async dismissSyncError(id: number) {
+    const syncService = OfflineSyncService.getInstance();
+    await syncService.dismissError(id);
+    this.syncErrors = this.syncErrors.filter((e) => e.id !== id);
+    this.cdr.detectChanges();
+  }
+
+  async dismissAllSyncErrors() {
+    const syncService = OfflineSyncService.getInstance();
+    await syncService.dismissAllErrors();
+    this.syncErrors = [];
+    this.isSyncErrorsOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  formatSyncTime(timestamp: number): string {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   }
 
   /** ──── Sidebar ──── */

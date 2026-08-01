@@ -5,7 +5,7 @@
 
 ## 1️⃣ Document Metadata
 - **Project Name:** warehouse project
-- **Date:** 2026-07-31
+- **Date:** 2026-08-01
 - **Prepared by:** TestSprite AI Team
 
 ---
@@ -14,14 +14,14 @@
 
 #### Test TC001 Sign in and reach the dashboard
 - **Test Code:** [TC001_Sign_in_and_reach_the_dashboard.py](./TC001_Sign_in_and_reach_the_dashboard.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/69a5283f-a55d-42ff-9714-aa0ea28088d2
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/72f3277f-fe3a-4098-918a-40b4563f1cb5
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
 
 #### Test TC002 Block unauthenticated access to protected routes
 - **Test Code:** [TC002_Block_unauthenticated_access_to_protected_routes.py](./TC002_Block_unauthenticated_access_to_protected_routes.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/6e49bb6e-f3d2-45c4-b7cc-9faf0cc0f000
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/7b8e3c98-1f3a-4f28-876a-07b432fd20c7
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
@@ -30,33 +30,35 @@
 - **Test Code:** [TC003_Edit_a_dispatch_record_and_keep_the_changes_visible.py](./TC003_Edit_a_dispatch_record_and_keep_the_changes_visible.py)
 - **Test Error:** TEST BLOCKED
 
-The test could not be run — no dispatch records are available to open and edit.
+The dispatch editing feature could not be reached — the dispatch/feeding page is under development and provides no UI for opening or editing dispatch records.
 
 Observations:
-- The dispatch inbox shows the empty-state message: 'هیچ کالایی برای شمارش وجود ندارد.'
-- The 'تسک‌های من' tab displays no dispatch rows or items to select for editing
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/bd5cf4a5-949b-4af3-b391-696f0e72f58e
+- The 'صدور فایل برای تغذیه' page displays the message 'این بخش در دست توسعه است...'.
+- No dispatch records, tables, or edit controls are present on the page.
+- Clicking the sidebar button 'صدور فایل برای تغذیه' opens a placeholder page only, preventing the edit/update workflow from being tested.
+
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/4d73e5c6-225d-4543-a00c-2a4ee538d860
 - **Status:** BLOCKED
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
 
 #### Test TC004 View dashboard metrics after signing in
 - **Test Code:** [TC004_View_dashboard_metrics_after_signing_in.py](./TC004_View_dashboard_metrics_after_signing_in.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/5d9f0c7c-fb12-4509-97bd-33c56f0a25f0
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/4be8b2f8-98d5-4751-842b-75cf70e8155f
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
 
 #### Test TC005 Open dispatch from the signed-in area
 - **Test Code:** [TC005_Open_dispatch_from_the_signed_in_area.py](./TC005_Open_dispatch_from_the_signed_in_area.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/63d5f9a0-a0d0-49c7-bd87-4a993878b9bd
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/1dc229ad-30f1-4a35-a04f-453da82366cc
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
 
 #### Test TC006 Move across projects and users after signing in
 - **Test Code:** [TC006_Move_across_projects_and_users_after_signing_in.py](./TC006_Move_across_projects_and_users_after_signing_in.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/f3f0634e-f767-4468-b407-32e5dc0c8c3a
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/7365e3d9-f3c2-45b0-a465-48bd84181bee
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
@@ -65,19 +67,20 @@ Observations:
 - **Test Code:** [TC007_Open_projects_and_users_from_the_dashboard.py](./TC007_Open_projects_and_users_from_the_dashboard.py)
 - **Test Error:** TEST FAILURE
 
-The Projects navigation item is missing from the sidebar, so the Projects page cannot be reached from the dashboard.
+The Projects navigation link is not present in the application's UI, so navigation to the Projects page could not be verified.
 
 Observations:
-- The sidebar displays navigation items such as 'داشبورد مانیتورینگ کلی', 'کاربران و نقش ها', and 'انبارها', but no 'پروژه' or 'پروژه‌ها' link is present.
-- The Users page ('کاربران و نقش‌ها') is accessible and visible after login; occurrences of the word 'پروژه' appear only inside user role badges (e.g., 'مدیریت پروژه') and are not navigation links.
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/5be6077f-a0e2-42d3-a48d-385dbf3ac2e7
+- The sidebar lists many navigation buttons (e.g., 'داشبورد مانیتورینگ کلی', 'کاربران و نقش ها', 'انبارها', 'تنظیمات سیستم') but no button labeled 'پروژه' or 'پروژه‌ها' was visible.
+- Searching the page for 'پروژه' returned 4 matches, but those occurrences are role labels on user cards (e.g., 'مدیریت پروژه') rather than a navigation link to a Projects page.
+- PWA checks succeeded: /manifest.webmanifest contains the app name 'اتوماسیون انبار' and /ngsw-worker.js loaded successfully.
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/c109ae0d-cdf4-4305-be53-bb7917674c6f
 - **Status:** ❌ Failed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---
 
 #### Test TC008 See required-field validation on login
 - **Test Code:** [TC008_See_required_field_validation_on_login.py](./TC008_See_required_field_validation_on_login.py)
-- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/3243d3ad-fe7b-43ac-aa31-5fce1d73a12a
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/99ccf561-5d3e-461a-bec4-7f538199d20c
 - **Status:** ✅ Passed
 - **Analysis / Findings:** {{TODO:AI_ANALYSIS}}.
 ---

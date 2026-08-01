@@ -8,8 +8,18 @@ import {
 } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../../services/toast.service';
+import { OFFLINE_NO_CACHE } from '../interceptors/offline.interceptor';
+import { isServerUnreachable } from '../services/server-reachability';
 
 export const SKIP_GLOBAL_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
+
+/**
+ * یک صفحه ممکن است چند GET موازی بزند و آفلاین همه با هم شکست بخورند.
+ * ToastService نه de-dup دارد نه تایمرش را می‌شود متوقف کرد، پس فاصله‌گذاری
+ * را همین‌جا انجام می‌دهیم تا کاربر با چند توست یکسان روبه‌رو نشود.
+ */
+let lastOfflineToastAt = 0;
+const OFFLINE_TOAST_GAP_MS = 3000;
 
 /**
  * Global Error Interceptor — خطاهای HTTP را catch کرده و toast مناسب نمایش می‌دهد
@@ -37,9 +47,25 @@ export const errorInterceptor: HttpInterceptorFn = (
         return throwError(() => error);
       }
 
+      // آفلاین + نبود کش — این «خطای سرور» نیست، وضعیت آفلاین است
+      if (req.context.get(OFFLINE_NO_CACHE)) {
+        const now = Date.now();
+        if (now - lastOfflineToastAt > OFFLINE_TOAST_GAP_MS) {
+          lastOfflineToastAt = now;
+          toast.show(
+            'warning',
+            'شما آفلاین هستید و این اطلاعات روی دستگاه ذخیره نشده است. پس از برقراری اتصال دوباره تلاش کنید.'
+          );
+        }
+        return throwError(() => error);
+      }
+
       let message = 'خطای ارتباط با سرور. لطفا دوباره تلاش کنید.';
 
-      if (error.status === 0) {
+      if (isServerUnreachable(error.status)) {
+        // ۵۳۰ از Cloudflare یک پاسخ کامل HTTP است، پس در شرط `>= 500` می‌افتاد و
+        // کاربر «با پشتیبانی تماس بگیرید» می‌دید؛ در حالی که بک‌اند هیچ خطایی
+        // نداده — درخواست هرگز به آن نرسیده است. مقصر اتصال است، نه سرور.
         message = 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.';
       } else if (error.status === 403) {
         message = 'شما مجوز دسترسی به این عملیات را ندارید.';

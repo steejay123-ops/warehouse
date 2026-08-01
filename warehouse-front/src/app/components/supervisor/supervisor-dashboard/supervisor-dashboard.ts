@@ -8,6 +8,7 @@ import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/
 import { StateService } from '../../../services/state.service';
 import { HasPermissionDirective } from '../../../shared';
 import { WarehouseSelectorComponent } from '../../../shared/components/warehouse-selector/warehouse-selector.component';
+import { OfflinePendingBadgeComponent } from '../../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { AuthStore } from '../../../core/stores/auth.store';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
@@ -15,7 +16,7 @@ import { environment } from '../../../../environments/environment';
 @Component({
   selector: 'app-supervisor-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, HasPermissionDirective, WarehouseSelectorComponent],
+  imports: [CommonModule, FormsModule, HasPermissionDirective, WarehouseSelectorComponent, OfflinePendingBadgeComponent],
   templateUrl: './supervisor-dashboard.html',
   styleUrl: './supervisor-dashboard.css'
 })

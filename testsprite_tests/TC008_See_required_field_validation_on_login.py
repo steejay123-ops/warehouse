@@ -48,15 +48,18 @@ async def run_test():
         # --> Assertions to verify final state
         
         # --> Verify validation feedback is displayed
-        # Assert: Validation feedback "نام کاربری یا رمز عبور نادرست است." is visible on the page.
-        await expect(page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[1]/div/div").nth(0)).to_contain_text("\u0646\u0627\u0645 \u06a9\u0627\u0631\u0628\u0631\u06cc \u06cc\u0627 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a.", timeout=15000), "Validation feedback \"\u0646\u0627\u0645 \u06a9\u0627\u0631\u0628\u0631\u06cc \u06cc\u0627 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a.\" is visible on the page."
+        # Assert: Validation message 'نام کاربری یا رمز عبور نادرست است.' is visible on the page.
+        await expect(page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[1]/div/div").nth(0)).to_contain_text("\u0646\u0627\u0645 \u06a9\u0627\u0631\u0628\u0631\u06cc \u06cc\u0627 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a.", timeout=15000), "Validation message '\u0646\u0627\u0645 \u06a9\u0627\u0631\u0628\u0631\u06cc \u06cc\u0627 \u0631\u0645\u0632 \u0639\u0628\u0648\u0631 \u0646\u0627\u062f\u0631\u0633\u062a \u0627\u0633\u062a.' is visible on the page."
         
         # --> Verify the login page remains displayed
-        # Assert: The URL contains '/login', confirming the login page is still displayed.
-        await expect(page).to_have_url(re.compile("/login"), timeout=15000), "The URL contains '/login', confirming the login page is still displayed."
+        # Assert: The current URL contains '/login', confirming the login page is displayed.
+        await expect(page).to_have_url(re.compile("/login"), timeout=15000), "The current URL contains '/login', confirming the login page is displayed."
         await page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[1]/div/input").nth(0).scroll_into_view_if_needed()
         # Assert: The username input is visible on the login page.
         await expect(page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[1]/div/input").nth(0)).to_be_visible(timeout=15000), "The username input is visible on the login page."
+        await page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[2]/div/input").nth(0).scroll_into_view_if_needed()
+        # Assert: The password input is visible on the login page.
+        await expect(page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/div[2]/div/input").nth(0)).to_be_visible(timeout=15000), "The password input is visible on the login page."
         await page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/button").nth(0).scroll_into_view_if_needed()
         # Assert: The 'ورود به سامانه' button is visible on the login page.
         await expect(page.locator("xpath=/html/body/app-root/app-login/div/div[2]/div/div[2]/div[3]/button").nth(0)).to_be_visible(timeout=15000), "The '\u0648\u0631\u0648\u062f \u0628\u0647 \u0633\u0627\u0645\u0627\u0646\u0647' button is visible on the login page."

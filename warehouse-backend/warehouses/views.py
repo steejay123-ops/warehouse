@@ -152,8 +152,19 @@ class PublicConfigViewSet(viewsets.ViewSet):
         return [AllowAny()]
 
     def list(self, request):
-        from .services import get_setting
+        from .services import get_setting, DEFAULT_SETTINGS
+
+        def clamped_minutes(key, low, high):
+            """یک مقدار خرابِ واردشده توسط ادمین نباید این endpoint حساسِ بوت را ۵۰۰ کند."""
+            try:
+                return max(low, min(high, int(get_setting(key))))
+            except (TypeError, ValueError):
+                return DEFAULT_SETTINGS[key]
+
         return Response({
             'system_version': get_setting('system_version'),
-            'system_name': 'سامانه یکپارچه مدیریت انبارگردانی فارس عالیش'
+            'system_name': 'سامانه یکپارچه مدیریت انبارگردانی فارس عالیش',
+            'offline_sync_interval_minutes': clamped_minutes('offline_sync_interval_minutes', 1, 1440),
+            # صفر = «هیچ‌وقت کهنه نشود» و مقدار معتبری است، پس کف بازه صفر است
+            'offline_cache_ttl_minutes': clamped_minutes('offline_cache_ttl_minutes', 0, 10080),
         })

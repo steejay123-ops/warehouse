@@ -66,7 +66,10 @@ export class Projects implements OnInit {
         this.state.appState.projects = data as any;
         this.cdr.detectChanges();
       },
-      error: (err) => this.toast.show('error', 'خطا در دریافت لیست انبارها')
+      // پیام خطا را errorInterceptor می‌سازد، چون تنها اوست که می‌داند خطا از
+      // نرسیدن به سرور است یا از پاسخ خودش. توست محلی روی آن سوار می‌شد و
+      // «آفلاین هستید» را زیر یک پیام مبهم پنهان می‌کرد.
+      error: () => {}
     });
   }
 
@@ -169,7 +172,7 @@ export class Projects implements OnInit {
          this.toast.show('success', 'تغییرات با موفقیت ذخیره شد.');
          this.editModalOpen = false;
        },
-       error: () => this.toast.show('error', 'خطا در ویرایش انبار')
+       error: () => {}
     });
   }
 

@@ -1,0 +1,33 @@
+{
+  "projectId": "warehouse",
+  "type": "frontend",
+  "name": "PWA Manifest and Service Worker are active",
+  "description": "Verifies that the PWA manifest and Angular service worker are correctly served by the frontend server.",
+  "priority": "p1",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the homepage"
+    },
+    {
+      "type": "action",
+      "description": "Check if the application loads successfully"
+    },
+    {
+      "type": "action",
+      "description": "Navigate to /manifest.webmanifest directly"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the manifest JSON loads and contains the name 'اتوماسیون انبار'"
+    },
+    {
+      "type": "action",
+      "description": "Navigate to /ngsw-worker.js directly"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the Angular service worker script loads successfully"
+    }
+  ]
+}

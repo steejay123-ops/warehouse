@@ -1,84 +1,112 @@
-<div dir="rtl" align="right">
-
-# گزارش تست هوش مصنوعی TestSprite (MCP)
+# TestSprite AI Testing Report (MCP)
 
 ---
 
-## 1️⃣ متادیتا سند
-- **نام پروژه:** warehouse project
-- **تاریخ:** 2026-07-31
-- **تهیه شده توسط:** تیم هوش مصنوعی TestSprite
-- **حالت تست:** پروداکشن (Production) (با نام کاربری `admin` و تنظیمات پروکسی)
+## 1️⃣ Document Metadata
+- **Project Name:** warehouse project
+- **Date:** 2026-08-01
+- **Prepared by:** TestSprite AI Team
 
 ---
 
-## 2️⃣ خلاصه اعتبارسنجی نیازمندی‌ها
+## 2️⃣ Requirement Validation Summary
 
-### ورود کاربر (User Login)
-#### تست TC001 ورود به سیستم و دسترسی به داشبورد
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/69a5283f-a55d-42ff-9714-aa0ea28088d2
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** قابلیت ورود با استفاده از نام کاربری و رمز عبور ادمین به درستی کار می‌کند.
+### Requirement: Authentication & Login
+- **Description:** Verifies user login and access control functionality.
 
-#### تست TC002 جلوگیری از دسترسی کاربران احراز هویت نشده به مسیرهای محافظت‌شده
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/6e49bb6e-f3d2-45c4-b7cc-9faf0cc0f000
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** برنامه با موفقیت کاربرانی که وارد نشده‌اند را هنگام تلاش برای دسترسی به مسیرهای محافظت‌شده، به صفحه ورود (login) هدایت می‌کند.
-
-#### تست TC008 مشاهده اعتبارسنجی فیلدهای اجباری در ورود
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/3243d3ad-fe7b-43ac-aa31-5fce1d73a12a
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** صفحه ورود به درستی فیلدهای خالی را اعتبارسنجی می‌کند و قبل از ارسال اطلاعات، از کاربر می‌خواهد که آن‌ها را پر کند.
-
-### داشبورد (Dashboard)
-#### تست TC004 مشاهده معیارهای داشبورد پس از ورود
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/5d9f0c7c-fb12-4509-97bd-33c56f0a25f0
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** پس از ورود موفق، داشبورد به درستی لود می‌شود و محتویات آن نمایش داده می‌شود.
-
-### مدیریت رسید و حواله (Dispatch Management)
-#### تست TC003 ویرایش یک رکورد حواله و قابل مشاهده نگه‌داشتن تغییرات
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/bd5cf4a5-949b-4af3-b391-696f0e72f58e
-- **وضعیت:** ❌ مسدود شده (Blocked)
-- **تحلیل / یافته‌ها:** این تست قابل اجرا نبود زیرا هیچ رکورد حواله/رسیدی در دیتابیس برای ویرایش وجود ندارد. رابط کاربری (UI) به درستی پیام حالت خالی را نشان می‌دهد: «هیچ کالایی برای شمارش وجود ندارد.»
-
-#### تست TC005 باز کردن بخش رسید/حواله از محیط کاربری
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/63d5f9a0-a0d0-49c7-bd87-4a993878b9bd
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** ناوبری به بخش رسید/حواله به درستی کار می‌کند.
-
-### مدیریت پروژه‌ها و کاربران (Projects and Users Management)
-#### تست TC006 جابجایی بین بخش پروژه‌ها و کاربران پس از ورود
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/f3f0634e-f767-4468-b407-32e5dc0c8c3a
-- **وضعیت:** ✅ موفق (Passed)
-- **تحلیل / یافته‌ها:** ناوبری و جابجایی بین بخش‌های مختلف کاربر طبق انتظار کار می‌کند.
-
-#### تست TC007 باز کردن پروژه‌ها و کاربران از طریق داشبورد
-- **تصویرسازی و نتیجه تست:** https://www.testsprite.com/dashboard/mcp/tests/f736c118-568d-4e47-9bd6-47028c996db1/5be6077f-a0e2-42d3-a48d-385dbf3ac2e7
-- **وضعیت:** ❌ ناموفق (Failed)
-- **تحلیل / یافته‌ها:** آیتم ناوبری «پروژه‌ها» در منوی کناری (سایدبار) وجود ندارد، که این موضوع مانع از رفتن ربات به صفحه پروژه‌ها می‌شود.
-
+#### Test TC001 Sign in and reach the dashboard
+- **Test Code:** [TC001_Sign_in_and_reach_the_dashboard.py](./TC001_Sign_in_and_reach_the_dashboard.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/72f3277f-fe3a-4098-918a-40b4563f1cb5
+- **Status:** ✅ Passed
+- **Severity:** HIGH
+- **Analysis / Findings:** Login is functioning correctly, allowing users to reach the dashboard.
 ---
 
-## 3️⃣ معیارهای پوشش و تطابق
-
-- **۷۵.۰۰٪** از تست‌ها با موفقیت پاس شدند (۶ از ۸)
-
-| نیازمندی (Requirement)            | کل تست‌ها | ✅ موفق (Passed) | ❌ ناموفق/مسدود (Failed/Blocked) |
-|-----------------------------------|-----------|-----------------|---------------------------------|
-| ورود کاربر                        | 3         | 3               | 0                               |
-| داشبورد                           | 1         | 1               | 0                               |
-| مدیریت رسید و حواله               | 2         | 1               | 1                               |
-| مدیریت پروژه‌ها و کاربران         | 2         | 1               | 1                               |
-| **مجموع**                         | **8**     | **6**           | **2**                           |
-
+#### Test TC002 Block unauthenticated access to protected routes
+- **Test Code:** [TC002_Block_unauthenticated_access_to_protected_routes.py](./TC002_Block_unauthenticated_access_to_protected_routes.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/7b8e3c98-1f3a-4f28-876a-07b432fd20c7
+- **Status:** ✅ Passed
+- **Severity:** HIGH
+- **Analysis / Findings:** Protected routes are correctly enforcing authentication.
 ---
 
-## 4️⃣ شکاف‌ها و ریسک‌های کلیدی (Key Gaps / Risks)
+#### Test TC008 See required-field validation on login
+- **Test Code:** [TC008_See_required_field_validation_on_login.py](./TC008_See_required_field_validation_on_login.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/99ccf561-5d3e-461a-bec4-7f538199d20c
+- **Status:** ✅ Passed
+- **Severity:** LOW
+- **Analysis / Findings:** Login form correctly validates required fields.
+---
 
-1. **وضعیت دیتابیس خالی (تست TC003):** 
-   - تست TC003 مسدود شد زیرا هیچ رکورد کالایی (رسید/حواله) در سیستم برای ویرایش وجود ندارد. ما باید دیتابیس را با داده‌های اولیه (Mock Data) پر کنیم، یا اینکه قبل از این تست، یک تست "ایجاد رکورد جدید" بنویسیم.
-2. **عدم وجود مسیر در رابط کاربری (تست TC007):** 
-   - رابط کاربری فاقد لینک "پروژه‌ها" در منوی کناری (سایدبار) است و همین باعث رد شدن تست TC007 شد. سایدبار در حال حاضر فقط شامل 'داشبورد مانیتورینگ کلی'، 'کاربران و نقش ها' و 'انبارها' است. روتینگ مربوط به پروژه‌ها باید به منوی ناوبری سایدبار اضافه شود.
 
-</div>
+### Requirement: Dashboard & Navigation
+- **Description:** Verifies navigation and metrics visualization.
+
+#### Test TC004 View dashboard metrics after signing in
+- **Test Code:** [TC004_View_dashboard_metrics_after_signing_in.py](./TC004_View_dashboard_metrics_after_signing_in.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/4be8b2f8-98d5-4751-842b-75cf70e8155f
+- **Status:** ✅ Passed
+- **Severity:** MEDIUM
+- **Analysis / Findings:** Dashboard metrics are correctly visible upon login.
+---
+
+#### Test TC006 Move across projects and users after signing in
+- **Test Code:** [TC006_Move_across_projects_and_users_after_signing_in.py](./TC006_Move_across_projects_and_users_after_signing_in.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/7365e3d9-f3c2-45b0-a465-48bd84181bee
+- **Status:** ✅ Passed
+- **Severity:** MEDIUM
+- **Analysis / Findings:** Cross-navigation works without issues.
+---
+
+#### Test TC007 Open projects and users from the dashboard & PWA Verification
+- **Test Code:** [TC007_Open_projects_and_users_from_the_dashboard.py](./TC007_Open_projects_and_users_from_the_dashboard.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/c109ae0d-cdf4-4305-be53-bb7917674c6f
+- **Status:** ❌ Failed
+- **Severity:** HIGH
+- **Analysis / Findings:** The Projects navigation link is missing in the sidebar (UI issue). **However, PWA checks succeeded:** /manifest.webmanifest contains the app name 'اتوماسیون انبار' and /ngsw-worker.js loaded successfully.
+---
+
+
+### Requirement: Dispatch Management
+- **Description:** Verifies the dispatch workflow (creation, editing, opening).
+
+#### Test TC003 Edit a dispatch record and keep the changes visible
+- **Test Code:** [TC003_Edit_a_dispatch_record_and_keep_the_changes_visible.py](./TC003_Edit_a_dispatch_record_and_keep_the_changes_visible.py)
+- **Test Error:** TEST BLOCKED
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/4d73e5c6-225d-4543-a00c-2a4ee538d860
+- **Status:** ⚠️ Blocked
+- **Severity:** HIGH
+- **Analysis / Findings:** The dispatch editing feature could not be reached — the dispatch/feeding page is under development and provides no UI for opening or editing dispatch records ('این بخش در دست توسعه است...').
+---
+
+#### Test TC005 Open dispatch from the signed-in area
+- **Test Code:** [TC005_Open_dispatch_from_the_signed_in_area.py](./TC005_Open_dispatch_from_the_signed_in_area.py)
+- **Test Visualization and Result:** https://www.testsprite.com/dashboard/mcp/tests/102bfa2a-6795-4ef8-952a-cc2368a29394/1dc229ad-30f1-4a35-a04f-453da82366cc
+- **Status:** ✅ Passed
+- **Severity:** MEDIUM
+- **Analysis / Findings:** Opening the dispatch area works.
+---
+
+
+## 3️⃣ Coverage & Matching Metrics
+
+- **75.00%** of tests passed
+
+| Requirement               | Total Tests | ✅ Passed | ❌ Failed | ⚠️ Blocked |
+|---------------------------|-------------|-----------|------------|------------|
+| Authentication & Login    | 3           | 3         | 0          | 0          |
+| Dashboard & Navigation    | 3           | 2         | 1          | 0          |
+| Dispatch Management       | 2           | 1         | 0          | 1          |
+| **Total**                 | **8**       | **6**     | **1**      | **1**      |
+---
+
+
+## 4️⃣ Key Gaps / Risks
+
+> **75.00% of tests passed fully.**
+> 
+> **Risks & Gaps:**
+> 1. **Incomplete Features:** The dispatch editing page is currently under development (showing a placeholder message) which blocks core functional testing for dispatch management.
+> 2. **Missing Navigation Links:** The "Projects" link is missing from the sidebar, preventing users from directly navigating to the projects page from the UI.
+> 3. **PWA Validation:** The requested PWA and Offline functionality checks were validated successfully during TC007 execution (`manifest.webmanifest` and `ngsw-worker.js` were correctly served).
+---

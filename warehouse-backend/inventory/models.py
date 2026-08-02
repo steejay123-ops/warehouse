@@ -5,7 +5,10 @@ from django.utils import timezone
 
 from django.contrib.postgres.indexes import GinIndex
 
-class ItemFieldDefinition(models.Model):
+from common.sync_models import SyncModelMixin
+
+
+class ItemFieldDefinition(SyncModelMixin):
     FIELD_TYPE_CHOICES = [
         ('text', 'متن (Text)'),
         ('number', 'عدد (Number)'),
@@ -31,11 +34,12 @@ class ItemFieldDefinition(models.Model):
         unique_together = ('warehouse', 'name')
         verbose_name = "تعریف فیلد پویا"
         verbose_name_plural = "تعاریف فیلدهای پویا"
+        base_manager_name = 'all_objects'  # روابط FK حتی به رکوردهای حذف‌نرم دسترسی داشته باشند
 
     def __str__(self):
         return f"{self.label} ({self.name})"
 
-class Item(models.Model):
+class Item(SyncModelMixin):
     # Tracking & IDs
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items', verbose_name="انبار")
     fa_unic_code = models.CharField(max_length=100, verbose_name="کد یکتا (FA-UNIC)")
@@ -109,6 +113,7 @@ class Item(models.Model):
 
     class Meta:
         unique_together = ('warehouse', 'fa_unic_code')
+        base_manager_name = 'all_objects'  # روابط FK حتی به رکوردهای حذف‌نرم دسترسی داشته باشند
         indexes = [
             GinIndex(
                 name='item_desc_gin_idx',
@@ -170,7 +175,7 @@ class ItemPhoto(models.Model):
     def __str__(self):
         return f"Photo for {self.item.fa_unic_code}"
 
-class CountTask(models.Model):
+class CountTask(SyncModelMixin):
     STATUS_CHOICES = [
         ('PENDING_COUNT', 'در انتظار شمارش'),
         ('COUNTED', 'شمارش شده (نزد سرپرست)'),
@@ -202,20 +207,24 @@ class CountTask(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        base_manager_name = 'all_objects'  # روابط FK حتی به رکوردهای حذف‌نرم دسترسی داشته باشند
 
     def __str__(self):
         return f"Count Task for {self.item.fa_unic_code} - {self.get_status_display()}"
 
-class CountTaskHistory(models.Model):
+class CountTaskHistory(SyncModelMixin):
     task = models.ForeignKey(CountTask, on_delete=models.CASCADE, related_name='history', verbose_name="تسک شمارش")
     action_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='action_histories', verbose_name="اقدام کننده")
     action_type = models.CharField(max_length=50, verbose_name="نوع اقدام")
     counted_balance = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, verbose_name="مقدار شمرده شده (Snapshot)")
     note = models.TextField(null=True, blank=True, verbose_name="توضیحات در لحظه ثبت")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
+    # برای cursor سینک (Pull) لازم است؛ رکورد تاریخچه immutable است پس عملاً برابر created_at می‌ماند
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="زمان به‌روزرسانی")
 
     class Meta:
         ordering = ['created_at']
+        base_manager_name = 'all_objects'  # روابط FK حتی به رکوردهای حذف‌نرم دسترسی داشته باشند
 
     def __str__(self):
         return f"{self.action_type} on {self.task_id} by {self.action_by_id}"

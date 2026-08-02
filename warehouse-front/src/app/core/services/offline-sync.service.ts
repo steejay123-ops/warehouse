@@ -86,6 +86,13 @@ export class OfflineSyncService {
   private _syncOutcome$ = new Subject<SyncOutcome>();
   readonly syncOutcome$ = this._syncOutcome$.asObservable();
 
+  /**
+   * رد صریح سرور (4xx/409) — storeهای دامنه برای reconciliation گوش می‌دهند:
+   * رکورد محلی خوش‌بینانه باید به آخرین نسخهٔ سروری برگردد.
+   */
+  private _rejected$ = new Subject<SyncErrorEntry>();
+  readonly rejected$ = this._rejected$.asObservable();
+
   private constructor() {}
 
   /** دریافت نمونه سینگلتون */
@@ -130,7 +137,39 @@ export class OfflineSyncService {
     // به‌روزرسانی شمارنده‌ها
     this.refreshCounts();
 
+    // پاکسازی دادهٔ دامنهٔ خیلی قدیمی (نگهداری ۶ ماه) — روزی یک‌بار
+    this.pruneOldLocalData().catch(() => {});
+
     console.log('[OfflineSync] ✅ سرویس همگام‌سازی آفلاین راه‌اندازی شد');
+  }
+
+  /**
+   * حذف رکوردهای دامنهٔ محلی قدیمی‌تر از ۶ ماه (updated_at) که هیچ تغییر
+   * ارسال‌نشده‌ای در صف ندارند. صف و صندوق خطا هرگز prune نمی‌شوند.
+   */
+  private async pruneOldLocalData(): Promise<void> {
+    const PRUNE_KEY = 'wh_last_prune';
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    const last = parseInt(localStorage.getItem(PRUNE_KEY) || '0', 10);
+    if (Date.now() - last < ONE_DAY) return;
+    localStorage.setItem(PRUNE_KEY, String(Date.now()));
+
+    const cutoffIso = new Date(Date.now() - 180 * ONE_DAY).toISOString();
+    const pendingEntries = await offlineDb.syncQueue.toArray();
+    const protectedIds = new Set(pendingEntries.map((e) => e.entitySyncId).filter(Boolean));
+
+    let pruned = 0;
+    for (const table of [offlineDb.countTasks, offlineDb.items, offlineDb.dynamicFields]) {
+      const old = await table.where('updated_at').below(cutoffIso).primaryKeys();
+      const deletable = old.filter((k) => !protectedIds.has(k as string));
+      if (deletable.length) {
+        await table.bulkDelete(deletable as string[]);
+        pruned += deletable.length;
+      }
+    }
+    if (pruned > 0) {
+      console.log(`[OfflineSync] 🧹 ${pruned} رکورد محلی قدیمی‌تر از ۶ ماه پاک شد`);
+    }
   }
 
   // ════════════════════════════════════════════
@@ -251,8 +290,14 @@ export class OfflineSyncService {
 
   /**
    * افزودن یک درخواست تغییری به صف همگام‌سازی
+   * @param meta متادیتای Local-First: مالک، نوع/شناسه موجودیت، نسخهٔ مبنا (409)
    */
-  async enqueue(method: string, url: string, body: any): Promise<SyncQueueEntry> {
+  async enqueue(
+    method: string,
+    url: string,
+    body: any,
+    meta?: { userId?: number; entityType?: string; entitySyncId?: string; baseUpdatedAt?: string }
+  ): Promise<SyncQueueEntry> {
     const entry: SyncQueueEntry = {
       method,
       url,
@@ -260,6 +305,7 @@ export class OfflineSyncService {
       createdAt: Date.now(),
       retryCount: 0,
       status: 'pending',
+      ...(meta || {}),
     };
     const id = await offlineDb.syncQueue.add(entry);
     entry.id = id;
@@ -359,6 +405,69 @@ export class OfflineSyncService {
   async clearAllErrors(): Promise<void> {
     await offlineDb.syncErrors.clear();
     await this.refreshCounts();
+  }
+
+  /**
+   * تلاش مجدد یک درخواست ردشده — از Inbox خطاها.
+   * رکورد به صف برمی‌گردد (با متادیتای اصلی) و صف بلافاصله پردازش می‌شود.
+   */
+  async retryError(errorId: number): Promise<void> {
+    const err = await offlineDb.syncErrors.get(errorId);
+    if (!err) return;
+    await this.enqueue(err.method, err.url, err.body, {
+      userId: err.userId,
+      entityType: err.entityType,
+      entitySyncId: err.entitySyncId,
+    });
+    await offlineDb.syncErrors.delete(errorId);
+    await this.refreshCounts();
+    console.log(`[OfflineSync] 🔁 خطای ${errorId} به صف برگشت (${err.method} ${err.url})`);
+    this.processQueue();
+  }
+
+  /**
+   * Reconciliation پس از رد صریح سرور (اصلاح ۵ طرح):
+   * دادهٔ خوش‌بینانهٔ محلی نباید طوری بماند که انگار پذیرفته شده.
+   * اگر سرور نسخهٔ خودش را داده (server_record در 409) همان جایگزین می‌شود؛
+   * وگرنه فقط پرچم pending پاک می‌شود و نسخهٔ تازه با Pull بعدی می‌رسد.
+   */
+  private async reconcileRejected(err: SyncErrorEntry): Promise<void> {
+    if (!err.entitySyncId || !err.entityType) return;
+    const tableMap: Record<string, 'countTasks' | 'items' | 'dynamicFields'> = {
+      count_task: 'countTasks',
+      item: 'items',
+      dynamic_field: 'dynamicFields',
+    };
+    const tableName = tableMap[err.entityType];
+    if (!tableName) return;
+    const table = offlineDb[tableName];
+
+    try {
+      // آیا تغییر دیگری از همین رکورد هنوز در صف است؟ اگر بله پرچم می‌ماند.
+      const stillPending = await offlineDb.syncQueue
+        .where('entitySyncId').equals(err.entitySyncId)
+        .and((e) => ['pending', 'sending', 'failed'].includes(e.status))
+        .count();
+
+      const serverRecord = err.serverResponse?.server_record;
+      if (serverRecord?.sync_id) {
+        const existing = await table.get(err.entitySyncId);
+        await table.put({
+          ...serverRecord,
+          warehouse_id: serverRecord.warehouse_id ?? serverRecord.warehouse ?? existing?.warehouse_id,
+          ...(stillPending > 0 ? { _offlinePending: true } : {}),
+        });
+      } else if (stillPending === 0) {
+        const existing = await table.get(err.entitySyncId);
+        if (existing?._offlinePending) {
+          delete existing._offlinePending;
+          delete existing._localDraft;
+          await table.put(existing);
+        }
+      }
+    } catch (e) {
+      console.warn('[OfflineSync] ⚠️ reconciliation ناموفق:', e);
+    }
   }
 
   // ════════════════════════════════════════════
@@ -524,12 +633,15 @@ export class OfflineSyncService {
         await this.handleRetry(entry, `خطای موقت سرور (${response.status}) — بعداً دوباره تلاش می‌شود`);
         return 'server-error';
       } else if (response.status >= 400 && response.status < 500) {
-        // خطای کلاینت (4xx) — انتقال به صندوق خطاها
+        // خطای کلاینت (4xx شامل 409) — انتقال به صندوق خطاها
         let serverMessage = `خطای ${response.status}`;
+        let errorBody: any = null;
         try {
-          const errorBody = await response.json();
+          errorBody = await response.json();
           if (errorBody.detail) {
-            serverMessage = errorBody.detail;
+            serverMessage = errorBody.detail === 'conflict'
+              ? 'تداخل: این رکورد هم‌زمان توسط شخص دیگری تغییر کرده است'
+              : errorBody.detail;
           } else if (typeof errorBody === 'object') {
             const firstField = Object.keys(errorBody)[0];
             const firstError = errorBody[firstField];
@@ -539,7 +651,7 @@ export class OfflineSyncService {
           }
         } catch { /* ignore JSON parse error */ }
 
-        // ذخیره در صندوق خطاها
+        // ذخیره در صندوق خطاها (payload کامل حفظ می‌شود — داده کاربر گم نمی‌شود)
         const syncError: SyncErrorEntry = {
           method: entry.method,
           url: entry.url,
@@ -548,12 +660,20 @@ export class OfflineSyncService {
           serverMessage,
           failedAt: Date.now(),
           dismissed: 0,
+          userId: entry.userId,
+          entityType: entry.entityType,
+          entitySyncId: entry.entitySyncId,
+          serverResponse: errorBody,
         };
-        await offlineDb.syncErrors.add(syncError);
+        syncError.id = await offlineDb.syncErrors.add(syncError);
 
         // حذف از صف — سرور صریحاً رد کرده و تکرار آن بی‌فایده است
         await offlineDb.syncQueue.delete(entry.id);
         console.error(`[OfflineSync] ❌ خطای ${response.status} برای ${entry.url} — منتقل به صندوق خطاها`);
+
+        // Reconciliation: رکورد خوش‌بینانه محلی به وضعیت سروری برگردد
+        await this.reconcileRejected(syncError);
+        this._rejected$.next(syncError);
         return 'rejected';
       } else {
         // خطای سرور (5xx) — در صف می‌ماند، بعداً دوباره تلاش می‌شود

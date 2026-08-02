@@ -30,6 +30,12 @@ export const appConfig: ApplicationConfig = {
     }),
     provideAppInitializer(() => {
       OfflineSyncService.getInstance().initialize();
+      // درخواست ماندگاری storage — بدون آن مرورگر می‌تواند تحت فشار دیسک
+      // IndexedDB (صف و دادهٔ آفلاین کاربر) را پاک کند. fire-and-forget.
+      navigator.storage?.persist?.().then(
+        (granted) => console.log(`[Storage] persist: ${granted ? '✅ ماندگار شد' : '⚠️ رد شد (best-effort)'}`),
+        () => {}
+      );
     })
   ]
 };

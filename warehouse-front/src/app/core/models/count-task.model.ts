@@ -43,6 +43,16 @@ export interface CountTask {
   history?: CountTaskHistory[];
   is_blind?: boolean;
 
+  // ─── فیلدهای Local-First ───
+  /** شناسه پایدار سینک (کلید upsert در Dexie) */
+  sync_id?: string;
+  /** tombstone سرور (فقط در جریان Pull دیده می‌شود) */
+  is_deleted?: boolean;
+  /** انبار (در Dexie برای پارتیشن ذخیره می‌شود) */
+  warehouse_id?: number;
+  /** سرور این رکورد را حذف کرده ولی تغییر ارسال‌نشده محلی دارد */
+  _serverDeleted?: boolean;
+
   // توسط offlineInterceptor روی رکوردهای صف‌شده اضافه می‌شود
   _offlinePending?: boolean;
   _offlineId?: number;

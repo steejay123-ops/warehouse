@@ -25,8 +25,8 @@ class ItemFieldDefinitionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ItemFieldDefinition
-        fields = ['id', 'warehouse', 'name', 'label', 'field_type', 'default_value', 'is_required', 'is_active', 'created_by_name']
-        read_only_fields = ['id']
+        fields = ['id', 'warehouse', 'name', 'label', 'field_type', 'default_value', 'is_required', 'is_active', 'created_by_name', 'sync_id', 'is_deleted', 'updated_at']
+        read_only_fields = ['id', 'sync_id', 'is_deleted', 'updated_at']
 
     def get_created_by_name(self, obj):
         if obj.created_by:

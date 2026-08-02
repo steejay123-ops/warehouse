@@ -1,33 +1,163 @@
-{
-  "projectId": "warehouse",
-  "type": "frontend",
-  "name": "PWA Manifest and Service Worker are active",
-  "description": "Verifies that the PWA manifest and Angular service worker are correctly served by the frontend server.",
-  "priority": "p1",
-  "planSteps": [
-    {
-      "type": "action",
-      "description": "Navigate to the homepage"
-    },
-    {
-      "type": "action",
-      "description": "Check if the application loads successfully"
-    },
-    {
-      "type": "action",
-      "description": "Navigate to /manifest.webmanifest directly"
-    },
-    {
-      "type": "assertion",
-      "description": "Verify the manifest JSON loads and contains the name 'اتوماسیون انبار'"
-    },
-    {
-      "type": "action",
-      "description": "Navigate to /ngsw-worker.js directly"
-    },
-    {
-      "type": "assertion",
-      "description": "Verify the Angular service worker script loads successfully"
-    }
-  ]
-}
+[
+  {
+    "projectId": "warehouse",
+    "type": "frontend",
+    "name": "PWA Manifest and Service Worker are active",
+    "description": "Verifies that the PWA manifest and Angular service worker are correctly served by the frontend server.",
+    "priority": "p1",
+    "planSteps": [
+      {
+        "type": "action",
+        "description": "Navigate to the homepage"
+      },
+      {
+        "type": "action",
+        "description": "Check if the application loads successfully"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /manifest.webmanifest directly"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the manifest JSON loads and contains the name 'اتوماسیون انبار'"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to /ngsw-worker.js directly"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the Angular service worker script loads successfully"
+      }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: initial paged pull and mid-pull resume",
+    "description": "با انبار انتخاب‌شده، ورود به صفحه شمارش باید Pull صفحه‌بندی‌شده از /api/inventory/sync/pull/ را کامل کند و قطع اتصال وسط Pull نباید داده جا بیندازد (ادامه از cursor).",
+    "priority": "p1",
+    "planSteps": [
+      { "type": "action", "description": "به‌عنوان شمارشگر وارد شوید و یک انبار مشخص (نه «همه») انتخاب کنید" },
+      { "type": "action", "description": "صفحه شمارش را باز کنید و در DevTools → Network درخواست‌های sync/pull را ببینید" },
+      { "type": "assertion", "description": "Pull تا has_more=false ادامه می‌یابد و لیست تسک‌ها بلافاصله (از Dexie) نمایش داده می‌شود" },
+      { "type": "action", "description": "دیتای انبار را زیاد کنید یا throttling بگذارید، وسط Pull اینترنت را قطع کنید و دوباره وصل شوید" },
+      { "type": "assertion", "description": "Pull بعدی از همان cursor ادامه می‌دهد (در IndexedDB → syncCursors مقدار cursor/inFlightSince دیده می‌شود) و هیچ تسکی جا نمی‌افتد" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "frontend",
+    "name": "Local-First: offline count draft and submit",
+    "description": "در حالت کاملاً آفلاین، لیست شمارش از Dexie باز می‌شود، ثبت پیش‌نویس و ارسال گروهی انجام می‌شود و در صف می‌نشیند (Badge صف).",
+    "priority": "p1",
+    "planSteps": [
+      { "type": "action", "description": "یک‌بار آنلاین صفحه شمارش را باز کنید تا Pull اولیه کامل شود، سپس اینترنت را کامل قطع کنید (DevTools → Offline)" },
+      { "type": "action", "description": "صفحه را رفرش کنید و دوباره وارد صفحه شمارش شوید" },
+      { "type": "assertion", "description": "لیست تسک‌ها بدون خطا از Dexie نمایش داده می‌شود" },
+      { "type": "action", "description": "روی یک تسک، مقدار شمارش و یادداشت ثبت کنید (ذخیره)" },
+      { "type": "assertion", "description": "توست موفقیت نمایش داده می‌شود و روی کارت تسک Badge «در انتظار ارسال» ظاهر می‌شود" },
+      { "type": "action", "description": "چند تسک شمرده‌شده را submitAll کنید" },
+      { "type": "assertion", "description": "وضعیت محلی COUNTED می‌شود، پیام «در صف ارسال قرار گرفت» می‌آید و شمارنده صف در هدر بالا می‌رود" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: reconnect flushes queue and clears pending flags",
+    "description": "با اتصال مجدد، صف ارسال می‌شود، Pull دلتا اجرا می‌شود و پرچم‌های _offlinePending با نسخه رسمی سرور جایگزین می‌شوند.",
+    "priority": "p1",
+    "planSteps": [
+      { "type": "action", "description": "با صف پر (سناریوی قبل)، اینترنت را وصل کنید" },
+      { "type": "assertion", "description": "درخواست‌های PATCH و bulk_submit از صف ارسال می‌شوند و شمارنده صف صفر می‌شود" },
+      { "type": "assertion", "description": "بلافاصله بعد از صف، یک sync/pull خودکار اجرا می‌شود" },
+      { "type": "assertion", "description": "Badgeهای «در انتظار ارسال» پاک می‌شوند و وضعیت واقعی سرور (COUNTED یا MANAGER_REVIEW) در لیست دیده می‌شود" },
+      { "type": "action", "description": "همان bulk_submit را (با retry صف یا تکرار دستی) دوباره بفرستید" },
+      { "type": "assertion", "description": "سرور پاسخ already_submitted می‌دهد و خطا/دوباره‌کاری رخ نمی‌دهد (idempotent)" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: 409 conflict goes to Inbox with Retry and reconciliation",
+    "description": "ویرایش هم‌زمان همان تسک توسط ناظر/ادمین باید هنگام ارسال صف، 409 بدهد؛ خطا با Payload در Inbox بنشیند، صف «مسدود» علامت بخورد و رکورد محلی به نسخه سرور برگردد.",
+    "priority": "p1",
+    "planSteps": [
+      { "type": "action", "description": "آفلاین شوید و روی تسک X پیش‌نویس ثبت کنید (در صف بماند)" },
+      { "type": "action", "description": "از یک مرورگر/کاربر دیگر (آنلاین) همان تسک X را تغییر دهید تا updated_at سرور جلو بیفتد" },
+      { "type": "action", "description": "اینترنت دستگاه اول را وصل کنید تا صف پردازش شود" },
+      { "type": "assertion", "description": "درخواست با 409 رد می‌شود و در پنل خطاهای سینک (Inbox) بنر قرمز «همگام‌سازی متوقف است» نمایش داده می‌شود" },
+      { "type": "assertion", "description": "با «نمایش داده»، Payload خوانا دیده می‌شود و رکورد محلی تسک X به نسخه سرور برگشته است (پرچم pending ندارد)" },
+      { "type": "action", "description": "دکمه «تلاش مجدد» را بزنید" },
+      { "type": "assertion", "description": "آیتم به صف برمی‌گردد، صف دوباره پردازش می‌شود و خطا از Inbox حذف می‌شود" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: clock skew does not lose data",
+    "description": "عقب/جلو بودن ساعت دستگاه نباید باعث جا افتادن دلتا شود، چون مبنای last_sync فقط server_time پاسخ سرور است.",
+    "priority": "p2",
+    "planSteps": [
+      { "type": "action", "description": "ساعت دستگاه کلاینت را عمداً یک روز عقب ببرید" },
+      { "type": "action", "description": "از یک کاربر دیگر یک تسک را تغییر دهید، سپس در دستگاه اول Pull (رفرش دوره‌ای یا ورود مجدد به صفحه) را صبر کنید" },
+      { "type": "assertion", "description": "تغییر جدید در لیست دستگاه اول ظاهر می‌شود (هیچ دلتایی جا نمی‌افتد)" },
+      { "type": "assertion", "description": "در syncCursors مقدار lastServerTime با زمان سرور (نه ساعت دستگاه) ذخیره شده است" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "frontend",
+    "name": "Local-First: logout with pending queue shows blocking warning",
+    "description": "خروج با صف پر باید دیالوگ هشدار جدی (پیش‌فرض انصراف) نمایش دهد و Dexie در logout پاک نشود.",
+    "priority": "p1",
+    "planSteps": [
+      { "type": "action", "description": "آفلاین یک تغییر ثبت کنید تا صف پر شود، سپس دکمه خروج را بزنید" },
+      { "type": "assertion", "description": "دیالوگ قرمز «تغییرات ارسال‌نشده دارید» با تعداد موارد نمایش داده می‌شود و گزینه پیش‌فرض انصراف است" },
+      { "type": "action", "description": "با تأیید صریح خارج شوید و دوباره با همان کاربر وارد شوید" },
+      { "type": "assertion", "description": "داده‌های Dexie (تسک‌ها و صف) پاک نشده‌اند و صف پس از اتصال ارسال می‌شود" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: tombstone delete and stale-cursor full resync",
+    "description": "حذف تسک در سرور باید با Pull بعدی از لیست محلی حذف شود (مگر تغییر ارسال‌نشده داشته باشد)؛ cursor خیلی قدیمی باید 410 و Full Resync بدهد.",
+    "priority": "p2",
+    "planSteps": [
+      { "type": "action", "description": "یک CountTask را از پنل ادمین حذف کنید (soft-delete سرور)" },
+      { "type": "action", "description": "در دستگاه شمارشگر منتظر Pull بعدی بمانید" },
+      { "type": "assertion", "description": "تسک حذف‌شده از لیست محلی ناپدید می‌شود" },
+      { "type": "action", "description": "اگر همان تسک تغییر ارسال‌نشده در صف داشت، بررسی کنید" },
+      { "type": "assertion", "description": "رکورد حذف نمی‌شود بلکه با پرچم _serverDeleted نگه داشته می‌شود (داده کاربر از بین نمی‌رود)" },
+      { "type": "action", "description": "در syncCursors مقدار lastServerTime را دستی به بیش از ۱۸۰ روز قبل تغییر دهید و Pull بزنید" },
+      { "type": "assertion", "description": "سرور 410 می‌دهد و کلاینت به‌صورت خودکار Full Resync همان انبار را انجام می‌دهد" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "frontend",
+    "name": "Local-First: feature flag rollback restores legacy path",
+    "description": "با useLocalFirstCounting=false، صفحه شمارش باید دقیقاً مثل قبل مستقیم از API بخواند/بنویسد (برگشت فوری عملیاتی).",
+    "priority": "p2",
+    "planSteps": [
+      { "type": "action", "description": "در environment مقدار useLocalFirstCounting را false کنید و بیلد/سرو کنید" },
+      { "type": "assertion", "description": "لیست شمارش با درخواست مستقیم GET count-tasks پر می‌شود (نه Dexie) و ذخیره/ارسال مستقیم PATCH/bulk_submit می‌زند" },
+      { "type": "assertion", "description": "هیچ درخواست sync/pull از صفحه شمارش ارسال نمی‌شود" }
+    ]
+  },
+  {
+    "projectId": "warehouse",
+    "type": "fullstack",
+    "name": "Local-First: regression on out-of-scope flows",
+    "description": "جریان‌های خارج از طرح (آپلود اکسل، داشبورد، رسید/حواله، ناظر/مدیر) باید بدون تغییر رفتار کار کنند.",
+    "priority": "p2",
+    "planSteps": [
+      { "type": "action", "description": "آپلود اکسل، داشبورد مدیریتی، صفحات رسید/حواله و کارتابل ناظر/مدیر را آنلاین باز کنید" },
+      { "type": "assertion", "description": "همه مثل قبل کار می‌کنند (بدون Dexie/pull) و approve/reject ناظر آنلاین انجام می‌شود" },
+      { "type": "action", "description": "claim از استخر تسک‌ها را در حالت آفلاین امتحان کنید" },
+      { "type": "assertion", "description": "claim آنلاین است و آفلاین با پیام خطای روشن رد می‌شود (نه ثبت در صف)" }
+    ]
+  }
+]

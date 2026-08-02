@@ -13,8 +13,9 @@ import { AuthStore } from '../../../core/stores/auth.store';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { Router } from '@angular/router';
-import { Subject } from 'rxjs';
+import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { CountTaskStore } from '../../../core/services/count-task-store';
 
 @Component({
   selector: 'app-counter-dashboard',
@@ -54,6 +55,8 @@ export class CounterDashboard implements OnInit {
   searchSubject = new Subject<string>();
   locationSort: 'asc' | 'desc' | '' = '';
 
+  private pullSub: Subscription | null = null;
+
   constructor(
     private countTaskApi: CountTaskApiService,
     private toast: ToastService,
@@ -63,14 +66,48 @@ export class CounterDashboard implements OnInit {
     public authStore: AuthStore,
     private auth: AuthService,
     private http: HttpClient,
-    private router: Router
+    private router: Router,
+    private store: CountTaskStore
   ) {}
 
+  // ─── Local-First (فاز ۲) ───
+
+  /** انبار فعال به‌صورت عددی؛ null یعنی «همه/نامشخص» → مسیر Local-First غیرفعال */
+  private get activeWarehouseId(): number | null {
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && Number(whId) !== -1) return Number(whId);
+    return null;
+  }
+
+  /** Local-First فقط با feature flag روشن + انبار مشخص + کاربر شناخته‌شده */
+  private get localFirst(): boolean {
+    return (
+      (environment as any).useLocalFirstCounting === true &&
+      this.activeWarehouseId !== null &&
+      this.currentUserId !== null
+    );
+  }
+
+  private get currentUserId(): number | null {
+    const id = this.auth.user()?.id;
+    return typeof id === 'number' ? id : null;
+  }
+
   ngOnInit() {
+    // پس از هر Pull موفق (خودکار یا دستی)، لیست از Dexie تازه شود
+    this.pullSub = this.store.pull.pullCompleted$.subscribe(({ warehouseId }) => {
+      if (this.localFirst && warehouseId === this.activeWarehouseId && !this.selectedTask) {
+        this.readFromLocal(false);
+      }
+    });
+
     this.loadTasks();
     this.refreshInterval = setInterval(() => {
       if (!this.selectedTask) {
-        if (this.currentTab === 'my-tasks') {
+        if (this.localFirst) {
+          // Local-First: رفرش دوره‌ای = Pull دلتا در پس‌زمینه (UI از Dexie می‌خواند)
+          this.store.refresh(this.activeWarehouseId!);
+        } else if (this.currentTab === 'my-tasks') {
           this.loadTasks(false); // background refresh
         } else {
           this.loadPoolTasks(false);
@@ -92,6 +129,7 @@ export class CounterDashboard implements OnInit {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
+    this.pullSub?.unsubscribe();
   }
 
   applyFilters() {
@@ -175,7 +213,37 @@ export class CounterDashboard implements OnInit {
   }
 
 
+  /**
+   * Local-First: خواندن فوری از Dexie (حتی آفلاین) — سپس Pull دلتا در پس‌زمینه.
+   * پاسخ Pull از طریق pullCompleted$ دوباره همین متد را صدا می‌زند.
+   */
+  private async readFromLocal(showLoading = true) {
+    const whId = this.activeWarehouseId!;
+    const userId = this.currentUserId!;
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
+    try {
+      if (this.currentTab === 'my-tasks') {
+        this.tasks = await this.store.getMyTasks(whId, userId);
+        this.applyFilters();
+      } else {
+        this.poolTasks = await this.store.getPoolTasks(whId);
+      }
+    } catch (e) {
+      console.error('[CounterDashboard] خطا در خواندن از Dexie:', e);
+    }
+    this.isLoading = false;
+    this.cdr.detectChanges();
+  }
+
   loadTasks(showLoading = true) {
+    if (this.localFirst) {
+      this.readFromLocal(showLoading);
+      this.store.refresh(this.activeWarehouseId!); // دلتا در پس‌زمینه
+      return;
+    }
     if (showLoading) {
       this.isLoading = true;
       this.cdr.detectChanges();
@@ -210,6 +278,11 @@ export class CounterDashboard implements OnInit {
   }
 
   loadPoolTasks(showLoading = true) {
+    if (this.localFirst) {
+      this.readFromLocal(showLoading);
+      this.store.refresh(this.activeWarehouseId!);
+      return;
+    }
     if (showLoading) {
       this.isLoading = true;
       this.cdr.detectChanges();
@@ -263,8 +336,13 @@ export class CounterDashboard implements OnInit {
     };
 
     this.http.post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, payload).subscribe({
-      next: (res: any) => {
+      next: async (res: any) => {
         this.toast.success(`${res.claimed_count} کالا با موفقیت به عهده گرفته شد`);
+        // claim آنلاین است (رقابت روی استخر باید سمت سرور حل شود)؛
+        // در حالت Local-First اول دلتا را بگیر تا تسک‌ها با counter جدید در Dexie بنشینند
+        if (this.localFirst) {
+          await this.store.refresh(this.activeWarehouseId!);
+        }
         this.setTab('my-tasks');
       },
       error: (err) => {
@@ -289,14 +367,30 @@ export class CounterDashboard implements OnInit {
     this.cdr.detectChanges();
   }
 
-  saveDraft() {
+  async saveDraft() {
     if (!this.selectedTask) return;
-    
+
     // We only save it as draft, status remains PENDING_COUNT or whatever it was
     const payload = {
       counted_balance: this.countedBalanceStr || null,
       counter_note: this.counterNote
     };
+
+    // ─── مسیر Local-First: نوشتن در Dexie + صف؛ بدون انتظار برای سرور ───
+    if (this.localFirst && this.selectedTask.sync_id) {
+      try {
+        await this.store.saveDraft(this.selectedTask, payload, this.currentUserId!);
+        Object.assign(this.selectedTask, payload, { _offlinePending: true });
+        this.applyFilters();
+        this.toast.success('مقدار ذخیره شد');
+        this.closeDetail();
+      } catch (e) {
+        console.error('[CounterDashboard] خطا در ذخیره محلی:', e);
+        this.toast.error('خطا در ذخیره اطلاعات');
+      }
+      this.cdr.detectChanges();
+      return;
+    }
 
     this.countTaskApi.update(this.selectedTask.id, payload).subscribe({
       next: (res) => {
@@ -355,6 +449,25 @@ export class CounterDashboard implements OnInit {
     });
 
     if (confirmed) {
+      // ─── مسیر Local-First: وضعیت محلی + صف (idempotent سمت سرور) ───
+      if (this.localFirst) {
+        const eligible = this.pendingTasks.filter(t => t.counted_balance !== null);
+        const toSubmit = isPartial
+          ? eligible.filter(t => this.selectedTasks.has(t.id))
+          : eligible;
+        try {
+          await this.store.submitTasks(toSubmit, this.currentUserId!);
+          this.toast.success(`${toSubmit.length} مورد در صف ارسال قرار گرفت و به‌محض اتصال ارسال می‌شود`);
+          this.selectedTasks.clear();
+          this.readFromLocal(false);
+        } catch (e) {
+          console.error('[CounterDashboard] خطا در ارسال محلی:', e);
+          this.toast.error('خطا در ارسال اطلاعات');
+          this.cdr.detectChanges();
+        }
+        return;
+      }
+
       const payload = isPartial ? { task_ids: Array.from(this.selectedTasks) } : {};
       this.countTaskApi.bulkSubmit(payload).subscribe({
         next: (res) => {

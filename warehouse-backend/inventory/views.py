@@ -6,6 +6,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import Item, ImportLog, ImportHistory, ItemFieldDefinition
+from .models import CountTaskHistory
+from common.sync_models import soft_delete_queryset
 from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer
 from django.forms.models import model_to_dict
 from warehouses.models import Warehouse
@@ -31,6 +33,23 @@ from django.utils import timezone
 
 from rest_framework.pagination import PageNumberPagination
 from .filters import ItemFilter
+
+
+def _soft_delete_items_cascade(items_qs):
+    """
+    حذف نرم گروهی آیتم‌ها + Cascade دستی به مدل‌های سینک‌شونده وابسته
+    (CountTask و CountTaskHistory) تا کلاینت آفلاین tombstone همه را بگیرد.
+    DocTask/ItemPhoto/ImportHistory عمداً دست نمی‌خورند (خارج از دامنه سینک فاز ۰؛
+    نمایششان با فیلتر item__is_deleted=False کنترل می‌شود).
+    خروجی: تعداد آیتم‌های حذف‌نرم‌شده.
+    """
+    item_ids = list(items_qs.values_list('id', flat=True))
+    if not item_ids:
+        return 0
+    soft_delete_queryset(CountTaskHistory.objects.filter(task__item_id__in=item_ids))
+    soft_delete_queryset(CountTask.objects.filter(item_id__in=item_ids))
+    return soft_delete_queryset(Item.objects.filter(id__in=item_ids))
+
 
 class ItemPagination(PageNumberPagination):
     page_size = 100
@@ -77,7 +96,22 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'label']
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # اگر رکورد حذف‌نرم با همان (انبار، نام) وجود دارد، احیا می‌شود؛
+        # وگرنه INSERT به قید unique_together دیتابیس می‌خورد (اعتبارسنجی DRF
+        # فقط رکوردهای زنده را می‌بیند).
+        tombstone = ItemFieldDefinition.all_objects.filter(
+            warehouse=serializer.validated_data.get('warehouse'),
+            name=serializer.validated_data.get('name'),
+            is_deleted=True,
+        ).first()
+        if tombstone:
+            serializer.instance = tombstone
+            serializer.save(created_by=self.request.user, is_deleted=False)
+        else:
+            serializer.save(created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.soft_delete()
 
     def perform_update(self, serializer):
         old_instance = self.get_object()
@@ -95,7 +129,10 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
                     items_to_update.append(item)
             
             if items_to_update:
-                Item.objects.bulk_update(items_to_update, ['dynamic_data'])
+                now = timezone.now()
+                for item in items_to_update:
+                    item.updated_at = now  # bulk_update سیگنال auto_now را رد می‌کند
+                Item.objects.bulk_update(items_to_update, ['dynamic_data', 'updated_at'])
 
     @action(detail=False, methods=['post'])
     def copy_from_warehouse(self, request):
@@ -109,10 +146,28 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 source_fields = ItemFieldDefinition.objects.filter(warehouse_id=source_warehouse_id)
                 target_existing_names = set(ItemFieldDefinition.objects.filter(warehouse_id=target_warehouse_id).values_list('name', flat=True))
-                
+                # فیلدهای حذف‌نرم مقصد: به‌جای ساخت (که به unique_together می‌خورد) احیا می‌شوند
+                target_tombstones = {
+                    fd.name: fd
+                    for fd in ItemFieldDefinition.all_objects.filter(warehouse_id=target_warehouse_id, is_deleted=True)
+                }
+
                 new_fields = []
+                resurrected = 0
                 for field in source_fields:
-                    if field.name not in target_existing_names:
+                    if field.name in target_existing_names:
+                        continue
+                    tombstone = target_tombstones.get(field.name)
+                    if tombstone:
+                        tombstone.label = field.label
+                        tombstone.field_type = field.field_type
+                        tombstone.is_required = field.is_required
+                        tombstone.default_value = field.default_value
+                        tombstone.is_active = field.is_active
+                        tombstone.is_deleted = False
+                        tombstone.save()
+                        resurrected += 1
+                    else:
                         new_field = ItemFieldDefinition(
                             warehouse_id=target_warehouse_id,
                             name=field.name,
@@ -124,11 +179,11 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
                             created_by=request.user
                         )
                         new_fields.append(new_field)
-                
+
                 if new_fields:
                     ItemFieldDefinition.objects.bulk_create(new_fields)
-                    
-                return Response({'message': f'{len(new_fields)} فیلد با موفقیت کپی شد.'}, status=200)
+
+                return Response({'message': f'{len(new_fields) + resurrected} فیلد با موفقیت کپی شد.'}, status=200)
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
@@ -144,6 +199,23 @@ class ItemViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return super().get_queryset()
+
+    def perform_create(self, serializer):
+        # احیای رکورد حذف‌نرم با همان (انبار، کد یکتا) به‌جای INSERT تکراری
+        tombstone = Item.all_objects.filter(
+            warehouse=serializer.validated_data.get('warehouse'),
+            fa_unic_code=serializer.validated_data.get('fa_unic_code'),
+            is_deleted=True,
+        ).first()
+        if tombstone:
+            serializer.instance = tombstone
+            serializer.save(is_deleted=False)
+        else:
+            serializer.save()
+
+    def perform_destroy(self, instance):
+        with transaction.atomic():
+            _soft_delete_items_cascade(Item.objects.filter(id=instance.id))
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess
@@ -897,6 +969,16 @@ class ItemViewSet(viewsets.ModelViewSet):
                                         q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
                                         continue
                                 
+                            # رکورد حذف‌نرم با همین کد؟ (unique_together هنوز فعال است)
+                            # → باید احیا شود، وگرنه INSERT خطای دیتابیس می‌دهد.
+                            resurrect_tombstone = None
+                            if not existing_item and fa_unic_code and target_warehouse_id:
+                                resurrect_tombstone = Item.all_objects.filter(
+                                    fa_unic_code=fa_unic_code,
+                                    warehouse_id=target_warehouse_id,
+                                    is_deleted=True,
+                                ).first()
+
                             item_display_code = fa_unic_code or f"ID:{item_id}"
                             
                             # Build merged dynamic_data for this item if needed
@@ -909,7 +991,28 @@ class ItemViewSet(viewsets.ModelViewSet):
                             if final_dynamic_data:
                                 defaults['dynamic_data'] = final_dynamic_data
                                 
-                            if existing_item:
+                            if resurrect_tombstone:
+                                # احیای رکورد حذف‌نرم: از دید کاربر «رکورد جدید» است،
+                                # اما ردیف قبلی (با همان sync_id) به‌روزرسانی و زنده می‌شود.
+                                from django.core.serializers.json import DjangoJSONEncoder
+                                old_state = model_to_dict(resurrect_tombstone)
+                                old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
+
+                                if user_id: defaults['created_by_id'] = user_id
+                                if 'tag_status' not in defaults:
+                                    defaults['tag_status'] = sys_tag_status
+                                Item.all_objects.filter(id=resurrect_tombstone.id).update(
+                                    fa_unic_code=fa_unic_code,
+                                    is_deleted=False,
+                                    updated_at=timezone.now(),
+                                    **defaults,
+                                )
+                                history_records.append(ImportHistory(item=resurrect_tombstone, action='update', previous_state=old_state_json))
+
+                                created += 1
+                                append_colored_row(row, 'created', 'ثبت رکورد جدید (احیای رکورد حذف‌شده)')
+                                q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید (احیا): {fa_unic_code}"}) + "\n")
+                            elif existing_item:
                                 # Append new tags to existing item's tags
                                 if existing_item.tag:
                                     existing_tags = [t.strip() for t in existing_item.tag.split('،') if t.strip()]
@@ -942,7 +1045,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                                         old_state = model_to_dict(existing_item)
                                         old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
                                         
-                                        Item.objects.filter(id=existing_item.id).update(**new_defaults)
+                                        Item.objects.filter(id=existing_item.id).update(**{**new_defaults, 'updated_at': timezone.now()})
                                         history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
                                         
                                         updated += 1
@@ -959,7 +1062,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     old_state = model_to_dict(existing_item)
                                     old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
                                     
-                                    Item.objects.filter(id=existing_item.id).update(**defaults)
+                                    Item.objects.filter(id=existing_item.id).update(**{**defaults, 'updated_at': timezone.now()})
                                     history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
                                     
                                     updated += 1
@@ -1102,21 +1205,31 @@ class ItemViewSet(viewsets.ModelViewSet):
                 for history in histories:
                     if history.action == 'create':
                         if history.item:
-                            history.item.delete()
+                            # بازگردانی ایجاد = حذف (نرم) رکورد ساخته‌شده
+                            _soft_delete_items_cascade(Item.objects.filter(id=history.item_id))
                     elif history.action == 'update' or history.action == 'delete':
                         if history.previous_state:
                             state = history.previous_state.copy()
-                            
+
                             # Handle foreign keys correctly for both update and create
                             fk_fields = ['warehouse', 'created_by', 'modified_by']
                             for fk in fk_fields:
                                 if fk in state and isinstance(state[fk], int):
                                     state[f'{fk}_id'] = state.pop(fk)
-                            
+
                             if history.action == 'update' and history.item:
-                                Item.objects.filter(id=history.item.id).update(**state)
+                                # بامپ updated_at تا کلاینت‌های سینک مقادیر بازگردانی‌شده را بگیرند
+                                Item.all_objects.filter(id=history.item.id).update(**{**state, 'updated_at': timezone.now()})
                             elif history.action == 'delete':
-                                items_to_create.append(Item(**state))
+                                # حذف حالا نرم است؛ ردیف tombstone هنوز با همه داده‌ها موجود است
+                                # → فقط احیا می‌شود. اگر (به هر دلیل) واقعاً حذف شده بود، بازسازی.
+                                restored = Item.all_objects.filter(
+                                    warehouse_id=state.get('warehouse_id'),
+                                    fa_unic_code=state.get('fa_unic_code'),
+                                    is_deleted=True,
+                                ).update(is_deleted=False, updated_at=timezone.now())
+                                if not restored:
+                                    items_to_create.append(Item(**state))
                 
                 if items_to_create:
                     Item.objects.bulk_create(items_to_create, ignore_conflicts=True)
@@ -1166,7 +1279,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 if histories:
                     ImportHistory.objects.bulk_create(histories)
                     
-                deleted, _ = items_qs.delete()
+                deleted = _soft_delete_items_cascade(items_qs)
                 items_deleted = deleted
                 
                 import_log.records_created = items_deleted # Store count here
@@ -1277,7 +1390,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 if histories:
                     ImportHistory.objects.bulk_create(histories)
                     
-                deleted, _ = items_qs.delete()
+                deleted = _soft_delete_items_cascade(items_qs)
                 items_deleted = deleted
                 
                 import_log.records_created = items_deleted # Store count in this field for history
@@ -1387,6 +1500,49 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             
         return permission_classes
 
+    def perform_destroy(self, instance):
+        # حذف نرم + tombstone تاریخچه، تا کلاینت‌های آفلاین باخبر شوند
+        with transaction.atomic():
+            soft_delete_queryset(CountTaskHistory.objects.filter(task_id=instance.id))
+            instance.soft_delete()
+
+    def get_object(self):
+        """
+        زیرساخت سینک: اگر pk عددی نبود، به‌عنوان sync_id تفسیر می‌شود
+        (کلاینت آفلاین ممکن است فقط sync_id پایدار را داشته باشد).
+        """
+        pk = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        if pk is not None and not str(pk).isdigit():
+            from django.shortcuts import get_object_or_404
+            queryset = self.filter_queryset(self.get_queryset())
+            obj = get_object_or_404(queryset, sync_id=pk)
+            self.check_object_permissions(self.request, obj)
+            return obj
+        return super().get_object()
+
+    def update(self, request, *args, **kwargs):
+        """
+        تشخیص تداخل خوش‌بینانه: کلاینت می‌تواند base_updated_at (نسخه‌ای که
+        رویش تغییر داده) بفرستد؛ اگر سرور جدیدتر باشد → 409 + رکورد سروری
+        برای reconciliation سمت کلاینت. بدون این پارامتر، رفتار قبلی حفظ است.
+        """
+        base_raw = request.data.get('base_updated_at')
+        if base_raw:
+            from django.utils.dateparse import parse_datetime
+            base = parse_datetime(str(base_raw))
+            if base is None:
+                return Response({'detail': 'base_updated_at نامعتبر است.'}, status=400)
+            if timezone.is_naive(base):
+                base = timezone.make_aware(base)
+            instance = self.get_object()
+            # تلورانس ۱ms برای جلوگیری از تداخل کاذب ناشی از گرد شدن میکروثانیه
+            if (instance.updated_at - base).total_seconds() > 0.001:
+                return Response({
+                    'detail': 'conflict',
+                    'server_record': self.get_serializer(instance).data,
+                }, status=409)
+        return super().update(request, *args, **kwargs)
+
     def get_queryset(self):
         user = self.request.user
         queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by')
@@ -1463,11 +1619,11 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
             
             # Update CountTasks
-            updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user)
+            updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user, updated_at=timezone.now())
             
             # Update Item field_assignee
             assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name)
+            Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name, updated_at=timezone.now())
             
         elif as_role == 'supervisor':
             tasks = tasks.filter(supervisor__isnull=True, status='COUNTED')
@@ -1510,14 +1666,33 @@ class CountTaskViewSet(viewsets.ModelViewSet):
     def bulk_submit(self, request):
         user = request.user
         task_ids = request.data.get('task_ids', [])
-        
+        sync_ids = request.data.get('sync_ids', [])
+
+        # کلاینت آفلاین ممکن است فقط sync_id پایدار را داشته باشد
+        if sync_ids:
+            task_ids = list(set(task_ids) | set(
+                CountTask.objects.filter(sync_id__in=sync_ids).values_list('id', flat=True)
+            ))
+
         if task_ids:
             tasks = CountTask.objects.filter(id__in=task_ids, counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
         else:
             tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
-        
+
         first_task = tasks.first()
         if not first_task:
+            # Idempotency: اگر تسک‌های درخواستی قبلاً ارسال شده‌اند (مثلاً retry صف
+            # آفلاین پس از گم شدن پاسخ در تونل)، موفقیت no-op برگردان نه ابهام.
+            if task_ids:
+                already = CountTask.objects.filter(
+                    id__in=task_ids, counter=user,
+                    status__in=['COUNTED', 'MANAGER_REVIEW', 'FINAL_APPROVED'],
+                ).count()
+                if already > 0:
+                    return Response({
+                        'message': f'{already} مورد قبلاً ارسال شده بود.',
+                        'already_submitted': already,
+                    })
             return Response({'message': 'هیچ موردی برای ارسال یافت نشد.'})
             
         from warehouses.services import get_setting
@@ -1538,10 +1713,11 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             ))
             task.status = target_status
             task.modified_by = user
-            
+            task.updated_at = timezone.now()  # bulk_update سیگنال auto_now را رد می‌کند
+
         count = len(tasks_list)
         if count > 0:
-            CountTask.objects.bulk_update(tasks_list, ['status', 'modified_by'])
+            CountTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'updated_at'])
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
@@ -1571,7 +1747,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 note=note
             ))
             
-        count = tasks.update(status='MANAGER_REVIEW', supervisor_note=note, modified_by=user)
+        count = tasks.update(status='MANAGER_REVIEW', supervisor_note=note, modified_by=user, updated_at=timezone.now())
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
@@ -1617,7 +1793,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 item.updated_at = timezone.now()
                 items_to_update.append(item)
             
-            count = tasks.update(status='FINAL_APPROVED', manager_note=note, modified_by=user)
+            count = tasks.update(status='FINAL_APPROVED', manager_note=note, modified_by=user, updated_at=timezone.now())
             
             if items_to_update:
                 Item.objects.bulk_update(items_to_update, ['field_status', 'balance', 'has_conflict', 'modified_by', 'updated_at'])
@@ -1734,7 +1910,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = DocTask.objects.all().select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
         
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
@@ -1771,7 +1947,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     def pool_tasks(self, request):
         as_role = request.query_params.get('as_role')
         warehouse_id = request.query_params.get('warehouse_id')
-        queryset = DocTask.objects.all().select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
         
         if warehouse_id:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
@@ -1810,7 +1986,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
             
             # Update Item doc_assignee
             assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name)
+            Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name, updated_at=timezone.now())
             
         elif as_role == 'doc_supervisor':
             tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
@@ -2002,7 +2178,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by'])
             DocTaskHistory.objects.bulk_create(histories)
-            Item.objects.filter(id__in=item_ids_to_update).update(doc_status='approved')
+            Item.objects.filter(id__in=item_ids_to_update).update(doc_status='approved', updated_at=timezone.now())
             
         return Response({'message': f'{len(histories)} رکورد نهایی شد.'})
         
@@ -2017,7 +2193,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         
         from .models import Item
         deleted_count, _ = tasks.delete()
-        Item.objects.filter(id__in=item_ids).update(doc_status='checking', doc_assignee=None)
+        Item.objects.filter(id__in=item_ids).update(doc_status='checking', doc_assignee=None, updated_at=timezone.now())
         
         return Response({'message': f'{deleted_count} وظیفه ارجاع اسناد با موفقیت لغو شد.'})
 

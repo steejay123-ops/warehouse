@@ -19,6 +19,15 @@ export interface SyncQueueEntry {
   status: 'pending' | 'sending' | 'failed';
   /** پیام خطای آخرین تلاش */
   lastError?: string;
+  // ─── فیلدهای Local-First (v3) — روی دستگاه مشترک صف هر کاربر جداست ───
+  /** شناسه کاربر صاحب این تغییر */
+  userId?: number;
+  /** نوع موجودیت: count_task, item, ... (برای reconciliation) */
+  entityType?: string;
+  /** sync_id پایدار رکورد هدف (کلید idempotency و reconciliation) */
+  entitySyncId?: string;
+  /** updated_at نسخه‌ای که تغییر رویش اعمال شده (تشخیص تداخل 409) */
+  baseUpdatedAt?: string;
 }
 
 /**
@@ -55,19 +64,55 @@ export interface SyncErrorEntry {
   failedAt: number;
   /** آیا کاربر این خطا را خوانده؟ (0 = خیر، 1 = بله — boolean در IndexedDB قابل ایندکس نیست) */
   dismissed: 0 | 1;
+  // ─── فیلدهای Local-First (v3) ───
+  /** شناسه کاربر صاحب درخواست ردشده */
+  userId?: number;
+  /** نوع موجودیت (برای reconciliation) */
+  entityType?: string;
+  /** sync_id رکورد هدف */
+  entitySyncId?: string;
+  /** بدنه کامل پاسخ سرور (مثلاً server_record در 409) */
+  serverResponse?: any;
+}
+
+/**
+ * cursor و زمان آخرین Pull موفق — per (کاربر، انبار)
+ * lastServerTime همیشه از server_time پاسخ سرور است، نه ساعت دستگاه (رفع Clock Skew).
+ */
+export interface SyncCursorEntry {
+  /** کلید مرکب: `${userId}:${warehouseId}` */
+  key: string;
+  userId: number;
+  warehouseId: number;
+  /** cursor مات وسط یک دانلود نیمه‌تمام؛ null یعنی دانلود قبلی کامل شد */
+  cursor: string | null;
+  /** since که دانلود نیمه‌تمام با آن شروع شد (باید تا پایان همان بماند) */
+  inFlightSince: string | null;
+  /** server_time صفحه اول دانلود نیمه‌تمام — پس از اتمام، lastServerTime می‌شود */
+  pendingServerTime: string | null;
+  /** مبنای دلتای بعدی (ISO) — فقط از server_time سرور */
+  lastServerTime: string | null;
 }
 
 /**
  * OfflineDatabase — دیتابیس IndexedDB برنامه با استفاده از Dexie.js
- * شامل سه جدول:
+ * جداول:
  * 1. syncQueue: صف درخواست‌های آفلاین (POST/PATCH/PUT/DELETE)
  * 2. apiCache: کش پاسخ‌های GET برای خواندن آفلاین
  * 3. syncErrors: صندوق خطاهایی که سرور رد کرده (4xx)
+ * 4. countTasks / items / dynamicFields: دادهٔ دامنه Local-First (منبع: Pull API)
+ * 5. syncCursors: cursor و server_time آخرین Pull per (کاربر، انبار)
+ *
+ * قاعده: هیچ جدولی هرگز Clear نمی‌شود مگر صف خالی باشد و کاربر صریحاً تأیید کند.
  */
 export class OfflineDatabase extends Dexie {
   syncQueue!: Table<SyncQueueEntry, number>;
   apiCache!: Table<ApiCacheEntry, string>;
   syncErrors!: Table<SyncErrorEntry, number>;
+  countTasks!: Table<any, string>;
+  items!: Table<any, string>;
+  dynamicFields!: Table<any, string>;
+  syncCursors!: Table<SyncCursorEntry, string>;
 
   constructor() {
     super('WarehouseOfflineDB');
@@ -83,6 +128,18 @@ export class OfflineDatabase extends Dexie {
       syncQueue: '++id, status, createdAt',
       apiCache: 'url, expiresAt',
       syncErrors: '++id, failedAt, dismissed',
+    });
+
+    // نسخه ۳ — Local-First: دادهٔ دامنه + cursorها؛ داده‌های v2 دست‌نخورده می‌مانند
+    // (upgrade فقط ایندکس اضافه می‌کند؛ رکوردهای موجود صف/کش حفظ می‌شوند)
+    this.version(3).stores({
+      syncQueue: '++id, status, createdAt, userId, entitySyncId',
+      apiCache: 'url, expiresAt',
+      syncErrors: '++id, failedAt, dismissed, userId',
+      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+      syncCursors: 'key, userId, warehouseId',
     });
   }
 }

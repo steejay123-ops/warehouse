@@ -308,6 +308,36 @@ export class Layout implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  /** بازگرداندن درخواست ردشده به صف و پردازش فوری (اصلاح ۶ — باز شدن صف مسدود) */
+  async retrySyncError(id: number) {
+    const syncService = OfflineSyncService.getInstance();
+    await syncService.retryError(id);
+    this.syncErrors = this.syncErrors.filter((e) => e.id !== id);
+    this.toast.show('info', 'درخواست به صف ارسال برگشت و دوباره تلاش می‌شود.');
+    this.cdr.detectChanges();
+  }
+
+  /** باز/بستن نمایش payload یک خطا */
+  expandedErrorId: number | null = null;
+  toggleErrorPayload(id: number) {
+    this.expandedErrorId = this.expandedErrorId === id ? null : id;
+    this.cdr.detectChanges();
+  }
+
+  /** نمایش خوانای بدنهٔ درخواست ردشده — دادهٔ کاربر که سرور نپذیرفت */
+  formatErrorPayload(body: any): { key: string; value: string }[] {
+    if (!body || typeof body !== 'object') return [];
+    return Object.entries(body)
+      .filter(([k]) => !k.startsWith('_'))
+      .slice(0, 12)
+      .map(([k, v]) => ({
+        key: k,
+        value: v === null || v === undefined ? '—'
+          : typeof v === 'object' ? JSON.stringify(v).slice(0, 120)
+          : String(v).slice(0, 120),
+      }));
+  }
+
   async dismissAllSyncErrors() {
     const syncService = OfflineSyncService.getInstance();
     await syncService.dismissAllErrors();
@@ -418,6 +448,21 @@ export class Layout implements OnInit, OnDestroy {
   }
 
   async logout() {
+    // هشدار جدی وقتی تغییرات ارسال‌نشده در صف است — دادهٔ کاربر نباید بی‌خبر رها شود.
+    // (Dexie در logout پاک نمی‌شود؛ پس از ورود مجددِ همان کاربر، صف ارسال می‌شود.)
+    if (this.pendingCount > 0) {
+      const confirmed = await this.confirmDialog.open({
+        title: 'تغییرات ارسال‌نشده دارید!',
+        message: `${this.pendingCount} تغییر هنوز به سرور ارسال نشده است. اگر خارج شوید، این تغییرات تا ورود مجدد شما روی همین دستگاه معلق می‌مانند و از دستگاه دیگری در دسترس نیستند. پیشنهاد می‌شود اول همگام‌سازی کنید.`,
+        confirmText: 'با این حال خارج شو',
+        cancelText: 'انصراف (پیشنهادی)',
+        type: 'danger',
+      });
+      if (!confirmed) return;
+      this.auth.logout();
+      return;
+    }
+
     const confirmed = await this.confirmDialog.open({
       title: 'خروج از حساب',
       message: 'آیا مطمئنید می‌خواهید از حساب کاربری خارج شوید؟',

@@ -1,309 +1,8 @@
 [
   {
-    "id": "TC001",
-    "title": "Log in successfully and reach the authenticated app",
-    "description": "This test verifies that a user can submit valid credentials on the login page and enter the authenticated area with access to the app shell.",
-    "category": "User Login",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user lands in the authenticated app"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify access to the dashboard is available"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC002",
-    "title": "Block direct access to the dashboard when signed out",
-    "description": "This test verifies that an unauthenticated visitor who opens the dashboard is redirected or blocked from protected content.",
-    "category": "Session Gating",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /dashboard"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the login page is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC003",
-    "title": "Block direct access to protected management pages when signed out",
-    "description": "This test verifies that an unauthenticated visitor who opens protected management pages is redirected or blocked from access.",
-    "category": "Session Gating",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /projects"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the login page is displayed"
-      },
-      {
-        "type": "action",
-        "description": "Navigate to /dispatch"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the login page is displayed"
-      },
-      {
-        "type": "action",
-        "description": "Navigate to /users"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the login page is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC004",
-    "title": "Edit a dispatch item and see the updated information",
-    "description": "This test verifies that an authenticated user can change a dispatch record and see the updated dispatch information reflected in the UI.",
-    "category": "Dispatch Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the dispatch link in the authenticated app"
-      },
-      {
-        "type": "action",
-        "description": "Open a dispatch item for editing"
-      },
-      {
-        "type": "action",
-        "description": "Update the dispatch item details"
-      },
-      {
-        "type": "action",
-        "description": "Save the dispatch item"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the updated dispatch information is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC005",
-    "title": "View dashboard metrics after signing in",
-    "description": "This test verifies that an authenticated user can open the dashboard and see operational overview content.",
-    "category": "Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the dashboard link in the authenticated app"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify dashboard overview metrics are displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC006",
-    "title": "View dispatch records after signing in",
-    "description": "This test verifies that an authenticated user can open dispatch management and see the dispatch list.",
-    "category": "Dispatch Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the dispatch link in the authenticated app"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify dispatch records are displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC007",
-    "title": "Move from dashboard to dispatch after signing in",
-    "description": "This test verifies that an authenticated user can navigate from the dashboard to dispatch management without losing access.",
-    "category": "Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the dashboard link in the authenticated app"
-      },
-      {
-        "type": "action",
-        "description": "Click the dispatch link in the authenticated app"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify dispatch records are displayed"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user remains authenticated"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC008",
-    "title": "Navigate across protected sections without being logged out",
-    "description": "This test verifies that an authenticated user can move between projects and users sections in the protected app shell without losing access.",
-    "category": "Projects and Users",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Click the projects link in the authenticated app"
-      },
-      {
-        "type": "action",
-        "description": "Click the users link in the authenticated app"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the users management page is displayed"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user remains authenticated"
-      }
-    ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC009",
-    "title": "See validation feedback when required login fields are left blank",
-    "description": "This test verifies that submitting the login form without required credentials shows validation feedback and does not enter the authenticated area.",
-    "category": "User Login",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify login validation feedback is visible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the user remains on the login page"
-      }
-    ],
-    "priority": "Low"
-  }
-  ,{
-    "id": "TC010",
-    "title": "Edit a dispatch item while offline and verify sync",
-    "description": "This test verifies that an authenticated user can edit a dispatch record while offline, see the offline banner, and then have it sync when online.",
+    "id": "TC013",
+    "title": "Local-First Online: Draft and Submit a count task successfully",
+    "description": "Verifies that counting a task online uses the optimistic Dexie store, saves locally, submits via the queue, and seamlessly processes the queue in the background.",
     "category": "Offline Sync",
     "steps": [
       {
@@ -312,7 +11,7 @@
       },
       {
         "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+        "description": "Fill in the username field with {{LOGIN_USER}}"
       },
       {
         "type": "action",
@@ -324,39 +23,43 @@
       },
       {
         "type": "action",
-        "description": "Click the dispatch link in the authenticated app"
+        "description": "Navigate to /counter"
       },
       {
         "type": "action",
-        "description": "Disable network connection to simulate offline mode"
+        "description": "Select a warehouse from the warehouse selector dropdown if required"
       },
       {
         "type": "action",
-        "description": "Open a dispatch item for editing"
+        "description": "Open a pending count task to view details"
       },
       {
         "type": "action",
-        "description": "Update the dispatch item details"
+        "description": "Enter a valid number into the counted balance field"
       },
       {
         "type": "action",
-        "description": "Save the dispatch item"
+        "description": "Click the Save button"
       },
       {
         "type": "assertion",
-        "description": "Verify the offline banner is visible indicating changes are saved locally"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the updated dispatch information is displayed in the list"
+        "description": "Verify the task is saved successfully and a success toast is shown"
       },
       {
         "type": "action",
-        "description": "Re-enable network connection to simulate online mode"
+        "description": "Select the counted task using its checkbox"
+      },
+      {
+        "type": "action",
+        "description": "Click the Submit All button to send the count to the supervisor"
+      },
+      {
+        "type": "action",
+        "description": "Confirm the submission dialog by clicking Yes"
       },
       {
         "type": "assertion",
-        "description": "Verify the changes sync to the server successfully"
+        "description": "Verify the tasks are processed and submitted without errors"
       }
     ],
     "priority": "High"

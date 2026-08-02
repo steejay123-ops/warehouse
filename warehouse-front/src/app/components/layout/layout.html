@@ -128,6 +128,11 @@
               <span class="text-xs font-bold text-slate-700">صندوق خطاهای همگام‌سازی</span>
               <button *ngIf="syncErrors.length > 0" (click)="dismissAllSyncErrors()" class="text-[10px] text-rose-500 hover:text-rose-700 font-bold">پاک کردن همه</button>
             </div>
+            <!-- حالت صف مسدود: مواردی که نیاز به تصمیم کاربر دارند -->
+            <div *ngIf="syncErrors.length > 0" class="px-3 py-2 bg-rose-50 border-b border-rose-100 flex items-center gap-1.5">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2" class="shrink-0"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              <span class="text-[10px] text-rose-600 font-bold">همگام‌سازی این موارد متوقف است — {{syncErrors.length}} مورد نیاز به تصمیم شما دارد</span>
+            </div>
             <div class="overflow-y-auto max-h-72">
               <div *ngIf="syncErrors.length === 0" class="p-6 text-center">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" class="mx-auto mb-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -143,9 +148,26 @@
                     <p class="text-[11px] text-slate-700 font-semibold truncate">{{err.serverMessage}}</p>
                     <p class="text-[9px] text-slate-400 mt-0.5">{{formatSyncTime(err.failedAt)}}</p>
                   </div>
-                  <button (click)="dismissSyncError(err.id!)" class="p-1 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors shrink-0" title="بستن">
+                  <button (click)="dismissSyncError(err.id!)" class="p-1 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors shrink-0" title="حذف — دادهٔ این تغییر دور ریخته می‌شود">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
+                </div>
+                <!-- اکشن‌ها: تلاش مجدد + نمایش داده -->
+                <div class="flex items-center gap-2 mt-2">
+                  <button (click)="retrySyncError(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors flex items-center gap-1">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                    تلاش مجدد
+                  </button>
+                  <button *ngIf="formatErrorPayload(err.body).length > 0" (click)="toggleErrorPayload(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                    {{expandedErrorId === err.id ? 'بستن داده' : 'نمایش داده'}}
+                  </button>
+                </div>
+                <!-- Payload: دادهٔ کاربر که سرور نپذیرفت -->
+                <div *ngIf="expandedErrorId === err.id" class="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                  <div *ngFor="let field of formatErrorPayload(err.body)" class="flex items-start gap-1.5 py-0.5">
+                    <span class="text-[9px] text-slate-400 font-bold shrink-0" dir="ltr">{{field.key}}:</span>
+                    <span class="text-[9px] text-slate-600 break-all" dir="auto">{{field.value}}</span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -118,6 +118,7 @@ export class AuthService {
     const refresh = this.getItem(REFRESH_KEY);
     if (!refresh) {
       this.clearAuth();
+      this.router.navigate(['/login']);
       return throwError(() => new Error('No refresh token'));
     }
 
@@ -132,8 +133,14 @@ export class AuthService {
       .pipe(
         tap((response) => this.setItem(TOKEN_KEY, response.access)),
         catchError((err) => {
-          this.clearAuth();
-          this.router.navigate(['/login']);
+          // نشست فقط با «رد صریح سرور» (4xx) پایان می‌یابد. اگر به سرور نرسیدیم
+          // (قطع شبکه/تونل — status 0/5xx/530) کاربر وسط کار میدانی بیرون
+          // انداخته نمی‌شود؛ آفلاین اصلاً امکان ورود مجدد وجود ندارد.
+          const status = err?.status ?? 0;
+          if (status >= 400 && status < 500) {
+            this.clearAuth();
+            this.router.navigate(['/login']);
+          }
           return throwError(() => err);
         }),
         map((response) => response.access),

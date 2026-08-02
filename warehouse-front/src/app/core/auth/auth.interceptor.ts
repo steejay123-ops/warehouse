@@ -42,8 +42,9 @@ export const authInterceptor: HttpInterceptorFn = (
             return next(retryReq);
           }),
           catchError((refreshError) => {
-            // refresh هم شکست خورد → logout
-            auth.logout();
+            // پاک کردن نشست و هدایت به login داخل AuthService.refreshToken انجام
+            // می‌شود و فقط برای رد صریح سرور (4xx) است؛ خطای شبکه نباید کاربر
+            // آفلاین را بیرون بیندازد. اینجا فقط خطا را عبور می‌دهیم.
             return throwError(() => refreshError);
           })
         );

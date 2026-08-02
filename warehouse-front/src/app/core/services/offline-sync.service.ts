@@ -518,6 +518,11 @@ export class OfflineSyncService {
         });
         console.warn(`[OfflineSync] 🔒 توکن منقضی — ${entry.url} در صف ماند`);
         return 'auth-failed';
+      } else if (response.status === 408 || response.status === 429) {
+        // 408 (مهلت درخواست) و 429 (محدودیت نرخ) رد صریح نیستند — موقتی‌اند و
+        // تلاش بعدی به احتمال زیاد موفق می‌شود. مثل 5xx در صف می‌مانند.
+        await this.handleRetry(entry, `خطای موقت سرور (${response.status}) — بعداً دوباره تلاش می‌شود`);
+        return 'server-error';
       } else if (response.status >= 400 && response.status < 500) {
         // خطای کلاینت (4xx) — انتقال به صندوق خطاها
         let serverMessage = `خطای ${response.status}`;

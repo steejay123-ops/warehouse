@@ -8,7 +8,7 @@ import {
 } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../../services/toast.service';
-import { OFFLINE_NO_CACHE } from '../interceptors/offline.interceptor';
+import { OFFLINE_NO_CACHE, OFFLINE_UPLOAD_UNSUPPORTED } from '../interceptors/offline.interceptor';
 import { isServerUnreachable } from '../services/server-reachability';
 
 export const SKIP_GLOBAL_ERROR_TOAST = new HttpContextToken<boolean>(() => false);
@@ -44,6 +44,15 @@ export const errorInterceptor: HttpInterceptorFn = (
       
       // لاگین خودش 429 را هندل می‌کند
       if (error.status === 429 && req.url.includes('/auth/login')) {
+        return throwError(() => error);
+      }
+
+      // آپلود فایل در حالت آفلاین — فایل نزد کاربر مانده و چیزی گم نشده
+      if (req.context.get(OFFLINE_UPLOAD_UNSUPPORTED)) {
+        toast.show(
+          'warning',
+          'آپلود فایل در حالت آفلاین ممکن نیست. فایل شما ارسال نشد؛ پس از برقراری اتصال دوباره تلاش کنید.'
+        );
         return throwError(() => error);
       }
 

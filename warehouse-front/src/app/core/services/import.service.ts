@@ -3,6 +3,8 @@ import { Subject } from 'rxjs';
 import { ItemApiService } from '../api/item-api.service';
 import { ToastService } from '../../services/toast.service';
 import { StateService } from '../../services/state.service';
+import { isServerUnreachable } from './server-reachability';
+import { NetworkStatusService } from './network-status.service';
 
 export interface WarehouseImportState {
   importTag: string;
@@ -258,6 +260,20 @@ export class ImportService {
         state.importId
       );
 
+      if (isServerUnreachable(response.status)) {
+        // این مسیر با fetch خام است و از interceptorها عبور نمی‌کند؛ تشخیص
+        // آفلاین/قطع تونل (۵۰۲–۵۳۰) باید همین‌جا انجام شود. فایل نزد کاربر
+        // مانده و چیزی گم نشده است.
+        NetworkStatusService.getInstance().reportServerUnreachable();
+        state.logs.unshift({ time: new Date(), type: 'warn', msg: '[WARN] ارتباط با سرور برقرار نشد. فایل ارسال نشد؛ پس از برقراری اتصال دوباره تلاش کنید.' });
+        if (this.activeWarehouseId === warehouseId) {
+          this.toast.show('warning', 'آپلود فایل در حالت آفلاین ممکن نیست. پس از برقراری اتصال دوباره تلاش کنید.');
+        }
+        state.isSimulating = false;
+        state.isCanceling = false;
+        this.stateUpdated.next();
+        return;
+      }
       if (!response.ok) {
         throw new Error(`پاسخ خطا از سرور: ${response.status}`);
       }
@@ -371,8 +387,18 @@ export class ImportService {
       this.stateUpdated.next();
     } catch (error: any) {
       console.error(error);
-      state.logs.unshift({ type: 'err', msg: `[ERR] خطای سرور: ${error.message}` });
-      if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'خطا در پردازش اطلاعات.');
+      // fetch خام وقتی مرورگر کاملاً آفلاین است TypeError (Failed to fetch)
+      // پرتاب می‌کند — این خطای سرور نیست، وضعیت آفلاین است.
+      if (error instanceof TypeError) {
+        NetworkStatusService.getInstance().reportServerUnreachable();
+        state.logs.unshift({ time: new Date(), type: 'warn', msg: '[WARN] ارتباط با سرور برقرار نشد. فایل ارسال نشد؛ پس از برقراری اتصال دوباره تلاش کنید.' });
+        if (this.activeWarehouseId === warehouseId) {
+          this.toast.show('warning', 'آپلود فایل در حالت آفلاین ممکن نیست. پس از برقراری اتصال دوباره تلاش کنید.');
+        }
+      } else {
+        state.logs.unshift({ type: 'err', msg: `[ERR] خطای سرور: ${error.message}` });
+        if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'خطا در پردازش اطلاعات.');
+      }
       state.isSimulating = false;
       state.isCanceling = false;
       this.stateUpdated.next();

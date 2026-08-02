@@ -20,6 +20,12 @@ export const SKIP_OFFLINE = new HttpContextToken<boolean>(() => false);
 export const OFFLINE_NO_CACHE = new HttpContextToken<boolean>(() => false);
 
 /**
+ * وقتی یک آپلود فایل (FormData) در حالت آفلاین رد می‌شود، این توکن ست می‌شود
+ * تا errorInterceptor پیام روشن «آپلود آفلاین ممکن نیست» را نشان دهد.
+ */
+export const OFFLINE_UPLOAD_UNSUPPORTED = new HttpContextToken<boolean>(() => false);
+
+/**
  * سقف انتظار برای یک GET روی شبکه کند. بعد از این مهلت به کش fallback می‌کنیم
  * چون داده کهنه از اسپینر بی‌پایان بهتر است. بارگذاری فایل‌های سنگین از این
  * مسیر عبور نمی‌کند (فقط GETهای API).
@@ -208,6 +214,23 @@ export const offlineInterceptor: HttpInterceptorFn = (
   };
 
   const handleOfflineMutation = (): Observable<any> => {
+    // FormData در IndexedDB قابل ذخیره نیست (DataCloneError) و حتی اگر بود،
+    // replay با JSON.stringify بدنه را خالی می‌کرد. صف نکن؛ خطای روشن بده
+    // تا کاربر بداند فایل نزد خودش مانده و باید بعد از اتصال دوباره تلاش کند.
+    if (req.body instanceof FormData) {
+      console.warn(`[OfflineInterceptor] 📎 آپلود فایل در حالت آفلاین پشتیبانی نمی‌شود: ${req.method} ${req.url}`);
+      req.context.set(OFFLINE_UPLOAD_UNSUPPORTED, true);
+      return throwError(
+        () =>
+          new HttpErrorResponse({
+            error: { detail: 'آپلود فایل در حالت آفلاین ممکن نیست. پس از برقراری اتصال دوباره تلاش کنید.' },
+            status: 503,
+            statusText: 'Offline - Upload Not Supported',
+            url: req.url,
+          })
+      );
+    }
+
     const fullUrl = req.url;
     return from(syncService.enqueue(req.method, fullUrl, req.body)).pipe(
       switchMap((entry) => {

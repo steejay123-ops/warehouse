@@ -11,6 +11,7 @@ import { ItemApiService } from '../../core/api/item-api.service';
 import { ImportService } from '../../core/services/import.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { environment } from '../../../environments/environment';
+import { isServerUnreachable } from '../../core/services/server-reachability';
 
 @Component({
   selector: 'app-docs',
@@ -169,7 +170,11 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
           this.importService.currentState.isParsingHeaders = false;
           this.cdr.detectChanges();
           console.error('Error parsing headers', err);
-          this.toast.show('error', 'خطا در خواندن فایل اکسل. لطفاً از معتبر بودن فایل اطمینان حاصل کنید.');
+          // اگر به سرور نرسیدیم (آفلاین/تونل قطع) مشکل از فایل نیست؛ پیام آفلاین
+          // را interceptor سراسری نشان می‌دهد و توست قرمز گمراه‌کننده است.
+          if (!isServerUnreachable(err?.status ?? 0)) {
+            this.toast.show('error', 'خطا در خواندن فایل اکسل. لطفاً از معتبر بودن فایل اطمینان حاصل کنید.');
+          }
         }
       });
     }

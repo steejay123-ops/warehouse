@@ -19,6 +19,7 @@ import { CounterDashboard } from './components/counter/counter-dashboard/counter
 import { SupervisorDashboard } from './components/supervisor/supervisor-dashboard/supervisor-dashboard';
 import { ManagerReview } from './components/manager-review/manager-review';
 import { CountTracking } from './components/count-tracking/count-tracking';
+import { Reports } from './components/reports/reports';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
 export const routes: Routes = [
@@ -55,6 +56,7 @@ export const routes: Routes = [
       { path: 'supervisor', component: SupervisorDashboard, data: { reuse: true } },
       { path: 'manager-review', component: ManagerReview, data: { reuse: true } },
       { path: 'count-tracking', component: CountTracking, data: { reuse: true } },
+      { path: 'reports', component: Reports },
       { path: 'tasks', component: Placeholders },
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },

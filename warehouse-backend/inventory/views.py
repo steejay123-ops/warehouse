@@ -878,7 +878,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 continue
                             
                             # Ignore Excel data for core system fields
-                            for ignore_field in ['created_at', 'updated_at', 'created_by', 'modified_by']:
+                            for ignore_field in ['created_at', 'updated_at', 'created_by', 'modified_by', 'sync_id', 'is_deleted']:
                                 row_data.pop(ignore_field, None)
                                 
                             # Ignore sensitive fields if not superuser

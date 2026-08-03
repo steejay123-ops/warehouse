@@ -76,7 +76,8 @@ export class Layout implements OnInit, OnDestroy {
     'alert-triangle': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
     'check-square': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
     database: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
-    activity: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`
+    activity: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`,
+    'bar-chart-2': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`
   };
 
   icons: any = {};
@@ -91,6 +92,7 @@ export class Layout implements OnInit, OnDestroy {
     {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
     {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
     {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_sys_export'},
+    {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'}
   ];
 
@@ -107,6 +109,7 @@ export class Layout implements OnInit, OnDestroy {
     {id:'feeding', label:'مدیریت و تغذیه MT26/49', icon:'database', permission: 'view_wh_feeding'},
     {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_wh_export'},
     {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text', permission: 'view_wh_audit'},
+    {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'wh-settings', label:'تنظیمات انبار', icon:'settings', permission: 'view_wh_settings'}
   ];
 

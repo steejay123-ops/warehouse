@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams, HttpRequest, HttpEvent } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpRequest, HttpEvent, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
@@ -13,14 +13,23 @@ export class ApiService {
 
   constructor(private http: HttpClient) {}
 
-  get<T>(endpoint: string, params?: Record<string, unknown>): Observable<T> {
+  get<T>(
+    endpoint: string,
+    params?: Record<string, unknown>,
+    options?: { context?: HttpContext },
+  ): Observable<T> {
     return this.http.get<T>(this.url(endpoint), {
       params: this.buildParams(params),
+      context: options?.context,
     });
   }
 
-  post<T>(endpoint: string, body: unknown = {}): Observable<T> {
-    return this.http.post<T>(this.url(endpoint), body);
+  post<T>(
+    endpoint: string,
+    body: unknown = {},
+    options?: { context?: HttpContext },
+  ): Observable<T> {
+    return this.http.post<T>(this.url(endpoint), body, { context: options?.context });
   }
 
   patch<T>(endpoint: string, body: unknown): Observable<T> {
@@ -66,9 +75,14 @@ export class ApiService {
   /**
    * دانلود فایل با درخواست POST
    */
-  downloadPost(endpoint: string, body: unknown = {}): Observable<Blob> {
+  downloadPost(
+    endpoint: string,
+    body: unknown = {},
+    options?: { context?: HttpContext },
+  ): Observable<Blob> {
     return this.http.post(this.url(endpoint), body, {
-      responseType: 'blob'
+      responseType: 'blob',
+      context: options?.context,
     });
   }
 

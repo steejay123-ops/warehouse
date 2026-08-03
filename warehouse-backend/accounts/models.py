@@ -35,6 +35,7 @@ class CustomUser(AbstractUser):
             ("view_sys_export", "دسترسی به تب صدور فایل تغذیه"),
             ("view_sys_recounts", "دسترسی به تب بررسی مغایرت و بازشماری"),
             ("view_sys_settings", "دسترسی به تب تنظیمات سیستم"),
+            ("view_sys_reports", "دسترسی به تب گزارش‌ساز"),
             
             # Warehouse Tabs
             ("view_wh_dashboard", "دسترسی به تب داشبورد انبار"),

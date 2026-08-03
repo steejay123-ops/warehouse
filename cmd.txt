@@ -6,6 +6,24 @@ npm run start
 
 
 npm run build
+node server.js
+
+.\venv\Scripts\activate
+# بعد از activate:
+python manage.py migrate
+python manage.py runserver 0.0.0.0:8000
+یا 
+.\venv\Scripts\python manage.py runserver 0.0.0.0:8000
+
+
+کلاد فلر با دامنه خودت
+npx cloudflared tunnel login
+npx cloudflared tunnel create warehouse
+npx cloudflared tunnel route dns warehouse app.farsalish.ir
+
+npx cloudflared tunnel run --url http://localhost:4200 warehouse
+
+
 npx serve dist/warehouse-app/browser -s -p 4200
 
 
@@ -14,7 +32,6 @@ New-NetFirewallRule -DisplayName "Open Port 4200 for Angular" -Direction Inbound
 
 
 
-.\venv\Scripts\python manage.py runserver 0.0.0.0:8000
 
 
 node server.js
@@ -30,14 +47,17 @@ npx cloudflared tunnel --url http://localhost:4200
 ssh -p 443 -R0:localhost:4200 a.pinggy.io
 
 
-کلاد فلر با دامنه خودت
-npx cloudflared tunnel login
-npx cloudflared tunnel create warehouse
-npx cloudflared tunnel route dns warehouse app.farsalish.ir
-
-npx cloudflared tunnel run --url http://localhost:4200 warehouse
 
 
 
 
 
+
+انتقال به شاخه اصلی
+اجرا در شاخه فرعی
+git stash -u
+
+cd "E:\warehouse project"
+git checkout main
+git stash apply
+npm run build

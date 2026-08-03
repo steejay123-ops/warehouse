@@ -8,6 +8,7 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls')),
     path('api/warehouses/', include('warehouses.urls')),
     path('api/inventory/', include('inventory.urls')),
+    path('api/reports/', include('reports.urls')),
     path('api/settings/global/', SettingsViewSet.as_view({'get': 'global_settings', 'post': 'global_settings'})),
     path('api/public/config/', PublicConfigViewSet.as_view({'get': 'list'})),
     path('api/backup/create/', BackupCreateView.as_view()),

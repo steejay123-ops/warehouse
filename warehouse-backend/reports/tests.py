@@ -2,10 +2,14 @@
 تست‌های گزارش‌ساز — تمرکز روی مرزهای امنیتی و صحت موتور کوئری.
 اجرا: python manage.py test reports
 """
+import io
 from decimal import Decimal
+from unittest.mock import patch
 
+import openpyxl
 from django.contrib.auth.models import Permission
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import CustomUser
@@ -13,7 +17,8 @@ from inventory.models import Item, ItemFieldDefinition
 from warehouses.models import SystemSetting, Warehouse
 
 from .engine import ReportEngine, ReportError
-from .models import ReportTemplate
+from .excel import _run_export_job, cleanup_old_jobs, start_export_job
+from .models import ExportWorkerStatus, ReportExportJob, ReportTemplate
 
 
 def _perm(codename):
@@ -384,3 +389,135 @@ class ApiTests(BaseReportTest):
             'name': 'بد', 'entity': 'nope', 'spec': {},
         }, format='json')
         self.assertEqual(r.status_code, 400)
+
+
+class ExcelStyleTests(BaseReportTest):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_sync_excel_styled_and_openable(self):
+        r = self.client.post('/api/reports/export/', {
+            'entity': 'items', 'fields': ['fa_unic_code', 'balance'],
+            'report_name': 'گزارش تست',
+        }, format='json')
+        self.assertEqual(r.status_code, 200)
+
+        ws = openpyxl.load_workbook(io.BytesIO(r.content))['Report']
+        # ردیف ۱ عنوان، ردیف ۲ برچسب (بولد روی fill سرمه‌ای)، ردیف ۳ کلید، داده از ۴
+        self.assertTrue(str(ws['A1'].value).startswith('گزارش تست'))
+        self.assertTrue(ws['A2'].font.bold)
+        self.assertIn('4F46E5', str(ws['A2'].fill.fgColor.rgb))
+        self.assertEqual(ws['A3'].value, 'fa_unic_code')
+        self.assertEqual(ws.max_row, 3 + 3)  # ۳ ردیف سربرگ + ۳ آیتم
+        # فرمت هزارگان روی ستون عددی balance
+        self.assertEqual(ws['B4'].number_format, '#,##0.###')
+        # زبرا روی ردیف دوم داده
+        self.assertIn('F1F5F9', str(ws['A5'].fill.fgColor.rgb))
+        # فریز و فیلتر (در write_only فقط از راه Pane/auto_filter.ref ممکن است)
+        self.assertEqual(ws.freeze_panes, 'A4')
+        self.assertEqual(ws.auto_filter.ref, 'A3:B6')
+        self.assertTrue(ws.sheet_view.rightToLeft)
+
+
+class PdfExportTests(BaseReportTest):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _spec(self, **extra):
+        return {'entity': 'items', 'fields': ['fa_unic_code', 'vendor'],
+                'format': 'pdf', 'report_name': 'گزارش اقلام', **extra}
+
+    def test_pdf_returned(self):
+        r = self.client.post('/api/reports/export/', self._spec(), format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
+        self.assertTrue(r.content.startswith(b'%PDF'))
+
+    def test_pdf_row_limit_persian_error(self):
+        with patch('reports.pdf.PDF_ROW_LIMIT', 2):
+            r = self.client.post('/api/reports/export/', self._spec(), format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Excel', r.json()['error'])
+
+    def test_pdf_column_limit(self):
+        with patch('reports.pdf.PDF_MAX_COLUMNS', 1):
+            r = self.client.post('/api/reports/export/', self._spec(), format='json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('ستون', r.json()['error'])
+
+    def test_pdf_grouped_report(self):
+        spec = {
+            'entity': 'items', 'format': 'pdf', 'report_name': 'گروهی',
+            'group_by': ['warehouse__name'],
+            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total'}],
+        }
+        r = self.client.post('/api/reports/export/', spec, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b'%PDF'))
+
+
+class ExportWorkerTests(BaseReportTest):
+    SPEC = {'entity': 'items', 'fields': ['fa_unic_code']}
+
+    def test_run_export_job_done_with_heartbeat(self):
+        job = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, report_name='r',
+            status='pending', total_rows=3,
+        )
+        _run_export_job(job.pk, self.admin.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'done')
+        self.assertEqual(job.progress, 100)
+        self.assertIsNotNone(job.heartbeat_at)
+        p = job.absolute_file_path
+        self.assertTrue(p.exists())
+        p.unlink()
+
+    def test_job_queued_when_worker_alive(self):
+        ExportWorkerStatus.objects.create(pk=1, alive_at=timezone.now())
+        job = start_export_job(self.admin, self.SPEC, 'r', 20_000)
+        job.refresh_from_db()
+        # worker زنده → thread ساخته نمی‌شود؛ job در صف می‌ماند تا worker بردارد
+        self.assertEqual(job.status, 'pending')
+
+    def test_orphan_recovery_by_heartbeat_not_age(self):
+        from .management.commands.run_export_worker import Command
+        old = timezone.now() - timezone.timedelta(minutes=10)
+        dead = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, status='running', heartbeat_at=old,
+        )
+        alive = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, status='running',
+            heartbeat_at=timezone.now(),
+        )
+        # job بزرگ زنده (نبض تازه) نباید یتیم فرض شود حتی اگر قدیمی شروع شده باشد
+        ReportExportJob.objects.filter(pk=alive.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=2),
+        )
+        import io
+        Command(stdout=io.StringIO())._recover_orphans()
+        dead.refresh_from_db()
+        alive.refresh_from_db()
+        self.assertEqual(dead.status, 'pending')
+        self.assertEqual(alive.status, 'running')
+
+    def test_cleanup_respects_live_queue(self):
+        ExportWorkerStatus.objects.create(pk=1, alive_at=timezone.now())
+        stale_running = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, status='running',
+            heartbeat_at=timezone.now() - timezone.timedelta(hours=2),
+        )
+        queued = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, status='pending',
+        )
+        ReportExportJob.objects.filter(pk=queued.pk).update(
+            created_at=timezone.now() - timezone.timedelta(hours=2),
+        )
+        cleanup_old_jobs()
+        stale_running.refresh_from_db()
+        queued.refresh_from_db()
+        self.assertEqual(stale_running.status, 'failed')
+        # با worker زنده، صف pending سالم است و failed نمی‌شود
+        self.assertEqual(queued.status, 'pending')

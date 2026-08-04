@@ -57,6 +57,8 @@ class ReportExportJob(models.Model):
     spec = models.JSONField(default=dict, verbose_name="تعریف گزارش")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     progress = models.PositiveSmallIntegerField(default=0, verbose_name="درصد پیشرفت")
+    # نبض job در حین پردازش — .update() مدل auto_now را trigger نمی‌کند، پس صریحاً touch می‌شود
+    heartbeat_at = models.DateTimeField(null=True, blank=True, verbose_name="آخرین نبض پردازش")
     total_rows = models.PositiveIntegerField(default=0, verbose_name="تعداد کل ردیف‌ها")
     file_path = models.CharField(max_length=500, null=True, blank=True, verbose_name="مسیر فایل (نسبی)")
     error_message = models.TextField(null=True, blank=True, verbose_name="متن خطا")
@@ -82,3 +84,19 @@ class ReportExportJob(models.Model):
         if not self.file_path:
             return None
         return Path(settings.BASE_DIR) / self.file_path
+
+
+class ExportWorkerStatus(models.Model):
+    """
+    نبض worker خروجی‌ها — یک ردیف (pk=1) که هر چرخه poll به‌روز می‌شود.
+    وب‌سرور با آن تشخیص می‌دهد worker زنده است یا باید fallback به Thread کند.
+    در DB است (نه فایل لوکال) تا با چند سرور هم کار کند.
+    """
+    alive_at = models.DateTimeField(verbose_name="آخرین نبض")
+
+    class Meta:
+        verbose_name = "وضعیت worker خروجی"
+        verbose_name_plural = "وضعیت worker خروجی"
+
+    def __str__(self):
+        return f"ExportWorker alive_at={self.alive_at}"

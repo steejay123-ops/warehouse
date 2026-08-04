@@ -13,4 +13,5 @@ reportlab==4.2.0
 qrcode==7.4.2
 arabic-reshaper==3.0.0
 python-bidi==0.6.3
+jdatetime==5.0.0
 cryptography>=43.0.0

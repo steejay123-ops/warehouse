@@ -237,10 +237,12 @@ export class Reports implements OnInit {
     if (!next.x && this.store.groupBy().length === 1) next.x = this.store.groupBy()[0];
     if (!next.y && this.store.aggAliases().length === 1) next.y = this.store.aggAliases()[0];
     this.store.chart.set(next);
+    if (this.chartReady() && this.store.hasRun()) this.store.fetchChartRows();
   }
 
   clearChart(): void {
     this.store.chart.set(null);
+    this.store.chartRows.set([]);
   }
 
   chartXLabel(): string {
@@ -268,7 +270,7 @@ export class Reports implements OnInit {
     this.store.page.set(1);
     // snapshot کامل درخت فیلتر → store (آبجکت جدید)
     const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
-    this.store.run(snapshot.children.length ? snapshot : null);
+    this.store.run(snapshot.children.length ? snapshot : null, true);
   }
 
   onPageChanged(e: PageEvent): void {
@@ -284,18 +286,28 @@ export class Reports implements OnInit {
       this.store.sort.set([{ field: s.key, dir: s.direction }]);
     }
     this.store.page.set(1);
-    this.store.run();
+    this.store.run(undefined, true);
   }
 
-  // ------------------------------------------------------------------ Excel
+  // ------------------------------------------------------------ Excel / PDF
   exportExcel(): void {
+    this.exportReport('xlsx');
+  }
+
+  exportPdf(): void {
+    this.exportReport('pdf');
+  }
+
+  private exportReport(format: 'xlsx' | 'pdf'): void {
+    const label = format === 'pdf' ? 'PDF' : 'Excel';
     if (this.store.isOffline()) {
-      this.toast.warning('خروجی Excel فقط در حالت آنلاین در دسترس است.');
+      this.toast.warning(`خروجی ${label} فقط در حالت آنلاین در دسترس است.`);
       return;
     }
     const spec = this.store.buildSpec(true);
     if (!spec) return;
     spec.report_name = this.store.activeTemplate()?.name || 'report';
+    spec.format = format;
     this.exporting.set(true);
     this.reportApi.export(spec).subscribe({
       next: (outcome) => {
@@ -304,11 +316,12 @@ export class Reports implements OnInit {
           const url = URL.createObjectURL(outcome.blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `${spec.report_name}.xlsx`;
+          a.download = `${spec.report_name}.${format}`;
           a.click();
           URL.revokeObjectURL(url);
-          this.toast.success('فایل Excel دانلود شد.');
+          this.toast.success(`فایل ${label} دانلود شد.`);
         } else {
+          // فقط xlsx بزرگ به job می‌رسد؛ PDF همیشه sync است
           this.exportJobId.set(outcome.jobId);
           this.exportTotalRows.set(outcome.totalRows);
           this.toast.info('نتیجه بزرگ است؛ فایل در سرور تولید می‌شود و درصد پیشرفت را می‌بینید.');
@@ -317,7 +330,7 @@ export class Reports implements OnInit {
       error: async (e) => {
         this.exporting.set(false);
         // خطای blob → متن JSON را دربیاور
-        let msg = 'خطا در تولید خروجی Excel.';
+        let msg = `خطا در تولید خروجی ${label}.`;
         try {
           if (e?.error instanceof Blob) {
             const j = JSON.parse(await e.error.text());

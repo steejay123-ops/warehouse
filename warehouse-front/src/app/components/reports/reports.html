@@ -12,6 +12,14 @@
               class="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
         ذخیره قالب
       </button>
+      <button type="button" (click)="exportPdf()"
+              [disabled]="!store.hasRun() || store.isOffline() || exporting()"
+              class="text-xs font-bold px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+        @if (exporting()) {
+          <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        }
+        خروجی PDF
+      </button>
       <button type="button" (click)="exportExcel()"
               [disabled]="!store.hasRun() || store.isOffline() || exporting()"
               class="text-xs font-bold px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
@@ -306,14 +314,18 @@
               </div>
 
               @if (chartReady()) {
-                <app-report-chart
-                  [rows]="store.rows()"
-                  [config]="store.chart()!"
-                  [xLabel]="chartXLabel()"
-                  [yLabel]="chartYLabel()" />
-                @if (store.count() > store.rows().length) {
+                @if (store.chartRowsLoading()) {
+                  <p class="text-[11px] text-slate-400 text-center py-2">در حال دریافت داده نمودار…</p>
+                } @else {
+                  <app-report-chart
+                    [rows]="store.chartRows()"
+                    [config]="store.chart()!"
+                    [xLabel]="chartXLabel()"
+                    [yLabel]="chartYLabel()" />
+                }
+                @if (store.count() > 200) {
                   <p class="text-[11px] text-amber-600 text-center">
-                    نمودار فقط صفحه جاری ({{ store.rows().length }} از {{ store.count() }} گروه) را نشان می‌دهد.
+                    نمودار ۲۰۰ گروه اول (از {{ store.count() }} گروه) را نشان می‌دهد.
                   </p>
                 }
               } @else {

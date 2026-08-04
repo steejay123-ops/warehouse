@@ -73,6 +73,10 @@ export class ReportStore {
   readonly error = signal<string | null>(null);
   readonly hasRun = signal(false);
 
+  // ─── داده نمودار (کل نتیجه تا سقف ۲۰۰ گروه، مستقل از صفحه‌بندی جدول) ───
+  readonly chartRows = signal<Record<string, unknown>[]>([]);
+  readonly chartRowsLoading = signal(false);
+
   // ─── قالب‌ها ───
   readonly templates = signal<ReportTemplate[]>([]);
   readonly activeTemplate = signal<ReportTemplate | null>(null);
@@ -98,6 +102,7 @@ export class ReportStore {
       this.rows.set([]);
       this.columns.set([]);
       this.count.set(0);
+      this.chartRows.set([]);
       this.hasRun.set(false);
       this.activeTemplate.set(null);
     }
@@ -169,8 +174,12 @@ export class ReportStore {
     return spec;
   }
 
-  /** اجرای گزارش — درخت فیلتر کامل از کامپوننت فیلتر پاس می‌شود */
-  run(filters?: FilterGroup | null): void {
+  /**
+   * اجرای گزارش — درخت فیلتر کامل از کامپوننت فیلتر پاس می‌شود.
+   * refreshChart فقط در «اجرای جدید» (اجرای دستی/تغییر مرتب‌سازی) true است؛
+   * ورق زدن صفحه‌ها نمودار را دست نمی‌زند (بدون کوئری مضاعف).
+   */
+  run(filters?: FilterGroup | null, refreshChart = false): void {
     if (filters !== undefined) this.filters.set(filters);
     const spec = this.buildSpec();
     if (!spec) return;
@@ -183,10 +192,42 @@ export class ReportStore {
         this.count.set(res.count);
         this.loading.set(false);
         this.hasRun.set(true);
+        if (refreshChart) this.fetchChartRows();
       },
       error: (e) => {
         this.loading.set(false);
         this.error.set(this.msg(e));
+      },
+    });
+  }
+
+  /**
+   * داده نمودار از کل نتیجه (صفحه ۱ با page_size=200 — سقف بک‌اند).
+   * اگر همه نتایج در صفحه جاری باشند، بدون درخواست اضافه همان rows کپی می‌شود.
+   */
+  fetchChartRows(): void {
+    if (!this.grouped() || !this.chart()) {
+      this.chartRows.set([]);
+      return;
+    }
+    if (this.page() === 1 && this.count() <= this.rows().length) {
+      this.chartRows.set(this.rows());
+      return;
+    }
+    const spec = this.buildSpec(true);
+    if (!spec) return;
+    spec.page = 1;
+    spec.page_size = 200;
+    this.chartRowsLoading.set(true);
+    this.api.run(spec).subscribe({
+      next: (res) => {
+        this.chartRows.set(res.rows);
+        this.chartRowsLoading.set(false);
+      },
+      error: () => {
+        // نمودار حیاتی نیست — fallback به صفحه جاری جدول
+        this.chartRows.set(this.rows());
+        this.chartRowsLoading.set(false);
       },
     });
   }
@@ -214,6 +255,7 @@ export class ReportStore {
     this.rows.set([]);
     this.columns.set([]);
     this.count.set(0);
+    this.chartRows.set([]);
     this.hasRun.set(false);
     this.error.set(null);
     this.loadFields();

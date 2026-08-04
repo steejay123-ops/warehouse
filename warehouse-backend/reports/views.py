@@ -16,6 +16,7 @@ from accounts.permissions import require_menu_access
 
 from .engine import ReportEngine, ReportError
 from .excel import SYNC_ROW_LIMIT, cleanup_old_jobs, start_export_job, sync_excel_response
+from .pdf import sync_pdf_response
 from .models import ReportExportJob, ReportTemplate
 from .registry import get_registry
 from .serializers import ReportExportJobSerializer, ReportTemplateSerializer
@@ -94,9 +95,10 @@ class RunReportView(APIView):
 
 class ExportReportView(APIView):
     """
-    POST /api/reports/export/ — خروجی Excel ترکیبی:
-    - تا SYNC_ROW_LIMIT ردیف: فایل xlsx همان لحظه برمی‌گردد.
-    - بیشتر: job پس‌زمینه ساخته می‌شود و 202 {job_id} برمی‌گردد.
+    POST /api/reports/export/ — خروجی گزارش:
+    - format='pdf': همیشه sync با سقف ردیف/ستون (خطای فارسی اگر بزرگ باشد).
+    - xlsx (پیش‌فرض) تا SYNC_ROW_LIMIT ردیف: فایل همان لحظه برمی‌گردد.
+    - xlsx بزرگ‌تر: job پس‌زمینه ساخته می‌شود و 202 {job_id} برمی‌گردد.
     """
     permission_classes = [
         IsAuthenticated, ReportsMenuAccess, require_menu_access('view_sys_export'),
@@ -109,8 +111,15 @@ class ExportReportView(APIView):
             qs, columns, total = engine.export_queryset()
 
             report_name = str(spec.get('report_name') or 'report')[:100]
+            fmt = str(spec.get('format') or 'xlsx').lower()
+            if fmt == 'pdf':
+                return sync_pdf_response(
+                    qs, columns, total, filename='report.pdf', report_name=report_name,
+                )
             if total <= SYNC_ROW_LIMIT:
-                return sync_excel_response(qs, columns, filename='report.xlsx')
+                return sync_excel_response(
+                    qs, columns, filename='report.xlsx', report_name=report_name,
+                )
 
             job = start_export_job(request.user, spec, report_name, total)
             return Response(

@@ -100,6 +100,8 @@ export interface ReportSpec {
   page?: number;
   page_size?: number;
   report_name?: string;
+  /** فقط برای export — پیش‌فرض بک‌اند xlsx است */
+  format?: 'xlsx' | 'pdf';
 }
 
 export interface ReportColumn {

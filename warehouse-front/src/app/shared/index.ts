@@ -15,6 +15,7 @@ export type { SortState, PageEvent } from './components/data-table/data-table.co
 export { FileUploadComponent } from './components/file-upload/file-upload.component';
 export { WarehouseSelectorComponent } from './components/warehouse-selector/warehouse-selector.component';
 export { LoadingSkeletonComponent } from './components/loading-skeleton/loading-skeleton.component';
+export { BarcodeScannerComponent } from './components/barcode-scanner/barcode-scanner.component';
 
 // Pipes
 export { PersianDatePipe } from './pipes/persian-date.pipe';

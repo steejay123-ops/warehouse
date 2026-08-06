@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CountTaskApiService } from '../../../core/api/count-task-api.service';
@@ -16,11 +16,12 @@ import { Router } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { CountTaskStore } from '../../../core/services/count-task-store';
+import { BarcodeScannerComponent } from '../../../shared/components/barcode-scanner/barcode-scanner.component';
 
 @Component({
   selector: 'app-counter-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent],
   templateUrl: './counter-dashboard.html',
   styleUrl: './counter-dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -56,6 +57,9 @@ export class CounterDashboard implements OnInit {
   locationSort: 'asc' | 'desc' | '' = '';
 
   private pullSub: Subscription | null = null;
+
+  @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
+  private scanBusy = false;
 
   constructor(
     private countTaskApi: CountTaskApiService,
@@ -354,6 +358,122 @@ export class CounterDashboard implements OnInit {
 
 
 
+  // ════════════════════════════════════════════
+  //  اسکنر بارکد
+  // ════════════════════════════════════════════
+
+  async onBarcodeScanned(code: string) {
+    if (this.scanBusy || this.selectedTask) return;
+    this.scanBusy = true;
+    try {
+      const q = code.trim().toLowerCase();
+      const match = (t: CountTask) =>
+        (t.item_details?.fa_unic_code || '').trim().toLowerCase() === q;
+
+      // گردآوری کارتابل و استخر — Local-First از Dexie (آفلاین و مستقل از تب فعال)
+      let myTasks: CountTask[];
+      let pool: CountTask[];
+      if (this.localFirst) {
+        [myTasks, pool] = await Promise.all([
+          this.store.getMyTasks(this.activeWarehouseId!, this.currentUserId!),
+          this.store.getPoolTasks(this.activeWarehouseId!),
+        ]);
+      } else {
+        myTasks = this.tasks;
+        pool = this.poolTasks.length > 0 ? this.poolTasks : await this.fetchPoolTasks();
+      }
+
+      // ۱) کارتابل خودم — اولویت با تسک‌های در انتظار شمارش
+      const mine = myTasks.filter(match);
+      const target =
+        mine.find((t) => t.status === 'PENDING_COUNT' || t.status === 'SUPERVISOR_REJECTED') ??
+        mine[0];
+      if (target) {
+        this.openDetail(target);
+        return;
+      }
+
+      // ۲) استخر — تأیید بر عهده گرفتن
+      const poolTask = pool.find(match);
+      if (poolTask) {
+        await this.claimScannedTask(poolTask);
+        return;
+      }
+
+      // ۳) هیچ‌کدام
+      this.toast.error(`کالایی با کد «${code}» در کارتابل یا استخر شما یافت نشد`);
+    } finally {
+      this.scanBusy = false;
+      if (!this.selectedTask) this.scanner?.focusInput();
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** استخر در حالت سرور-محور (وقتی تب استخر هنوز باز نشده و آرایه خالی است) */
+  private fetchPoolTasks(): Promise<CountTask[]> {
+    const params: any = { as_role: 'counter' };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
+    return new Promise((resolve) => {
+      this.http
+        .get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params })
+        .subscribe({
+          next: (res: any) => resolve(Array.isArray(res) ? res : res.results || []),
+          error: () => resolve([]),
+        });
+    });
+  }
+
+  private async claimScannedTask(task: CountTask): Promise<void> {
+    const codeHtml = `<b dir="ltr">${task.item_details?.fa_unic_code || ''}</b>`;
+    const desc = task.item_details?.description || '';
+    const confirmed = await this.confirmDialog.open({
+      title: 'بر عهده گرفتن کالا',
+      message: `کالای ${codeHtml}<br>${desc}<br>در استخر است. آیا آن را بر عهده می‌گیرید؟`,
+      confirmText: 'بله، بر عهده می‌گیرم',
+      cancelText: 'انصراف',
+      type: 'info',
+    });
+    if (confirmed !== true) return;
+
+    if (!navigator.onLine) {
+      // claim آنلاین است — رقابت روی استخر باید سمت سرور حل شود
+      this.toast.error('بر عهده گرفتن کالا نیاز به اتصال اینترنت دارد');
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.http
+        .post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, {
+          task_ids: [task.id],
+          as_role: 'counter',
+        })
+        .subscribe({
+          next: async () => {
+            this.toast.success('کالا با موفقیت به عهده گرفته شد');
+            this.currentTab = 'my-tasks';
+            if (this.localFirst) {
+              await this.store.refresh(this.activeWarehouseId!);
+              await this.readFromLocal(false);
+              const fresh = (
+                await this.store.getMyTasks(this.activeWarehouseId!, this.currentUserId!)
+              ).find((t) => (task.sync_id ? t.sync_id === task.sync_id : t.id === task.id));
+              if (fresh) this.openDetail(fresh);
+            } else {
+              this.loadTasks(false);
+              this.openDetail(task);
+            }
+            this.cdr.detectChanges();
+            resolve();
+          },
+          error: (err) => {
+            this.toast.error(err?.error?.error || 'خطا در عملیات');
+            resolve();
+          },
+        });
+    });
+  }
+
   openDetail(task: CountTask) {
     this.selectedTask = task;
     // Fix: If counted_balance is 0, we should preserve it as '0' instead of ''
@@ -365,6 +485,7 @@ export class CounterDashboard implements OnInit {
   closeDetail() {
     this.selectedTask = null;
     this.cdr.detectChanges();
+    this.scanner?.focusInput();
   }
 
   async saveDraft() {

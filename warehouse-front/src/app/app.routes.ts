@@ -13,6 +13,7 @@ import { Audit } from './components/audit/audit';
 import { Feeding } from './components/feeding/feeding';
 import { Field } from './components/field/field';
 import { Placeholders } from './components/placeholders/placeholders';
+import { Customs } from './components/customs/customs';
 import { ChangePassword } from './components/change-password/change-password';
 import { WhSettings } from './components/wh-settings/wh-settings';
 import { CounterDashboard } from './components/counter/counter-dashboard/counter-dashboard';
@@ -61,7 +62,7 @@ export const routes: Routes = [
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },
       { path: 'export', component: Placeholders },
-      { path: 'customs', component: Placeholders },
+      { path: 'customs', component: Customs },
       { path: 'doc_approvals', component: Placeholders },
       { path: 'feed_approvals', component: Placeholders },
 

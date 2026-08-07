@@ -113,7 +113,7 @@ export class Dispatch implements OnInit {
       if (prefs.visibleCols) {
         // Validate columns against known defaults to prevent empty tables from old preferences
         const validCols = this.state.appState.dispatchSettings.visibleCols;
-        const filteredCols = prefs.visibleCols.filter((c: string) => validCols.includes(c) || ['fa_unic_code', 'description', 'balance', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'tag', 'has_conflict', 'is_fragile', 'is_heavy', 'needs_qc', 'plpkitem', 'pl', 'po', 'pk_number', 'item_no', 'unit', 'scope_discipline', 'bal4miv', 'new_location', 'hov_no', 'hov_date', 'msr_status', 'vendor', 'supplier', 'irn_no', 'item2', 'inventory_status', 'indent', 'remark', 'price_amount', 'currency', 'invoice_file', 'invoice_page', 'customs_field', 'customs_file', 'customs_file_page', 'price_remark', 'issue_remark', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'].includes(c));
+        const filteredCols = prefs.visibleCols.filter((c: string) => validCols.includes(c) || ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'has_conflict', 'is_fragile', 'is_heavy', 'needs_qc', 'plpkitem', 'pl', 'po', 'pk_number', 'item_no', 'unit', 'scope_discipline', 'bal4miv', 'new_location', 'hov_no', 'hov_date', 'msr_status', 'vendor', 'supplier', 'irn_no', 'item2', 'inventory_status', 'indent', 'remark', 'price_amount', 'currency', 'invoice_file', 'invoice_page', 'customs_field', 'customs_file', 'customs_file_page', 'price_remark', 'issue_remark', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'].includes(c));
         if (filteredCols.length > 0) {
           this.state.appState.dispatchSettings.visibleCols = filteredCols;
         }
@@ -152,8 +152,8 @@ export class Dispatch implements OnInit {
   get tagFilterOptions() {
     const tags = new Set<string>();
     this.items.forEach(i => {
-      if (i.tag) {
-        i.tag.split('،').forEach((t: string) => tags.add(t.trim()));
+      if (i.my_tag) {
+        i.my_tag.split('،').forEach((t: string) => tags.add(t.trim()));
       }
     });
     return Array.from(tags).filter(t => t).map(t => ({label: t, value: t}));
@@ -224,7 +224,7 @@ export class Dispatch implements OnInit {
         
         // For checkbox filters, we need to append __in
         // We know which ones are checkboxes based on if they contain commas and match certain keys
-        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'tag', 'created_by_name', 'modified_by_name'];
+        const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'my_tag', 'created_by_name', 'modified_by_name'];
         if (inFields.includes(key)) {
             filters[`${key}__in`] = stateFilters[key];
         } else {
@@ -234,7 +234,7 @@ export class Dispatch implements OnInit {
             else if (key === 'labelStatus') filters['tag_status__in'] = stateFilters[key];
             else if (key === 'fieldAssignee') filters['field_assignee__in'] = stateFilters[key];
             else if (key === 'docAssignee') filters['doc_assignee__in'] = stateFilters[key];
-            else if (key === 'tag_search') filters['tag'] = stateFilters[key];
+            else if (key === 'my_tag_search') filters['my_tag'] = stateFilters[key];
             else if (key === 'fieldAssignee_search') filters['field_assignee'] = stateFilters[key];
             else if (key === 'docAssignee_search') filters['doc_assignee'] = stateFilters[key];
             else if (key === 'created_by_name_search') filters['created_by_name'] = stateFilters[key];
@@ -650,7 +650,7 @@ export class Dispatch implements OnInit {
   updateAvailableTags() {
     const tagsSet = new Set<string>();
     this.items.forEach((r: any) => {
-      if (r.tag) r.tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
+      if (r.my_tag) r.my_tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
     });
     this.availableTagsList = Array.from(tagsSet).filter((t: string) => t).map((t: string) => ({label: t, value: t}));
   }
@@ -662,9 +662,9 @@ export class Dispatch implements OnInit {
 
     const updates = Array.from(this.selectedItemIds).map(id => {
       const r = this.items.find(i => i.id === id);
-      let currentTags = r?.tag ? r.tag.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
+      let currentTags = r?.my_tag ? r.my_tag.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
       let newTagsList = [...new Set([...currentTags, val])];
-      return { id, tag: newTagsList.join('، ') };
+      return { id, my_tag: newTagsList.join('، ') };
     });
 
     this.itemApi.bulkTag({ updates }).subscribe({
@@ -684,8 +684,8 @@ export class Dispatch implements OnInit {
     const tagsSet = new Set<string>();
     Array.from(this.selectedItemIds).forEach(id => {
       const r = this.items.find(i => i.id === id);
-      if (r?.tag) {
-        r.tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
+      if (r?.my_tag) {
+        r.my_tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
       }
     });
     this.selectedItemsTags = Array.from(tagsSet).filter((t: string) => t);
@@ -696,9 +696,9 @@ export class Dispatch implements OnInit {
     
     const updates = Array.from(this.selectedItemIds).map(id => {
       const r = this.items.find(i => i.id === id);
-      let currentTags = r?.tag ? r.tag.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
+      let currentTags = r?.my_tag ? r.my_tag.split('،').map((t: string) => t.trim()).filter((t: string) => t) : [];
       let newTagsList = currentTags.filter((t: string) => t !== tagToRemove);
-      return { id, tag: newTagsList.join('، ') };
+      return { id, my_tag: newTagsList.join('، ') };
     });
 
     this.itemApi.bulkTag({ updates }).subscribe({
@@ -714,7 +714,7 @@ export class Dispatch implements OnInit {
   clearBatchTags() {
     if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
 
-    const updates = Array.from(this.selectedItemIds).map(id => ({ id, tag: '' }));
+    const updates = Array.from(this.selectedItemIds).map(id => ({ id, my_tag: '' }));
     this.itemApi.bulkTag({ updates }).subscribe({
       next: (res) => {
         this.toast.show('success', `تمامی تگ‌های ${res.updated} رکورد انتخابی پاک شد.`);
@@ -733,7 +733,7 @@ export class Dispatch implements OnInit {
     event.stopPropagation();
     
     // Checkbox text filter uses the column key for the checkbox selections (comma separated)
-    const currentStr = this.state.appState.dispatchSettings.filters['tag'] || '';
+    const currentStr = this.state.appState.dispatchSettings.filters['my_tag'] || '';
     const currentTags = currentStr.split(',').map((t: string) => t.trim()).filter((t: string) => t);
     let newTags: string[] = [];
 
@@ -755,8 +755,8 @@ export class Dispatch implements OnInit {
 
     this.state.appState.dispatchSettings.filters = {
       ...this.state.appState.dispatchSettings.filters,
-      tag: newValue,
-      tag_search: ''
+      my_tag: newValue,
+      my_tag_search: ''
     };
     
     if (this.dataTable) {

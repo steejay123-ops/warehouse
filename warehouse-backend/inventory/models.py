@@ -55,7 +55,7 @@ class Item(SyncModelMixin):
     scope_discipline = models.CharField(max_length=100, null=True, blank=True, verbose_name="دیسیپلین کاری")
     
     # Quantities
-    balance = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی فیزیکی")
+    inventory = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی فیزیکی")
     bal4miv = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی مجاز MIV")
     
     # Locations
@@ -97,7 +97,7 @@ class Item(SyncModelMixin):
     needs_qc = models.BooleanField(default=False, verbose_name="نیاز به کنترل کیفی")
     
     # Custom Tags
-    tag = models.CharField(max_length=500, null=True, blank=True, verbose_name="تگ‌ها")
+    my_tag = models.CharField(max_length=500, null=True, blank=True, verbose_name="تگ‌ها")
     
     # Dynamic Data
     dynamic_data = models.JSONField(default=dict, blank=True, verbose_name="اطلاعات متغیر (پویا)")

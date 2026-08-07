@@ -229,7 +229,7 @@
             <div class="font-medium text-slate-700 max-w-[180px] truncate" [title]="value">{{value || '-'}}</div>
           </ng-template>
 
-          <ng-template appTableCol="balance" label="موجودی سیستم" [editable]="true" let-value="value">
+          <ng-template appTableCol="inventory" label="موجودی سیستم" [editable]="true" let-value="value">
             <span class="font-bold text-slate-700">{{value || '0'}}</span>
           </ng-template>
 
@@ -267,7 +267,7 @@
             <span *ngIf="value === 'done'" class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded text-[9px] font-bold">تکمیل اسناد</span>
           </ng-template>
 
-          <ng-template appTableCol="tag" label="تگ / محموله" filterType="checkbox_text" [filterOptions]="tagFilterOptions" let-value="value">
+          <ng-template appTableCol="my_tag" label="تگ / محموله" filterType="checkbox_text" [filterOptions]="tagFilterOptions" let-value="value">
             <div class="max-w-[140px] truncate">
               <span *ngIf="!getSplitTags(value).length" class="text-slate-300">-</span>
               <span *ngFor="let t of getSplitTags(value)" 

@@ -12,7 +12,7 @@ export interface Item {
   description?: string;
   unit?: string;
   scope_discipline?: string;
-  balance: number;
+  inventory: number;
   bal4miv: number;
   old_location?: string;
   new_location?: string;
@@ -34,6 +34,7 @@ export interface Item {
   customs_file?: string;
   customs_file_page?: string;
   price_remark?: string;
+  my_tag?: string;
   tag_status: string;
   field_status: string;
   doc_status: string;

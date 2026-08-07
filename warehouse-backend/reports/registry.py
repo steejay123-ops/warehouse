@@ -247,7 +247,7 @@ def _build_registry():
                 'created_by__username': fk_text('created_by__username', 'نام کاربری سازنده'),
             },
             select_related=('warehouse', 'created_by'),
-            blind_sensitive=('balance', 'bal4miv'),
+            blind_sensitive=('inventory', 'bal4miv'),
         ),
         EntityConfig(
             key='count_tasks', label='وظایف شمارش', model=CountTask,
@@ -259,8 +259,8 @@ def _build_registry():
                 'item__description': fk_text('item__description', 'شرح کالا'),
                 'item__unit': fk_text('item__unit', 'واحد سنجش'),
                 'item__warehouse__name': fk_text('item__warehouse__name', 'نام انبار'),
-                'item__balance': FieldDef(
-                    key='item__balance', source='item__balance', label='موجودی فیزیکی کالا',
+                'item__inventory': FieldDef(
+                    key='item__inventory', source='item__inventory', label='موجودی فیزیکی کالا',
                     type='number', aggregatable=True, sensitive=False,
                 ),
             },
@@ -275,7 +275,7 @@ def _build_registry():
                 ),
             },
             select_related=('item', 'counter', 'supervisor'),
-            blind_sensitive=('counted_balance', 'item__balance'),
+            blind_sensitive=('counted_balance', 'item__inventory'),
         ),
         EntityConfig(
             key='count_task_history', label='تاریخچه شمارش', model=CountTaskHistory,

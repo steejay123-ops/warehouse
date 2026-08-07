@@ -142,7 +142,7 @@ class LabelTemplateViewSet(viewsets.ModelViewSet):
             {'key': 'description', 'label': 'شرح کالا', 'group': 'مشخصات'},
             {'key': 'unit', 'label': 'واحد سنجش', 'group': 'مشخصات'},
             {'key': 'scope_discipline', 'label': 'دیسیپلین کاری', 'group': 'مشخصات'},
-            {'key': 'balance', 'label': 'موجودی فیزیکی', 'group': 'مقادیر'},
+            {'key': 'inventory', 'label': 'موجودی فیزیکی', 'group': 'مقادیر'},
             {'key': 'bal4miv', 'label': 'موجودی مجاز MIV', 'group': 'مقادیر'},
             {'key': 'old_location', 'label': 'لوکیشن قبلی', 'group': 'مکان'},
             {'key': 'new_location', 'label': 'لوکیشن جدید', 'group': 'مکان'},
@@ -150,7 +150,7 @@ class LabelTemplateViewSet(viewsets.ModelViewSet):
             {'key': 'vendor', 'label': 'سازنده (Vendor)', 'group': 'تدارکات'},
             {'key': 'supplier', 'label': 'تامین‌کننده (Supplier)', 'group': 'تدارکات'},
             {'key': 'irn_no', 'label': 'شماره IRN', 'group': 'تدارکات'},
-            {'key': 'tag', 'label': 'تگ‌ها', 'group': 'سایر'},
+            {'key': 'my_tag', 'label': 'تگ‌ها', 'group': 'سایر'},
             {'key': 'remark', 'label': 'ملاحظات', 'group': 'سایر'},
         ]
         fields.extend(static_fields)

@@ -14,7 +14,7 @@ export class StateService {
     users: [],
     items: [],
     dispatchSettings: {
-      visibleCols: ['fa_unic_code', 'description', 'balance', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'tag', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'],
+      visibleCols: ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'],
       filters: {},
       search: '',
       recentTags: ['اولویت الف', 'محموله مهر', 'سیستمی', 'تعمیری', 'اولویت ب'],

@@ -100,7 +100,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
     
     const tagsSet = new Set<string>();
     this.state.appState.items.forEach((r: any) => {
-      if (r.tag) r.tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
+      if (r.my_tag) r.my_tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
     });
     this.existingTags = Array.from(tagsSet);
     

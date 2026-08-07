@@ -46,15 +46,15 @@ class BaseReportTest(TestCase):
 
         cls.i1 = Item.objects.create(
             warehouse=cls.wh1, fa_unic_code='FA-001', description='پیچ فولادی',
-            vendor='زیمنس', balance=Decimal('10'), dynamic_data={'coating': '5.5'},
+            vendor='زیمنس', inventory=Decimal('10'), dynamic_data={'coating': '5.5'},
         )
         cls.i2 = Item.objects.create(
             warehouse=cls.wh1, fa_unic_code='FA-002', description='مهره',
-            vendor='ABB', balance=Decimal('4'), dynamic_data={'coating': '2'},
+            vendor='ABB', inventory=Decimal('4'), dynamic_data={'coating': '2'},
         )
         cls.i3 = Item.objects.create(
             warehouse=cls.wh2, fa_unic_code='FA-003', description='واشر',
-            vendor='زیمنس', balance=Decimal('7'), dynamic_data={},
+            vendor='زیمنس', inventory=Decimal('7'), dynamic_data={},
         )
         ItemFieldDefinition.objects.create(
             warehouse=cls.wh1, name='coating', label='پوشش', field_type='number',
@@ -110,18 +110,18 @@ class EngineSecurityTests(BaseReportTest):
 
     def test_sensitive_field_hidden_without_bypass(self):
         SystemSetting.objects.create(
-            key='SENSITIVE_EXCEL_FIELDS', value=['balance'], warehouse=None,
+            key='SENSITIVE_EXCEL_FIELDS', value=['inventory'], warehouse=None,
         )
-        eng = ReportEngine(self.viewer, {'entity': 'items', 'fields': ['balance']})
+        eng = ReportEngine(self.viewer, {'entity': 'items', 'fields': ['inventory']})
         with self.assertRaises(ReportError):
             eng.build()
         # superuser می‌بیند
-        res = ReportEngine(self.admin, {'entity': 'items', 'fields': ['balance']}).run()
+        res = ReportEngine(self.admin, {'entity': 'items', 'fields': ['inventory']}).run()
         self.assertEqual(res['count'], 3)
 
     def test_blind_counting_hides_balance(self):
         SystemSetting.objects.filter(key='blind_counting').update(value='blind')
-        eng = ReportEngine(self.viewer, {'entity': 'items', 'fields': ['balance']})
+        eng = ReportEngine(self.viewer, {'entity': 'items', 'fields': ['inventory']})
         with self.assertRaises(ReportError):
             eng.build()
 
@@ -131,7 +131,7 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items', 'fields': ['fa_unic_code'],
             'filters': {'op': 'AND', 'children': [
-                {'field': 'balance', 'operator': 'gte', 'value': 5},
+                {'field': 'inventory', 'operator': 'gte', 'value': 5},
                 {'op': 'OR', 'children': [
                     {'field': 'vendor', 'operator': 'icontains', 'value': 'زیمنس'},
                     {'field': 'description', 'operator': 'icontains', 'value': 'مهره'},
@@ -145,7 +145,7 @@ class EngineQueryTests(BaseReportTest):
     def test_invalid_coercion_400_not_500(self):
         spec = {
             'entity': 'items', 'fields': ['fa_unic_code'],
-            'filters': {'field': 'balance', 'operator': 'gte', 'value': 'متن'},
+            'filters': {'field': 'inventory', 'operator': 'gte', 'value': 'متن'},
         }
         with self.assertRaises(ReportError):
             ReportEngine(self.admin, spec).build()
@@ -153,7 +153,7 @@ class EngineQueryTests(BaseReportTest):
     def test_invalid_operator_for_type(self):
         spec = {
             'entity': 'items', 'fields': ['fa_unic_code'],
-            'filters': {'field': 'balance', 'operator': 'icontains', 'value': '1'},
+            'filters': {'field': 'inventory', 'operator': 'icontains', 'value': '1'},
         }
         with self.assertRaises(ReportError):
             ReportEngine(self.admin, spec).build()
@@ -162,7 +162,7 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
             'sort': [{'field': 'total_balance', 'dir': 'desc'}],
         }
         res = ReportEngine(self.admin, spec).run()
@@ -190,7 +190,7 @@ class EngineQueryTests(BaseReportTest):
     def test_alias_validation(self):
         spec = {
             'entity': 'items', 'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'DROP TABLE'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'DROP TABLE'}],
         }
         with self.assertRaises(ReportError):
             ReportEngine(self.admin, spec).build()
@@ -198,7 +198,7 @@ class EngineQueryTests(BaseReportTest):
     def test_sort_only_on_selected(self):
         spec = {
             'entity': 'items', 'fields': ['fa_unic_code'],
-            'sort': [{'field': 'balance', 'dir': 'desc'}],
+            'sort': [{'field': 'inventory', 'dir': 'desc'}],
         }
         with self.assertRaises(ReportError):
             ReportEngine(self.admin, spec).build()
@@ -219,7 +219,7 @@ class EngineQueryTests(BaseReportTest):
             'entity': 'items', 'fields': ['fa_unic_code'],
             'filters': {'op': 'OR', 'not': True, 'children': [
                 {'field': 'vendor', 'operator': 'icontains', 'value': 'زیمنس'},
-                {'field': 'balance', 'operator': 'gte', 'value': 7},
+                {'field': 'inventory', 'operator': 'gte', 'value': 7},
             ]},
         }
         res = ReportEngine(self.admin, spec).run()
@@ -230,7 +230,7 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
             'having': [{'alias': 'total_balance', 'operator': 'gte', 'value': 10}],
         }
         res = ReportEngine(self.admin, spec).run()
@@ -243,7 +243,7 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
             'having': [{'alias': 'total_balance', 'operator': 'between', 'value': [5, 10]}],
         }
         res = ReportEngine(self.admin, spec).run()
@@ -254,8 +254,8 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
-            'having': [{'alias': 'balance', 'operator': 'gte', 'value': 1}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
+            'having': [{'alias': 'inventory', 'operator': 'gte', 'value': 1}],
         }
         with self.assertRaises(ReportError) as ctx:
             ReportEngine(self.admin, spec).build()
@@ -274,7 +274,7 @@ class EngineQueryTests(BaseReportTest):
         spec = {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
             'having': [{'alias': 'total_balance', 'operator': 'gte', 'value': 'متن'}],
         }
         with self.assertRaises(ReportError) as ctx:
@@ -372,7 +372,7 @@ class ApiTests(BaseReportTest):
         r = self.client.post('/api/reports/run/', {
             'entity': 'items',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total_balance'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total_balance'}],
             'filters': {'field': 'vendor', 'operator': 'icontains',
                         'value': 'ABB', 'not': True},
             'having': [{'alias': 'total_balance', 'operator': 'gte', 'value': 8}],
@@ -398,7 +398,7 @@ class ExcelStyleTests(BaseReportTest):
 
     def test_sync_excel_styled_and_openable(self):
         r = self.client.post('/api/reports/export/', {
-            'entity': 'items', 'fields': ['fa_unic_code', 'balance'],
+            'entity': 'items', 'fields': ['fa_unic_code', 'inventory'],
             'report_name': 'گزارش تست',
         }, format='json')
         self.assertEqual(r.status_code, 200)
@@ -451,7 +451,7 @@ class PdfExportTests(BaseReportTest):
         spec = {
             'entity': 'items', 'format': 'pdf', 'report_name': 'گروهی',
             'group_by': ['warehouse__name'],
-            'aggregations': [{'field': 'balance', 'fn': 'sum', 'alias': 'total'}],
+            'aggregations': [{'field': 'inventory', 'fn': 'sum', 'alias': 'total'}],
         }
         r = self.client.post('/api/reports/export/', spec, format='json')
         self.assertEqual(r.status_code, 200)

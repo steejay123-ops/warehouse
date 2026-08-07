@@ -81,13 +81,13 @@ class CountTaskSerializer(serializers.ModelSerializer):
         return blind_mode == 'blind'
 
     def get_item_details(self, obj):
-        """اگر شمارش کور فعال باشد، balance از پاسخ حذف شود"""
+        """اگر شمارش کور فعال باشد، inventory (موجودی) از پاسخ حذف شود"""
         data = ItemSerializer(obj.item).data
         from warehouses.services import get_setting
         wh_id = obj.item.warehouse_id if obj.item else None
         blind_mode = get_setting('blind_counting', wh_id)
         if blind_mode == 'blind':
-            data.pop('balance', None)
+            data.pop('inventory', None)
             data.pop('bal4miv', None)
         return data
 class DocTaskHistorySerializer(serializers.ModelSerializer):

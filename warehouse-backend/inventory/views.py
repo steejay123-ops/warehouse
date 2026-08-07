@@ -193,7 +193,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, PriorityOrderingFilter]
     filterset_class = ItemFilter
     pagination_class = ItemPagination
-    search_fields = ['fa_unic_code', 'plpkitem', 'description', 'po', 'pl', 'pk_number', 'tag']
+    search_fields = ['fa_unic_code', 'plpkitem', 'description', 'po', 'pl', 'pk_number', 'my_tag']
     ordering_fields = '__all__'
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
@@ -414,7 +414,7 @@ class ItemViewSet(viewsets.ModelViewSet):
             elif h == 'warehouse':
                 sample_row_1.append('انبار مرکزی')
                 sample_row_2.append('انبار مرکزی')
-            elif h in ['balance', 'bal4miv']:
+            elif h in ['inventory', 'bal4miv']:
                 sample_row_1.append(100.0)
                 sample_row_2.append(50.5)
             elif field and field.get_internal_type() == 'BooleanField':
@@ -628,10 +628,10 @@ class ItemViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 for up in updates:
                     item_id = up.get('id')
-                    tag = up.get('tag', '')
+                    tag = up.get('my_tag', '')
                     if item_id:
                         Item.objects.filter(id=item_id).update(
-                            tag=tag, 
+                            my_tag=tag,
                             updated_at=timezone.now(), 
                             modified_by=request.user
                         )
@@ -893,7 +893,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 else:
                                     row_data['hov_date'] = None
                                     
-                            excel_tag = row_data.pop('tag', '')
+                            excel_tag = row_data.pop('my_tag', '')
                             if not excel_tag: excel_tag = ''
                             excel_tag = str(excel_tag).strip().replace(',', '،')
                             
@@ -906,9 +906,9 @@ class ItemViewSet(viewsets.ModelViewSet):
                             
                             unique_tags = list(set(final_tags))
                             if unique_tags:
-                                row_data['tag'] = '،'.join(unique_tags)
+                                row_data['my_tag'] = '،'.join(unique_tags)
                             else:
-                                row_data['tag'] = ''
+                                row_data['my_tag'] = ''
 
                             warehouse_str = row_data.pop('warehouse', None)
                             target_warehouse_id = int(warehouse_id) if warehouse_id else None
@@ -1014,11 +1014,11 @@ class ItemViewSet(viewsets.ModelViewSet):
                                 q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید (احیا): {fa_unic_code}"}) + "\n")
                             elif existing_item:
                                 # Append new tags to existing item's tags
-                                if existing_item.tag:
-                                    existing_tags = [t.strip() for t in existing_item.tag.split('،') if t.strip()]
-                                    new_tags = [t.strip() for t in defaults.get('tag', '').split('،') if t.strip()]
+                                if existing_item.my_tag:
+                                    existing_tags = [t.strip() for t in existing_item.my_tag.split('،') if t.strip()]
+                                    new_tags = [t.strip() for t in defaults.get('my_tag', '').split('،') if t.strip()]
                                     combined_tags = list(set(existing_tags + new_tags))
-                                    defaults['tag'] = '،'.join(combined_tags) if combined_tags else ''
+                                    defaults['my_tag'] = '،'.join(combined_tags) if combined_tags else ''
 
                                 if conflict_strategy == 'ignore':
                                     skipped += 1
@@ -1037,8 +1037,8 @@ class ItemViewSet(viewsets.ModelViewSet):
                                     if fa_unic_code and not existing_item.fa_unic_code:
                                         new_defaults['fa_unic_code'] = fa_unic_code
                                     # Always update tag since we append them
-                                    if defaults.get('tag') and defaults.get('tag') != existing_item.tag:
-                                        new_defaults['tag'] = defaults['tag']
+                                    if defaults.get('my_tag') and defaults.get('my_tag') != existing_item.my_tag:
+                                        new_defaults['my_tag'] = defaults['my_tag']
                                         
                                     if new_defaults:
                                         from django.core.serializers.json import DjangoJSONEncoder
@@ -1788,7 +1788,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                     # بررسی مغایرت (اصلاح ۱۰)
                     if str(task.counted_balance) != str(item.bal4miv):
                         item.has_conflict = True
-                    item.balance = task.counted_balance
+                    item.inventory = task.counted_balance
                 item.modified_by = user
                 item.updated_at = timezone.now()
                 items_to_update.append(item)
@@ -1796,7 +1796,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             count = tasks.update(status='FINAL_APPROVED', manager_note=note, modified_by=user, updated_at=timezone.now())
             
             if items_to_update:
-                Item.objects.bulk_update(items_to_update, ['field_status', 'balance', 'has_conflict', 'modified_by', 'updated_at'])
+                Item.objects.bulk_update(items_to_update, ['field_status', 'inventory', 'has_conflict', 'modified_by', 'updated_at'])
             
             if histories:
                 CountTaskHistory.objects.bulk_create(histories)

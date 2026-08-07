@@ -203,7 +203,7 @@ class SyncPullView(APIView):
             data = ItemSerializer(obj).data
             if blind:
                 # همان redaction شمارش کور CountTaskSerializer.item_details
-                data.pop('balance', None)
+                data.pop('inventory', None)
                 data.pop('bal4miv', None)
             return data
         return CountTaskSerializer(obj).data

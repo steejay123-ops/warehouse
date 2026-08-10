@@ -113,6 +113,7 @@ export class OfflineDatabase extends Dexie {
   items!: Table<any, string>;
   dynamicFields!: Table<any, string>;
   syncCursors!: Table<SyncCursorEntry, string>;
+  docTasks!: Table<any, string>;
 
   constructor() {
     super('WarehouseOfflineDB');
@@ -140,6 +141,17 @@ export class OfflineDatabase extends Dexie {
       items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
       dynamicFields: 'sync_id, id, warehouse_id, updated_at',
       syncCursors: 'key, userId, warehouseId',
+    });
+    // نسخه ۴ — اضافه کردن جدول docTasks برای کارتابل مالی Local-First
+    this.version(4).stores({
+      syncQueue: '++id, status, createdAt, userId, entitySyncId',
+      apiCache: 'url, expiresAt',
+      syncErrors: '++id, failedAt, dismissed, userId',
+      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+      syncCursors: 'key, userId, warehouseId',
+      docTasks: 'sync_id, id, warehouse_id, status, updated_at',
     });
   }
 }

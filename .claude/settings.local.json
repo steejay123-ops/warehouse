@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(git stash *)",
+      "Read(//c/Users/Payandeh/.claude/projects/E--warehouse-project--claude-worktrees-cranky-cerf-0acb95/**)",
+      "Bash(./venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\('reports/engine.py',encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(\"E:\\\\warehouse project\\\\warehouse-backend\\\\venv\\\\Scripts\\\\python.exe\" -c \"import ast; ast.parse\\(open\\(r'E:\\\\warehouse project\\\\warehouse-backend\\\\reports\\\\tests.py', encoding='utf-8'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(curl -sL -o \"E:\\\\warehouse project\\\\warehouse-backend\\\\reports\\\\fonts\\\\Vazirmatn-Regular.ttf\" \"https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Regular.ttf\")",
+      "Bash(curl -sL -o \"E:\\\\warehouse project\\\\warehouse-backend\\\\reports\\\\fonts\\\\Vazirmatn-Bold.ttf\" \"https://raw.githubusercontent.com/rastikerdar/vazirmatn/master/fonts/ttf/Vazirmatn-Bold.ttf\")",
+      "Bash(xxd)",
+      "Bash(npm install *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Read(//e//**)",
+      "Bash(python3 -c ' *)",
+      "Bash(python manage.py makemigrations inventory --name=\"remove_unused_item_fields\")",
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|jsx\\)$\")",
+      "mcp__TestSprite__testsprite_generate_code_and_execute",
+      "Bash(node \"C:/Users/Payandeh/AppData/Local/npm-cache/_npx/8ddf6bea01b2519d/node_modules/@testsprite/testsprite-mcp/dist/index.js\" generateCodeAndExecute)",
+      "Bash(venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4200 --max-time 5)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

@@ -112,7 +112,7 @@ class DocTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocTask
         fields = '__all__'
-        read_only_fields = ('created_at', 'updated_at', 'created_by', 'modified_by')
+        read_only_fields = ('created_at', 'updated_at', 'created_by', 'modified_by', 'sync_id')
 
     def get_doc_worker_name(self, obj):
         if obj.doc_worker:
@@ -130,10 +130,4 @@ class DocTaskSerializer(serializers.ModelSerializer):
         return None
 
     def get_item_details(self, obj):
-        return {
-            'id': obj.item.id,
-            'name': obj.item.name,
-            'fa_unic_code': obj.item.fa_unic_code,
-            'en_unic_code': obj.item.en_unic_code,
-            'warehouse_name': obj.item.warehouse.name if obj.item.warehouse else None
-        }
+        return ItemSerializer(obj.item).data

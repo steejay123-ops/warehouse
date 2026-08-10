@@ -1,227 +1,524 @@
-<div class="space-y-6 fade-in pb-10" dir="rtl">
-    <div class="flex items-center justify-between bg-white p-5 rounded-2xl border border-slate-200 shadow-sm border-t-4 border-t-purple-600">
-        <div>
-            <h3 class="font-black text-slate-800 text-lg">بررسی نهایی مدیر (مغایرت‌گیری)</h3>
-            <p class="text-xs text-slate-500 mt-1">مقایسه موجودی سیستمی با شمارش تایید شده سرپرست</p>
-        </div>
-        <div class="flex items-center gap-3">
-          <div class="flex-1 min-w-[200px]">
-            <app-warehouse-selector
-              *ngIf="!authStore.isWarehouseContext()"
-              [allowAll]="true"
-              [projects]="state.appState.projects"
-              [activeId]="authStore.activeWarehouseId()"
-              (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
-            ></app-warehouse-selector>
-          </div>
-          <button 
-            (click)="loadTasks()"
-            class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl px-4 py-2 font-bold text-xs flex items-center gap-2 transition-colors">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-            بروزرسانی
-          </button>
-          <button 
-            *ngIf="selectedTasks.size > 0"
-            (click)="openApproveDialog()"
-            class="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-4 py-2 font-bold text-xs shadow-md shadow-purple-600/20 flex items-center gap-2 transition-transform active:scale-95 slide-in">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            تایید نهایی {{selectedTasks.size}} مورد
-          </button>
-        </div>
+<div class="h-full flex flex-col relative w-full" dir="rtl">
+
+  <!-- Header -->
+  <header class="mb-4 flex items-center justify-between gap-3 relative z-40 px-2 mt-2">
+    <div class="flex-1 max-w-[200px]">
+      <app-warehouse-selector
+        *ngIf="!authStore.isWarehouseContext()"
+        [allowAll]="true"
+        [projects]="state.appState.projects"
+        [activeId]="authStore.activeWarehouseId()"
+        (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
+      ></app-warehouse-selector>
+    </div>
+    <div class="flex items-center gap-2">
+      <button
+        (click)="currentTab === 'doc' ? loadDocTasks() : (currentTab === 'doc-pool' ? loadDocPoolTasks() : (currentTab === 'pool' ? loadPoolTasks() : loadTasks()))"
+        class="p-2 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors shadow-sm"
+        title="بروزرسانی">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Title -->
+  <div class="mb-4 px-2">
+    <h2 class="text-xl font-black text-slate-800">بررسی نهایی مدیر</h2>
+    <p class="text-sm text-slate-500 mt-1">
+      <ng-container *ngIf="currentTab !== 'doc'">مغایرت‌گیری و تایید نهایی شمارش انبار</ng-container>
+      <ng-container *ngIf="currentTab === 'doc' || currentTab === 'doc-pool'">تایید یا رد اسناد مالی ارسال‌شده توسط سرپرستان</ng-container>
+    </p>
+  </div>
+
+  <!-- Navigation: Section Pills + Sub-tabs -->
+  <div class="mb-4 px-2">
+    <div class="flex gap-2 mb-2">
+      <button (click)="setTab('my-tasks')"
+        class="flex-1 py-1.5 text-xs font-bold rounded-full transition-all"
+        [class]="currentTab !== 'doc' && currentTab !== 'doc-pool' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+        انبارگردانی
+      </button>
+      <button (click)="setTab('doc')"
+        class="flex-1 py-1.5 text-xs font-bold rounded-full transition-all flex items-center justify-center gap-1"
+        [class]="currentTab === 'doc' || currentTab === 'doc-pool' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+        مالی / اسناد
+        <span *ngIf="(docTasks.length + docPoolTasks.length) > 0 && currentTab !== 'doc' && currentTab !== 'doc-pool'"
+          class="bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full px-1.5 py-0.5">{{docTasks.length + docPoolTasks.length}}</span>
+      </button>
+    </div>
+    <!-- Sub-tabs -->
+    <div class="flex border-b border-slate-200">
+      <ng-container *ngIf="currentTab !== 'doc' && currentTab !== 'doc-pool'">
+        <button (click)="setTab('my-tasks')"
+          class="px-4 py-2.5 border-b-2 font-bold text-sm transition-colors"
+          [class]="currentTab === 'my-tasks' ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-800'">
+          کارهای من
+        </button>
+        <button (click)="setTab('pool')"
+          class="px-4 py-2.5 border-b-2 font-bold text-sm transition-colors flex items-center gap-1"
+          [class]="currentTab === 'pool' ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-800'">
+          استخر
+          <span *ngIf="poolTasks.length > 0" class="bg-purple-100 text-purple-700 text-xs px-1.5 py-0.5 rounded-full">{{poolTasks.length}}</span>
+        </button>
+      </ng-container>
+      <ng-container *ngIf="currentTab === 'doc' || currentTab === 'doc-pool'">
+        <button (click)="setTab('doc')"
+          class="px-4 py-2.5 border-b-2 font-bold text-sm transition-colors"
+          [class]="currentTab === 'doc' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'">
+          کارهای من
+        </button>
+        <button (click)="setTab('doc-pool')"
+          class="px-4 py-2.5 border-b-2 font-bold text-sm transition-colors flex items-center gap-1"
+          [class]="currentTab === 'doc-pool' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'">
+          استخر اسناد
+          <span *ngIf="docPoolTasks.length > 0" class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{{docPoolTasks.length}}</span>
+        </button>
+      </ng-container>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- TAB: my-tasks                              -->
+  <!-- ══════════════════════════════════════════ -->
+  <ng-container *ngIf="currentTab === 'my-tasks'">
+
+    <div *ngIf="isLoading" class="flex items-center justify-center py-12 flex-1">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
     </div>
 
-    <div *ngIf="isLoading" class="flex justify-center items-center py-20">
-        <div class="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+    <div *ngIf="!isLoading && tasks.length === 0" class="text-center py-16 bg-white rounded-2xl border border-slate-200 flex-1 mx-2">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto text-slate-300 mb-4">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+      <p class="text-slate-600 font-bold">موردی برای بررسی وجود ندارد.</p>
+      <p class="text-xs text-slate-400 mt-2">منتظر ارسال کالاها توسط سرپرستان باشید.</p>
     </div>
 
-    <!-- Task List -->
-    <div *ngIf="!isLoading && !selectedTask" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        
-        <!-- Select All Header -->
-        <div *ngIf="tasks.length > 0" class="col-span-full flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
-            <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll($event)" class="w-4 h-4 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500">
-              <span class="text-sm font-bold text-slate-700">انتخاب همه موارد</span>
-            </label>
-        </div>
-
-        <div *ngIf="tasks.length === 0" class="col-span-full text-center py-10">
-            <p class="text-sm font-bold text-slate-500">موردی برای بررسی نهایی وجود ندارد.</p>
-        </div>
-
-        <div *ngFor="let t of tasks" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between transition-all"
-             [class.border-purple-300]="selectedTasks.has(t.id)"
-             [class.bg-purple-50]="selectedTasks.has(t.id)">
+    <!-- Single Review Form -->
+    <ng-container *ngIf="!isLoading && selectedTask">
+      <div class="px-2 pb-24">
+        <button (click)="cancelReview()" class="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 mb-4 font-bold transition-colors">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          بازگشت به فهرست
+        </button>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4">
+          <div class="flex items-start justify-between mb-3">
             <div>
-                <div class="flex justify-between items-start mb-3">
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" [checked]="selectedTasks.has(t.id)" (change)="toggleSelection(t.id)" class="w-4 h-4 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500 cursor-pointer">
-                        <span class="text-xs font-black text-purple-700 bg-purple-50 px-2 py-1 rounded-lg border border-purple-100">
-                            {{t.item_details?.fa_unic_code || '-'}}
-                        </span>
-                    </div>
-                    <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
-                        منتظر بررسی مدیر
-                    </span>
-                </div>
-                <h4 class="text-sm font-bold text-slate-800 mb-4 line-clamp-2 pl-6">{{t.item_details?.description || '-'}}</h4>
-                
-                <div class="grid grid-cols-2 gap-2 text-xs mb-3">
-                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex flex-col justify-center items-center">
-                        <span class="text-slate-500 font-bold mb-1 text-[10px]">موجودی سیستمی</span>
-                        <span class="font-black text-slate-800 text-base">{{t.item_details?.bal4miv || 0}}</span>
-                    </div>
-                    <div class="p-3 rounded-xl border flex flex-col justify-center items-center" 
-                         [ngClass]="isMatched(t) ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'">
-                        <span class="font-bold mb-1 text-[10px]"
-                              [ngClass]="isMatched(t) ? 'text-emerald-600' : 'text-rose-600'">مقدار شمرده شده</span>
-                        <span class="font-black text-base"
-                              [ngClass]="isMatched(t) ? 'text-emerald-700' : 'text-rose-700'">{{t.counted_balance}}</span>
-                    </div>
-                </div>
-                <div class="text-[10px] text-slate-500 px-1 flex justify-between">
-                    <span>انبارگردان: <strong>{{t.counter_name}}</strong></span>
-                    <span>سرپرست: <strong>{{t.supervisor_name}}</strong></span>
-                </div>
+              <div class="font-mono text-[11px] text-slate-400">{{selectedTask.item_details?.fa_unic_code}}</div>
+              <h3 class="font-black text-slate-800 mt-0.5">{{selectedTask.item_details?.description}}</h3>
             </div>
-            
-            <button (click)="selectTask(t)" class="w-full mt-4 py-2 bg-purple-100 text-purple-700 hover:text-white text-xs font-bold rounded-xl shadow-sm hover:bg-purple-600 transition-colors">
-                مقایسه جزئیات و ثبت نتیجه تکی
-            </button>
-        </div>
-    </div>
-
-    <!-- Review Form (Single) -->
-    <div *ngIf="selectedTask && !isLoading" class="max-w-2xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 fade-in">
-        <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-            <h4 class="font-black text-slate-800">تصمیم‌گیری مدیر</h4>
-            <button (click)="cancelReview()" class="text-slate-400 hover:text-slate-600">✕</button>
-        </div>
-
-        <div class="space-y-6">
-            <div class="bg-purple-50 border border-purple-100 p-4 rounded-xl">
-                <p class="text-xs text-purple-600 font-bold mb-1">شرح کالا</p>
-                <p class="font-black text-purple-900">{{selectedTask.item_details?.description}}</p>
-            </div>
-
-            <!-- Compare Side-by-Side -->
-            <div class="grid grid-cols-2 gap-4">
-                <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl relative overflow-hidden">
-                    <div class="absolute top-0 right-0 w-1 h-full bg-slate-400"></div>
-                    <span class="text-xs text-slate-500 font-bold block mb-3 border-b border-slate-200 pb-2">اطلاعات سیستمی</span>
-                    <div class="space-y-2">
-                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">موجودی:</span><span class="font-black text-slate-800">{{selectedTask.item_details?.bal4miv}}</span></div>
-                        <div class="flex justify-between"><span class="text-[10px] text-slate-500">لوکیشن:</span><span class="font-bold text-slate-700 text-[11px]">{{selectedTask.item_details?.new_location || '-'}}</span></div>
-                    </div>
-                </div>
-
-                <div class="p-4 rounded-xl relative overflow-hidden border"
-                     [ngClass]="isMatched(selectedTask) ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'">
-                    <div class="absolute top-0 right-0 w-1 h-full"
-                         [ngClass]="isMatched(selectedTask) ? 'bg-emerald-500' : 'bg-rose-500'"></div>
-                    <span class="text-xs font-bold block mb-3 border-b pb-2"
-                          [ngClass]="isMatched(selectedTask) ? 'text-emerald-700 border-emerald-200' : 'text-rose-700 border-rose-200'">اطلاعات شمرده شده</span>
-                    <div class="space-y-2">
-                        <div class="flex justify-between"><span class="text-[10px]" [ngClass]="isMatched(selectedTask) ? 'text-emerald-600' : 'text-rose-600'">موجودی:</span><span class="font-black" [ngClass]="isMatched(selectedTask) ? 'text-emerald-800' : 'text-rose-800'">{{selectedTask.counted_balance}}</span></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- History Timeline -->
-            <div *ngIf="selectedTask.history && selectedTask.history.length > 0" class="mb-6 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-              <h3 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                تاریخچه بررسی‌ها
-              </h3>
-              <div class="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
-                <div *ngFor="let record of selectedTask.history" class="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                  <!-- Icon -->
-                  <div class="flex items-center justify-center w-8 h-8 rounded-full border border-white bg-slate-100 text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 z-10"
-                       [ngClass]="{
-                         'bg-emerald-100 text-emerald-600': record.action_type.includes('APPROVE') || record.action_type === 'COUNTED',
-                         'bg-rose-100 text-rose-600': record.action_type.includes('REJECT')
-                       }">
-                    <svg *ngIf="record.action_type === 'COUNTED'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                    <svg *ngIf="record.action_type.includes('APPROVE') || record.action_type === 'MANAGER_REVIEW'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <svg *ngIf="record.action_type.includes('REJECT')" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                  </div>
-                  <!-- Content -->
-                  <div class="w-[calc(100%-2.5rem)] md:w-[calc(50%-2.5rem)] p-3 rounded-xl border border-slate-100 bg-slate-50 shadow-sm"
-                       [ngClass]="{
-                         'border-rose-200 bg-rose-50/50': record.action_type.includes('REJECT'),
-                         'border-emerald-200 bg-emerald-50/50': record.action_type.includes('APPROVE') || record.action_type === 'COUNTED' || record.action_type === 'MANAGER_REVIEW'
-                       }">
-                    <div class="flex items-center justify-between mb-1">
-                      <span class="text-[10px] font-bold text-slate-500">{{record.action_by_name || 'سیستم'}}</span>
-                      <span class="text-[9px] text-slate-400" dir="ltr">{{record.created_at | date:'short'}}</span>
-                    </div>
-                    <div class="text-[10px] font-bold mb-1" 
-                         [ngClass]="{'text-rose-600': record.action_type.includes('REJECT'), 'text-emerald-600': record.action_type.includes('APPROVE') || record.action_type === 'COUNTED' || record.action_type === 'MANAGER_REVIEW'}">
-                       {{record.action_type | titlecase}}
-                    </div>
-                    <div class="text-xs text-slate-600 font-bold mb-1" *ngIf="record.counted_balance">
-                       مقدار ثبت شده: {{record.counted_balance}}
-                    </div>
-                    <p class="text-xs text-slate-600 m-0" *ngIf="record.note">{{record.note}}</p>
-                    <p class="text-xs text-slate-400 italic m-0" *ngIf="!record.note">بدون توضیح</p>
-                  </div>
-                </div>
+            <div class="text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-bold">در انتظار بررسی</div>
+          </div>
+          <div class="flex items-center gap-2 p-3 rounded-xl mb-4"
+            [ngClass]="isMatched(selectedTask) ? 'bg-emerald-50 border border-emerald-200' : 'bg-rose-50 border border-rose-200'">
+            <svg *ngIf="isMatched(selectedTask)" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-emerald-600 shrink-0"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <svg *ngIf="!isMatched(selectedTask)" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-rose-600 shrink-0"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <div>
+              <div class="font-bold text-sm" [ngClass]="isMatched(selectedTask) ? 'text-emerald-700' : 'text-rose-700'">
+                {{isMatched(selectedTask) ? 'موجودی مطابقت دارد' : 'موجودی مغایرت دارد'}}
+              </div>
+              <div class="text-[11px] mt-0.5" [ngClass]="isMatched(selectedTask) ? 'text-emerald-600' : 'text-rose-600'">
+                مقدار شمرده: <strong>{{selectedTask.counted_balance}} {{selectedTask.item_details?.unit}}</strong>
+                &nbsp;|&nbsp;
+                موجودی سیستم: <strong>{{selectedTask.item_details?.bal4miv}} {{selectedTask.item_details?.unit}}</strong>
               </div>
             </div>
-
-            <!-- Manager Input -->
-            <div>
-                <label class="block text-xs font-bold text-slate-700 mb-2">توضیحات / دستورات مدیر (برای تایید نهایی یا ارجاع)</label>
-                <textarea [(ngModel)]="managerNote" rows="3" class="w-full px-4 py-3 bg-white border border-slate-300 rounded-xl text-sm focus:border-purple-500 outline-none resize-none" placeholder="نظرتان را بنویسید..."></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs mb-4">
+            <div class="bg-slate-50 p-2 rounded-lg border border-slate-100">
+              <span class="text-slate-400 text-[10px] block mb-0.5">موقعیت</span>
+              <span class="font-bold text-slate-700" dir="ltr">{{selectedTask.item_details?.new_location || selectedTask.item_details?.old_location || '-'}}</span>
             </div>
-
-            <div class="flex gap-3 pt-4">
-                <button (click)="approveTask()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-3 rounded-xl shadow-md transition-colors">
-                    تایید نهایی شمارش
-                </button>
-                <button *appHasPermission="'view_sys_recounts'" (click)="rejectTask()" class="flex-1 bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold text-sm py-3 rounded-xl transition-colors border border-rose-200">
-                    درخواست بازشماری مجدد
-                </button>
-            </div>
+          </div>
+          <div *ngIf="selectedTask.counter_note" class="bg-amber-50 border border-amber-100 p-2 rounded-lg text-xs mb-3">
+            <span class="font-bold text-amber-700 text-[10px] block mb-0.5">یادداشت انبارگردان:</span>
+            <span class="text-amber-800 whitespace-pre-wrap">{{selectedTask.counter_note}}</span>
+          </div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">یادداشت مدیر</label>
+          <textarea [(ngModel)]="managerNote" rows="3"
+            class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm text-slate-700 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/20 outline-none transition-all resize-none"
+            placeholder="دلیل رد یا تایید را بنویسید..."></textarea>
         </div>
+        <div class="flex gap-3">
+          <button (click)="rejectTask()"
+            class="flex-1 py-3.5 rounded-xl font-black text-sm bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/30 transition-transform active:scale-95">
+            رد (بازشماری)
+          </button>
+          <button (click)="approveTask()"
+            class="flex-1 py-3.5 rounded-xl font-black text-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/30 transition-transform active:scale-95">
+            تایید نهایی
+          </button>
+        </div>
+      </div>
+    </ng-container>
+
+    <!-- Task Cards List -->
+    <div *ngIf="!isLoading && tasks.length > 0 && !selectedTask" class="flex flex-col gap-3 px-2 pb-24 fade-in">
+      <div class="flex items-center justify-between mb-2 px-1">
+        <label class="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
+          <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll($event)"
+            class="w-5 h-5 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500 cursor-pointer">
+          <span>انتخاب همه تسک‌ها</span>
+        </label>
+        <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{{tasks.length}} مورد</span>
+      </div>
+      <div *ngFor="let task of tasks"
+           class="bg-white rounded-xl p-4 border transition-all shadow-sm flex flex-col gap-3"
+           [ngClass]="{
+             'border-purple-400 ring-1 ring-purple-400/30 bg-purple-50/20': selectedTasks.has(task.id),
+             'border-slate-200': !selectedTasks.has(task.id)
+           }">
+        <div class="flex justify-between items-start gap-2 border-b border-slate-100 pb-3">
+          <div class="flex items-start gap-3 flex-1">
+            <input type="checkbox" [checked]="selectedTasks.has(task.id)" (change)="toggleSelection(task.id)"
+              class="mt-1 w-5 h-5 text-purple-600 bg-slate-100 border-slate-300 rounded focus:ring-purple-500 cursor-pointer shrink-0">
+            <div>
+              <h3 class="font-bold text-slate-800 text-sm leading-snug">{{task.item_details?.description}}</h3>
+              <div class="text-[11px] text-slate-400 font-mono mt-1">{{task.item_details?.fa_unic_code}}</div>
+            </div>
+          </div>
+          <div class="shrink-0">
+            <span *ngIf="isMatched(task)" class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md font-bold">مطابقت</span>
+            <span *ngIf="!isMatched(task)" class="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-md font-bold">مغایرت</span>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="flex flex-col gap-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span class="text-slate-400 text-[10px] font-bold">موقعیت</span>
+            <span class="font-bold text-slate-700" dir="ltr">{{task.item_details?.new_location || task.item_details?.old_location || '-'}}</span>
+          </div>
+          <div class="flex flex-col gap-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span class="text-slate-400 text-[10px] font-bold">مقدار شمرده</span>
+            <span class="font-black text-purple-700">{{task.counted_balance}} {{task.item_details?.unit}}</span>
+          </div>
+        </div>
+        <div class="flex justify-end pt-1 border-t border-slate-100">
+          <button (click)="selectTask(task)"
+            class="px-3 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors shadow-sm">
+            بررسی
+          </button>
+        </div>
+      </div>
     </div>
 
-  <!-- Approve Dialog (Bulk) -->
+    <!-- Sticky Bottom: Bulk Approve -->
+    <div *ngIf="selectedTasks.size > 0 && !selectedTask" class="fixed bottom-0 left-0 right-0 z-50 p-4 slide-up pointer-events-none md:left-64">
+      <div class="max-w-2xl mx-auto w-full flex pointer-events-auto">
+        <button (click)="openApproveDialog()"
+          class="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl px-4 py-4 font-black text-sm shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 transition-transform active:scale-[0.98]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          تایید نهایی {{selectedTasks.size}} مورد انتخاب‌شده
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- TAB: pool                                  -->
+  <!-- ══════════════════════════════════════════ -->
+  <ng-container *ngIf="currentTab === 'pool'">
+
+    <div *ngIf="isLoading" class="flex items-center justify-center py-12 flex-1">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-600"></div>
+    </div>
+
+    <div class="flex justify-between items-center mb-4 px-2" *ngIf="!isLoading && poolTasks.length > 0">
+      <button
+        (click)="claimSelectedTasks()"
+        [disabled]="selectedPoolTasks.size === 0"
+        class="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="8.5" cy="7" r="4"></circle>
+          <line x1="20" y1="8" x2="20" y2="14"></line>
+          <line x1="23" y1="11" x2="17" y2="11"></line>
+        </svg>
+        به عهده گرفتن ({{selectedPoolTasks.size}})
+      </button>
+    </div>
+
+    <div *ngIf="!isLoading && poolTasks.length === 0" class="text-center py-16 bg-white rounded-2xl border border-slate-200 mx-2">
+      <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-slate-400">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        </svg>
+      </div>
+      <h3 class="text-slate-800 font-bold mb-1">استخر خالی است</h3>
+      <p class="text-slate-500 text-sm">هیچ کالایی در استخر مدیران وجود ندارد.</p>
+    </div>
+
+    <div class="space-y-3 pb-20 px-2" *ngIf="!isLoading && poolTasks.length > 0">
+      <div *ngFor="let task of poolTasks"
+           class="bg-white border-2 border-slate-100 rounded-2xl p-4 transition-all"
+           [ngClass]="selectedPoolTasks.has(task.id) ? 'border-purple-500 shadow-md ring-4 ring-purple-500/10' : 'hover:border-purple-200'">
+        <div class="flex gap-4">
+          <div class="flex items-center" (click)="togglePoolSelection(task.id)">
+            <div class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors cursor-pointer"
+                 [ngClass]="selectedPoolTasks.has(task.id) ? 'bg-purple-600 border-purple-600' : 'bg-white border-slate-300'">
+              <svg *ngIf="selectedPoolTasks.has(task.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0" (click)="togglePoolSelection(task.id)">
+            <span class="font-black text-slate-800 tracking-wide font-mono text-base">{{task.item_details?.fa_unic_code}}</span>
+            <h3 class="text-slate-700 font-bold text-sm mt-1 mb-3 line-clamp-2 leading-relaxed">{{task.item_details?.description}}</h3>
+            <div *ngIf="task.item_details?.new_location" class="flex items-center gap-1.5">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-500 shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              <span class="text-xs font-bold text-purple-700 font-mono tracking-wider" dir="ltr">{{task.item_details?.new_location}}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="selectedPoolTasks.size > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none md:left-64">
+      <div class="max-w-2xl mx-auto w-full flex pointer-events-auto">
+        <button (click)="claimSelectedTasks()"
+          class="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-2xl px-4 py-4 font-black text-sm shadow-xl shadow-purple-500/30 flex items-center justify-center gap-2 transition-transform active:scale-[0.98]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="8.5" cy="7" r="4"></circle>
+            <line x1="20" y1="8" x2="20" y2="14"></line>
+            <line x1="23" y1="11" x2="17" y2="11"></line>
+          </svg>
+          به عهده گرفتن {{selectedPoolTasks.size}} کالای انتخاب‌شده
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- TAB: doc                                   -->
+  <!-- ══════════════════════════════════════════ -->
+  <ng-container *ngIf="currentTab === 'doc'">
+
+    <div *ngIf="isDocLoading" class="flex items-center justify-center py-12 flex-1">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+    </div>
+
+    <div *ngIf="!isDocLoading && docTasks.length === 0" class="text-center py-16 bg-white rounded-2xl border border-slate-200 mx-2">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="mx-auto text-slate-300 mb-4">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
+      </svg>
+      <p class="text-slate-600 font-bold">سندی برای بررسی وجود ندارد.</p>
+      <p class="text-xs text-slate-400 mt-2">اسناد تایید‌شده توسط سرپرستان اینجا نمایش داده می‌شوند.</p>
+    </div>
+
+    <div *ngIf="!isDocLoading && docTasks.length > 0" class="flex flex-col gap-3 px-2 pb-24">
+      <div class="flex items-center justify-between mb-2 px-1">
+        <label class="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
+          <input type="checkbox" [checked]="isAllDocSelected()" (change)="toggleAllDoc($event)"
+            class="w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer">
+          <span>انتخاب همه اسناد</span>
+        </label>
+        <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">{{docTasks.length}} سند</span>
+      </div>
+
+      <div *ngFor="let task of docTasks"
+           class="bg-white rounded-xl p-4 border shadow-sm flex flex-col gap-2 transition-all"
+           [ngClass]="selectedDocTasks.has(task.id) ? 'border-blue-400 bg-blue-50/20' : 'border-slate-200'">
+        <div class="flex items-start gap-3">
+          <input type="checkbox" [checked]="selectedDocTasks.has(task.id)" (change)="toggleDocSelection(task.id)"
+            class="mt-1 w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer shrink-0">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-bold text-slate-800 text-sm font-mono" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">ارسال‌شده توسط سرپرست</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5 truncate">{{task.item_details?.description}}</p>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-600">
+              <span *ngIf="task.invoice_type"><span class="text-slate-400">نوع فاکتور: </span>{{task.invoice_type}}</span>
+              <span *ngIf="task.invoice_date"><span class="text-slate-400">تاریخ: </span><span dir="ltr">{{task.invoice_date}}</span></span>
+              <span *ngIf="task.total_value"><span class="text-slate-400">ارزش: </span>{{task.total_value}}</span>
+              <span *ngIf="task.currency"><span class="text-slate-400">ارز: </span>{{task.currency}}</span>
+            </div>
+            <p *ngIf="task.worker_note" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1 mt-1">{{task.worker_note}}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="selectedDocTasks.size > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none md:left-64">
+      <div class="max-w-2xl mx-auto w-full flex gap-2 pointer-events-auto">
+        <button (click)="openDocRejectDialog()"
+          class="flex-1 bg-rose-500 hover:bg-rose-600 text-white rounded-2xl px-4 py-4 font-black text-sm shadow-xl shadow-rose-500/30 transition-transform active:scale-[0.98]">
+          رد {{selectedDocTasks.size}} سند
+        </button>
+        <button (click)="openDocApproveDialog()"
+          class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl px-4 py-4 font-black text-sm shadow-xl shadow-emerald-500/30 transition-transform active:scale-[0.98]">
+          تایید نهایی {{selectedDocTasks.size}} سند
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- TAB: doc-pool                              -->
+  <!-- ══════════════════════════════════════════ -->
+  <ng-container *ngIf="currentTab === 'doc-pool'">
+
+    <div *ngIf="isDocPoolLoading" class="flex items-center justify-center py-12 flex-1">
+      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+    </div>
+
+    <!-- Pool Header Actions -->
+    <div class="flex justify-between items-center mb-4 px-2" *ngIf="!isDocPoolLoading && docPoolTasks.length > 0">
+      <label class="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
+        <input type="checkbox" [checked]="isAllDocPoolSelected()" (change)="toggleAllDocPool($event)"
+          class="w-5 h-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 cursor-pointer">
+        <span>انتخاب همه ({{docPoolTasks.length}})</span>
+      </label>
+      <button (click)="claimSelectedDocTasks()" [disabled]="selectedDocPoolTasks.size === 0"
+        class="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="8.5" cy="7" r="4"></circle>
+          <line x1="20" y1="8" x2="20" y2="14"></line>
+          <line x1="23" y1="11" x2="17" y2="11"></line>
+        </svg>
+        به عهده گرفتن ({{selectedDocPoolTasks.size}})
+      </button>
+    </div>
+
+    <!-- Pool Empty -->
+    <div *ngIf="!isDocPoolLoading && docPoolTasks.length === 0" class="text-center py-16 bg-white rounded-2xl border border-slate-200 mx-2">
+      <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-slate-400">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+      </div>
+      <h3 class="text-slate-800 font-bold mb-1">استخر اسناد خالی است</h3>
+      <p class="text-slate-500 text-sm">هیچ سندی برای تخصیص در استخر وجود ندارد.</p>
+    </div>
+
+    <!-- Doc Pool Cards -->
+    <div class="space-y-3 pb-20 px-2" *ngIf="!isDocPoolLoading && docPoolTasks.length > 0">
+      <div *ngFor="let task of docPoolTasks"
+           class="bg-white border-2 rounded-2xl p-4 transition-all cursor-pointer"
+           [ngClass]="selectedDocPoolTasks.has(task.id) ? 'border-blue-500 shadow-md ring-4 ring-blue-500/10' : 'border-slate-100 hover:border-blue-200'"
+           (click)="toggleDocPoolSelection(task.id)">
+        <div class="flex gap-4">
+          <div class="flex items-center shrink-0">
+            <div class="w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors"
+                 [ngClass]="selectedDocPoolTasks.has(task.id) ? 'bg-blue-600 border-blue-600' : 'bg-white border-slate-300'">
+              <svg *ngIf="selectedDocPoolTasks.has(task.id)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <span class="font-black text-slate-800 font-mono text-sm" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
+            <p class="text-xs text-slate-500 mt-0.5 truncate">{{task.item_details?.description}}</p>
+            <div class="flex gap-3 mt-1.5 text-[11px] text-slate-500">
+              <span *ngIf="task.item_details?.new_location" dir="ltr">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="inline text-blue-500 mr-1"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                {{task.item_details?.new_location}}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sticky Bottom: Claim -->
+    <div *ngIf="selectedDocPoolTasks.size > 0" class="fixed bottom-0 left-0 right-0 z-50 p-4 pointer-events-none md:left-64">
+      <div class="max-w-2xl mx-auto w-full flex pointer-events-auto">
+        <button (click)="claimSelectedDocTasks()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-4 py-4 font-black text-sm shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2 transition-transform active:scale-[0.98]">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="8.5" cy="7" r="4"></circle>
+            <line x1="20" y1="8" x2="20" y2="14"></line>
+            <line x1="23" y1="11" x2="17" y2="11"></line>
+          </svg>
+          به عهده گرفتن {{selectedDocPoolTasks.size}} سند انتخاب‌شده
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- DIALOG: Bulk Count Approve                 -->
+  <!-- ══════════════════════════════════════════ -->
   <div *ngIf="showApproveDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="cancelApprove()"></div>
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col slide-in">
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
       <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-        <h3 class="font-black text-slate-800 text-sm">تایید کالاها</h3>
+        <h3 class="font-black text-slate-800 text-sm">تایید نهایی کالاها</h3>
         <button (click)="cancelApprove()" class="text-slate-400 hover:text-slate-600 transition-colors">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
-      
-      <div class="p-6 flex-1 overflow-y-auto">
-        <div class="mb-4">
-          <div class="p-3 bg-purple-50 border border-purple-100 rounded-xl mb-4">
-            <p class="text-xs text-purple-800 leading-relaxed font-bold">آیا از تایید نهایی {{selectedTasks.size}} قلم کالا اطمینان دارید؟</p>
-          </div>
-          <label class="block text-xs font-bold text-slate-700 mb-2">توضیحات مدیر (اختیاری)</label>
-          <textarea 
-            [(ngModel)]="approveNote"
-            rows="3" 
-            class="w-full text-sm rounded-xl border-slate-200 shadow-sm focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50 transition-colors p-3 bg-slate-50/50"
-            placeholder="در صورت نیاز دستورات خود را بنویسید..."></textarea>
+      <div class="p-6">
+        <div class="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-4">
+          <p class="text-xs text-emerald-800 leading-relaxed font-bold">آیا از تایید نهایی {{selectedTasks.size}} قلم کالا اطمینان دارید؟</p>
         </div>
+        <label class="block text-xs font-bold text-slate-700 mb-2">یادداشت مدیر (اختیاری)</label>
+        <textarea [(ngModel)]="approveNote" rows="3"
+          class="w-full text-sm rounded-xl border border-slate-200 p-3 bg-slate-50/50 focus:outline-none focus:ring-1 focus:ring-purple-400 resize-none"
+          placeholder="در صورت نیاز یادداشت خود را بنویسید..."></textarea>
       </div>
-      
       <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-        <button 
-          (click)="cancelApprove()"
-          class="flex-1 py-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">
-          انصراف
+        <button (click)="cancelApprove()"
+          class="flex-1 py-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">انصراف</button>
+        <button (click)="confirmApprove()"
+          class="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-transform active:scale-95">تایید نهایی</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- DIALOG: Doc Approve                        -->
+  <!-- ══════════════════════════════════════════ -->
+  <div *ngIf="showDocApproveDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="cancelDocApprove()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h3 class="font-black text-slate-800 text-sm">تایید نهایی اسناد مالی</h3>
+        <button (click)="cancelDocApprove()" class="text-slate-400 hover:text-slate-600 transition-colors">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
-        <button 
-          (click)="confirmApprove()"
-          class="flex-1 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs shadow-md shadow-purple-600/20 transition-transform active:scale-95">
-          تایید نهایی کالاها
-        </button>
+      </div>
+      <div class="p-6">
+        <div class="p-3 bg-emerald-50 border border-emerald-100 rounded-xl mb-4">
+          <p class="text-xs text-emerald-800 font-bold">آیا از تایید نهایی {{selectedDocTasks.size}} سند مالی اطمینان دارید؟</p>
+        </div>
+        <label class="block text-xs font-bold text-slate-700 mb-2">یادداشت مدیر (اختیاری)</label>
+        <textarea [(ngModel)]="docApproveNote" rows="3"
+          class="w-full text-sm rounded-xl border border-slate-200 p-3 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-emerald-400 resize-none"
+          placeholder="یادداشت برای سابقه..."></textarea>
+      </div>
+      <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+        <button (click)="cancelDocApprove()"
+          class="flex-1 py-2.5 px-4 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-50 transition-colors">انصراف</button>
+        <button (click)="confirmDocApprove()"
+          class="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-transform active:scale-95">تایید نهایی</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════ -->
+  <!-- DIALOG: Doc Reject                         -->
+  <!-- ══════════════════════════════════════════ -->
+  <div *ngIf="showDocRejectDialog" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="closeDocRejectDialog()"></div>
+    <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+      <div class="flex items-center gap-3 text-rose-600 mb-4">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <h3 class="text-lg font-black">رد اسناد مالی</h3>
+      </div>
+      <p class="text-sm text-slate-600 mb-4">{{selectedDocTasks.size}} سند رد و به سرپرست ارجاع داده می‌شود.</p>
+      <label class="block text-xs font-bold text-slate-700 mb-2">دلیل رد <span class="text-rose-500">*</span></label>
+      <textarea [(ngModel)]="docRejectNote" rows="3"
+        class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm focus:border-rose-500 focus:ring-4 focus:ring-rose-500/20 outline-none resize-none"
+        placeholder="مشکل یا نقص سند را توضیح دهید..."></textarea>
+      <div class="flex justify-end gap-3 mt-6">
+        <button (click)="closeDocRejectDialog()"
+          class="px-5 py-2.5 rounded-xl font-bold text-sm text-slate-500 hover:bg-slate-100 transition-colors">انصراف</button>
+        <button (click)="confirmDocReject()"
+          class="px-5 py-2.5 rounded-xl font-bold text-sm text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-500/30 transition-transform active:scale-95">ثبت رد</button>
       </div>
     </div>
   </div>

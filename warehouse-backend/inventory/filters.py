@@ -70,12 +70,9 @@ class ItemFilter(django_filters.FilterSet):
     my_tag = django_filters.CharFilter(lookup_expr='icontains')
     field_assignee = django_filters.CharFilter(lookup_expr='icontains')
     fa_unic_code = django_filters.CharFilter(lookup_expr='icontains')
-    plpkitem = django_filters.CharFilter(lookup_expr='icontains')
-    old_location = django_filters.CharFilter(lookup_expr='icontains')
     new_location = django_filters.CharFilter(lookup_expr='icontains')
-    
+
     # Text search for other fields (icontains)
-    item_no = django_filters.CharFilter(lookup_expr='icontains')
     unit = django_filters.CharFilter(lookup_expr='icontains')
     scope_discipline = django_filters.CharFilter(lookup_expr='icontains')
     vendor = django_filters.CharFilter(lookup_expr='icontains')
@@ -84,20 +81,28 @@ class ItemFilter(django_filters.FilterSet):
     po = django_filters.CharFilter(lookup_expr='icontains')
     pk_number = django_filters.CharFilter(lookup_expr='icontains')
     pl = django_filters.CharFilter(lookup_expr='icontains')
-    item2 = django_filters.CharFilter(lookup_expr='icontains')
     indent = django_filters.CharFilter(lookup_expr='icontains')
     remark = django_filters.CharFilter(lookup_expr='icontains')
-    price_remark = django_filters.CharFilter(lookup_expr='icontains')
-    issue_remark = django_filters.CharFilter(lookup_expr='icontains')
-    customs_field = django_filters.CharFilter(lookup_expr='icontains')
     hov_no = django_filters.CharFilter(lookup_expr='icontains')
     msr_status = django_filters.CharFilter(lookup_expr='icontains')
-    inventory_status = django_filters.CharFilter(lookup_expr='icontains')
     currency = django_filters.CharFilter(lookup_expr='icontains')
-    invoice_file = django_filters.CharFilter(lookup_expr='icontains')
     invoice_page = django_filters.CharFilter(lookup_expr='icontains')
-    customs_file = django_filters.CharFilter(lookup_expr='icontains')
-    customs_file_page = django_filters.CharFilter(lookup_expr='icontains')
+    # New fields
+    request_number_of_table = django_filters.CharFilter(lookup_expr='icontains')
+    tag = django_filters.CharFilter(lookup_expr='icontains')
+    size = django_filters.CharFilter(lookup_expr='icontains')
+    invoice_type = django_filters.CharFilter(lookup_expr='icontains')
+    invoice_date = django_filters.CharFilter(lookup_expr='icontains')
+    inv_rti_number = django_filters.CharFilter(lookup_expr='icontains')
+    added_rti_no = django_filters.CharFilter(lookup_expr='icontains')
+    page_row = django_filters.CharFilter(lookup_expr='icontains')
+    doc_supplier = django_filters.CharFilter(lookup_expr='icontains')
+    folder_address = django_filters.CharFilter(lookup_expr='icontains')
+    hyperlink = django_filters.CharFilter(lookup_expr='icontains')
+    desc_from_standard_system = django_filters.CharFilter(lookup_expr='icontains')
+    unit_from_standard_system = django_filters.CharFilter(lookup_expr='icontains')
+    stamp = django_filters.CharFilter(lookup_expr='icontains')
+    signature = django_filters.CharFilter(lookup_expr='icontains')
     
     # Exact matches for numeric fields
     inventory = django_filters.NumberFilter(lookup_expr='exact')
@@ -118,7 +123,4 @@ class ItemFilter(django_filters.FilterSet):
             'doc_status': ['exact', 'in'],
             'tag_status': ['exact', 'in'],
             'has_conflict': ['exact'],
-            'needs_qc': ['exact'],
-            'is_fragile': ['exact'],
-            'is_heavy': ['exact'],
         }

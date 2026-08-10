@@ -9,15 +9,12 @@
     "projectName": "warehouse project",
     "projectPath": "e:\\warehouse project",
     "testIds": [
-      "TC_RB_006",
-      "TC_RB_007",
-      "TC_RB_008"
+      "TC_FINANCIAL_03_SUPERVISOR_APPROVE"
     ],
-    "additionalInstruction": "",
+    "additionalInstruction": "A DocTask with status=DOC_PROCESSED (id=35, item=134613) exists in warehouse عسلویه for supervisor to approve and send to manager. Login: admin/123456.",
     "serverMode": "development",
-    "envs": {
-      "API_KEY": "sk-user-SWPSvOYLYhFxDUdAXQ3sNjHs4LaG2WuSiF8wJZS9u5w0FmyfBd4tw23wDFJXKjE8pl6Tj7QQDpqBkQH79iUDVYWt1AJhBQUGAtzMuIE6yhk7dN7naECHI2A8a4kXsMoyQrE"
-    }
+    "envs": {},
+    "envsFile": "C:\\Users\\Payandeh\\.testsprite\\mcp\\session-6b528f4f5be665c2.json"
   },
-  "serverPort": 63385
+  "serverPort": 51959
 }

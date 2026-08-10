@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from warehouses.models import Warehouse
 from django.conf import settings
@@ -43,11 +45,12 @@ class Item(SyncModelMixin):
     # Tracking & IDs
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items', verbose_name="انبار")
     fa_unic_code = models.CharField(max_length=100, verbose_name="کد یکتا (FA-UNIC)")
-    plpkitem = models.CharField(max_length=100, null=True, blank=True, verbose_name="کد ترکیبی PL-PK-Item")
     pl = models.CharField(max_length=100, null=True, blank=True, verbose_name="پکینگ لیست (PL)")
     po = models.CharField(max_length=100, null=True, blank=True, verbose_name="سفارش خرید (PO)")
     pk_number = models.CharField(max_length=100, null=True, blank=True, verbose_name="پکیج (PK)")
-    item_no = models.CharField(max_length=100, null=True, blank=True, verbose_name="ردیف (Item)")
+    request_number_of_table = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره درخواست جدول")
+    tag = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره تگ کالا")
+    size = models.CharField(max_length=100, null=True, blank=True, verbose_name="سایز اصلی")
 
     # Specs
     description = models.TextField(null=True, blank=True, verbose_name="شرح کالا")
@@ -59,7 +62,6 @@ class Item(SyncModelMixin):
     bal4miv = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی مجاز MIV")
     
     # Locations
-    old_location = models.CharField(max_length=255, null=True, blank=True, verbose_name="لوکیشن قبلی")
     new_location = models.CharField(max_length=255, null=True, blank=True, verbose_name="لوکیشن جدید")
     
     # Procurement / Delivery Statuses
@@ -69,32 +71,39 @@ class Item(SyncModelMixin):
     vendor = models.CharField(max_length=255, null=True, blank=True, verbose_name="سازنده (Vendor)")
     supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین کننده (Supplier)")
     irn_no = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره IRN")
-    item2 = models.CharField(max_length=100, null=True, blank=True, verbose_name="ردیف فرعی (ITEM2)")
-    inventory_status = models.CharField(max_length=100, null=True, blank=True, verbose_name="طبقه‌بندی انبار")
     indent = models.CharField(max_length=100, null=True, blank=True, verbose_name="تقاضای خرید (INDENT)")
     remark = models.TextField(null=True, blank=True, verbose_name="ملاحظات")
-    
-    # Pricing / Customs
-    price_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="مبلغ")
+
+    # Pricing & Documents (پیمانکار-مدارک)
+    price_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت واحد (UnitPrice)")
+    similar_unit_price = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت کالای مشابه")
+    total_value = models.DecimalField(max_digits=25, decimal_places=2, null=True, blank=True, verbose_name="ارزش کل")
     currency = models.CharField(max_length=50, null=True, blank=True, verbose_name="ارز")
-    invoice_file = models.CharField(max_length=500, null=True, blank=True, verbose_name="آدرس فایل فاکتور")
-    invoice_page = models.CharField(max_length=100, null=True, blank=True, verbose_name="صفحه فاکتور")
-    customs_field = models.CharField(max_length=255, null=True, blank=True, verbose_name="فیلد گمرکی")
-    customs_file = models.CharField(max_length=500, null=True, blank=True, verbose_name="آدرس فایل گمرکی")
-    customs_file_page = models.CharField(max_length=100, null=True, blank=True, verbose_name="صفحه گمرک")
-    price_remark = models.TextField(null=True, blank=True, verbose_name="توضیحات قیمت")
-    issue_remark = models.TextField(null=True, blank=True, verbose_name="ملاحظات صدور (Issue Remark)")
+    invoice_type = models.CharField(max_length=100, null=True, blank=True, verbose_name="نوع فاکتور")
+    invoice_date = models.CharField(max_length=20, null=True, blank=True, verbose_name="تاریخ فاکتور")
+    inv_rti_number = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره RTI فاکتور")
+    added_rti_no = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره RTI افزوده‌شده")
+    page_row = models.CharField(max_length=100, null=True, blank=True, verbose_name="ردیف در فاکتور")
+    invoice_page = models.CharField(max_length=100, null=True, blank=True, verbose_name="صفحه فاکتور (PageNumber)")
+    doc_supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین‌کننده فاکتور (Supplier)")
+    folder_address = models.CharField(max_length=500, null=True, blank=True, verbose_name="مسیر پوشه اسناد")
+    hyperlink = models.CharField(max_length=500, null=True, blank=True, verbose_name="هایپرلینک اسناد")
     
     # Old Record statuses for workflow
     tag_status = models.CharField(max_length=50, default='چاپ نشده', verbose_name="وضعیت لیبل")
     field_status = models.CharField(max_length=50, default='waiting', verbose_name="وضعیت میدانی")
     doc_status = models.CharField(max_length=50, default='waiting', verbose_name="وضعیت مستندات")
     
+    # Standard System Reference (سامانه یکنواخت)
+    desc_from_standard_system = models.TextField(null=True, blank=True, verbose_name="شرح کالا در سامانه یکنواخت")
+    unit_from_standard_system = models.CharField(max_length=100, null=True, blank=True, verbose_name="واحد کالا در سامانه یکنواخت")
+
+    # Document Physical Status
+    stamp = models.CharField(max_length=20, null=True, blank=True, verbose_name="وضعیت مهر اسناد")
+    signature = models.CharField(max_length=20, null=True, blank=True, verbose_name="وضعیت امضای اسناد")
+
     # Quality / Checks
     has_conflict = models.BooleanField(default=False, verbose_name="مغایرت دارد")
-    is_fragile = models.BooleanField(default=False, verbose_name="شکستنی")
-    is_heavy = models.BooleanField(default=False, verbose_name="سنگین")
-    needs_qc = models.BooleanField(default=False, verbose_name="نیاز به کنترل کیفی")
     
     # Custom Tags
     my_tag = models.CharField(max_length=500, null=True, blank=True, verbose_name="تگ‌ها")
@@ -251,6 +260,38 @@ class DocTask(models.Model):
     supervisor_note = models.TextField(null=True, blank=True, verbose_name="توضیحات سرپرست اسناد")
     manager_note = models.TextField(null=True, blank=True, verbose_name="توضیحات مدیر")
     
+    # ─── فیلدهای مالی ───
+    INVOICE_TYPE_CHOICES = [
+        ('formal',      'رسمی/مالیاتی'),
+        ('domestic',    'خریدهای داخلی'),
+        ('foreign',     'خریدهای خارجی'),
+        ('consignment', 'امانی'),
+    ]
+    CURRENCY_CHOICES = [
+        ('IRR',   'ریال'),
+        ('USD',   'دلار'),
+        ('EUR',   'یورو'),
+        ('OTHER', 'سایر'),
+    ]
+
+    added_rti_no       = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره RTI اضافه‌شده")
+    inv_rti_number     = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره RTI فاکتور")
+    invoice_type       = models.CharField(max_length=20, choices=INVOICE_TYPE_CHOICES, null=True, blank=True, verbose_name="نوع فاکتور")
+    invoice_date       = models.DateField(null=True, blank=True, verbose_name="تاریخ فاکتور")
+    invoice_page       = models.PositiveIntegerField(null=True, blank=True, verbose_name="صفحه فاکتور")
+    page_row           = models.PositiveIntegerField(null=True, blank=True, verbose_name="ردیف صفحه")
+    doc_supplier       = models.CharField(max_length=255, null=True, blank=True, verbose_name="تأمین‌کننده")
+    total_value        = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="ارزش کل")
+    price_amount       = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="مبلغ")
+    similar_unit_price = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت مشابه")
+    currency           = models.CharField(max_length=10, choices=CURRENCY_CHOICES, null=True, blank=True, verbose_name="ارز")
+    folder_address     = models.CharField(max_length=500, null=True, blank=True, verbose_name="آدرس پوشه")
+    stamp              = models.BooleanField(default=False, verbose_name="مهر")
+    signature          = models.BooleanField(default=False, verbose_name="امضا")
+
+    # ─── Local-First sync ───
+    sync_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, verbose_name="شناسه سینک")
+
     # Auditing
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

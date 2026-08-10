@@ -1,8 +1,8 @@
 [
   {
     "id": "TC001",
-    "title": "Sign in with valid credentials",
-    "description": "This test verifies that a user can log in with valid credentials and reach the authenticated app.",
+    "title": "Sign in successfully and open the dashboard overview",
+    "description": "A user can log in and reach the dashboard where overview metrics are visible.",
     "category": "User Login",
     "steps": [
       {
@@ -22,16 +22,20 @@
         "description": "Submit the login form"
       },
       {
+        "type": "action",
+        "description": "Click the link to open the dashboard"
+      },
+      {
         "type": "assertion",
-        "description": "Verify the authenticated area is displayed"
+        "description": "Verify the dashboard overview metrics are displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC002",
-    "title": "Redirect signed-out users from dashboard access to login",
-    "description": "This test verifies that an unauthenticated user trying to open the dashboard is routed to login and can continue after signing in.",
+    "title": "Redirect signed-out users from the dashboard to login",
+    "description": "A signed-out user who tries to access the dashboard is redirected to login and can sign in from there.",
     "category": "User Login",
     "steps": [
       {
@@ -56,15 +60,241 @@
       },
       {
         "type": "assertion",
-        "description": "Verify the dashboard is displayed"
+        "description": "Verify the authenticated area is displayed"
       }
     ],
     "priority": "High"
   },
   {
     "id": "TC003",
-    "title": "Show required-field validation on blank login submit",
-    "description": "This test verifies that submitting the login form with missing credentials shows validation feedback and does not authenticate the user.",
+    "title": "View dashboard metrics after signing in from a protected route",
+    "description": "A user who is redirected to login from a protected route can sign in and return to the dashboard overview.",
+    "category": "Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard overview metrics are displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Review dispatch records after signing in",
+    "description": "A user can log in, open dispatch management, and see the dispatch list.",
+    "category": "Dispatch Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open dispatch management"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dispatch list is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Edit a dispatch item and see the updated record",
+    "description": "A user can update a dispatch record and confirm the changed information appears in the list or detail view.",
+    "category": "Dispatch Management",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open dispatch management"
+      },
+      {
+        "type": "action",
+        "description": "Open an editable dispatch item"
+      },
+      {
+        "type": "action",
+        "description": "Change a dispatch field to a valid new value"
+      },
+      {
+        "type": "action",
+        "description": "Save the dispatch changes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated dispatch information is displayed"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Navigate across authenticated modules after signing in",
+    "description": "A signed-in user can move between dashboard, projects, dispatch, and users pages without being sent back to login.",
+    "category": "Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open the dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open projects management"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open dispatch management"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open users management"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the users management page is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC007",
+    "title": "Return to protected pages after logging in once",
+    "description": "A user can revisit protected pages after authentication without being redirected back to login.",
+    "category": "Dashboard",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with {{LOGIN_USER}}"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open the dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open dispatch management"
+      },
+      {
+        "type": "action",
+        "description": "Click the link to open the dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard overview metrics are displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC008",
+    "title": "Keep the user on login when credentials are invalid",
+    "description": "Entering invalid credentials on the login form shows an authentication error and does not enter the app.",
+    "category": "User Login",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /login"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the username or email field with invalid-user@example.com"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the password field with invalid-password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an authentication error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the authenticated area is not displayed"
+      }
+    ],
+    "priority": "Low"
+  },
+  {
+    "id": "TC009",
+    "title": "Show validation when required login fields are missing",
+    "description": "Submitting the login form without required credentials shows inline validation feedback.",
     "category": "User Login",
     "steps": [
       {
@@ -77,467 +307,110 @@
       },
       {
         "type": "assertion",
-        "description": "Verify required-field validation is visible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the authenticated area is not displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC004",
-    "title": "Display dashboard overview metrics after login",
-    "description": "This test verifies that an authenticated user can open the dashboard and see the overview metrics that support daily operations.",
-    "category": "Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Open the dashboard"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify overview metrics are displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC005",
-    "title": "View the dispatch list after login",
-    "description": "This test verifies that an authenticated user can open dispatch management and see the dispatch list.",
-    "category": "Dispatch Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Open dispatch management"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify dispatch list items are displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC006",
-    "title": "Edit a dispatch item and see the updated record",
-    "description": "This test verifies that an authenticated user can update a dispatch item and see the saved dispatch information reflected in the list.",
-    "category": "Dispatch Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Open dispatch management"
-      },
-      {
-        "type": "action",
-        "description": "Open a dispatch item for editing"
-      },
-      {
-        "type": "action",
-        "description": "Update a dispatch field with a valid value"
-      },
-      {
-        "type": "action",
-        "description": "Save the dispatch item"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the updated dispatch information is displayed"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC007",
-    "title": "Keep access to dashboard, projects, dispatch, and users after login",
-    "description": "This test verifies that an authenticated user can move across the main operational areas without losing access.",
-    "category": "Dashboard",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Open the dashboard"
-      },
-      {
-        "type": "action",
-        "description": "Open projects management"
-      },
-      {
-        "type": "action",
-        "description": "Open dispatch management"
-      },
-      {
-        "type": "action",
-        "description": "Open users management"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the authenticated operational pages remain accessible"
-      }
-    ],
-    "priority": "Medium"
-  },
-  {
-    "id": "TC008",
-    "title": "Show dispatch edit validation for incomplete changes",
-    "description": "This test verifies that dispatch edits with invalid or incomplete values are rejected with validation feedback and do not apply changes.",
-    "category": "Dispatch Management",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /login"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the username or email field with {{LOGIN_USER}}"
-      },
-      {
-        "type": "action",
-        "description": "Fill in the password field with {{LOGIN_PASSWORD}}"
-      },
-      {
-        "type": "action",
-        "description": "Submit the login form"
-      },
-      {
-        "type": "action",
-        "description": "Open dispatch management"
-      },
-      {
-        "type": "action",
-        "description": "Open a dispatch item for editing"
-      },
-      {
-        "type": "action",
-        "description": "Clear or enter an invalid value in a required dispatch field"
-      },
-      {
-        "type": "action",
-        "description": "Save the dispatch item"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify dispatch validation feedback is visible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the dispatch item remains unchanged"
+        "description": "Verify required field validation feedback is visible"
       }
     ],
     "priority": "Low"
   },
   {
-    "id": "TC_RB_001",
-    "title": "Build a basic report, apply filters, and execute",
-    "description": "Verifies that a user can select an entity (items), choose fields (including dynamic ones), apply AND/OR filters, and run the report with pagination and sorting.",
-    "category": "Dynamic Report Builder",
+    "id": "TC_FINANCIAL_01_WORKER_CLAIM_AND_SUBMIT",
+    "title": "Financial worker claims a document task, fills all 14 fields, saves draft, and submits",
+    "description": "A financial expert (doc_worker) navigates to customs, claims a task from the pool, fills out all financial data, saves a draft, and submits it to the supervisor.",
+    "category": "Financial Workflow",
     "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /reports (گزارش‌ساز)"
-      },
-      {
-        "type": "action",
-        "description": "Select the 'items' entity from the entity picker and select a warehouse"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify that dynamic fields (dyn__*) are available in the field picker"
-      },
-      {
-        "type": "action",
-        "description": "Select basic and dynamic fields to include in the report"
-      },
-      {
-        "type": "action",
-        "description": "Create a nested AND/OR filter condition in the filter panel"
-      },
-      {
-        "type": "action",
-        "description": "Click the run/execute report button"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the report preview table displays the correct columns and applies pagination"
-      },
-      {
-        "type": "action",
-        "description": "Click on a column header to sort the data"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the table reloads and data is sorted accordingly"
-      }
+      { "type": "action", "description": "Navigate to /login" },
+      { "type": "action", "description": "Fill in the username field with admin" },
+      { "type": "action", "description": "Fill in the password field with 123456" },
+      { "type": "action", "description": "Submit the login form" },
+      { "type": "action", "description": "Navigate to /customs" },
+      { "type": "action", "description": "Click on the Pool tab (استخر)" },
+      { "type": "action", "description": "Select the first available document task in the pool by checking its checkbox" },
+      { "type": "action", "description": "Click the claim button (بر عهده گرفتن)" },
+      { "type": "action", "description": "Click on the My Tasks tab (کارهای من)" },
+      { "type": "action", "description": "Click on the newly claimed document task to open its details panel" },
+      { "type": "action", "description": "Fill in the Added RTI No field with RTI-9988" },
+      { "type": "action", "description": "Fill in the Invoice RTI field with INV-RTI-001" },
+      { "type": "action", "description": "Select the first option from the Invoice Type dropdown" },
+      { "type": "action", "description": "Fill in the Invoice Date field with 2026-08-01" },
+      { "type": "action", "description": "Fill in the Invoice Page field with 5" },
+      { "type": "action", "description": "Fill in the Page Row field with 12" },
+      { "type": "action", "description": "Fill in the Supplier field with Tech Corp" },
+      { "type": "action", "description": "Fill in the Total Value field with 15000" },
+      { "type": "action", "description": "Fill in the Price Amount field with 14500" },
+      { "type": "action", "description": "Fill in the Similar Unit Price field with 14600" },
+      { "type": "action", "description": "Select the first option from the Currency dropdown" },
+      { "type": "action", "description": "Fill in the Folder Address field with /docs/2026/08" },
+      { "type": "action", "description": "Check the Stamp checkbox (مهر)" },
+      { "type": "action", "description": "Check the Signature checkbox (امضا)" },
+      { "type": "action", "description": "Fill in the Worker Note textarea with All values checked and verified" },
+      { "type": "action", "description": "Click the Save Draft button (ذخیره پیش‌نویس)" },
+      { "type": "assertion", "description": "Verify a success toast message appears" },
+      { "type": "action", "description": "Click on the task in My Tasks list to open it again" },
+      { "type": "action", "description": "Click the Submit button (ارسال)" },
+      { "type": "assertion", "description": "Verify a success message appears after submission" }
     ],
     "priority": "High"
   },
   {
-    "id": "TC_RB_002",
-    "title": "Apply grouping and aggregations",
-    "description": "Verifies that a user can group the data by specific fields and apply aggregation functions like SUM, and the results are calculated correctly.",
-    "category": "Dynamic Report Builder",
+    "id": "TC_FINANCIAL_02_SUPERVISOR_REJECT",
+    "title": "Supervisor rejects a processed financial document",
+    "description": "The supervisor reviews a DOC_PROCESSED document and rejects it back to the worker.",
+    "category": "Financial Workflow",
     "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /reports"
-      },
-      {
-        "type": "action",
-        "description": "Select the 'items' entity and a warehouse"
-      },
-      {
-        "type": "action",
-        "description": "Open the grouping panel and select a field to group by (e.g., warehouse__name)"
-      },
-      {
-        "type": "action",
-        "description": "Add an aggregation function (SUM) on a numeric field (e.g., balance) with an alias"
-      },
-      {
-        "type": "action",
-        "description": "Click the run/execute report button"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the preview table displays grouped rows and the aggregated total is correctly calculated"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC_RB_003",
-    "title": "Save, publish, and view a public report template",
-    "description": "Verifies that a user can save a report as a template, make it public, and a second user can view it but not delete it.",
-    "category": "Dynamic Report Builder",
-    "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /reports"
-      },
-      {
-        "type": "action",
-        "description": "Create a simple report with some fields selected"
-      },
-      {
-        "type": "action",
-        "description": "Save the current report configuration as a new template"
-      },
-      {
-        "type": "action",
-        "description": "Toggle the template visibility to 'Public' (عمومی)"
-      },
-      {
-        "type": "action",
-        "description": "Log out of the current user account"
-      },
-      {
-        "type": "action",
-        "description": "Log in with a second user account that has view_sys_reports permission"
-      },
-      {
-        "type": "action",
-        "description": "Navigate to /reports"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the public template created by the first user is visible in the saved reports sidebar"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the second user does not have a delete button for the public template"
-      }
+      { "type": "action", "description": "Navigate to /login" },
+      { "type": "action", "description": "Fill in the username field with admin" },
+      { "type": "action", "description": "Fill in the password field with 123456" },
+      { "type": "action", "description": "Submit the login form" },
+      { "type": "action", "description": "Navigate to /supervisor-dashboard" },
+      { "type": "action", "description": "Click on the Financial/Documents tab (مالی/اسناد)" },
+      { "type": "assertion", "description": "Verify at least one document task card is visible in the list" },
+      { "type": "action", "description": "Check the checkbox of the first document task card" },
+      { "type": "action", "description": "Click the Reject button (رد)" },
+      { "type": "action", "description": "Enter Missing valid signature in the rejection note textarea" },
+      { "type": "action", "description": "Click the confirm reject button (ثبت رد)" },
+      { "type": "assertion", "description": "Verify a success toast message appears" }
     ],
     "priority": "Medium"
   },
   {
-    "id": "TC_RB_004",
-    "title": "Export report to Excel (Immediate and Background)",
-    "description": "Verifies that exporting a small report triggers an immediate download with RTL formatting, and exporting a large report shows a progress bar and a download button later.",
-    "category": "Dynamic Report Builder",
+    "id": "TC_FINANCIAL_03_SUPERVISOR_APPROVE",
+    "title": "Supervisor approves a processed financial document and sends to manager",
+    "description": "The supervisor reviews a DOC_PROCESSED document and approves it, sending it to the manager.",
+    "category": "Financial Workflow",
     "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /reports"
-      },
-      {
-        "type": "action",
-        "description": "Load a template that results in a small dataset (less than 10,000 rows)"
-      },
-      {
-        "type": "action",
-        "description": "Click the Export to Excel button"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify the file downloads immediately and (if possible to inspect) the sheet view is right-to-left"
-      },
-      {
-        "type": "action",
-        "description": "Modify the filters to match a very large dataset (over 10,000 rows)"
-      },
-      {
-        "type": "action",
-        "description": "Click the Export to Excel button"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify a background job is created, a progress bar appears, and eventually a download button is presented"
-      }
+      { "type": "action", "description": "Navigate to /login" },
+      { "type": "action", "description": "Fill in the username field with admin" },
+      { "type": "action", "description": "Fill in the password field with 123456" },
+      { "type": "action", "description": "Submit the login form" },
+      { "type": "action", "description": "Navigate to /supervisor-dashboard" },
+      { "type": "action", "description": "Click on the Financial/Documents tab (مالی/اسناد)" },
+      { "type": "assertion", "description": "Verify at least one document task card is visible" },
+      { "type": "action", "description": "Check the checkbox of the first document task card" },
+      { "type": "action", "description": "Click the Send to Manager button (ارسال به مدیر)" },
+      { "type": "action", "description": "Enter Looks good in the approval note textarea" },
+      { "type": "action", "description": "Click the confirm send button (ارسال به مدیر)" },
+      { "type": "assertion", "description": "Verify a success toast message appears" }
     ],
     "priority": "High"
   },
   {
-    "id": "TC_RB_005",
-    "title": "Offline guard disables report builder",
-    "description": "Verifies that when the application goes offline, the report builder UI displays a warning banner and disables interactive elements, and no requests enter the offline sync queue.",
-    "category": "Dynamic Report Builder",
+    "id": "TC_FINANCIAL_04_MANAGER_FINAL_APPROVE",
+    "title": "Manager gives final approval to the financial document",
+    "description": "The manager views the DOC_MANAGER_REVIEW document in manager-review and gives final approval.",
+    "category": "Financial Workflow",
     "steps": [
-      {
-        "type": "action",
-        "description": "Navigate to /reports"
-      },
-      {
-        "type": "action",
-        "description": "Simulate offline mode (e.g., via DevTools Network tab)"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify a yellow offline warning banner is displayed on the page"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify that run and export buttons are disabled"
-      },
-      {
-        "type": "action",
-        "description": "Attempt to trigger any report action if possible"
-      },
-      {
-        "type": "assertion",
-        "description": "Verify that the IndexedDB offline sync queue remains empty (proving SKIP_OFFLINE works)"
-      }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC_RB_006",
-    "title": "Apply NOT filter on leaves and groups",
-    "description": "Verifies that the NOT (!) button works for individual conditions (leaves) and group headers, reversing the result set appropriately.",
-    "category": "Dynamic Report Builder",
-    "steps": [
-      { "type": "action", "description": "Navigate to /reports" },
-      { "type": "action", "description": "Select the 'items' entity and a warehouse" },
-      { "type": "action", "description": "Add a simple condition, e.g., name contains 'laptop'" },
-      { "type": "action", "description": "Click the NOT (!) toggle button on the condition row so its color changes to rose" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify the results exclude items with 'laptop'" },
-      { "type": "action", "description": "Create a filter group with OR" },
-      { "type": "action", "description": "Toggle the NOT button on the group header" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify the results return the complement of the OR group" }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC_RB_007",
-    "title": "Apply HAVING condition to aggregated results",
-    "description": "Verifies that filtering grouped data (HAVING) works for basic operators and the 'between' operator.",
-    "category": "Dynamic Report Builder",
-    "steps": [
-      { "type": "action", "description": "Navigate to /reports" },
-      { "type": "action", "description": "Select 'items' and a warehouse" },
-      { "type": "action", "description": "Group by warehouse name and add a SUM aggregation for balance" },
-      { "type": "action", "description": "In the 'HAVING' section, select the SUM alias, choose 'GreaterThanOrEqual' (>=), and enter 100" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify only groups with sum_balance >= 100 are shown" },
-      { "type": "action", "description": "Change the HAVING operator to 'Between' and enter 10 and 50" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify only groups with sum_balance between 10 and 50 are shown" }
-    ],
-    "priority": "High"
-  },
-  {
-    "id": "TC_RB_008",
-    "title": "Chart visualization and limitations",
-    "description": "Verifies that chart renders for grouped results, supports changing types, and shows warning for large sets.",
-    "category": "Dynamic Report Builder",
-    "steps": [
-      { "type": "action", "description": "Navigate to /reports" },
-      { "type": "action", "description": "Select 'items', group by category, and add a SUM aggregation" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify the Chart section (Section 6) appears" },
-      { "type": "action", "description": "Select Chart Type 'Bar', X-axis as category, and Y-axis as the SUM aggregation" },
-      { "type": "assertion", "description": "Verify the chart canvas renders the data" },
-      { "type": "action", "description": "Switch chart type to 'Pie' and then to 'Line'" },
-      { "type": "assertion", "description": "Verify the chart updates accordingly" },
-      { "type": "action", "description": "Select a grouping that yields more than 50 rows (e.g. group by item ID)" },
-      { "type": "action", "description": "Click run/execute" },
-      { "type": "assertion", "description": "Verify a warning message appears stating that only the first 50 groups are charted" }
+      { "type": "action", "description": "Navigate to /login" },
+      { "type": "action", "description": "Fill in the username field with admin" },
+      { "type": "action", "description": "Fill in the password field with 123456" },
+      { "type": "action", "description": "Submit the login form" },
+      { "type": "action", "description": "Navigate to /manager-review" },
+      { "type": "action", "description": "Scroll down to the Financial Documents Review section (بررسی نهایی اسناد مالی)" },
+      { "type": "assertion", "description": "Verify at least one financial document card is visible" },
+      { "type": "action", "description": "Check the checkbox of the first financial document card" },
+      { "type": "action", "description": "Click the Final Approve button (تایید نهایی)" },
+      { "type": "action", "description": "Enter final approval in the manager note textarea" },
+      { "type": "action", "description": "Click the confirm final approve button (تایید نهایی)" },
+      { "type": "assertion", "description": "Verify a success toast message appears" }
     ],
     "priority": "High"
   }

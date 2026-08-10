@@ -193,7 +193,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, PriorityOrderingFilter]
     filterset_class = ItemFilter
     pagination_class = ItemPagination
-    search_fields = ['fa_unic_code', 'plpkitem', 'description', 'po', 'pl', 'pk_number', 'my_tag']
+    search_fields = ['fa_unic_code', 'description', 'po', 'pl', 'pk_number', 'my_tag']
     ordering_fields = '__all__'
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
@@ -643,12 +643,6 @@ class ItemViewSet(viewsets.ModelViewSet):
             items = Item.objects.filter(id__in=ids)
             if tag == 'conflict':
                 items.update(has_conflict=True, updated_at=timezone.now(), modified_by=request.user)
-            elif tag == 'fragile':
-                items.update(is_fragile=True, updated_at=timezone.now(), modified_by=request.user)
-            elif tag == 'heavy':
-                items.update(is_heavy=True, updated_at=timezone.now(), modified_by=request.user)
-            elif tag == 'qc':
-                items.update(needs_qc=True, updated_at=timezone.now(), modified_by=request.user)
             updated_count = items.count()
             
         return Response({'status': 'success', 'updated': updated_count})
@@ -1592,9 +1586,11 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(counter__isnull=True, status='PENDING_COUNT')
         elif as_role == 'supervisor':
             queryset = queryset.filter(supervisor__isnull=True, status='COUNTED')
+        elif as_role == 'manager':
+            queryset = queryset.filter(assigned_manager__isnull=True, status='MANAGER_REVIEW')
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
-            
+
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -1602,35 +1598,38 @@ class CountTaskViewSet(viewsets.ModelViewSet):
     def claim_tasks(self, request):
         task_ids = request.data.get('task_ids', [])
         as_role = request.data.get('as_role')
-        
+
         if not task_ids or not as_role:
             return Response({'error': 'شناسه تسک‌ها یا نقش ارسال نشده است.'}, status=400)
-            
+
         tasks = CountTask.objects.filter(id__in=task_ids)
-        
+
         if as_role == 'counter':
             tasks = tasks.filter(counter__isnull=True, status='PENDING_COUNT')
             # Fetch valid IDs to update Items as well
             valid_task_ids = list(tasks.values_list('id', flat=True))
             if not valid_task_ids:
                 return Response({'success': True, 'claimed_count': 0})
-                
+
             from .models import Item
             item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
-            
+
             # Update CountTasks
             updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user, updated_at=timezone.now())
-            
+
             # Update Item field_assignee
             assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
             Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name, updated_at=timezone.now())
-            
+
         elif as_role == 'supervisor':
             tasks = tasks.filter(supervisor__isnull=True, status='COUNTED')
             updated = tasks.update(supervisor=request.user)
+        elif as_role == 'manager':
+            tasks = tasks.filter(assigned_manager__isnull=True, status='MANAGER_REVIEW')
+            updated = tasks.update(assigned_manager=request.user)
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
-            
+
         return Response({'success': True, 'claimed_count': updated})
 
     def perform_create(self, serializer):
@@ -1923,8 +1922,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         elif as_role == 'doc_supervisor':
             return queryset.filter(doc_supervisor=user)
         elif as_role == 'manager':
-            from django.db.models import Q
-            queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
+            queryset = queryset.filter(assigned_manager=user, status='DOC_MANAGER_REVIEW')
         elif as_role == 'tracking':
             show_completed = self.request.query_params.get('show_completed', 'false').lower() == 'true'
             if not show_completed:
@@ -1956,9 +1954,11 @@ class DocTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(doc_worker__isnull=True, status='PENDING_DOC')
         elif as_role == 'doc_supervisor':
             queryset = queryset.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
+        elif as_role == 'manager':
+            queryset = queryset.filter(assigned_manager__isnull=True, status='DOC_MANAGER_REVIEW')
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
-            
+
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -1966,34 +1966,37 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     def claim_tasks(self, request):
         task_ids = request.data.get('task_ids', [])
         as_role = request.data.get('as_role')
-        
+
         if not task_ids or not as_role:
             return Response({'error': 'لیست شناسه‌ها یا نقش ارسال نشده است.'}, status=400)
-            
+
         tasks = DocTask.objects.filter(id__in=task_ids)
-        
+
         if as_role == 'doc_worker':
             tasks = tasks.filter(doc_worker__isnull=True, status='PENDING_DOC')
             valid_task_ids = list(tasks.values_list('id', flat=True))
             if not valid_task_ids:
                 return Response({'success': True, 'claimed_count': 0})
-                
+
             from .models import Item
             item_ids = list(DocTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
-            
+
             # Update DocTasks
             updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_worker=request.user)
-            
+
             # Update Item doc_assignee
             assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
             Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name, updated_at=timezone.now())
-            
+
         elif as_role == 'doc_supervisor':
             tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
             updated = tasks.update(doc_supervisor=request.user)
+        elif as_role == 'manager':
+            tasks = tasks.filter(assigned_manager__isnull=True, status='DOC_MANAGER_REVIEW')
+            updated = tasks.update(assigned_manager=request.user)
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
-            
+
         return Response({'success': True, 'claimed_count': updated})
 
     def perform_create(self, serializer):

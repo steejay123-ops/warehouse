@@ -22,10 +22,11 @@ const SINCE_OVERLAP_MS = 30_000;
 const PAGE_LIMIT = 500;
 
 /** نگاشت کلید مدل سرور → جدول Dexie */
-const MODEL_TABLES: Record<string, 'countTasks' | 'items' | 'dynamicFields'> = {
+const MODEL_TABLES: Record<string, 'countTasks' | 'items' | 'dynamicFields' | 'docTasks'> = {
   count_tasks: 'countTasks',
   items: 'items',
   dynamic_fields: 'dynamicFields',
+  doc_tasks: 'docTasks',
 };
 
 export type PullOutcome =

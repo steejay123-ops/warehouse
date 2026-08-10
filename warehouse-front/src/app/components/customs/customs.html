@@ -1,0 +1,325 @@
+<div class="h-full flex flex-col bg-slate-50" dir="rtl">
+
+  <!-- Header -->
+  <div class="bg-white border-b border-slate-200 px-4 pt-4 pb-2 shrink-0">
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <h1 class="text-base font-black text-slate-800">کارتابل مالی و مدارک</h1>
+        <p class="text-[11px] text-slate-400 mt-0.5">بررسی اسناد و فیلدهای مالی کالاها</p>
+      </div>
+      <app-offline-pending-badge />
+    </div>
+    <app-warehouse-selector class="block mb-3"
+      [projects]="state.appState.projects"
+      [activeId]="state.appState.activeWarehouseId"
+      (changed)="state.appState.activeWarehouseId = $event; loadTasks()" />
+    <app-barcode-scanner [autofocus]="true" (scanned)="onBarcodeScanned($event)" #scanner />
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-white border-b border-slate-200 px-4 flex gap-1 shrink-0">
+    <button (click)="setTab('my-tasks')"
+      class="py-2.5 px-4 text-sm font-bold border-b-2 transition-colors"
+      [class]="currentTab==='my-tasks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      کارهای من
+      @if (pendingCount > 0) {
+        <span class="mr-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{{ pendingCount }}</span>
+      }
+    </button>
+    <button (click)="setTab('pool')"
+      class="py-2.5 px-4 text-sm font-bold border-b-2 transition-colors"
+      [class]="currentTab==='pool' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      استخر
+    </button>
+  </div>
+
+  <!-- Filter Bar (my-tasks only) -->
+  @if (currentTab === 'my-tasks') {
+    <div class="bg-white border-b border-slate-100 px-4 py-2 flex gap-2 items-center shrink-0">
+      <div class="flex gap-1 flex-1">
+        <button (click)="setStatusFilter('pending')"
+          class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
+          [class]="statusFilter==='pending' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          در انتظار
+        </button>
+        <button (click)="setStatusFilter('processing')"
+          class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
+          [class]="statusFilter==='processing' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          ارسال‌شده
+        </button>
+        <button (click)="setStatusFilter('all')"
+          class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
+          [class]="statusFilter==='all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          همه
+        </button>
+      </div>
+      <input type="search" placeholder="جستجو کد / شرح / PO..."
+        class="text-xs border border-slate-200 rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        (input)="onSearchChange($event)" />
+    </div>
+  }
+
+  <!-- Task List -->
+  <div class="flex-1 overflow-y-auto px-4 py-3">
+
+    <!-- Loading -->
+    @if (isLoading) {
+      <div class="flex flex-col items-center justify-center py-16 gap-3">
+        <div class="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        <span class="text-xs text-slate-400">در حال بارگذاری...</span>
+      </div>
+    }
+
+    <!-- My Tasks List -->
+    @if (!isLoading && currentTab === 'my-tasks') {
+      @if (filteredTasks.length === 0) {
+        <div class="flex flex-col items-center justify-center py-16 text-slate-400">
+          <span class="text-3xl mb-2">📄</span>
+          <span class="text-sm">کاری برای نمایش وجود ندارد</span>
+        </div>
+      } @else {
+        <ul class="space-y-2">
+          @for (task of filteredTasks; track trackById($index, task)) {
+            <li class="bg-white rounded-xl border shadow-sm overflow-hidden"
+              [class]="task._offlinePending ? 'border-amber-300' : 'border-slate-200'">
+              <div class="flex items-center gap-3 px-3 py-3">
+                <input type="checkbox" class="w-4 h-4 accent-blue-600 shrink-0"
+                  [checked]="selectedTasks.has(task.id)"
+                  (change)="toggleSelection(task.id)" />
+                <div class="flex-1 min-w-0 cursor-pointer" (click)="openDetail(task)">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold text-sm text-slate-800 font-mono" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" [class]="getStatusColor(task.status)">
+                      {{ getStatusLabel(task.status) }}
+                    </span>
+                    @if (task._offlinePending) {
+                      <span class="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">آفلاین</span>
+                    }
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5 truncate">{{ task.item_details?.description }}</p>
+                  @if (task.item_details?.new_location) {
+                    <p class="text-[10px] text-slate-400 mt-0.5">📍 {{ task.item_details?.new_location }}</p>
+                  }
+                </div>
+                <button (click)="openDetail(task)"
+                  class="text-slate-400 hover:text-blue-600 transition-colors shrink-0 p-1">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    }
+
+    <!-- Pool Tasks List -->
+    @if (!isLoading && currentTab === 'pool') {
+      @if (poolTasks.length === 0) {
+        <div class="flex flex-col items-center justify-center py-16 text-slate-400">
+          <span class="text-3xl mb-2">🏊</span>
+          <span class="text-sm">استخر خالی است</span>
+        </div>
+      } @else {
+        <ul class="space-y-2">
+          @for (task of poolTasks; track trackById($index, task)) {
+            <li class="bg-white rounded-xl border border-slate-200 shadow-sm">
+              <div class="flex items-center gap-3 px-3 py-3">
+                <input type="checkbox" class="w-4 h-4 accent-blue-600 shrink-0"
+                  [checked]="selectedPoolTasks.has(task.id)"
+                  (change)="togglePoolSelection(task.id)" />
+                <div class="flex-1 min-w-0">
+                  <span class="font-bold text-sm text-slate-800 font-mono block" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
+                  <p class="text-xs text-slate-500 truncate">{{ task.item_details?.description }}</p>
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    }
+
+  </div><!-- /task list -->
+
+  <!-- Bottom Bar: my-tasks -->
+  @if (currentTab === 'my-tasks' && !selectedTask) {
+    <div class="bg-white border-t border-slate-200 px-4 py-3 shrink-0">
+      <button (click)="submitAll()" [disabled]="pendingCount === 0"
+        class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
+        @if (selectedTasks.size > 0) { ارسال {{ selectedTasks.size }} مورد انتخابی }
+        @else { ارسال همه موارد ({{ pendingCount }}) }
+      </button>
+    </div>
+  }
+  <!-- Bottom Bar: pool -->
+  @if (currentTab === 'pool' && !selectedTask) {
+    <div class="bg-white border-t border-slate-200 px-4 py-3 shrink-0">
+      <button (click)="claimSelectedTasks()" [disabled]="selectedPoolTasks.size === 0"
+        class="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
+        بر عهده گرفتن {{ selectedPoolTasks.size }} مورد انتخابی
+      </button>
+    </div>
+  }
+
+  <!-- ══ Detail Panel ══ -->
+  @if (selectedTask) {
+    <div class="absolute inset-0 bg-white z-20 flex flex-col" dir="rtl">
+
+      <!-- Panel Header -->
+      <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
+        <button (click)="closeDetail()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+        <div class="flex-1 min-w-0">
+          <p class="font-black text-slate-800 font-mono text-sm truncate" dir="ltr">{{ selectedTask.item_details?.fa_unic_code }}</p>
+          <p class="text-xs text-slate-400 truncate">{{ selectedTask.item_details?.description }}</p>
+        </div>
+        <span class="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" [class]="getStatusColor(selectedTask.status)">
+          {{ getStatusLabel(selectedTask.status) }}
+        </span>
+      </div>
+
+      <!-- Panel Body -->
+      <div class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+
+        <!-- Item Info -->
+        <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1.5 border border-slate-100">
+          @if (selectedTask.item_details?.po) {
+            <div class="flex gap-2"><span class="text-slate-400 w-20 shrink-0">PO:</span><span class="font-mono" dir="ltr">{{ selectedTask.item_details?.po }}</span></div>
+          }
+          @if (selectedTask.item_details?.unit) {
+            <div class="flex gap-2"><span class="text-slate-400 w-20 shrink-0">واحد:</span><span>{{ selectedTask.item_details?.unit }}</span></div>
+          }
+          @if (selectedTask.item_details?.new_location) {
+            <div class="flex gap-2"><span class="text-slate-400 w-20 shrink-0">لوکیشن:</span><span>{{ selectedTask.item_details?.new_location }}</span></div>
+          }
+        </div>
+
+        <!-- RTI Numbers -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">شماره RTI اضافه‌شده</label>
+            <input type="text" [(ngModel)]="f_added_rti_no" placeholder="RTI-..."
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">شماره RTI فاکتور</label>
+            <input type="text" [(ngModel)]="f_inv_rti_number" placeholder="RTI-..."
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+        </div>
+
+        <!-- Invoice Type + Date -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">نوع فاکتور</label>
+            <select [(ngModel)]="f_invoice_type"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+              <option value="">انتخاب کنید</option>
+              @for (item of invoiceTypes; track item[0]) {
+                <option [value]="item[0]">{{ item[1] }}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">تاریخ فاکتور</label>
+            <input type="date" [(ngModel)]="f_invoice_date"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+        </div>
+
+        <!-- Page / Row / Supplier -->
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">صفحه فاکتور</label>
+            <input type="number" [(ngModel)]="f_invoice_page" min="1"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">ردیف صفحه</label>
+            <input type="number" [(ngModel)]="f_page_row" min="1"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">تأمین‌کننده</label>
+            <input type="text" [(ngModel)]="f_doc_supplier"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+          </div>
+        </div>
+
+        <!-- Financial Values -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">ارزش کل</label>
+            <input type="text" [(ngModel)]="f_total_value"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">مبلغ قیمت</label>
+            <input type="text" [(ngModel)]="f_price_amount"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">قیمت واحد مشابه</label>
+            <input type="text" [(ngModel)]="f_similar_unit_price"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+          </div>
+          <div>
+            <label class="text-[11px] font-bold text-slate-500 block mb-1">ارز</label>
+            <select [(ngModel)]="f_currency"
+              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+              <option value="">انتخاب کنید</option>
+              @for (item of currencies; track item[0]) {
+                <option [value]="item[0]">{{ item[1] }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <!-- Folder Address -->
+        <div>
+          <label class="text-[11px] font-bold text-slate-500 block mb-1">آدرس پوشه</label>
+          <input type="text" [(ngModel)]="f_folder_address"
+            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+        </div>
+
+        <!-- Stamp + Signature -->
+        <div class="flex gap-6">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" [(ngModel)]="f_stamp" class="w-4 h-4 accent-blue-600"/>
+            <span class="text-sm font-bold text-slate-700">مهر</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" [(ngModel)]="f_signature" class="w-4 h-4 accent-blue-600"/>
+            <span class="text-sm font-bold text-slate-700">امضا</span>
+          </label>
+        </div>
+
+        <!-- Worker Note -->
+        <div>
+          <label class="text-[11px] font-bold text-slate-500 block mb-1">یادداشت کارشناس</label>
+          <textarea [(ngModel)]="f_worker_note" rows="3" placeholder="توضیحات اضافی..."
+            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"></textarea>
+        </div>
+
+      </div><!-- /panel body -->
+
+      <!-- Panel Actions -->
+      <div class="bg-white border-t border-slate-200 px-4 py-3 flex gap-2 shrink-0">
+        <button (click)="saveDraft()" [disabled]="isSaving"
+          class="flex-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-sm font-bold py-2.5 rounded-xl transition-colors">
+          @if (isSaving) { در حال ذخیره... } @else { ذخیره پیش‌نویس }
+        </button>
+        <button (click)="submitAll()" [disabled]="isSaving"
+          class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
+          ارسال
+        </button>
+      </div>
+
+    </div><!-- /detail panel overlay -->
+  }
+
+</div><!-- /root -->

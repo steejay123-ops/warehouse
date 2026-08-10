@@ -1,0 +1,24 @@
+{
+  "type": "frontend",
+  "name": "Login always uses persistent storage without Remember Me checkbox",
+  "description": "When a user logs in, the 'Remember Me' checkbox is no longer present, and the user successfully authenticates and lands on the dashboard.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the 'مرا به خاطر بسپار' (Remember Me) checkbox is no longer visible on the login form"
+    },
+    {
+      "type": "action",
+      "description": "Enter valid credentials (e.g. username 'saman_admin' and password '123456') and submit the form"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify the user is successfully redirected to the dashboard and the main panel is visible"
+    }
+  ]
+}

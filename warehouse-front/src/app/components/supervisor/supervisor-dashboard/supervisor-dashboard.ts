@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CountTaskApiService } from '../../../core/api/count-task-api.service';
 import { CountTask } from '../../../core/models/count-task.model';
+import { DocTaskApiService } from '../../../core/api/doc-task-api.service';
+import { DocTask } from '../../../core/models/doc-task.model';
 import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { StateService } from '../../../services/state.service';
@@ -27,8 +29,12 @@ export class SupervisorDashboard implements OnInit {
   isLoading = true;
   selectedTasks: Set<number> = new Set();
   selectedPoolTasks: Set<number> = new Set();
-  currentTab: 'my-tasks' | 'pool' = 'my-tasks';
-  
+  currentTab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool' = 'my-tasks';
+
+  get activeSection(): 'counting' | 'financial' {
+    return (this.currentTab === 'doc' || this.currentTab === 'doc-pool') ? 'financial' : 'counting';
+  }
+
   // Reject Dialog State
   showRejectDialog = false;
   rejectingTask: CountTask | null = null;
@@ -42,8 +48,23 @@ export class SupervisorDashboard implements OnInit {
   showHistoryDialog = false;
   historyTask: CountTask | null = null;
 
+  // ── Doc Task Tab ──
+  docTasks: DocTask[] = [];
+  isDocLoading = false;
+  selectedDocTasks = new Set<number>();
+  showDocApproveDialog = false;
+  docApproveNote = '';
+  showDocRejectDialog = false;
+  docRejectNote = '';
+
+  // ── Doc Pool Tab ──
+  docPoolTasks: DocTask[] = [];
+  isDocPoolLoading = false;
+  selectedDocPoolTasks = new Set<number>();
+
   constructor(
     private countTaskApi: CountTaskApiService,
+    private docTaskApi: DocTaskApiService,
     private toast: ToastService,
     private confirmDialog: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
@@ -110,15 +131,16 @@ export class SupervisorDashboard implements OnInit {
     });
   }
 
-  setTab(tab: 'my-tasks' | 'pool') {
+  setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
     this.currentTab = tab;
     this.selectedTasks.clear();
     this.selectedPoolTasks.clear();
-    if (tab === 'my-tasks') {
-      this.loadTasks();
-    } else {
-      this.loadPoolTasks();
-    }
+    this.selectedDocTasks.clear();
+    this.selectedDocPoolTasks.clear();
+    if (tab === 'my-tasks') this.loadTasks();
+    else if (tab === 'pool') this.loadPoolTasks();
+    else if (tab === 'doc') this.loadDocTasks();
+    else this.loadDocPoolTasks();
   }
 
   togglePoolSelection(taskId: number) {
@@ -256,5 +278,161 @@ export class SupervisorDashboard implements OnInit {
     this.showHistoryDialog = false;
     this.historyTask = null;
     this.cdr.detectChanges();
+  }
+
+  // ════════════════════════════════════════════
+  //  Doc Task Tab
+  // ════════════════════════════════════════════
+
+  loadDocTasks() {
+    this.isDocLoading = true;
+    this.cdr.detectChanges();
+    const params: any = { as_role: 'doc_supervisor', page_size: 1000 };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
+
+    this.docTaskApi.getAll(params).subscribe({
+      next: (res: any) => {
+        const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
+        this.docTasks = all.filter(t => t.status === 'DOC_PROCESSED');
+        this.selectedDocTasks.clear();
+        this.isDocLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت اسناد مالی');
+        this.isDocLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleDocSelection(id: number) {
+    if (this.selectedDocTasks.has(id)) this.selectedDocTasks.delete(id);
+    else this.selectedDocTasks.add(id);
+    this.selectedDocTasks = new Set(this.selectedDocTasks);
+    this.cdr.detectChanges();
+  }
+
+  toggleAllDoc(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) this.docTasks.forEach(t => this.selectedDocTasks.add(t.id));
+    else this.selectedDocTasks.clear();
+    this.selectedDocTasks = new Set(this.selectedDocTasks);
+    this.cdr.detectChanges();
+  }
+
+  isAllDocSelected() {
+    return this.docTasks.length > 0 && this.selectedDocTasks.size === this.docTasks.length;
+  }
+
+  openDocApproveDialog() {
+    if (this.selectedDocTasks.size === 0) return;
+    this.docApproveNote = '';
+    this.showDocApproveDialog = true;
+    this.cdr.detectChanges();
+  }
+
+  cancelDocApprove() {
+    this.showDocApproveDialog = false;
+    this.docApproveNote = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmDocApprove() {
+    if (this.selectedDocTasks.size === 0) return;
+    this.docTaskApi.bulkApprove(Array.from(this.selectedDocTasks), this.docApproveNote).subscribe({
+      next: (res) => {
+        this.toast.success(res.message);
+        this.showDocApproveDialog = false;
+        this.selectedDocTasks = new Set();
+        this.loadDocTasks();
+      },
+      error: () => { this.toast.error('خطا در تایید اسناد'); this.cdr.detectChanges(); }
+    });
+  }
+
+  openDocRejectDialog() {
+    if (this.selectedDocTasks.size === 0) return;
+    this.docRejectNote = '';
+    this.showDocRejectDialog = true;
+    this.cdr.detectChanges();
+  }
+
+  closeDocRejectDialog() {
+    this.showDocRejectDialog = false;
+    this.docRejectNote = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmDocReject() {
+    if (!this.docRejectNote.trim()) { this.toast.error('لطفاً دلیل رد را بنویسید'); return; }
+    this.docTaskApi.reject(Array.from(this.selectedDocTasks), this.docRejectNote).subscribe({
+      next: (res) => {
+        this.toast.success(res.message);
+        this.closeDocRejectDialog();
+        this.selectedDocTasks = new Set();
+        this.loadDocTasks();
+      },
+      error: () => { this.toast.error('خطا در رد اسناد'); this.cdr.detectChanges(); }
+    });
+  }
+
+  // ════════════════════════════════════════════
+  //  Doc Pool Tab
+  // ════════════════════════════════════════════
+
+  loadDocPoolTasks() {
+    this.isDocPoolLoading = true;
+    this.cdr.detectChanges();
+    const params: any = { as_role: 'doc_supervisor' };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
+
+    this.docTaskApi.poolTasks(params).subscribe({
+      next: (res: any) => {
+        this.docPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.isDocPoolLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت استخر اسناد');
+        this.isDocPoolLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleDocPoolSelection(id: number) {
+    if (this.selectedDocPoolTasks.has(id)) this.selectedDocPoolTasks.delete(id);
+    else this.selectedDocPoolTasks.add(id);
+    this.selectedDocPoolTasks = new Set(this.selectedDocPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  toggleAllDocPool(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    if (checked) this.docPoolTasks.forEach(t => this.selectedDocPoolTasks.add(t.id));
+    else this.selectedDocPoolTasks.clear();
+    this.selectedDocPoolTasks = new Set(this.selectedDocPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  isAllDocPoolSelected() {
+    return this.docPoolTasks.length > 0 && this.selectedDocPoolTasks.size === this.docPoolTasks.length;
+  }
+
+  claimSelectedDocTasks() {
+    if (this.selectedDocPoolTasks.size === 0) return;
+    this.docTaskApi.claimTasks(Array.from(this.selectedDocPoolTasks), 'doc_supervisor').subscribe({
+      next: (res: any) => {
+        this.toast.success(`${res.claimed_count} سند با موفقیت به عهده گرفته شد`);
+        this.setTab('doc');
+      },
+      error: (err: any) => {
+        const errorMsg = err?.error?.error || 'خطا در عملیات';
+        this.toast.error(errorMsg);
+      }
+    });
   }
 }

@@ -694,7 +694,7 @@ export class OfflineSyncService {
    * @returns true = توکن جدید گرفته شد / false = ناموفق
    */
   private async tryRefreshToken(): Promise<boolean> {
-    const refresh = sessionStorage.getItem('wh_refresh_token') || localStorage.getItem('wh_refresh_token');
+    const refresh = localStorage.getItem('wh_refresh_token');
     if (!refresh) return false;
 
     try {
@@ -708,11 +708,11 @@ export class OfflineSyncService {
       const data = await response.json();
       if (!data?.access) return false;
 
-      // توکن جدید را همان‌جایی ذخیره کن که توکن قبلی بود
-      if (sessionStorage.getItem('wh_access_token')) {
-        sessionStorage.setItem('wh_access_token', data.access);
-      } else {
-        localStorage.setItem('wh_access_token', data.access);
+      // ذخیره توکن جدید در localStorage
+      localStorage.setItem('wh_access_token', data.access);
+      // ذخیره refresh token جدید (بعد از چرخش توکن، توکن قبلی باطل می‌شود)
+      if (data.refresh) {
+        localStorage.setItem('wh_refresh_token', data.refresh);
       }
       console.log('[OfflineSync] 🔑 توکن با موفقیت تازه‌سازی شد');
       return true;

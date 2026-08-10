@@ -32,15 +32,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import CountTask, CountTaskHistory, Item, ItemFieldDefinition
-from .serializers import CountTaskSerializer, ItemFieldDefinitionSerializer, ItemSerializer
+from .models import CountTask, CountTaskHistory, DocTask, DocTaskHistory, Item, ItemFieldDefinition
+from .serializers import CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer, ItemSerializer
 
 # هم‌راستا با نگهداری ۶ ماهه کلاینت؛ tombstone قدیمی‌تر از این قابل اتکا نیست
 TOMBSTONE_RETENTION_DAYS = 180
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 1000
 # ترتیب ثابت پردازش (وابستگی‌ها اول: تعریف فیلدها → آیتم‌ها → تسک‌ها)
-MODEL_ORDER = ['dynamic_fields', 'items', 'count_tasks']
+MODEL_ORDER = ['dynamic_fields', 'items', 'count_tasks', 'doc_tasks']
 
 
 def _encode_cursor(model_key, updated_at, row_id):
@@ -176,6 +176,20 @@ class SyncPullView(APIView):
                 Q(is_deleted=True) | (task_scope & Q(count_tasks__is_deleted=False))
             ).distinct()
 
+        if model_key == 'doc_tasks':
+            base = DocTask.objects.filter(item__warehouse_id=warehouse_id).select_related(
+                'item', 'doc_worker', 'doc_supervisor', 'assigned_manager', 'created_by', 'modified_by'
+            ).prefetch_related(
+                Prefetch('history', queryset=DocTaskHistory.objects.order_by('created_at'))
+            )
+            if full_access:
+                return base
+            # کارشناس مالی: فقط تسک‌های خودش یا استخر
+            return base.filter(
+                Q(doc_worker=user)
+                | Q(doc_worker__isnull=True, status='PENDING_DOC')
+            )
+
         # count_tasks
         base = CountTask.all_objects.filter(item__warehouse_id=warehouse_id).select_related(
             'item', 'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
@@ -191,6 +205,8 @@ class SyncPullView(APIView):
         )
 
     def _serialize(self, model_key, obj, blind):
+        if model_key == 'doc_tasks':
+            return DocTaskSerializer(obj).data
         if obj.is_deleted:
             return {
                 'sync_id': str(obj.sync_id) if obj.sync_id else None,
@@ -202,7 +218,6 @@ class SyncPullView(APIView):
         if model_key == 'items':
             data = ItemSerializer(obj).data
             if blind:
-                # همان redaction شمارش کور CountTaskSerializer.item_details
                 data.pop('inventory', None)
                 data.pop('bal4miv', None)
             return data

@@ -248,5 +248,90 @@
       { "type": "assertion", "description": "Verify a warning message appears stating that only the first 50 groups are charted" }
     ],
     "priority": "High"
+  },
+  {
+    "id": "TC_RB_009",
+    "title": "Comprehensive Export and Chart Validation (Phase 3)",
+    "description": "Verifies PDF limits (column and row counts), successful PDF/Excel exports, and ensures the chart correctly displays global data independently of table pagination.",
+    "category": "Dynamic Report Builder",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the /reports page"
+      },
+      {
+        "type": "action",
+        "description": "Select the 'items' entity and a warehouse to begin report configuration"
+      },
+      {
+        "type": "action",
+        "description": "Select more than 12 fields/columns to test PDF column limits"
+      },
+      {
+        "type": "action",
+        "description": "Click the 'Export PDF' button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an error message appears stating that the number of columns exceeds the maximum limit for PDF"
+      },
+      {
+        "type": "action",
+        "description": "Deselect fields to have less than 12 columns, but ensure no filters are applied so the result exceeds 2000 rows"
+      },
+      {
+        "type": "action",
+        "description": "Click the run/execute report button"
+      },
+      {
+        "type": "action",
+        "description": "Click the 'Export PDF' button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an error message appears stating that PDF export is limited to 2000 rows"
+      },
+      {
+        "type": "action",
+        "description": "Add a filter to reduce the result set to under 2000 rows, group by category, and add a SUM aggregation"
+      },
+      {
+        "type": "action",
+        "description": "Click the run/execute report button"
+      },
+      {
+        "type": "action",
+        "description": "Click the 'Export PDF' button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the PDF download is initiated successfully without errors"
+      },
+      {
+        "type": "action",
+        "description": "Click the 'Export Excel' button"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the Excel export job runs and triggers a successful file download"
+      },
+      {
+        "type": "action",
+        "description": "Scroll down to the Chart section and configure a Bar chart with the grouped category and SUM aggregation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the chart renders showing data for up to the first 200 groups"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to page 2 of the report data table using the pagination controls"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the chart canvas remains unchanged and still displays the global data, independent of the table's current page"
+      }
+    ],
+    "priority": "High"
   }
 ]

@@ -19,7 +19,6 @@ export class Login implements OnInit, OnDestroy {
   username = '';
   password = '';
   passwordFieldType = 'password';
-  rememberMe = false;
   isLoggingIn = false;
   loginErrorMessage: string | null = null;
   showForgotModal = false;
@@ -92,7 +91,7 @@ export class Login implements OnInit, OnDestroy {
     this.isLoggingIn = true;
     this.loginErrorMessage = null;
 
-    this.auth.login(this.username, this.password, this.rememberMe).subscribe({
+    this.auth.login(this.username, this.password).subscribe({
       next: () => {
         this.isLoggingIn = false;
         

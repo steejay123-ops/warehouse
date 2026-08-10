@@ -6,14 +6,21 @@ npm run start
 
 
 npm run build
+
+clear
 node server.js
 
+clear
 .\venv\Scripts\activate
 # بعد از activate:
+
 python manage.py migrate
 python manage.py runserver 0.0.0.0:8000
 یا 
+
+clear
 .\venv\Scripts\python manage.py runserver 0.0.0.0:8000
+python manage.py migrate
 
 
 کلاد فلر با دامنه خودت
@@ -21,6 +28,7 @@ npx cloudflared tunnel login
 npx cloudflared tunnel create warehouse
 npx cloudflared tunnel route dns warehouse app.farsalish.ir
 
+clear
 npx cloudflared tunnel run --url http://localhost:4200 warehouse
 
 
@@ -61,3 +69,14 @@ cd "E:\warehouse project"
 git checkout main
 git stash apply
 npm run build
+
+باز کردن IP
+python manage.py axes_reset_ip <IP_ADDRESS>
+
+تمام کاربران
+python manage.py axes_reset
+ یا 
+ http://localhost:8000/admin
+
+
+ 

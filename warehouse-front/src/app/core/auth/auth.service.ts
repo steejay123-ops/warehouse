@@ -85,11 +85,11 @@ export class AuthService {
   constructor(private router: Router, private http: HttpClient) {}
 
   /** لاگین — mock یا API واقعی */
-  login(username: string, password: string, rememberMe: boolean = true): Observable<LoginResponse> {
+  login(username: string, password: string): Observable<LoginResponse> {
     this._isLoading.set(true);
 
     if (environment.useMockData) {
-      return this.mockLogin(username, password, rememberMe);
+      return this.mockLogin(username, password);
     }
 
     return this.http
@@ -97,7 +97,7 @@ export class AuthService {
         context: new HttpContext().set(SKIP_OFFLINE, true),
       })
       .pipe(
-        tap((response) => this.handleLoginSuccess(response, rememberMe)),
+        tap((response) => this.handleLoginSuccess(response)),
         catchError((err) => {
           this._isLoading.set(false);
           return throwError(() => err);
@@ -127,11 +127,16 @@ export class AuthService {
     }
 
     return this.http
-      .post<{ access: string }>(`${environment.apiUrl}/auth/refresh/`, { refresh }, {
+      .post<{ access: string; refresh?: string }>(`${environment.apiUrl}/auth/refresh/`, { refresh }, {
         context: new HttpContext().set(SKIP_OFFLINE, true),
       })
       .pipe(
-        tap((response) => this.setItem(TOKEN_KEY, response.access)),
+        tap((response) => {
+          this.setItem(TOKEN_KEY, response.access);
+          if (response.refresh) {
+            this.setItem(REFRESH_KEY, response.refresh);
+          }
+        }),
         catchError((err) => {
           // نشست فقط با «رد صریح سرور» (4xx) پایان می‌یابد. اگر به سرور نرسیدیم
           // (قطع شبکه/تونل — status 0/5xx/530) کاربر وسط کار میدانی بیرون
@@ -189,32 +194,21 @@ export class AuthService {
 
   // ────────── Storage Helpers ──────────
 
-  private setItem(key: string, value: string, rememberMe?: boolean): void {
-    if (rememberMe === true) {
-      localStorage.setItem(key, value);
-    } else if (rememberMe === false) {
-      sessionStorage.setItem(key, value);
-    } else {
-      if (sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, value);
-      } else {
-        localStorage.setItem(key, value);
-      }
-    }
+  private setItem(key: string, value: string): void {
+    localStorage.setItem(key, value);
   }
 
   private getItem(key: string): string | null {
-    return sessionStorage.getItem(key) || localStorage.getItem(key);
+    return localStorage.getItem(key);
   }
 
   private removeItem(key: string): void {
-    sessionStorage.removeItem(key);
     localStorage.removeItem(key);
   }
 
   // ────────── Private ──────────
 
-  private mockLogin(username: string, password: string, rememberMe: boolean): Observable<LoginResponse> {
+  private mockLogin(username: string, password: string): Observable<LoginResponse> {
     return new Observable((subscriber) => {
       setTimeout(() => {
         const account = this.mockUsers[username];
@@ -223,7 +217,7 @@ export class AuthService {
             tokens: { access: 'mock-access-token', refresh: 'mock-refresh-token' },
             user: account.profile,
           };
-          this.handleLoginSuccess(response, rememberMe);
+          this.handleLoginSuccess(response);
           subscriber.next(response);
           subscriber.complete();
         } else {
@@ -234,10 +228,10 @@ export class AuthService {
     });
   }
 
-  private handleLoginSuccess(response: LoginResponse, rememberMe: boolean): void {
-    this.setItem(TOKEN_KEY, response.tokens.access, rememberMe);
-    this.setItem(REFRESH_KEY, response.tokens.refresh, rememberMe);
-    this.setItem(USER_KEY, JSON.stringify(response.user), rememberMe);
+  private handleLoginSuccess(response: LoginResponse): void {
+    this.setItem(TOKEN_KEY, response.tokens.access);
+    this.setItem(REFRESH_KEY, response.tokens.refresh);
+    this.setItem(USER_KEY, JSON.stringify(response.user));
     this._user.set(response.user);
     this._isLoading.set(false);
   }
@@ -251,7 +245,7 @@ export class AuthService {
 
   private loadUserFromStorage(): AuthUserProfile | null {
     try {
-      const raw = typeof window !== "undefined" ? (sessionStorage.getItem(USER_KEY) || localStorage.getItem(USER_KEY)) : null;
+      const raw = typeof window !== "undefined" ? localStorage.getItem(USER_KEY) : null;
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;

@@ -16,7 +16,10 @@ export class WebSocketService {
     if (this.ws) return;
 
     // Use ws:// for http, wss:// for https
-    const url = 'ws://localhost:8000/ws/notifications/';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const url = `${protocol}//${host}/ws/notifications/`;
+    
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
@@ -29,7 +32,7 @@ export class WebSocketService {
         this.notifications$.next(data);
         
         // Auto-show toast for notifications
-        if (data.message && data.type) {
+        if (data.message && data.type && data.type !== 'count_task_update' && data.type !== 'doc_task_update') {
           this.toast.show(data.type, data.message);
         }
       } catch (e) {

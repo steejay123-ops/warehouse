@@ -113,6 +113,15 @@ class SyncPullView(APIView):
             from warehouses.services import get_setting
             blind = get_setting('blind_counting', warehouse_id) == 'blind'
 
+        total_records = None
+        if not cursor:
+            total_records = 0
+            for model_key in requested:
+                qs = self._build_queryset(model_key, warehouse_id, user, full_access)
+                if since is not None:
+                    qs = qs.filter(updated_at__gte=since)
+                total_records += qs.count()
+
         results = {}
         next_cursor = None
         has_more = False
@@ -152,12 +161,16 @@ class SyncPullView(APIView):
                 has_more = True
                 break
 
-        return Response({
+        response_data = {
             'server_time': server_time.isoformat(),
             'results': results,
             'next_cursor': next_cursor,
             'has_more': has_more,
-        })
+        }
+        if total_records is not None:
+            response_data['total_records'] = total_records
+
+        return Response(response_data)
 
     def _build_queryset(self, model_key, warehouse_id, user, full_access):
         if model_key == 'dynamic_fields':

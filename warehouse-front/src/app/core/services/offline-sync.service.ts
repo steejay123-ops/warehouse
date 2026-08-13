@@ -1,4 +1,6 @@
+import { Injectable } from '@angular/core';
 import { offlineDb, SyncQueueEntry, SyncErrorEntry } from './offline-db';
+import { SyncPullService } from './sync-pull.service';
 import { NetworkStatusService } from './network-status.service';
 import { isServerUnreachable } from './server-reachability';
 import { BehaviorSubject, Subject, Subscription, filter } from 'rxjs';
@@ -46,6 +48,16 @@ type EntryResult = 'sent' | 'rejected' | 'auth-failed' | 'server-error' | 'trans
  * 5. همگام‌سازی دستی (forceSync)
  * 6. انتقال خطاهای 4xx به صندوق خطا (syncErrors)
  */
+
+export interface DeepUpdateSummary {
+  warehouseName: string;
+  records: number;
+  bytes: number;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
 export class OfflineSyncService {
   private static instance: OfflineSyncService;
   private network = NetworkStatusService.getInstance();
@@ -86,6 +98,15 @@ export class OfflineSyncService {
   private _syncOutcome$ = new Subject<SyncOutcome>();
   readonly syncOutcome$ = this._syncOutcome$.asObservable();
 
+  private _deepUpdateState$ = new BehaviorSubject<{
+    isActive: boolean;
+    mode: 'current' | 'all';
+    totalWarehouses: number;
+    currentIndex: number;
+    currentWarehouseName: string;
+  } | null>(null);
+  readonly deepUpdateState$ = this._deepUpdateState$.asObservable();
+
   /**
    * رد صریح سرور (4xx/409) — storeهای دامنه برای reconciliation گوش می‌دهند:
    * رکورد محلی خوش‌بینانه باید به آخرین نسخهٔ سروری برگردد.
@@ -102,6 +123,9 @@ export class OfflineSyncService {
     }
     return OfflineSyncService.instance;
   }
+
+  get pullProgress$() { return SyncPullService.getInstance().pullProgress$; }
+  get isPulling$() { return SyncPullService.getInstance().isPulling$; }
 
   // ─── مقادیر لحظه‌ای ───
   get isSyncing(): boolean { return this._isSyncing$.value; }
@@ -795,8 +819,76 @@ export class OfflineSyncService {
   /** تخلیه کامل صف (برای حالت‌های اضطراری) */
   async clearQueue(): Promise<void> {
     await offlineDb.syncQueue.clear();
-    await this.refreshCounts();
-    console.log('[OfflineSync] 🗑️ صف همگام‌سازی پاک شد');
+  }
+
+  /** 
+   * بروزرسانی عمیق (Full Resync): 
+   * پاک کردن کامل دیتابیس لوکال و دانلود مجدد داده‌های سرور
+   */
+  async performDeepUpdate(warehouseIds: number[], warehousesMap: Record<number, string>): Promise<DeepUpdateSummary[]> {
+    console.log(`[OfflineSync] 🚨 شروع بروزرسانی عمیق برای انبارهای:`, warehouseIds);
+    
+    if (warehouseIds.length === 0) return [];
+
+    // ۱. گارد اطمینان از سلامت سرور پیش از پاکسازی داده‌ها
+    const token = sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    
+    try {
+      // ارسال یک ریکوئست سبک فقط برای بررسی بالا بودن سرور و اعتبار نشست
+      const testId = warehouseIds[0];
+      const res = await fetch(`${environment.apiUrl}/inventory/sync/pull/?warehouse_id=${testId}&limit=1`, { headers });
+      if (!res.ok) {
+        throw new Error(res.status === 401 || res.status === 403 ? 'auth-required' : 'server-unreachable');
+      }
+    } catch (err: any) {
+      console.error(`[OfflineSync] ❌ سرور برای بروزرسانی عمیق در دسترس نیست.`);
+      const status = err.message || 'server-unreachable';
+      throw new Error(status === 'auth-required' ? 'نشست شما منقضی شده است. لطفا وارد شوید.' : 'سرور در دسترس نیست');
+    }
+
+    // ۲. پاکسازی جداول داده و نشانگرها (Cursor) فقط برای انبارهای انتخاب‌شده
+    const deletePromises = [];
+    for (const id of warehouseIds) {
+      deletePromises.push(offlineDb.items.where('warehouse_id').equals(id).delete());
+      deletePromises.push(offlineDb.docTasks.where('warehouse_id').equals(id).delete());
+      deletePromises.push(offlineDb.countTasks.where('warehouse_id').equals(id).delete());
+      deletePromises.push(offlineDb.syncCursors.where('warehouseId').equals(id).delete());
+    }
+    await Promise.all(deletePromises);
+    
+    // ۳. دریافت و دانلود مجدد داده‌ها
+    const { SyncPullService } = await import('./sync-pull.service');
+    const pullService = SyncPullService.getInstance();
+    
+    try {
+      const summaries: DeepUpdateSummary[] = [];
+
+      this._deepUpdateState$.next({
+        isActive: true, mode: 'all', totalWarehouses: warehouseIds.length, currentIndex: 0, currentWarehouseName: ''
+      });
+
+      for (let i = 0; i < warehouseIds.length; i++) {
+        const id = warehouseIds[i];
+        const wName = warehousesMap[id] || `انبار ${id}`;
+        this._deepUpdateState$.next({ ...this._deepUpdateState$.value!, currentIndex: i + 1, currentWarehouseName: wName });
+        
+        const outcome = await pullService.pullChanges(id, true);
+        
+        if (outcome.status === 'completed') {
+          summaries.push({ warehouseName: wName, records: outcome.upserted, bytes: outcome.bytes });
+        } else {
+          console.error(`[OfflineSync] ❌ بروزرسانی عمیق برای انبار ${id} شکست خورد:`, outcome);
+          throw new Error(outcome.status === 'server-unreachable' ? 'سرور در دسترس نیست' : outcome.status);
+        }
+      }
+      
+      console.log(`[OfflineSync] ✅ بروزرسانی عمیق با موفقیت پایان یافت.`);
+      return summaries;
+    } finally {
+      this._deepUpdateState$.next(null);
+    }
   }
 
   destroy(): void {

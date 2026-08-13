@@ -21,9 +21,12 @@ const path = require('path');
 
 const workerPath = path.join(__dirname, '..', 'dist', 'warehouse-app', 'browser', 'ngsw-worker.js');
 
-const ORIGINAL = '(res.status === 503 || res.status === 504) && ignoreOfflineError';
-const PATCHED =
+const ORIGINAL_MANIFEST_CHECK = '(res.status === 503 || res.status === 504) && ignoreOfflineError';
+const PATCHED_MANIFEST_CHECK =
   '(res.status === 502 || res.status === 503 || res.status === 504 || (res.status >= 520 && res.status <= 530)) && ignoreOfflineError';
+
+const ORIGINAL_DEGRADE = 'this.state = DriverReadyState.EXISTING_CLIENTS_ONLY;';
+const PATCHED_DEGRADE = 'if (!String(err).match(/50[234]|52[0-9]|530/)) { this.state = DriverReadyState.EXISTING_CLIENTS_ONLY; }';
 
 if (!fs.existsSync(workerPath)) {
   console.error(`[patch-ngsw-530] ✖ فایل پیدا نشد: ${workerPath}`);
@@ -31,19 +34,22 @@ if (!fs.existsSync(workerPath)) {
   process.exit(1);
 }
 
-const source = fs.readFileSync(workerPath, 'utf8');
+let source = fs.readFileSync(workerPath, 'utf8');
+let patched = false;
 
-if (source.includes(PATCHED)) {
+if (source.includes(PATCHED_MANIFEST_CHECK) && source.includes(PATCHED_DEGRADE)) {
   console.log('[patch-ngsw-530] ✔ وصله از قبل اعمال شده است.');
   process.exit(0);
 }
 
-if (!source.includes(ORIGINAL)) {
+if (!source.includes(ORIGINAL_MANIFEST_CHECK) && !source.includes(PATCHED_MANIFEST_CHECK)) {
   console.error('[patch-ngsw-530] ✖ الگوی مورد انتظار در ngsw-worker.js پیدا نشد.');
   console.error('[patch-ngsw-530] احتمالاً @angular/service-worker ارتقا یافته و کدش تغییر کرده.');
-  console.error('[patch-ngsw-530] fetchLatestManifest را در ngsw-worker.js پیدا کن و این اسکریپت را با کد جدید تطبیق بده.');
   process.exit(1);
 }
 
-fs.writeFileSync(workerPath, source.replace(ORIGINAL, PATCHED), 'utf8');
-console.log('[patch-ngsw-530] ✔ ngsw-worker.js وصله شد: کدهای 502 و 520–530 هنگام بررسی به‌روزرسانی مثل آفلاین تحمل می‌شوند.');
+source = source.replace(ORIGINAL_MANIFEST_CHECK, PATCHED_MANIFEST_CHECK);
+source = source.replace(new RegExp(ORIGINAL_DEGRADE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), PATCHED_DEGRADE);
+
+fs.writeFileSync(workerPath, source, 'utf8');
+console.log('[patch-ngsw-530] ✔ ngsw-worker.js وصله شد: جلوگیری از غیرفعال شدن کش در هنگام قطعی کلودفلر (کدهای 5xx).');

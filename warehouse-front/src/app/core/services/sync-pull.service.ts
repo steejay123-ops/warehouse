@@ -30,7 +30,7 @@ const MODEL_TABLES: Record<string, 'countTasks' | 'items' | 'dynamicFields' | 'd
 };
 
 export type PullOutcome =
-  | { status: 'completed'; upserted: number; deleted: number }
+  | { status: 'completed'; upserted: number; deleted: number; bytes: number }
   | { status: 'offline' }
   | { status: 'server-unreachable' }
   | { status: 'auth-required' }
@@ -45,6 +45,9 @@ export class SyncPullService {
 
   private _isPulling$ = new BehaviorSubject<boolean>(false);
   readonly isPulling$ = this._isPulling$.asObservable();
+
+  private _pullProgress$ = new BehaviorSubject<{ current: number, total: number | null, bytes: number } | null>(null);
+  readonly pullProgress$ = this._pullProgress$.asObservable();
 
   /** بعد از هر Pull موفق emit می‌شود — storeهای دامنه برای رفرش UI گوش می‌دهند */
   private _pullCompleted$ = new Subject<{ warehouseId: number }>();
@@ -79,6 +82,10 @@ export class SyncPullService {
 
     let upserted = 0;
     let deleted = 0;
+    let totalRecords: number | null = null;
+    let bytesDownloaded = 0;
+
+    this._pullProgress$.next({ current: 0, total: null, bytes: 0 });
 
     try {
       const cursorKey = `${userId}:${warehouseId}`;
@@ -136,7 +143,13 @@ export class SyncPullService {
             return { status: 'error', message: `HTTP ${res.status}` };
           }
 
-          const data = await res.json();
+          const textData = await res.text();
+          bytesDownloaded += textData.length;
+          const data = JSON.parse(textData);
+
+          if (data.total_records !== undefined) {
+            totalRecords = data.total_records;
+          }
 
           // ذخیرهٔ server_time صفحهٔ اول به‌عنوان مبنای دلتای بعدی (پس از اتمام)
           if (!state.pendingServerTime) {
@@ -146,6 +159,8 @@ export class SyncPullService {
           const counts = await this.applyPage(data.results || {}, warehouseId, userId);
           upserted += counts.upserted;
           deleted += counts.deleted;
+
+          this._pullProgress$.next({ current: upserted + deleted, total: totalRecords, bytes: bytesDownloaded });
 
           cursor = data.next_cursor || null;
           hasMore = !!data.has_more && !!cursor;
@@ -167,13 +182,14 @@ export class SyncPullService {
 
       console.log(`[SyncPull] ✅ انبار ${warehouseId}: ${upserted} upsert، ${deleted} حذف`);
       this._pullCompleted$.next({ warehouseId });
-      return { status: 'completed', upserted, deleted };
+      return { status: 'completed', upserted, deleted, bytes: bytesDownloaded };
     } catch (error: any) {
       console.error('[SyncPull] ❌ خطا در Pull:', error);
       return { status: 'error', message: error?.message || 'unknown' };
     } finally {
       this.inFlight = false;
       this._isPulling$.next(false);
+      this._pullProgress$.next(null);
     }
   }
 

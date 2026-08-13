@@ -10,7 +10,3 @@
 - `[x]` بیلد و تست
 
 </div>
-
-
-# پیاده‌سازی مکانیزم اطلاع‌رسانی بروزرسانی PWA
-رجوع شود به e:\warehouse project\Documents\PWA_Update\task_PWA_Update.md

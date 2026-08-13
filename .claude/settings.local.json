@@ -21,7 +21,24 @@
       "Bash(node \"C:/Users/Payandeh/AppData/Local/npm-cache/_npx/8ddf6bea01b2519d/node_modules/@testsprite/testsprite-mcp/dist/index.js\" generateCodeAndExecute)",
       "Bash(venv/Scripts/python.exe manage.py shell -c ' *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4200 --max-time 5)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(python -m py_compile warehouse-backend/reports/views.py)",
+      "Bash(python -m py_compile warehouse-backend/reports/pdf.py)",
+      "Bash(ls ~/.claude/skills/ 2>/dev/null; ls .claude/skills/ 2>/dev/null; ls .claude/plugins/ 2>/dev/null)",
+      "Bash(netstat -ano)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(grep -o '\"mcpServers\"[^}]*}' \"$HOME/.claude.json\" 2>/dev/null | head -c 2000; echo; echo \"---\"; ls \"$HOME/.claude.json\" 2>/dev/null && echo \"claude.json exists\")",
+      "Bash(node -e \"const m = require\\('E:/warehouse project/warehouse-front/node_modules/http-proxy-middleware'\\); console.log\\(Object.keys\\(m\\)\\);\")",
+      "Bash(node -e ' *)",
+      "Bash(node server.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4200/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4200/api/test/)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(curl -v http://localhost:4200/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:4200/)",
+      "Bash(curl -s -w \"\\\\nHTTP_CODE:%{http_code}\" http://127.0.0.1:4200/api/)",
+      "Bash(python -c \"from reports.engine import ReportEngine; from reports.registry import get_registry, JOINS; print\\('OK — joins:', list\\(JOINS.keys\\(\\)\\)\\)\")",
+      "Bash(python -m py_compile reports/engine.py reports/registry.py reports/views.py)"
     ]
   }
 }

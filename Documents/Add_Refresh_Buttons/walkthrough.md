@@ -1,0 +1,40 @@
+<div dir="rtl" align="right">
+
+# گزارش پیاده‌سازی: دکمه بروزرسانی صفحات
+
+بر اساس طرح اجرایی تایید شده، دکمه "بروزرسانی" (Refresh) با استایل و آیکون یکپارچه مشابه داشبورد انبارگردانی به هدر تمامی تب‌ها و صفحات اصلی سیستم افزوده شد. این امکان به کاربران اجازه می‌دهد تا در هر لحظه داده‌ها را به صورت دستی بارگیری مجدد (Fetch) کنند.
+
+## تغییرات اعمال شده
+
+### ۱. صفحه انبارها (Projects)
+- افزودن دکمه در کنار گزینه‌های جستجو و دانلود اکسل.
+- فراخوانی متد `loadWarehouses()`.
+- [مشاهده تغییرات در فایل](file:///e:/warehouse%20project/warehouse-front/src/app/components/projects/projects.html)
+
+### ۲. مدیریت کاربران و نقش‌ها (Users)
+- افزودن دکمه بروزرسانی به صورت مجزا برای **تب لیست کاربران** و **تب لیست نقش‌ها** قبل از دکمه‌های عملیاتی اکسل.
+- فراخوانی متد سراسری `loadData()`.
+- [مشاهده تغییرات در فایل](file:///e:/warehouse%20project/warehouse-front/src/app/components/users/users.html)
+
+### ۳. فیلدهای پویا (Dynamic Fields)
+- گنجاندن دکمه در هدر اصلی صفحه در کنار دکمه "کپی از انبار دیگر".
+- فراخوانی متد `loadFields()`.
+- [مشاهده تغییرات در فایل](file:///e:/warehouse%20project/warehouse-front/src/app/components/dynamic-fields/dynamic-fields.html)
+
+### ۴. تنظیمات کلان سیستم (Global Settings)
+- افزودن دکمه بروزرسانی در هدر چسبنده (Sticky Header) در کنار دکمه "ذخیره و اعمال تنظیمات".
+- فراخوانی متد `loadSettings()`.
+- [مشاهده تغییرات در فایل](file:///e:/warehouse%20project/warehouse-front/src/app/components/settings/settings.html)
+
+### ۵. تنظیمات اختصاصی انبار (Warehouse Settings)
+- افزودن دکمه بروزرسانی در هدر چسبنده در کنار دکمه "ذخیره تنظیمات".
+- فراخوانی متد `loadSettings()`.
+- [مشاهده تغییرات در فایل](file:///e:/warehouse%20project/warehouse-front/src/app/components/wh-settings/wh-settings.html)
+
+## وضعیت تست و بررسی
+> [!NOTE]  
+> دکمه‌ها در ساختار HTML تزریق شده و متدهای پیش‌فرض بارگیری مجدد متصل شده‌اند. به دلیل استفاده از استایل‌های استاندارد Tailwind و SVG چرخشی، از نظر بصری کاملاً با ساختار قبلی برنامه مطابقت دارند.
+
+توصیه می‌شود در صورت نیاز، عملکرد این دکمه‌ها در محیط عملیاتی UI بررسی شود.
+
+</div>

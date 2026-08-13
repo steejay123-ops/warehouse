@@ -1,14 +1,33 @@
 cd "e:\warehouse project\warehouse-backend"
 .\venv\Scripts\python manage.py runserver 8000
 
+WebSocket 
+.\venv\Scripts\activate
+
+python -m daphne -b 0.0.0.0 -p 8000 config.asgi:application
+
+.\venv\Scripts\python.exe -m daphne -b 0.0.0.0 -p 8000 config.asgi:application
+
+
+
 cd "e:\warehouse project\warehouse-front"
 npm run start
+npm run start -- --port 4300
 
 
 npm run build
-
 clear
 node server.js
+
+
+کلاد فلر با دامنه خودت
+npx cloudflared tunnel login
+npx cloudflared tunnel create warehouse
+npx cloudflared tunnel route dns warehouse app.farsalish.ir
+
+clear
+npx cloudflared tunnel run --url http://localhost:4200 warehouse
+
 
 clear
 .\venv\Scripts\activate
@@ -23,13 +42,6 @@ clear
 python manage.py migrate
 
 
-کلاد فلر با دامنه خودت
-npx cloudflared tunnel login
-npx cloudflared tunnel create warehouse
-npx cloudflared tunnel route dns warehouse app.farsalish.ir
-
-clear
-npx cloudflared tunnel run --url http://localhost:4200 warehouse
 
 
 npx serve dist/warehouse-app/browser -s -p 4200
@@ -79,4 +91,36 @@ python manage.py axes_reset
  http://localhost:8000/admin
 
 
- 
+ cd C:\Users\Payandeh
+ omniroute
+
+
+
+
+نصب سراسریruflo
+npm install -g ruflo@latest
+
+معرفی د پوشه
+npx ruflo@latest init wizard
+
+npx ruflo@latest init wizard
+
+معرفی mcp
+claude mcp add ruflo -- npx ruflo@latest mcp start
+
+
+claude mcp remove ruflo
+npm uninstall -g ruflo
+
+افزایش رم
+$env:NODE_OPTIONS="--max-old-space-size=8192"
+
+لاگ دقیق
+$env:RUST_BACKTRACE=1
+
+پاک کردن کش
+npm cache clean --force
+
+npx ruflo@latest mcp start
+
+omniroute

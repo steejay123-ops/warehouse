@@ -1,0 +1,11 @@
+# Tasks
+- [x] Add `isFieldCountOnly` logic in `reports.ts`.
+- [x] Implement auto-swap in `updateAggregation` and `addJoin`.
+- [x] Implement run-time validation in `runReport` (fields and `between` bounds).
+- [x] Implement Max Joins limit UI logic.
+- [x] Implement Max Having limit UI logic.
+- [x] Pass `totalConditions` to `FilterGroupComponent` and enforce Max Conditions.
+- [x] Update `reports.html` templates to disable aggregation options based on `isFieldCountOnly`.
+- [x] Update `reports.html` templates to disable "+ Join" and "+ Having" buttons based on limits.
+- [x] Verify functionality via Angular compilation check.
+- [x] Write Walkthrough.

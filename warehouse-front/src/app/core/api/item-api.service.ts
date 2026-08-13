@@ -41,6 +41,11 @@ export class ItemApiService {
     return this.api.patch<Item>(`${this.endpoint}/${id}/`, payload);
   }
 
+  /** حذف رکورد */
+  delete(id: string | number): Observable<any> {
+    return this.api.delete<any>(`${this.endpoint}/${id}/`);
+  }
+
   /** ویرایش دسته‌ای (Inline Edit) */
   bulkUpdate(records: any[]): Observable<{ success: string }> {
     return this.api.post<{ success: string }>(`${this.endpoint}/bulk_update/`, records);

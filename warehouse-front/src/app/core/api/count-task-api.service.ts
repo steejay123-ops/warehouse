@@ -46,4 +46,12 @@ export class CountTaskApiService {
   managerReject(id: number | string, note: string): Observable<{ message: string }> {
     return this.api.post<{ message: string }>(`${this.endpoint}/${id}/manager_reject/`, { note });
   }
+
+  getExportColumns(): Observable<{ key: string; label: string }[]> {
+    return this.api.get<{ key: string; label: string }[]>(`${this.endpoint}/get_export_columns`);
+  }
+
+  exportExcel(payload: any): Observable<Blob> {
+    return this.api.downloadPost(`${this.endpoint}/export_excel`, payload);
+  }
 }

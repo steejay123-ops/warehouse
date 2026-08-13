@@ -1,19 +1,54 @@
-<div class="h-full flex flex-col bg-slate-50">
+<div class="h-full flex flex-col bg-surface">
   <!-- Header -->
-  <div class="bg-white border-b px-6 py-4 flex-none">
+  <div class="bg-background border-b px-6 py-4 flex-none">
     <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-bold text-slate-800">پیگیری وضعیت شمارش</h1>
-        <p class="text-sm text-slate-500 mt-1">مدیریت و پیگیری کالاهای تخصیص یافته به انبارگردان‌ها</p>
+      <div class="flex items-center gap-3">
+        <div>
+          <h1 class="text-xl font-bold text-foreground">پیگیری وضعیت شمارش</h1>
+          <p class="text-sm text-slate-500 mt-1">مانیتورینگ و پیگیری لحظه‌ای پیشرفت تیم‌های انبارگردانی</p>
+        </div>
       </div>
       
       <div class="flex items-center gap-3">
+        <!-- Refresh Button -->
+        <button type="button" [disabled]="isLoading" (click)="loadTasks()" class="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm disabled:opacity-50" title="بروزرسانی">
+          <svg *ngIf="!isLoading" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span *ngIf="isLoading" class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+        </button>
+        <div class="w-48">
+          <app-warehouse-selector
+            *ngIf="!authStore.isWarehouseContext()"
+            [allowAll]="true"
+            [projects]="state.appState.projects"
+            [activeId]="authStore.activeWarehouseId()"
+            (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
+          ></app-warehouse-selector>
+        </div>
+
+        <button (click)="toggleDiscrepancyFilter()"
+                [class]="showOnlyDiscrepancies ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-surface text-slate-600 border border-border hover:bg-surface'"
+                class="px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          {{ showOnlyDiscrepancies ? 'نمایش همه' : 'فقط دارای مغایرت' }}
+        </button>
+
         <button (click)="toggleCompleted()" 
-                [class]="showCompleted ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'"
+                [class]="showCompleted ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-surface text-slate-600 border border-border hover:bg-surface'"
                 class="px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
           <svg *ngIf="showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           <svg *ngIf="!showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
-          نمایش پایان‌یافته
+          {{ showCompleted ? 'مخفی کردن پایان‌یافته' : 'نمایش پایان‌یافته' }}
+        </button>
+
+        <button (click)="openExportModal()"
+                class="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                title="خروجی اکسل">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          خروجی اکسل
         </button>
 
         <button (click)="loadTasks()" 
@@ -21,64 +56,74 @@
                 title="بروزرسانی">
           <i class="feather-refresh-cw" [class.animate-spin]="isLoading"></i>
         </button>
-        
-        <button (click)="cancelAllocation()" 
-                [disabled]="selectedTaskIds.size === 0"
-                class="btn-danger flex items-center gap-2">
-          <i class="feather-x-circle"></i>
-          <span>لغو تخصیص ({{ selectedTaskIds.size }})</span>
-        </button>
       </div>
     </div>
-    
-    <!-- Filters -->
-    <div class="mt-4 flex items-center gap-4">
-      <div class="relative flex-1 max-w-md">
-        <i class="feather-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-        <input type="text" 
-               [(ngModel)]="searchQuery" 
-               (ngModelChange)="applyFilters()"
-               placeholder="جستجو در کد یا نام کالا..." 
-               class="form-input pl-4 pr-10 w-full rounded-lg border-slate-200">
+
+    <!-- Mini Dashboard -->
+    <div class="flex items-center gap-3 mt-3">
+      <div class="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-500"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+        <span class="text-[10px] font-bold text-slate-500">کل:</span>
+        <span class="text-xs font-black text-foreground">{{ statTotal }}</span>
       </div>
-      
-      <select [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()" class="form-select rounded-lg border-slate-200">
-        <option value="">همه وضعیت‌ها</option>
-        <option value="PENDING_COUNT">در حال شمارش</option>
-        <option value="COUNTED">در کارتابل سرپرست</option>
-        <option value="MANAGER_REVIEW">در کارتابل مدیر</option>
-      </select>
+      <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-blue-500"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+        <span class="text-[10px] font-bold text-blue-500">شمرده شده:</span>
+        <span class="text-xs font-black text-blue-800">{{ statCounted }}</span>
+      </div>
+      <div class="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-rose-500"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <span class="text-[10px] font-bold text-rose-500">دارای مغایرت:</span>
+        <span class="text-xs font-black text-rose-800">{{ statDiscrepancy }}</span>
+      </div>
+      <div class="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-emerald-500"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+        <span class="text-[10px] font-bold text-emerald-500">تأیید نهایی:</span>
+        <span class="text-xs font-black text-emerald-800">{{ statApproved }}</span>
+      </div>
     </div>
   </div>
 
   <!-- Content -->
   <div class="flex-1 p-6 overflow-hidden">
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
+    <div class="bg-background rounded-xl shadow-sm border border-border h-full flex flex-col overflow-hidden">
       
-      <!-- Loading State -->
-      <div *ngIf="isLoading" class="p-8 flex flex-col items-center justify-center text-slate-500 flex-1">
-        <i class="feather-loader animate-spin text-3xl mb-4 text-blue-600"></i>
-        <p>در حال دریافت اطلاعات...</p>
-      </div>
-
-      <!-- Empty State -->
-      <div *ngIf="!isLoading && filteredTasks.length === 0" class="p-12 flex flex-col items-center justify-center text-slate-500 flex-1">
-        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-          <i class="feather-inbox text-2xl text-slate-400"></i>
-        </div>
-        <p class="text-lg font-medium text-slate-700">موردی یافت نشد</p>
-        <p class="text-sm mt-1">با این فیلترها کالایی برای پیگیری وجود ندارد.</p>
-      </div>
-
       <!-- Data Table -->
-      <app-data-table *ngIf="!isLoading && filteredTasks.length > 0"
+      <app-data-table
                       class="flex-1"
-                      [data]="filteredTasks"
+                      [data]="paginatedTasks"
+                      [totalCount]="filteredTasks.length"
+                      [currentPage]="currentPage"
+                      [pageSize]="pageSize"
                       [selectable]="true"
+                      [selectedIds]="selectedTaskIds"
                       [visibleColumns]="visibleCols"
-                      (selectionChanged)="onSelectionChange($event)">
-        <ng-template appTableCol="warehouse_name" label="انبار" let-row="row">
-          <span class="text-[11px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg">
+                      [rowClass]="getRowClass.bind(this)"
+                      [isLoading]="isLoading"
+                      [emptyMessage]="'با این فیلترها کالایی برای پیگیری وجود ندارد.'"
+                      (selectionChanged)="onSelectionChange($event)"
+                      (searchChanged)="onTableSearch($event)"
+                      (filterChanged)="onTableFilter($event)"
+                      (filtersCleared)="onFiltersCleared()"
+                      (pageChanged)="onPageChange($event)"
+                      (sortChanged)="onSortChanged($event)">
+        <!-- Table Actions: Bulk Cancel -->
+        <div table-actions class="flex items-center gap-3">
+          <button *ngIf="selectedTaskIds.size > 0" 
+                  (click)="cancelAllocation()" 
+                  class="bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-sm animate-fade-in">
+            <i class="feather-trash-2"></i>
+            <span>لغو تخصیص ({{ selectedTaskIds.size }} مورد)</span>
+          </button>
+          <button (click)="bulkApproveGreenTasks()"
+                  class="bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span>تأیید گروهی بدون مغایرت</span>
+          </button>
+        </div>
+
+        <ng-template appTableCol="warehouse_name" label="انبار" filterType="checkbox_text" [filterOptions]="warehouseOptions" let-row="row">
+          <span class="text-[11px] font-black text-foreground bg-surface border border-border px-2 py-1 rounded-lg">
             {{ row.item_details?.warehouse_name || '-' }}
           </span>
         </ng-template>
@@ -90,67 +135,208 @@
         </ng-template>
 
         <ng-template appTableCol="description" label="شرح کالا" let-row="row">
-          <div class="text-slate-700 font-bold text-[12px] max-w-[200px] truncate" [title]="row.item_details?.description">
+          <div class="text-foreground font-bold text-[12px] max-w-[200px] truncate" [title]="row.item_details?.description || ''">
             {{ row.item_details?.description || '-' }}
           </div>
         </ng-template>
 
-        <ng-template appTableCol="counter" label="انبارگردان" let-row="row">
-          <div class="flex flex-col">
-            <span class="text-[11px] font-black text-slate-700">{{ row.counter_name || 'نامشخص' }}</span>
-            <span *ngIf="getStageDuration(row, 'counter') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+        <ng-template appTableCol="counter" label="انبارگردان" filterType="checkbox_text" [filterOptions]="counterOptions" let-row="row">
+          <div class="flex flex-col" [title]="row.counter_note || 'بدون یادداشت'">
+            <span class="text-[11px] font-black text-foreground border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.counter_name || 'نامشخص' }}</span>
+            <span *ngIf="row._computed_counter_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              {{ dur }}
+              {{ row._computed_counter_dur }}
             </span>
           </div>
         </ng-template>
 
-        <ng-template appTableCol="supervisor" label="سرپرست" let-row="row">
-          <div class="flex flex-col" *ngIf="row.supervisor_name">
-            <span class="text-[11px] font-black text-slate-700">{{ row.supervisor_name }}</span>
-            <span *ngIf="getStageDuration(row, 'supervisor') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+        <ng-template appTableCol="supervisor" label="سرپرست" filterType="checkbox_text" [filterOptions]="supervisorOptions" let-row="row">
+          <div class="flex flex-col" *ngIf="row.supervisor_name" [title]="row.supervisor_note || 'بدون یادداشت'">
+            <span class="text-[11px] font-black text-foreground border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.supervisor_name }}</span>
+            <span *ngIf="row._computed_supervisor_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              {{ dur }}
+              {{ row._computed_supervisor_dur }}
             </span>
           </div>
-          <span *ngIf="!row.supervisor_name" class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md inline-block">ندارد</span>
+          <span *ngIf="!row.supervisor_name" class="text-[10px] font-bold text-slate-400 bg-surface px-2 py-0.5 rounded-md inline-block">ندارد</span>
         </ng-template>
 
-        <ng-template appTableCol="manager" label="مدیریت" let-row="row">
-          <div class="flex flex-col">
-            <span class="text-[11px] font-black" [ngClass]="row.assigned_manager_name || getManagerName(row) !== 'استخر مشترک' ? 'text-indigo-700' : 'text-slate-700'">
-              {{ getManagerName(row) }}
+        <ng-template appTableCol="manager" label="مدیریت" filterType="checkbox_text" [filterOptions]="managerOptions" let-row="row">
+          <div class="flex flex-col" [title]="row.manager_note || 'بدون یادداشت'">
+            <span class="text-[11px] font-black border-b border-dashed pb-0.5 w-max" [ngClass]="row._computed_manager_name !== 'استخر مشترک' ? 'text-indigo-700 border-indigo-200' : 'text-foreground border-slate-300'">
+              {{ row._computed_manager_name }}
             </span>
-            <span *ngIf="getStageDuration(row, 'manager') as dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
+            <span *ngIf="row._computed_manager_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              {{ dur }}
+              {{ row._computed_manager_dur }}
             </span>
-            <span *ngIf="!getStageDuration(row, 'manager')" class="text-[9px] text-slate-400 font-medium mt-1">-</span>
+            <span *ngIf="!row._computed_manager_dur" class="text-[9px] text-slate-400 font-medium mt-1">-</span>
           </div>
         </ng-template>
 
-        <ng-template appTableCol="status" label="وضعیت فعلی" let-row="row">
-          <div *ngIf="row.status === 'FINAL_APPROVED'" class="flex flex-col gap-1 items-start">
+        <ng-template appTableCol="status" label="وضعیت فعلی" filterType="checkbox_text" [filterOptions]="statusOptions" let-row="row">
+          <div *ngIf="row.status === 'FINAL_APPROVED'" class="flex flex-col gap-1 items-start" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
             <span class="px-2 py-1 rounded-md text-[10px] font-black border bg-emerald-100 text-emerald-700 border-emerald-200">
-              تایید: {{ getManagerName(row) }}
+              تایید: {{ row._computed_manager_name }}
             </span>
-            <span *ngIf="getStageDuration(row, 'manager') as dur" class="text-[9px] text-slate-500 font-bold flex items-center gap-1">
+            <span *ngIf="row._computed_manager_dur" class="text-[9px] text-slate-500 font-bold flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              {{ dur }}
+              {{ row._computed_manager_dur }}
             </span>
           </div>
-          <span *ngIf="row.status !== 'FINAL_APPROVED'" class="px-2 py-1 rounded-md text-[10px] font-black border" [class]="getStatusClass(row.status)">
+          <span *ngIf="row.status !== 'FINAL_APPROVED'" [class]="getStatusClass(row.status)" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
             {{ getStatusName(row.status) }}
           </span>
         </ng-template>
 
-        <ng-template appTableCol="counted_balance" label="تعداد شمارش" let-row="row">
-          <div class="text-sm font-black text-slate-800">
+        <ng-template appTableCol="counted_balance" label="تعداد شمارش" filterType="range" let-row="row">
+          <div class="text-sm font-black cursor-default transition-colors" 
+               [ngClass]="getBalanceColorClass(row)" 
+               [title]="'موجودی سیستم: ' + (row.item_details?.inventory != null ? row.item_details?.inventory : 'نامشخص')">
             {{ row.counted_balance !== null ? row.counted_balance : '-' }}
           </div>
+        </ng-template>
+
+        <ng-template appTableCol="discrepancy" label="مغایرت" filterType="range" let-row="row">
+          <div class="text-xs font-black text-center">
+            <span *ngIf="row._discrepancy === null" class="text-slate-400">-</span>
+            <span *ngIf="row._discrepancy !== null && row._discrepancy === 0" class="text-emerald-600">✓ صفر</span>
+            <span *ngIf="row._discrepancy !== null && row._discrepancy > 0" class="text-orange-600">+{{ row._discrepancy }}</span>
+            <span *ngIf="row._discrepancy !== null && row._discrepancy < 0" class="text-rose-600">{{ row._discrepancy }}</span>
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="created_at" label="تاریخ ایجاد" filterType="date_range" let-row="row">
+          <div class="flex flex-col gap-0.5 text-right">
+            <span class="text-[10px] font-bold text-foreground">{{ row.created_at | persianDate:'short' }}</span>
+            <span class="text-[9px] font-mono text-slate-500" dir="ltr">{{ row.created_at | date:'HH:mm' }}</span>
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="updated_at" label="آخرین تغییر" filterType="date_range" let-row="row">
+          <div class="flex flex-col gap-0.5 text-right">
+            <span class="text-[10px] font-bold text-foreground">{{ row.updated_at | persianDate:'short' }}</span>
+            <span class="text-[9px] font-mono text-slate-500" dir="ltr">{{ row.updated_at | date:'HH:mm' }}</span>
+          </div>
+        </ng-template>
+
+        <ng-template appTableCol="actions" label="" [sortable]="false" [filterable]="false" let-row="row">
+          <button *ngIf="row.status === 'PENDING_COUNT'" (click)="cancelSingleAllocation(row)" class="text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition-colors border border-transparent hover:border-rose-100 flex items-center gap-1" title="لغو تخصیص این کالا">
+            <i class="feather-x-circle text-base"></i>
+            <span class="text-[10px] font-bold">لغو</span>
+          </button>
         </ng-template>
       </app-data-table>
 
     </div>
   </div>
+
+  <!-- Export Modal -->
+  <div *ngIf="isExportModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center" dir="rtl">
+    <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" (click)="closeExportModal()"></div>
+    <div class="relative bg-background rounded-2xl shadow-2xl border border-border w-[90%] max-w-md overflow-hidden">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between px-5 py-4 border-b border-border">
+        <div class="flex items-center gap-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-600"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <h3 class="text-sm font-black text-foreground">خروجی اکسل پیگیری شمارش</h3>
+        </div>
+        <button (click)="closeExportModal()" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-surface rounded-lg">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+
+        <!-- Data Scope -->
+        <div>
+          <p class="text-xs font-bold text-slate-600 mb-2">انتخاب داده‌ها</p>
+          <div class="flex gap-2">
+            <label class="flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors"
+                   [class.border-emerald-400]="exportDataScope === 'all'"
+                   [class.bg-emerald-50]="exportDataScope === 'all'"
+                   [class.border-border]="exportDataScope !== 'all'">
+              <input type="radio" name="dataScope" value="all" [(ngModel)]="exportDataScope"
+                     (change)="onExportDataScopeChange('all')" class="accent-emerald-600">
+              <span class="text-xs font-bold text-foreground">همه داده‌ها</span>
+            </label>
+            <label class="flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors"
+                   [class.border-emerald-400]="exportDataScope === 'selected'"
+                   [class.bg-emerald-50]="exportDataScope === 'selected'"
+                   [class.border-border]="exportDataScope !== 'selected'"
+                   [class.opacity-40]="selectedTaskIds.size === 0"
+                   [class.pointer-events-none]="selectedTaskIds.size === 0">
+              <input type="radio" name="dataScope" value="selected" [(ngModel)]="exportDataScope"
+                     (change)="onExportDataScopeChange('selected')" class="accent-emerald-600">
+              <span class="text-xs font-bold text-foreground">ردیف‌های انتخاب شده ({{ selectedTaskIds.size }})</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Column Scope -->
+        <div>
+          <p class="text-xs font-bold text-slate-600 mb-2">انتخاب ستون‌ها</p>
+          <div class="flex gap-2 flex-wrap">
+            <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl border cursor-pointer text-[11px] font-bold transition-colors"
+                   [class.border-emerald-400]="exportColumnScope === 'all_db'"
+                   [class.bg-emerald-50]="exportColumnScope === 'all_db'"
+                   [class.text-emerald-700]="exportColumnScope === 'all_db'"
+                   [class.border-border]="exportColumnScope !== 'all_db'"
+                   [class.text-slate-600]="exportColumnScope !== 'all_db'">
+              <input type="radio" name="colScope" value="all_db" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
+              همه ستون‌ها
+            </label>
+            <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl border cursor-pointer text-[11px] font-bold transition-colors"
+                   [class.border-emerald-400]="exportColumnScope === 'visible'"
+                   [class.bg-emerald-50]="exportColumnScope === 'visible'"
+                   [class.text-emerald-700]="exportColumnScope === 'visible'"
+                   [class.border-border]="exportColumnScope !== 'visible'"
+                   [class.text-slate-600]="exportColumnScope !== 'visible'">
+              <input type="radio" name="colScope" value="visible" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
+              ستون‌های نمایان
+            </label>
+            <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl border cursor-pointer text-[11px] font-bold transition-colors"
+                   [class.border-emerald-400]="exportColumnScope === 'custom'"
+                   [class.bg-emerald-50]="exportColumnScope === 'custom'"
+                   [class.text-emerald-700]="exportColumnScope === 'custom'"
+                   [class.border-border]="exportColumnScope !== 'custom'"
+                   [class.text-slate-600]="exportColumnScope !== 'custom'">
+              <input type="radio" name="colScope" value="custom" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
+              انتخاب دستی
+            </label>
+          </div>
+        </div>
+
+        <!-- Custom Column Selection -->
+        <div *ngIf="exportColumnScope === 'custom'" class="border border-border rounded-xl p-3 max-h-44 overflow-y-auto">
+          <p class="text-[10px] font-black text-slate-400 mb-2">ستون‌هایی که می‌خواهید در خروجی باشند:</p>
+          <div class="grid grid-cols-2 gap-1">
+            <label *ngFor="let col of availableExportColumns" class="flex items-center gap-2 p-1.5 hover:bg-surface rounded cursor-pointer">
+              <input type="checkbox" [checked]="selectedExportColumns.has(col.key)"
+                     (change)="toggleExportColumn(col.key)"
+                     class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+              <span class="text-[11px] font-bold text-foreground">{{ col.label }}</span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-5 py-4 bg-surface border-t border-border flex gap-2">
+        <button (click)="executeExport()" [disabled]="isExporting"
+                class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
+          <svg *ngIf="!isExporting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <svg *ngIf="isExporting" class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+          {{ isExporting ? 'در حال دانلود...' : 'دانلود اکسل' }}
+        </button>
+        <button (click)="closeExportModal()" [disabled]="isExporting"
+                class="px-4 py-2.5 bg-background border border-border text-foreground text-xs font-bold rounded-xl hover:bg-surface transition-colors">
+          لغو
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>

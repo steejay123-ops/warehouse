@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
-import { Observable, from, map, switchMap, of } from 'rxjs';
+import { Observable, Subject, from, map, switchMap, of, takeUntil, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
 import {
@@ -59,8 +59,11 @@ export class ReportApiService {
       })
       .pipe(
         switchMap((res) => {
-          if (res.status === 202 && res.body) {
+          if (res.status === 202) {
             // بدنه blob است ولی محتوایش JSON job — بازگشایی
+            if (!res.body) {
+              return throwError(() => new Error('پاسخ سرور خالی بود — دوباره تلاش کنید.'));
+            }
             return from(res.body.text()).pipe(
               map((txt) => {
                 const j = JSON.parse(txt);
@@ -72,7 +75,10 @@ export class ReportApiService {
               }),
             );
           }
-          return of({ kind: 'file', blob: res.body as Blob } as ExportOutcome);
+          if (!res.body) {
+            return throwError(() => new Error('پاسخ سرور خالی بود — دوباره تلاش کنید.'));
+          }
+          return of({ kind: 'file', blob: res.body } as ExportOutcome);
         }),
       );
   }

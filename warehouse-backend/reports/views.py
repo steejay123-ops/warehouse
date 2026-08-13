@@ -73,11 +73,29 @@ class EntityFieldsView(APIView):
                 'aggregatable': fd.aggregatable,
                 'dynamic': fd.key.startswith('dyn__'),
             })
+
+        # JOINهای مجاز برای این موجودیت
+        from .registry import JOINS
+        entity_joins = JOINS.get(cfg.key, {})
+        joins_out = []
+        for join_key, jd in entity_joins.items():
+            target_cfg = get_registry().get(jd.target)
+            if target_cfg and target_cfg.user_has_access(request.user):
+                joins_out.append({
+                    'key': join_key,
+                    'target': jd.target,
+                    'label': jd.label,
+                    'cardinality': jd.cardinality,
+                    'allowed_types': list(jd.allowed_types),
+                    'default_alias': join_key,
+                })
+
         return Response({
             'entity': cfg.key,
             'label': cfg.label,
             'warehouse_required_for_dynamic': cfg.key == 'items',
             'fields': out,
+            'joins': joins_out,
         })
 
 
@@ -113,8 +131,9 @@ class ExportReportView(APIView):
             report_name = str(spec.get('report_name') or 'report')[:100]
             fmt = str(spec.get('format') or 'xlsx').lower()
             if fmt == 'pdf':
+                safe_pdf_name = f'{report_name}.pdf'
                 return sync_pdf_response(
-                    qs, columns, total, filename='report.pdf', report_name=report_name,
+                    qs, columns, total, filename=safe_pdf_name, report_name=report_name,
                 )
             if total <= SYNC_ROW_LIMIT:
                 return sync_excel_response(
@@ -170,7 +189,7 @@ class ExportJobDownloadView(APIView):
             )
         safe_name = f'report_{job.pk}.xlsx'
         return FileResponse(
-            open(p, 'rb'), as_attachment=True, filename=safe_name,
+            p.open('rb'), as_attachment=True, filename=safe_name,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         )
 

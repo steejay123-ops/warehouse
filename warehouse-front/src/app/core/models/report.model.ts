@@ -26,11 +26,27 @@ export interface ReportFieldMeta {
   dynamic: boolean;
 }
 
+export interface ReportJoinMeta {
+  key: string;           // کلید JOIN در whitelist
+  target: string;        // کلید موجودیت مقصد
+  label: string;         // برچسب فارسی
+  cardinality: 'many' | 'one';
+  allowed_types: ('left' | 'inner')[];
+  default_alias: string; // alias پیشنهادی (= key)
+}
+
 export interface EntityFieldsResponse {
   entity: string;
   label: string;
   warehouse_required_for_dynamic: boolean;
   fields: ReportFieldMeta[];
+  joins: ReportJoinMeta[];
+}
+
+export interface ReportJoinSpec {
+  to: string;            // کلید JOIN در whitelist
+  type: 'left' | 'inner';
+  as: string;            // alias — فیلدهای مقصد با alias.field آدرس‌دهی می‌شوند
 }
 
 /** برگ شرط فیلتر */
@@ -90,6 +106,7 @@ export interface ReportChart {
 export interface ReportSpec {
   entity: string;
   warehouse_id?: number | null;
+  joins?: ReportJoinSpec[];
   fields?: string[];
   filters?: FilterGroup | null;
   group_by?: string[];
@@ -116,6 +133,8 @@ export interface ReportResult {
   page: number;
   page_size: number;
   rows: Record<string, unknown>[];
+  /** حالت JOIN — فقط وقتی joins در spec بود برمی‌گردد */
+  join_mode?: 'flat' | 'exists' | 'aggregated';
 }
 
 export interface ReportTemplate {

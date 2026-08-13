@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { ReportApiService } from '../../core/api/report-api.service';
 import { NetworkStatusService } from '../../core/services/network-status.service';
 import {
@@ -12,6 +13,8 @@ import {
   ReportEntity,
   ReportFieldMeta,
   ReportHaving,
+  ReportJoinMeta,
+  ReportJoinSpec,
   ReportSort,
   ReportSpec,
   ReportTemplate,
@@ -39,7 +42,12 @@ export class ReportStore {
   readonly entityKey = signal<string | null>(null);
   readonly warehouseId = signal<number | null>(null);
   readonly fieldsMeta = signal<ReportFieldMeta[]>([]);
+  readonly joinsMeta = signal<ReportJoinMeta[]>([]);  // JOINهای مجاز از متادیتا
   readonly fieldsLoading = signal(false);
+  readonly isRefreshing = signal(false);
+
+  /** سابسکریپشن loadFields — برای لغو درخواست قبلی در صورت تغییر سریع entity/warehouse (#9) */
+  private _fieldsReq: Subscription | null = null;
 
   readonly fieldByKey = computed(() => {
     const m = new Map<string, ReportFieldMeta>();
@@ -55,10 +63,38 @@ export class ReportStore {
   readonly sort = signal<ReportSort[]>([]);
   readonly filters = signal<FilterGroup | null>(null); // فقط هنگام اجرا ست می‌شود
   readonly chart = signal<ReportChart | null>(null); // فقط-کلاینت؛ در قالب ذخیره می‌شود
+  readonly joins = signal<ReportJoinSpec[]>([]);     // JOINهای انتخاب‌شده
   readonly page = signal(1);
   readonly pageSize = signal(50);
 
   readonly grouped = computed(() => this.groupBy().length > 0);
+
+  /** مجموعه‌ای از aliasهای مربوط به JOINهای چندمقداری (many) */
+  readonly manyJoinAliases = computed(() => {
+    return new Set(this.joinsMeta().filter(j => j.cardinality === 'many').map(j => j.key));
+  });
+
+  /** 
+   * برگرداندن alias اولین جدول چندمقداری که در حال حاضر فیلدی از آن در خروجی انتخاب شده است 
+   * (در selectedFields، groupBy یا aggregations)
+   */
+  readonly activeManyJoinAlias = computed(() => {
+    const manyAliases = this.manyJoinAliases();
+    if (!manyAliases.size) return null;
+    
+    const usedFields = new Set([
+      ...this.selectedFields(),
+      ...this.groupBy(),
+      ...this.aggregations().map(a => a.field)
+    ]);
+    
+    for (const alias of manyAliases) {
+      if ([...usedFields].some(f => f.startsWith(`${alias}.`))) {
+        return alias;
+      }
+    }
+    return null;
+  });
 
   /** aliasهای معتبر تجمیع — منبع گزینه‌های HAVING و محور Y نمودار */
   readonly aggAliases = computed(() =>
@@ -72,6 +108,7 @@ export class ReportStore {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly hasRun = signal(false);
+  readonly joinMode = signal<'flat' | 'exists' | 'aggregated' | null>(null);
 
   // ─── داده نمودار (کل نتیجه تا سقف ۲۰۰ گروه، مستقل از صفحه‌بندی جدول) ───
   readonly chartRows = signal<Record<string, unknown>[]>([]);
@@ -82,6 +119,27 @@ export class ReportStore {
   readonly activeTemplate = signal<ReportTemplate | null>(null);
 
   // ------------------------------------------------------------------ actions
+  refreshAll(): void {
+    this.isRefreshing.set(true);
+    let doneCount = 0;
+    const checkDone = () => {
+      doneCount++;
+      if (doneCount >= 2) {
+        setTimeout(() => this.isRefreshing.set(false), 600);
+      }
+    };
+
+    this.api.getEntities().subscribe({
+      next: (list) => this.entities.set(list),
+      error: (e) => this.error.set(this.msg(e)),
+    }).add(checkDone);
+
+    this.api.getTemplates().subscribe({
+      next: (list) => this.templates.set(list),
+      error: () => {},
+    }).add(checkDone);
+  }
+
   loadEntities(): void {
     this.api.getEntities().subscribe({
       next: (list) => this.entities.set(list),
@@ -99,6 +157,7 @@ export class ReportStore {
       this.sort.set([]);
       this.filters.set(null);
       this.chart.set(null);
+      this.joins.set([]);
       this.rows.set([]);
       this.columns.set([]);
       this.count.set(0);
@@ -108,6 +167,7 @@ export class ReportStore {
     }
     this.error.set(null);
     this.fieldsMeta.set([]);
+    this.joinsMeta.set([]);
     if (key) this.loadFields();
   }
 
@@ -120,18 +180,31 @@ export class ReportStore {
     const key = this.entityKey();
     if (!key) return;
     this.fieldsLoading.set(true);
-    this.api.getFields(key, this.warehouseId()).subscribe({
+    // لغو درخواست قبلی — جلوگیری از race condition هنگام تغییر سریع entity/warehouse (#9)
+    this._fieldsReq?.unsubscribe();
+    this._fieldsReq = this.api.getFields(key, this.warehouseId()).subscribe({
       next: (res: EntityFieldsResponse) => {
+        this._fieldsReq = null;
         this.fieldsMeta.set(res.fields);
+        this.joinsMeta.set(res.joins ?? []);
         this.fieldsLoading.set(false);
         // فیلدهای انتخابی که دیگر مجاز/موجود نیستند حذف شوند
         const valid = new Set(res.fields.map((f) => f.key));
-        this.selectedFields.update((arr) => arr.filter((k) => valid.has(k)));
-        this.groupBy.update((arr) => arr.filter((k) => valid.has(k)));
-        this.aggregations.update((arr) => arr.filter((a) => valid.has(a.field)));
+        // فیلدهای JOIN پیشوند‌دار (alias.field) همیشه معتبرند تا زمانی که JOIN باشد
+        const activeAliases = new Set(this.joins().map((j) => j.as));
+        this.selectedFields.update((arr) =>
+          arr.filter((k) => valid.has(k) || (k.includes('.') && activeAliases.has(k.split('.')[0])))
+        );
+        this.groupBy.update((arr) =>
+          arr.filter((k) => valid.has(k) || (k.includes('.') && activeAliases.has(k.split('.')[0])))
+        );
+        this.aggregations.update((arr) =>
+          arr.filter((a) => valid.has(a.field) || (a.field.includes('.') && activeAliases.has(a.field.split('.')[0])))
+        );
         this.pruneAggDependents();
       },
       error: (e) => {
+        this._fieldsReq = null;
         this.fieldsLoading.set(false);
         this.error.set(this.msg(e));
       },
@@ -156,11 +229,12 @@ export class ReportStore {
     if (!entity) return null;
     const spec: ReportSpec = { entity };
     if (this.warehouseId()) spec.warehouse_id = this.warehouseId();
+    if (this.joins().length) spec.joins = this.joins();
     if (this.grouped()) {
       spec.group_by = this.groupBy();
       spec.aggregations = this.aggregations();
       if (this.having().length) spec.having = this.having();
-      if (this.chart()) spec.chart = this.chart(); // فقط-کلاینت؛ engine نادیده می‌گیرد
+      if (this.chart()) spec.chart = this.chart();
     } else {
       spec.fields = this.selectedFields();
     }
@@ -190,6 +264,7 @@ export class ReportStore {
         this.rows.set(res.rows);
         this.columns.set(res.columns);
         this.count.set(res.count);
+        this.joinMode.set(res.join_mode ?? null);
         this.loading.set(false);
         this.hasRun.set(true);
         if (refreshChart) this.fetchChartRows();
@@ -208,10 +283,12 @@ export class ReportStore {
   fetchChartRows(): void {
     if (!this.grouped() || !this.chart()) {
       this.chartRows.set([]);
+      this.chartRowsLoading.set(false);
       return;
     }
     if (this.page() === 1 && this.count() <= this.rows().length) {
       this.chartRows.set(this.rows());
+      this.chartRowsLoading.set(false);
       return;
     }
     const spec = this.buildSpec(true);
@@ -243,7 +320,9 @@ export class ReportStore {
   applyTemplate(t: ReportTemplate): void {
     this.activeTemplate.set(t);
     this.entityKey.set(t.entity);
-    this.warehouseId.set((t.spec.warehouse_id as number) ?? t.warehouse ?? null);
+    const wId = t.spec.warehouse_id !== undefined ? t.spec.warehouse_id : (t.warehouse ?? null);
+    this.warehouseId.set(wId as number | null);
+    this.joins.set(t.spec.joins ?? []);
     this.selectedFields.set(t.spec.fields ?? []);
     this.groupBy.set(t.spec.group_by ?? []);
     this.aggregations.set(t.spec.aggregations ?? []);

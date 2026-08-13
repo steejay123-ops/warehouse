@@ -10,9 +10,12 @@
 whitelist روابط (`related`) هم فقط FK مستقیم (many-to-one) می‌پذیرد که ردیف
 تکثیر نمی‌کند. تنها استثنا annotationهای تجمیعیِ خودِ رجیستری است (مثل
 Count با distinct=True) که به‌عمد امن ساخته شده‌اند.
+
+برای JOIN چندمقداری (reverse FK) از JoinDef و JOINS whitelist استفاده می‌شود؛
+موتور با FilteredRelation تکثیر ردیف را کنترل می‌کند.
 """
 from dataclasses import dataclass, field as dc_field
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional
 
 from django.db.models import Count, DateField, DecimalField, F, Value
 from django.db.models.fields.json import KeyTextTransform
@@ -35,6 +38,67 @@ AGG_FUNCTIONS = ('count', 'sum', 'avg', 'min', 'max')
 
 # کاربرانی با یکی از این مجوزها اجازه دیدن فیلدهای حساس را دارند
 SENSITIVE_BYPASS_PERMS = ('view_sys_export', 'view_sys_manager_review')
+
+
+# ---------------------------------------------------------------------------
+# JoinDef — تعریف یک JOIN مجاز از یک موجودیت پایه به مقصد (reverse FK)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class JoinDef:
+    target: str           # کلید موجودیت مقصد در رجیستری
+    label: str            # برچسب فارسی برای UI
+    path: str             # related accessor از پایه به مقصد (verified از related_name مدل)
+    cardinality: str      # 'many': یک‌به‌چند | 'one': یک‌به‌یک (بدون گارد تکثیر)
+    warehouse_path: str   # مسیر از مقصد به warehouse_id (برای شرط ON در FilteredRelation)
+    path_to_base: str     # مسیر FK از مقصد به پایه (برای EXISTS subquery)
+    allowed_types: tuple = ('left', 'inner')
+
+
+# ---------------------------------------------------------------------------
+# JOINS whitelist — فقط روابط وارونه‌ای که JOIN آن‌ها مجاز است
+# هر entry دستی و بررسی‌شده است؛ path از related_name مدل تأیید شده.
+# ---------------------------------------------------------------------------
+JOINS: Dict[str, Dict[str, JoinDef]] = {
+    'items': {
+        'count_tasks': JoinDef(
+            target='count_tasks',
+            label='وظایف شمارش',
+            path='count_tasks',          # CountTask.item related_name='count_tasks'
+            cardinality='many',
+            warehouse_path='item__warehouse_id',
+            path_to_base='item',
+        ),
+        'doc_tasks': JoinDef(
+            target='doc_tasks',
+            label='وظایف مدارک',
+            path='doc_tasks',            # DocTask.item related_name='doc_tasks'
+            cardinality='many',
+            warehouse_path='item__warehouse_id',
+            path_to_base='item',
+        ),
+    },
+    'count_tasks': {
+        'ct_history': JoinDef(
+            target='count_task_history',
+            label='تاریخچه شمارش',
+            path='history',              # CountTaskHistory.task related_name='history'
+            cardinality='many',
+            warehouse_path='task__item__warehouse_id',
+            path_to_base='task',
+        ),
+    },
+    'doc_tasks': {
+        'dt_history': JoinDef(
+            target='doc_task_history',
+            label='تاریخچه مدارک',
+            path='history',              # DocTaskHistory.task related_name='history'
+            cardinality='many',
+            warehouse_path='task__item__warehouse_id',
+            path_to_base='task',
+        ),
+    },
+}
+
 
 
 @dataclass(frozen=True)

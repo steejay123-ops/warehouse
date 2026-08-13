@@ -10,7 +10,10 @@ import {
   FilterGroup,
   HavingOperator,
   ReportChart,
+  ReportJoinMeta,
+  ReportJoinSpec,
   ReportTemplate,
+  ReportFieldMeta,
 } from '../../core/models/report.model';
 import { ToastService } from '../../shared/components/toast/toast.component';
 import {
@@ -55,6 +58,8 @@ export class Reports implements OnInit {
 
   // ─── جستجوی فیلدها ───
   fieldSearch = signal('');
+
+  /** فیلدهای پایه با فیلتر جستجو — فیلدهای JOIN از visibleJoinFields() می‌آیند */
   readonly visibleFields = computed(() => {
     const q = this.fieldSearch().trim();
     const all = this.store.fieldsMeta();
@@ -80,7 +85,23 @@ export class Reports implements OnInit {
   // ─── job خروجی بزرگ ───
   exportJobId = signal<number | null>(null);
   exportTotalRows = signal(0);
-  exporting = signal(false);
+  /** export در حال انجام — جداگانه برای PDF و Excel (#8) */
+  exportingPdf = signal(false);
+  exportingExcel = signal(false);
+  /** هر دو با هم — برای disable کردن هر دو دکمه */
+  readonly exporting = computed(() => this.exportingPdf() || this.exportingExcel());
+
+  /** alias تکراری در تجمیع‌ها — block اجرا (#4) */
+  readonly hasAliasConflict = computed(() => {
+    const aliases = this.store.aggAliases();
+    return new Set(aliases).size !== aliases.length;
+  });
+
+  /** نمودار آماده برای رسم — computed برای جلوگیری از محاسبه مضاعف (#23) */
+  readonly chartReady = computed(() => {
+    const c = this.store.chart();
+    return !!(c && c.type && c.x && c.y);
+  });
 
   ngOnInit(): void {
     this.store.loadEntities();
@@ -91,7 +112,7 @@ export class Reports implements OnInit {
     });
     // در کانتکست انبار، انبار فعال پیش‌فرض شود
     const active = this.authStore.activeWarehouseId();
-    if (typeof active === 'number') this.store.warehouseId.set(active);
+    if (typeof active === 'number') this.store.setWarehouse(active);
   }
 
   // ------------------------------------------------------------ entity/fields
@@ -121,8 +142,140 @@ export class Reports implements OnInit {
     });
   }
 
-  // ------------------------------------------------------------ گروه‌بندی
+  // ─────────────────────────── JOINها ───────────────────────────
+  /** JOIN‌هایی که کاربر انتخاب کرده (از store) */
+  readonly activeJoins = computed(() => this.store.joins());
+
+  /** اضافه کردن یک JOIN */
+  addJoin(jm: ReportJoinMeta): void {
+    const current = this.store.joins();
+    if (current.some((j) => j.to === jm.key)) return; // تکراری نباشد
+    const newJoin: ReportJoinSpec = { to: jm.key, type: 'left', as: jm.default_alias };
+    this.store.joins.update((arr) => [...arr, newJoin]);
+    // بعد از اضافه کردن JOIN، فیلدهای مقصد را از API بگیر
+    this._loadJoinTargetFields(jm);
+
+    // بررسی Auto-Swap برای توابع تجمیعی در صورت اضافه شدن جدول چندمقداری
+    if (jm.cardinality === 'many') {
+      let swapped = false;
+      this.store.aggregations.update(arr => arr.map(a => {
+        if (!a.field.includes('.') && a.fn !== 'count') {
+          swapped = true;
+          return { ...a, fn: 'count' };
+        }
+        return a;
+      }));
+      if (swapped) {
+        this.toast.info('به دلیل اضافه شدن جدول چندمقداری، توابع تجمیع فیلدهای پایه برای جلوگیری از محاسبه اشتباه، به صورت خودکار به شمارش (Count) تغییر یافتند.');
+      }
+    }
+  }
+
+  removeJoin(joinKey: string): void {
+    const alias = this.store.joins().find((j) => j.to === joinKey)?.as ?? joinKey;
+    this.store.joins.update((arr) => arr.filter((j) => j.to !== joinKey));
+    // فیلدهای این JOIN را از انتخاب‌ها حذف کن
+    this.clearJoinSelections(alias);
+    // فیلدهای کش این JOIN را حذف کن
+    this._joinTargetFields.update((map) => {
+      const next = new Map(map);
+      next.delete(alias);
+      return next;
+    });
+  }
+
+  clearJoinSelections(alias: string): void {
+    const prefix = `${alias}.`;
+    this.store.selectedFields.update((arr) => arr.filter((k) => !k.startsWith(prefix)));
+    this.store.groupBy.update((arr) => arr.filter((k) => !k.startsWith(prefix)));
+    this.store.aggregations.update((arr) => arr.filter((a) => !a.field.startsWith(prefix)));
+    this.store.pruneAggDependents();
+  }
+
+  checkAndSwitchManyJoin(fieldKey: string): void {
+    if (!fieldKey.includes('.')) return;
+    const alias = fieldKey.split('.')[0];
+    if (this.store.manyJoinAliases().has(alias)) {
+      const active = this.store.activeManyJoinAlias();
+      if (active && active !== alias) {
+        this.clearJoinSelections(active);
+        const activeLabel = this.store.joinsMeta().find(j => j.key === active)?.label || active;
+        this.toast.info(`انتخاب‌های قبلی از جدول «${activeLabel}» به دلیل محدودیت جداول چندمقداری لغو شد.`);
+      }
+    }
+  }
+
+  updateJoinType(joinKey: string, type: 'left' | 'inner'): void {
+    this.store.joins.update((arr) =>
+      arr.map((j) => (j.to === joinKey ? { ...j, type } : j))
+    );
+  }
+
+  /** فیلدهای مقصد هر JOIN — بارگذاری‌شده از API */
+  private _joinTargetFields = signal<Map<string, ReportFieldMeta[]>>(new Map());
+
+  readonly joinTargetFieldsMap = computed(() => this._joinTargetFields());
+
+  /** بارگذاری فیلدهای موجودیت مقصد JOIN از API */
+  private _loadJoinTargetFields(jm: ReportJoinMeta): void {
+    this.reportApi.getFields(jm.target, this.store.warehouseId()).subscribe({
+      next: (res) => {
+        const alias = this.store.joins().find((j) => j.to === jm.key)?.as ?? jm.default_alias;
+        // فیلدها را با پیشوند alias. در map ذخیره کن
+        const prefixed = res.fields.map((f) => ({
+          key: `${alias}.${f.key}`,
+          label: `${f.label} (${jm.label})`,
+          type: f.type,
+          operators: f.operators,
+          choices: f.choices,
+          groupable: f.groupable,
+          aggregatable: f.aggregatable,
+          dynamic: f.dynamic,
+        }));
+        this._joinTargetFields.update((map) => {
+          const next = new Map(map);
+          next.set(alias, prefixed);
+          return next;
+        });
+      },
+      error: () => {/* بی‌صدا — UI بدون فیلدهای JOIN کار می‌کند */},
+    });
+  }
+
+  /** همه فیلدهای قابل انتخاب: پایه + مقصدهای JOIN */
+  readonly allSelectableFields = computed(() => {
+    const base = this.store.fieldsMeta();
+    const joinMap = this._joinTargetFields();
+    const joined = Array.from(joinMap.values()).flat();
+    return [...base, ...joined];
+  });
+
+  /** فیلدهای JOIN برای نمایش در picker — فیلتر با جستجو */
+  readonly visibleJoinFields = computed(() => {
+    const q = this.fieldSearch().trim();
+    const joinMap = this._joinTargetFields();
+    const result: { alias: string; label: string; fields: ReportFieldMeta[] }[] = [];
+    joinMap.forEach((fields, alias) => {
+      const filtered = q ? fields.filter((f) => f.label.includes(q) || f.key.includes(q)) : fields;
+      if (filtered.length) result.push({ alias, label: alias, fields: filtered });
+    });
+    return result;
+  });
+
+  isJoinFieldSelected(key: string): boolean {
+    return this.store.selectedFields().includes(key);
+  }
+
+  toggleJoinField(key: string): void {
+    this.checkAndSwitchManyJoin(key);
+    this.store.selectedFields.update((arr) =>
+      arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key]
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
   toggleGroupBy(key: string): void {
+    this.checkAndSwitchManyJoin(key);
     this.store.groupBy.update((arr) =>
       arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key],
     );
@@ -146,9 +299,32 @@ export class Reports implements OnInit {
     ]);
   }
 
+  isFieldCountOnly(fieldKey: string): boolean {
+    if (!fieldKey) return false;
+    const isBase = !fieldKey.includes('.');
+    const hasManyJoin = this.activeJoins().some(j => {
+      const jm = this.store.joinsMeta().find(m => m.key === j.to);
+      return jm?.cardinality === 'many';
+    });
+    if (isBase && hasManyJoin) return true;
+
+    const fd = this.allSelectableFields().find(f => f.key === fieldKey);
+    if (!fd) return true;
+    return !fd.aggregatable;
+  }
+
   updateAggregation(index: number, patch: Partial<{ field: string; fn: AggFn; alias: string }>): void {
+    if (patch.field) this.checkAndSwitchManyJoin(patch.field);
     this.store.aggregations.update((arr) =>
-      arr.map((a, i) => (i === index ? { ...a, ...patch } : a)),
+      arr.map((a, i) => {
+        if (i !== index) return a;
+        const next = { ...a, ...patch };
+        if (this.isFieldCountOnly(next.field) && next.fn !== 'count') {
+          next.fn = 'count';
+          this.toast.info('تابع تجمیع به دلیل محدودیت فیلد به‌طور خودکار به شمارش (Count) تغییر یافت.');
+        }
+        return next;
+      })
     );
     this.store.pruneAggDependents();
   }
@@ -159,13 +335,18 @@ export class Reports implements OnInit {
   }
 
   aggregatableFields() {
-    return this.store.fieldsMeta().filter((f) => f.aggregatable || f.key === 'id');
+    const base = this.store.fieldsMeta().filter((f) => f.aggregatable || f.key === 'id');
+    const joinFields = Array.from(this._joinTargetFields().values()).flat()
+      .filter((f) => f.aggregatable || f.key.endsWith('.id'));
+    return [...base, ...joinFields];
   }
 
   groupableFields() {
-    return this.store.fieldsMeta().filter((f) => f.groupable);
+    const base = this.store.fieldsMeta().filter((f) => f.groupable);
+    const joinFields = Array.from(this._joinTargetFields().values()).flat()
+      .filter((f) => f.groupable);
+    return [...base, ...joinFields];
   }
-
   // ------------------------------------------------------ HAVING (شرط تجمیع)
   readonly havingOps: { value: HavingOperator; label: string }[] = [
     { value: 'eq', label: 'برابر' },
@@ -256,19 +437,64 @@ export class Reports implements OnInit {
     return c ? this.aliasLabel(c.y) : '';
   }
 
-  chartReady(): boolean {
-    const c = this.store.chart();
-    return !!(c && c.type && c.x && c.y);
+  // ------------------------------------------------------------------ اجرا
+  countTotalConditions(node: any): number {
+    if (!node) return 0;
+    if (node.op) {
+      return (node.children || []).reduce((sum: number, child: any) => sum + this.countTotalConditions(child), 0);
+    }
+    return 1;
   }
 
-  // ------------------------------------------------------------------ اجرا
+  get totalConditionsCount(): number {
+    return this.countTotalConditions(this.filterRoot);
+  }
+
   runReport(): void {
     if (this.store.isOffline()) {
       this.toast.warning('گزارش‌گیری فقط در حالت آنلاین در دسترس است.');
       return;
     }
+    if (!this.store.grouped() && this.store.selectedFields().length === 0) {
+      this.toast.warning('لطفاً حداقل یک فیلد برای نمایش در گزارش انتخاب کنید.');
+      return;
+    }
+    // جلوگیری از HAVING با مقدار خالی (#6)
+    const invalidHaving = this.store.having().some((h) => {
+      if (h.operator === 'between') {
+        return !Array.isArray(h.value) || h.value[0] === null || h.value[1] === null;
+      }
+      return h.value === null || h.value === '';
+    });
+    if (invalidHaving) {
+      this.toast.warning('لطفاً مقدار همه شرط‌های «HAVING» را وارد کنید.');
+      return;
+    }
+    // جلوگیری از فیلترهای ناقص
+    let hasInvalidFilter = false;
+    const checkFilters = (node: any) => {
+      if (node.op) {
+        node.children?.forEach(checkFilters);
+      } else {
+        if (node.operator === 'between' && (!Array.isArray(node.value) || node.value[0] === null || node.value[1] === null)) {
+          hasInvalidFilter = true;
+        } else if (node.operator === 'in' && (!Array.isArray(node.value) || node.value.length === 0)) {
+          hasInvalidFilter = true;
+        }
+      }
+    };
+    checkFilters(this.filterRoot);
+    if (hasInvalidFilter) {
+      this.toast.warning('لطفاً مقدار همه فیلترها را کامل وارد کنید (مخصوصاً فیلترهای بازه و لیستی).');
+      return;
+    }
+
+    // جلوگیری از alias تکراری در تجمیع (#4)
+    if (this.hasAliasConflict()) {
+      this.toast.warning('دو تجمیع با نام مستعار یکسان وجود دارد — لطفاً نام مستعار دستی وارد کنید.');
+      return;
+    }
     this.store.page.set(1);
-    // snapshot کامل درخت فیلتر → store (آبجکت جدید)
     const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
     this.store.run(snapshot.children.length ? snapshot : null, true);
   }
@@ -304,14 +530,24 @@ export class Reports implements OnInit {
       this.toast.warning(`خروجی ${label} فقط در حالت آنلاین در دسترس است.`);
       return;
     }
+    // سینک فیلتر UI — export همیشه با وضعیت فعلی UI باشد، نه آخرین «اجرا» (#2)
+    // store.filters بعد از اتمام export بازگردانده می‌شود تا صفحه‌بندی لطمه نخورد (#3)
+    const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
+    const savedFilters = this.store.filters();
+    this.store.filters.set(snapshot.children.length ? snapshot : null);
     const spec = this.store.buildSpec(true);
+    this.store.filters.set(savedFilters);
+
     if (!spec) return;
     spec.report_name = this.store.activeTemplate()?.name || 'report';
     spec.format = format;
-    this.exporting.set(true);
+
+    const exportSignal = format === 'pdf' ? this.exportingPdf : this.exportingExcel;
+    exportSignal.set(true);
+
     this.reportApi.export(spec).subscribe({
       next: (outcome) => {
-        this.exporting.set(false);
+        exportSignal.set(false);
         if (outcome.kind === 'file') {
           const url = URL.createObjectURL(outcome.blob);
           const a = document.createElement('a');
@@ -328,8 +564,7 @@ export class Reports implements OnInit {
         }
       },
       error: async (e) => {
-        this.exporting.set(false);
-        // خطای blob → متن JSON را دربیاور
+        exportSignal.set(false);
         let msg = `خطا در تولید خروجی ${label}.`;
         try {
           if (e?.error instanceof Blob) {
@@ -357,8 +592,11 @@ export class Reports implements OnInit {
     const entity = this.store.entityKey();
     if (!entity || !this.saveName.trim()) return;
     const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
+    // ذخیره و بازگرداندن store.filters — ذخیره قالب نباید فیلتر اجراشده را تغییر دهد (#3)
+    const savedFilters = this.store.filters();
     this.store.filters.set(snapshot.children.length ? snapshot : null);
     const spec = this.store.buildSpec(true);
+    this.store.filters.set(savedFilters);
     if (!spec) return;
 
     const payload = {
@@ -391,6 +629,15 @@ export class Reports implements OnInit {
     this.filterRoot = t.spec.filters
       ? JSON.parse(JSON.stringify(t.spec.filters))
       : { op: 'AND', children: [] };
+    // بارگذاری فیلدهای مقصد JOINهای ذخیره‌شده در قالب
+    this._joinTargetFields.set(new Map());
+    if (t.spec.joins?.length) {
+      const joinsMeta = this.store.joinsMeta();
+      for (const jspec of t.spec.joins) {
+        const jm = joinsMeta.find((j) => j.key === jspec.to);
+        if (jm) this._loadJoinTargetFields(jm);
+      }
+    }
   }
 
   deleteTemplate(t: ReportTemplate): void {

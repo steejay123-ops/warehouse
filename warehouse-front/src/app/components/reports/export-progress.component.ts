@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Subscription, interval } from 'rxjs';
 import { ReportApiService } from '../../core/api/report-api.service';
 import { ReportExportJob } from '../../core/models/report.model';
+import { ToastService } from '../../shared/components/toast/toast.component';
 
 /**
  * نوار پیشرفت خروجی Excel بزرگ — poll هر ۲ ثانیه از /exports/<id>/
@@ -13,9 +14,9 @@ import { ReportExportJob } from '../../core/models/report.model';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-sm">
+    <div class="bg-background rounded-xl border border-border p-3 space-y-2 shadow-sm">
       <div class="flex items-center justify-between gap-2">
-        <div class="text-xs font-bold text-slate-700">
+        <div class="text-xs font-bold text-foreground">
           خروجی Excel ({{ job?.total_rows ?? totalRows }} ردیف)
         </div>
         <button type="button" (click)="close.emit()" class="text-slate-400 hover:text-slate-600 text-xs">✕</button>
@@ -26,13 +27,16 @@ import { ReportExportJob } from '../../core/models/report.model';
       } @else if (job?.status === 'done') {
         <div class="flex items-center gap-2">
           <span class="text-xs text-emerald-600 font-bold">فایل آماده است ✓</span>
-          <button type="button" (click)="download()"
-                  class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+          <button type="button" (click)="download()" [disabled]="downloading"
+                  class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+            @if (downloading) {
+              <svg class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            }
             دانلود فایل
           </button>
         </div>
       } @else {
-        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+        <div class="w-full bg-surface rounded-full h-2 overflow-hidden">
           <div class="bg-indigo-500 h-2 rounded-full transition-all duration-500"
                [style.width.%]="job?.progress ?? 0"></div>
         </div>
@@ -45,6 +49,7 @@ import { ReportExportJob } from '../../core/models/report.model';
 })
 export class ExportProgressComponent implements OnInit, OnDestroy {
   private api = inject(ReportApiService);
+  private toast = inject(ToastService);
 
   @Input({ required: true }) jobId!: number;
   @Input() totalRows = 0;
@@ -52,12 +57,18 @@ export class ExportProgressComponent implements OnInit, OnDestroy {
   @Output() close = new EventEmitter<void>();
 
   job: ReportExportJob | null = null;
+  downloading = false;
   private sub: Subscription | null = null;
 
   ngOnInit(): void {
     this.poll();
     this.sub = interval(2000).subscribe(() => {
-      if (this.job?.status === 'done' || this.job?.status === 'failed') return;
+      if (this.job?.status === 'done' || this.job?.status === 'failed') {
+        // job تمام شده — interval دیگر لازم نیست (#13)
+        this.sub?.unsubscribe();
+        this.sub = null;
+        return;
+      }
       this.poll();
     });
   }
@@ -74,14 +85,21 @@ export class ExportProgressComponent implements OnInit, OnDestroy {
   }
 
   download(): void {
+    if (this.downloading) return; // جلوگیری از کلیک چندباره (#14)
+    this.downloading = true;
     this.api.downloadExportFile(this.jobId).subscribe({
       next: (blob) => {
+        this.downloading = false;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = this.fileName;
         a.click();
         URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.downloading = false;
+        this.toast.error('دانلود فایل ناموفق بود — فایل ممکن است منقضی شده باشد. دوباره خروجی بگیرید.');
       },
     });
   }

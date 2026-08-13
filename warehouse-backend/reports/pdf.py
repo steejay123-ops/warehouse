@@ -82,7 +82,9 @@ def _jalali_now_str():
 
 
 def _fmt_number(v):
-    if isinstance(v, (int,)) or (isinstance(v, (float, Decimal)) and float(v).is_integer()):
+    if isinstance(v, int) or (isinstance(v, float) and float(v).is_integer()) or (
+        isinstance(v, Decimal) and v % 1 == 0
+    ):
         return f'{int(v):,}'
     return f'{float(v):,.3f}'.rstrip('0').rstrip('.')
 

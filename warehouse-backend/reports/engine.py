@@ -5,25 +5,28 @@
   ۱. موجودیت + مجوز per-entity
   ۲. محدودسازی به انبارهای تخصیص‌یافته کاربر
   ۳. سد whitelist: هر کلید spec باید در رجیستری مجاز باشد
-  ۴. annotationها (فیلد پویا/محاسباتی)
-  ۵. درخت فیلتر AND/OR ← Q (با coercion امن هر برگ)
-  ۶. گروه‌بندی/تجمیع با values()/annotate()
-  ۷. مرتب‌سازی + صفحه‌بندی
+  ۴. پردازش JOINها (whitelist JOINS) و گسترش فضای فیلد
+  ۵. annotationها (فیلد پویا/محاسباتی)
+  ۶. درخت فیلتر AND/OR ← Q (با coercion امن هر برگ)
+  ۷. گروه‌بندی/تجمیع با values()/annotate()
+  ۸. مرتب‌سازی + صفحه‌بندی
 هر خطای کاربری با ReportError (پیام فارسی + status) بالا می‌آید — هرگز 500.
 """
 import re
 from decimal import Decimal, InvalidOperation
 
 from django.db import DataError, OperationalError, transaction, connection
-from django.db.models import Avg, Count, Max, Min, Q, Sum
+from django.db.models import Avg, Count, Exists, Max, Min, OuterRef, Q, Sum
+from django.db.models import FilteredRelation
 from django.utils.dateparse import parse_date, parse_datetime
 
-from .registry import AGG_FUNCTIONS, get_registry
+from .registry import AGG_FUNCTIONS, JOINS, get_registry
 
 MAX_FILTER_DEPTH = 5
 MAX_FILTER_CONDITIONS = 60
 MAX_HAVING_CONDITIONS = 10
 MAX_PAGE_SIZE = 200
+MAX_JOINS = 2          # حداکثر JOIN در هر گزارش
 
 HAVING_OPERATORS = ('eq', 'gt', 'gte', 'lt', 'lte', 'between')
 STATEMENT_TIMEOUT_MS = 15000  # فیوز ایمنی کوئری‌های run
@@ -60,12 +63,18 @@ class ReportEngine:
         self.user = user
         self.spec = spec if isinstance(spec, dict) else {}
         self._condition_count = 0
+        # اطلاعات JOINهای پردازش‌شده: alias → (JoinDef, join_type)
+        self._joins = {}          # alias → JoinDef
+        self._join_types = {}     # alias → 'left'|'inner'
+        # آیا حداقل یک JOIN با cardinality='many' فعال است
+        self._has_many_join = False
 
         entity_key = self.spec.get('entity')
         registry = get_registry()
         if entity_key not in registry:
             raise ReportError(f'موجودیت نامعتبر: {entity_key}')
         self.config = registry[entity_key]
+        self._entity_key = entity_key
 
         if not self.config.user_has_access(user):
             raise ReportError('شما به این موجودیت دسترسی ندارید.', status=403)
@@ -78,6 +87,93 @@ class ReportEngine:
                 raise ReportError('شناسه انبار نامعتبر است.')
         self._check_warehouse_access()
         self.fields = self.config.allowed_fields(user, self.warehouse_id)
+
+        # پردازش JOINها و گسترش فضای فیلد
+        self._process_joins(registry)
+
+    def _process_joins(self, registry):
+        """اعتبارسنجی JOINهای spec و افزودن فیلدهای مقصد به self.fields."""
+        joins_spec = self.spec.get('joins') or []
+        if not isinstance(joins_spec, list):
+            raise ReportError('ساختار joins نامعتبر است.')
+        if len(joins_spec) > MAX_JOINS:
+            raise ReportError(f'حداکثر {MAX_JOINS} JOIN در هر گزارش مجاز است.')
+
+        entity_joins = JOINS.get(self._entity_key, {})
+        used_aliases = set(self.fields.keys())
+
+        for jspec in joins_spec:
+            if not isinstance(jspec, dict):
+                raise ReportError('هر عنصر joins باید یک آبجکت باشد.')
+            to = jspec.get('to')
+            alias = jspec.get('as') or to
+            join_type = str(jspec.get('type') or 'left').lower()
+
+            # تأیید از whitelist
+            jd = entity_joins.get(to)
+            if jd is None:
+                raise ReportError(f'JOIN نامعتبر یا مجاز نیست: {to}')
+
+            # اعتبارسنجی alias
+            if not alias or not ALIAS_RE.match(alias):
+                raise ReportError(f'alias نامعتبر برای JOIN {to}: {alias!r}')
+            if alias in used_aliases:
+                raise ReportError(f'alias تکراری یا تداخل با فیلد پایه: {alias}')
+            used_aliases.add(alias)
+
+            if join_type not in jd.allowed_types:
+                raise ReportError(f'نوع JOIN نامعتبر برای {to}: {join_type}')
+
+            # مجوز موجودیت مقصد
+            target_cfg = registry.get(jd.target)
+            if target_cfg is None:
+                raise ReportError(f'موجودیت مقصد JOIN یافت نشد: {jd.target}')
+            if not target_cfg.user_has_access(self.user):
+                raise ReportError(
+                    f'به موجودیت مقصد JOIN دسترسی ندارید: {target_cfg.label}', status=403
+                )
+
+            self._joins[alias] = jd
+            self._join_types[alias] = join_type
+            if jd.cardinality == 'many':
+                self._has_many_join = True
+
+            # افزودن فیلدهای مقصد با پیشوند alias. به فضای فیلد
+            target_fields = target_cfg.allowed_fields(self.user, self.warehouse_id)
+            for fkey, fd in target_fields.items():
+                prefixed_key = f'{alias}.{fkey}'
+                # مسیر ORM: از طریق FilteredRelation
+                fr_alias = f'{alias}_fr'
+                orm_source = f'{fr_alias}__{fd.source}'
+                from .registry import FieldDef
+                self.fields[prefixed_key] = FieldDef(
+                    key=prefixed_key,
+                    source=orm_source,
+                    label=f'{fd.label} ({target_cfg.label})',
+                    type=fd.type,
+                    choices=fd.choices,
+                    sensitive=fd.sensitive,
+                    groupable=fd.groupable,
+                    aggregatable=fd.aggregatable,
+                    annotation=None,   # annotationهای مقصد جداگانه handle می‌شوند
+                )
+
+    def _build_join_scope_q(self, jd, alias):
+        """شرط انبار برای FilteredRelation — در سطح ON نه WHERE."""
+        if not jd.warehouse_path:
+            return Q()
+        scope_q = Q()
+        if not self.user.is_superuser:
+            assigned = getattr(self, '_assigned_ids', None) or []
+            if assigned:
+                scope_q &= Q(**{
+                    f'{jd.path}__{jd.warehouse_path}__in': assigned
+                })
+        if self.warehouse_id:
+            scope_q &= Q(**{
+                f'{jd.path}__{jd.warehouse_path}': self.warehouse_id
+            })
+        return scope_q
 
     # ------------------------------------------------------------------ scope
     def _check_warehouse_access(self):
@@ -142,20 +238,29 @@ class ReportEngine:
             raise ReportError(f'مقدار نامعتبر برای فیلد «{fd.label}»: {value!r}')
 
     # ---------------------------------------------------------------- filters
-    def _build_q(self, node, depth=0):
-        """ساخت Q یک گره + اعمال فلگ اختیاری not (نقیض) روی گروه یا برگ."""
-        q = self._build_node_q(node, depth)
-        if node.get('not'):
-            q = ~q
-        return q
+    def _wrap_exists(self, q, alias):
+        jd = self._joins[alias]
+        fr_alias = f'{alias}_fr'
+        scope_q = self._build_join_scope_q(jd, alias)
+        
+        if self._join_types.get(alias) == 'inner':
+            q = q & Q(**{f'{fr_alias}__isnull': False})
+            
+        subq = self.config.base_queryset().filter(
+            pk=OuterRef('pk')
+        ).annotate(
+            **{fr_alias: FilteredRelation(jd.path, condition=scope_q)}
+        ).filter(
+            q
+        ).values('pk')
+        return Q(Exists(subq))
 
-    def _build_node_q(self, node, depth=0):
+    def _process_filter_node(self, node, depth=0):
         if not isinstance(node, dict):
             raise ReportError('ساختار فیلتر نامعتبر است.')
         if depth > MAX_FILTER_DEPTH:
             raise ReportError(f'عمق درخت فیلتر بیش از حد مجاز ({MAX_FILTER_DEPTH}) است.')
 
-        # گروه AND/OR
         if 'op' in node:
             op = str(node.get('op', '')).upper()
             if op not in ('AND', 'OR'):
@@ -163,13 +268,73 @@ class ReportEngine:
             children = node.get('children') or []
             if not isinstance(children, list):
                 raise ReportError('children باید لیست باشد.')
-            q = Q()
-            for child in children:
-                cq = self._build_q(child, depth + 1)
-                q = (q & cq) if op == 'AND' else (q | cq)
-            return q
+                
+            processed_children = [self._process_filter_node(c, depth + 1) for c in children]
+            
+            if op == 'AND':
+                alias_groups = {}
+                base_qs = []
+                mixed_qs = []
+                
+                for cq, cpure in processed_children:
+                    if cpure is None:
+                        mixed_qs.append(cq)
+                    elif not cpure:
+                        base_qs.append(cq)
+                    else:
+                        alias = list(cpure)[0]
+                        alias_groups.setdefault(alias, []).append(cq)
+                
+                if not mixed_qs and not base_qs and len(alias_groups) == 1:
+                    alias = list(alias_groups.keys())[0]
+                    combined_q = Q()
+                    for q in alias_groups[alias]:
+                        combined_q &= q
+                    final_q = combined_q
+                    final_pure = {alias}
+                elif not mixed_qs and not alias_groups:
+                    combined_q = Q()
+                    for q in base_qs:
+                        combined_q &= q
+                    final_q = combined_q
+                    final_pure = set()
+                else:
+                    final_q = Q()
+                    for q in base_qs + mixed_qs:
+                        final_q &= q
+                    for alias, qs_list in alias_groups.items():
+                        combined_alias_q = Q()
+                        for q in qs_list:
+                            combined_alias_q &= q
+                        final_q &= self._wrap_exists(combined_alias_q, alias)
+                    final_pure = None
+                    
+            elif op == 'OR':
+                first_pure = processed_children[0][1] if processed_children else set()
+                is_pure = all(cpure == first_pure for _, cpure in processed_children)
+                
+                if is_pure and first_pure is not None:
+                    final_q = Q()
+                    for cq, _ in processed_children:
+                        final_q |= cq
+                    final_pure = first_pure
+                else:
+                    final_q = Q()
+                    for cq, cpure in processed_children:
+                        if cpure and len(cpure) == 1:
+                            final_q |= self._wrap_exists(cq, list(cpure)[0])
+                        else:
+                            final_q |= cq
+                    final_pure = None
 
-        # برگ شرط
+            if node.get('not'):
+                if final_pure and len(final_pure) == 1:
+                    final_q = self._wrap_exists(final_q, list(final_pure)[0])
+                    final_pure = None
+                final_q = ~final_q
+                
+            return final_q, final_pure
+
         self._condition_count += 1
         if self._condition_count > MAX_FILTER_CONDITIONS:
             raise ReportError(f'تعداد شرط‌های فیلتر بیش از حد مجاز ({MAX_FILTER_CONDITIONS}) است.')
@@ -181,26 +346,39 @@ class ReportEngine:
         value = node.get('value')
 
         if operator == 'isnull':
-            return Q(**{f'{fd.source}__isnull': bool(value)})
-        if operator == 'between':
+            base_q = Q(**{f'{fd.source}__isnull': bool(value)})
+        elif operator == 'between':
             if not isinstance(value, (list, tuple)) or len(value) != 2:
                 raise ReportError(f'مقدار بازه برای «{fd.label}» باید دو عضو داشته باشد.')
             lo, hi = self._coerce(fd, value[0]), self._coerce(fd, value[1])
-            return Q(**{f'{fd.source}__gte': lo, f'{fd.source}__lte': hi})
-        if operator == 'in':
+            base_q = Q(**{f'{fd.source}__gte': lo, f'{fd.source}__lte': hi})
+        elif operator == 'in':
             if not isinstance(value, (list, tuple)) or not value:
                 raise ReportError(f'مقدار لیستی برای «{fd.label}» نامعتبر است.')
-            return Q(**{f'{fd.source}__in': [self._coerce(fd, v) for v in value]})
-
-        coerced = self._coerce(fd, value)
-        if operator == 'eq' and fd.type == 'datetime':
-            return Q(**{f'{fd.source}__date': coerced})
-        lookup = OPERATOR_LOOKUPS[operator]
-        return Q(**{f'{fd.source}{lookup}': coerced})
+            base_q = Q(**{f'{fd.source}__in': [self._coerce(fd, v) for v in value]})
+        else:
+            coerced = self._coerce(fd, value)
+            if operator == 'eq' and fd.type == 'datetime':
+                base_q = Q(**{f'{fd.source}__date': coerced})
+            else:
+                lookup = OPERATOR_LOOKUPS[operator]
+                base_q = Q(**{f'{fd.source}{lookup}': coerced})
+        
+        field_key = node.get('field', '')
+        alias = field_key.split('.')[0] if '.' in field_key else None
+        pure = {alias} if alias and alias in getattr(self, '_exists_aliases', set()) else set()
+        
+        if node.get('not'):
+            if pure and len(pure) == 1:
+                base_q = self._wrap_exists(base_q, list(pure)[0])
+                pure = None
+            base_q = ~base_q
+            
+        return base_q, pure
 
     # ------------------------------------------------------------------ build
     def build(self):
-        """ساخت queryset نهایی + توصیف ستون‌ها. خروجی: (queryset, columns)"""
+        """ساخت queryset نهایی + توصیف ستون‌ها. خروجی: (queryset, columns, join_mode)"""
         spec = self.spec
         field_keys = spec.get('fields') or []
         group_by = spec.get('group_by') or []
@@ -244,41 +422,102 @@ class ReportEngine:
             fd = self._field(agg.get('field'), usage='فیلد تجمیع')
             if fn != 'count' and not fd.aggregatable:
                 raise ReportError(f'فیلد «{fd.label}» قابل جمع/میانگین نیست.')
-            alias = agg.get('alias') or f'{fn}_{fd.key}'.replace('__', '_')
+            alias = agg.get('alias') or f'{fn}_{fd.key}'.replace('__', '_').replace('.', '_')
             if not ALIAS_RE.match(alias):
                 raise ReportError(f'نام alias نامعتبر: {alias}')
             if alias in self.fields or alias in used_aliases:
                 raise ReportError(f'alias تکراری یا رزروشده: {alias}')
+            # محدودیت تجمیع در grouped + many JOIN:
+            # Sum/Avg/Min/Max روی فیلدهای اسکالر پایه (نه مقصد JOIN) ممنوع است
+            if grouped and self._has_many_join and fn in ('sum', 'avg', 'min', 'max'):
+                if '.' not in fd.key:  # فیلد پایه (نه alias.field)
+                    raise ReportError(
+                        f'در ترکیب با جدول چندمقداری، {fn} روی فیلد «{fd.label}» '
+                        f'نادرست است. فیلد جدول مقصد را جمع بزنید یا از Count استفاده کنید.'
+                    )
             used_aliases.add(alias)
             agg_specs.append((alias, fn, fd))
 
         # کوئری پایه + scope
         qs = self._scope_queryset(self.config.base_queryset())
 
-        # annotationهای موردنیاز (پویا/محاسباتی) — قبل از فیلتر/گروه/مرتب‌سازی
+        # ── تشخیص فیلدهای JOIN در spec ──
+        join_field_keys = {k for k in field_keys if '.' in k}
+        join_group_keys = {k for k in group_by if '.' in k}
+        join_agg_keys = {fd.key for _, _, fd in agg_specs if '.' in fd.key}
+        join_used_in_output = join_field_keys | join_group_keys | join_agg_keys
+        # alias مقصدهایی که در output (نه فقط filter) استفاده شده‌اند
+        output_join_aliases = {k.split('.')[0] for k in join_used_in_output}
+        
+        many_output_count = sum(1 for a in output_join_aliases if self._joins.get(a) and self._joins[a].cardinality == 'many')
+        if many_output_count > 1:
+            raise ReportError('امکان نمایش همزمان ستون‌ها از چند جدول چندمقداری وجود ندارد. فیلدهای خروجی را فقط از یکی از این جداول انتخاب کنید.')
+
+        # ── تعیین حالت JOIN برای هر alias ──
+        # EXISTS: many JOIN که فقط در filter، نه output
+        # FilteredRelation: سایر موارد
+        join_mode = 'none'
+        self._exists_aliases = set()    # aliasهایی که با EXISTS اجرا می‌شوند
+        fr_aliases = set()        # aliasهایی که FilteredRelation می‌گیرند
+
+        for alias, jd in self._joins.items():
+            if jd.cardinality == 'many' and alias not in output_join_aliases:
+                self._exists_aliases.add(alias)
+            else:
+                fr_aliases.add(alias)
+
+        if fr_aliases:
+            join_mode = 'aggregated' if grouped else 'flat'
+        elif self._exists_aliases:
+            join_mode = 'exists'
+
+        # ── افزودن FilteredRelation برای JOINهای output ──
+        registry = get_registry()
+        for alias in fr_aliases:
+            jd = self._joins[alias]
+            fr_alias = f'{alias}_fr'
+            scope_q = self._build_join_scope_q(jd, alias)
+            qs = qs.annotate(**{fr_alias: FilteredRelation(jd.path, condition=scope_q)})
+            if self._join_types.get(alias) == 'inner':
+                qs = qs.filter(**{f'{fr_alias}__isnull': False})
+
+        # annotationهای موردنیاز (پویا/محاسباتی برای فیلدهای پایه) — قبل از فیلتر
         referenced = set(field_keys) | set(group_by)
         referenced |= {fd.key for _, _, fd in agg_specs}
         referenced |= self._filter_field_keys(spec.get('filters'))
         referenced |= {s.get('field') for s in sort if isinstance(s, dict)}
         annotations = {}
         for k in referenced:
+            if '.' in k:  # فیلدهای JOIN پیشوند‌دار ← annotation جداگانه لازم ندارند
+                continue
             fd = self.fields.get(k)
             if fd is not None and fd.annotation is not None:
                 annotations[fd.key] = fd.annotation()
         if annotations:
             qs = qs.annotate(**annotations)
 
-        # فیلترها
+        # ── فیلترها (شامل شرط‌های روی فیلدهای JOIN از طریق FilteredRelation و EXISTS) ──
         filters = spec.get('filters')
         if filters:
-            qs = qs.filter(self._build_q(filters))
+            q, pure = self._process_filter_node(filters)
+            if pure and len(pure) == 1:
+                q = self._wrap_exists(q, list(pure)[0])
+            qs = qs.filter(q)
 
-        # گروه‌بندی/انتخاب ستون‌ها
+        # ── اعمال EXISTS برای JOINهای filter-only (به _build_node_q منتقل شد) ──
+
+        # ── ساخت queryset نهایی ──
         if grouped:
             group_sources = [gd.source for gd in group_defs]
-            agg_exprs = {alias: AGG_MAP[fn](fd.source) for alias, fn, fd in agg_specs}
+            agg_exprs = {}
+            for alias, fn, fd in agg_specs:
+                if fn == 'count' and '.' not in fd.key:
+                    # Count روی فیلد پایه با distinct=True برای many JOIN
+                    agg_exprs[alias] = Count(fd.source, distinct=bool(fr_aliases))
+                else:
+                    agg_exprs[alias] = AGG_MAP[fn](fd.source)
             qs = qs.values(*group_sources).annotate(**agg_exprs)
-            # HAVING — فیلتر روی نتایج تجمیع (جنگو filter بعد از annotate را HAVING می‌کند)
+            # HAVING
             for h in having:
                 if not isinstance(h, dict):
                     raise ReportError('ساختار شرط HAVING نامعتبر است.')
@@ -306,7 +545,6 @@ class ReportEngine:
             sortable = {gd.key for gd in group_defs} | used_aliases
         else:
             sources = [self.fields[k].source for k in field_keys]
-            qs = qs.values(*sources)
             columns = [
                 {'key': k, 'label': self.fields[k].label, 'type': self.fields[k].type}
                 for k in field_keys
@@ -328,10 +566,23 @@ class ReportEngine:
             order.append(f'-{source}' if direction == 'desc' else source)
         if not grouped:
             order.append('pk')  # tiebreak پایدار برای صفحه‌بندی
+            if getattr(self, '_has_many_join', False):
+                if 'id' not in sources and 'pk' not in sources:
+                    sources.append('id')
+                for alias in fr_aliases:
+                    if self._joins[alias].cardinality == 'many':
+                        alias_pk = f'{alias}_fr__id'
+                        if alias_pk not in sources:
+                            sources.append(alias_pk)
+                        order.append(alias_pk)
+                qs = qs.values(*sources).distinct()
+            else:
+                qs = qs.values(*sources)
+                
         if order:
             qs = qs.order_by(*order)
 
-        return qs, columns
+        return qs, columns, join_mode
 
     def _having_value(self, alias, value):
         """مقدار عددی شرط HAVING — نامعتبر ← 400 فارسی (نتایج تجمیع همیشه عددی‌اند)."""
@@ -362,7 +613,7 @@ class ReportEngine:
 
     # -------------------------------------------------------------------- run
     def run(self):
-        qs, columns = self.build()
+        qs, columns, join_mode = self.build()
 
         page = self.spec.get('page') or 1
         page_size = self.spec.get('page_size') or 50
@@ -390,18 +641,21 @@ class ReportEngine:
             )
 
         rows = [_jsonable(r) for r in rows]
-        return {
+        result = {
             'columns': columns,
             'count': total,
             'page': page,
             'page_size': page_size,
             'rows': rows,
         }
+        if join_mode != 'none':
+            result['join_mode'] = join_mode
+        return result
 
     # ----------------------------------------------------------------- export
     def export_queryset(self):
         """queryset بدون صفحه‌بندی برای خروجی Excel + ستون‌ها + تعداد کل."""
-        qs, columns = self.build()
+        qs, columns, _join_mode = self.build()
         try:
             total = qs.count()
         except DataError:

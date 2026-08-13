@@ -8,20 +8,20 @@
   <div *ngIf="!isLoading" class="space-y-4">
 
     <!-- ─── Template Management Bar ─── -->
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="bg-gradient-to-l from-violet-50 to-white border-b border-slate-100 p-3 flex items-center gap-2 flex-wrap">
+    <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+      <div class="bg-gradient-to-l from-violet-50 to-white border-b border-border p-3 flex items-center gap-2 flex-wrap">
         <!-- Icon -->
         <div class="w-7 h-7 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
         </div>
-        <span class="font-black text-slate-700 text-[11px] shrink-0">تمپلیت فعال:</span>
+        <span class="font-black text-foreground text-[11px] shrink-0">تمپلیت فعال:</span>
 
         <!-- Template Switcher Dropdown -->
         <div class="flex-1 min-w-[140px]">
           <select *ngIf="!isRenaming && !isCopying"
             [ngModel]="template.id"
             (ngModelChange)="switchTemplate($event)"
-            class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 outline-none focus:border-violet-400 appearance-none cursor-pointer">
+            class="w-full px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold text-foreground outline-none focus:border-violet-400 appearance-none cursor-pointer">
             <option *ngFor="let t of templates" [ngValue]="t.id">
               {{ isGlobalTemplate(t) ? '🌐 [اصلی] ' : '' }}{{ t.name }}{{ t.is_active ? ' ⭐' : '' }}
             </option>
@@ -33,10 +33,10 @@
             <input #renameInput type="text" [(ngModel)]="renameValue"
               (keydown.enter)="confirmRename()"
               (keydown.escape)="cancelRename()"
-              class="flex-1 px-2 py-1.5 bg-white border border-violet-400 rounded-lg text-xs font-bold outline-none"
+              class="flex-1 px-2 py-1.5 bg-background border border-violet-400 rounded-lg text-xs font-bold outline-none"
               placeholder="نام جدید..." autofocus>
             <button (click)="confirmRename()" class="px-2 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-bold hover:bg-violet-700">✓</button>
-            <button (click)="cancelRename()" class="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
+            <button (click)="cancelRename()" class="px-2 py-1.5 bg-surface text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
           </div>
 
           <!-- Inline copy input -->
@@ -44,10 +44,10 @@
             <input #copyInput type="text" [(ngModel)]="copyValue"
               (keydown.enter)="confirmCopy()"
               (keydown.escape)="cancelCopy()"
-              class="flex-1 px-2 py-1.5 bg-white border border-sky-400 rounded-lg text-xs font-bold outline-none"
+              class="flex-1 px-2 py-1.5 bg-background border border-sky-400 rounded-lg text-xs font-bold outline-none"
               placeholder="نام کپی..." autofocus>
             <button (click)="confirmCopy()" class="px-2 py-1.5 bg-sky-600 text-white rounded-lg text-xs font-bold hover:bg-sky-700">✓</button>
-            <button (click)="cancelCopy()" class="px-2 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
+            <button (click)="cancelCopy()" class="px-2 py-1.5 bg-surface text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-200">✕</button>
           </div>
         </div>
 
@@ -109,16 +109,16 @@
         </div>
       </div>
 
-      <div *ngIf="isCreatingNew" class="p-3 border-t border-slate-100 bg-emerald-50/50 flex items-center gap-2">
+      <div *ngIf="isCreatingNew" class="p-3 border-t border-border bg-emerald-50/50 flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
         <input type="text" [(ngModel)]="newTemplateName"
           (keydown.enter)="confirmCreate()"
           (keydown.escape)="cancelCreate()"
-          class="flex-1 px-3 py-1.5 bg-white border border-emerald-400 rounded-lg text-xs font-bold outline-none placeholder:text-slate-400"
+          class="flex-1 px-3 py-1.5 bg-background border border-emerald-400 rounded-lg text-xs font-bold outline-none placeholder:text-slate-400"
           placeholder="نام تمپلیت جدید..." autofocus>
         <button (click)="confirmCreate()" [disabled]="!newTemplateName.trim()"
           class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">ایجاد</button>
-        <button (click)="cancelCreate()" class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200">انصراف</button>
+        <button (click)="cancelCreate()" class="px-3 py-1.5 bg-surface text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200">انصراف</button>
       </div>
 
       <!-- No templates yet prompt -->
@@ -133,22 +133,22 @@
     <div *ngIf="mode === 'settings'" class="xl:col-span-5 space-y-4">
 
       <!-- QR Source Field -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-border p-3.5 flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>
           </div>
           <div>
-            <h4 class="font-black text-slate-800 text-[12px]">فیلد QR Code</h4>
+            <h4 class="font-black text-foreground text-[12px]">فیلد QR Code</h4>
             <p class="text-[9px] text-slate-400 mt-0.5">کدام فیلد جدول داخل QR رمزنگاری شود؟</p>
           </div>
         </div>
         <div class="p-3.5 space-y-2.5">
-          <select [(ngModel)]="template.qr_source_field" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+          <select [(ngModel)]="template.qr_source_field" class="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-xs font-bold text-foreground outline-none focus:border-indigo-400 appearance-none cursor-pointer">
             <option *ngFor="let f of qrFieldOptions" [value]="f.key">{{f.label}}</option>
           </select>
           <button (click)="addQrElement()" class="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-[0.98]"
-            [ngClass]="hasQrElement ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'">
+            [ngClass]="hasQrElement ? 'bg-surface text-slate-500 border border-border' : 'bg-indigo-600 text-white shadow-md hover:bg-indigo-700'">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><circle cx="17.5" cy="17.5" r="3.5"/></svg>
             {{ hasQrElement ? 'بازنشانی QR روی بوم' : 'افزودن QR به بوم' }}
           </button>
@@ -156,37 +156,37 @@
       </div>
 
       <!-- Label Dimensions -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-gradient-to-l from-slate-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-slate-50 to-white border-b border-border p-3.5 flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-slate-200 text-slate-600 flex items-center justify-center shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
           </div>
-          <h4 class="font-black text-slate-800 text-[12px]">ابعاد لیبل</h4>
+          <h4 class="font-black text-foreground text-[12px]">ابعاد لیبل</h4>
         </div>
         <div class="p-3.5 grid grid-cols-2 gap-2.5">
           <div>
             <label class="block text-[10px] font-bold text-slate-500 mb-1">عرض (mm)</label>
-            <input type="number" [(ngModel)]="template.width_mm" (ngModelChange)="onDimensionChange()" min="20" max="200" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            <input type="number" [(ngModel)]="template.width_mm" (ngModelChange)="onDimensionChange()" min="20" max="200" class="w-full text-center px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-500 mb-1">ارتفاع (mm)</label>
-            <input type="number" [(ngModel)]="template.height_mm" (ngModelChange)="onDimensionChange()" min="15" max="150" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            <input type="number" [(ngModel)]="template.height_mm" (ngModelChange)="onDimensionChange()" min="15" max="150" class="w-full text-center px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
         </div>
       </div>
 
       <!-- Print Settings -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-gradient-to-l from-blue-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-blue-50 to-white border-b border-border p-3.5 flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           </div>
-          <h4 class="font-black text-slate-800 text-[12px]">تنظیمات چاپ</h4>
+          <h4 class="font-black text-foreground text-[12px]">تنظیمات چاپ</h4>
         </div>
         <div class="p-3.5 grid grid-cols-2 gap-2.5">
           <div>
             <label class="block text-[10px] font-bold text-slate-500 mb-1">نوع کاغذ</label>
-            <select [(ngModel)]="template.paper_type" (ngModelChange)="onDimensionChange()" class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400 appearance-none cursor-pointer">
+            <select [(ngModel)]="template.paper_type" (ngModelChange)="onDimensionChange()" class="w-full px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400 appearance-none cursor-pointer">
               <option value="A4">A4</option>
               <option value="A3">A3</option>
               <option value="roll">رول حرارتی</option>
@@ -194,39 +194,39 @@
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-500 mb-1">حاشیه (mm)</label>
-            <input type="number" [(ngModel)]="template.margin_mm" (ngModelChange)="onDimensionChange()" min="0" max="30" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            <input type="number" [(ngModel)]="template.margin_mm" (ngModelChange)="onDimensionChange()" min="0" max="30" class="w-full text-center px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
           <div *ngIf="template.paper_type !== 'roll'">
             <label class="block text-[10px] font-bold text-slate-500 mb-1">سطر</label>
-            <input type="number" [(ngModel)]="template.grid_rows" (ngModelChange)="onManualGridChange()" min="1" max="20" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            <input type="number" [(ngModel)]="template.grid_rows" (ngModelChange)="onManualGridChange()" min="1" max="20" class="w-full text-center px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
           <div *ngIf="template.paper_type !== 'roll'">
             <label class="block text-[10px] font-bold text-slate-500 mb-1">ستون</label>
-            <input type="number" [(ngModel)]="template.grid_cols" (ngModelChange)="onManualGridChange()" min="1" max="10" class="w-full text-center px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+            <input type="number" [(ngModel)]="template.grid_cols" (ngModelChange)="onManualGridChange()" min="1" max="10" class="w-full text-center px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
           </div>
           <div *ngIf="gridWarning" class="col-span-2 mt-1 px-3 py-2 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-[10.5px] font-bold flex items-start gap-2 fade-in">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             <span class="leading-relaxed">{{gridWarning}}</span>
           </div>
           <!-- توضیحات ویژه برای طراحی -->
-          <div class="col-span-2 space-y-1 pt-2 border-t border-slate-100">
+          <div class="col-span-2 space-y-1 pt-2 border-t border-border">
             <label class="block text-[10px] font-bold text-slate-500 mb-1">نمونه توضیحات ویژه (تستی)</label>
-            <input type="text" [(ngModel)]="customRemark" placeholder="متن تستی برای پیش‌نمایش در بوم..." class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400 placeholder:text-slate-400">
+            <input type="text" [(ngModel)]="customRemark" placeholder="متن تستی برای پیش‌نمایش در بوم..." class="w-full px-2 py-2 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400 placeholder:text-slate-400">
           </div>
         </div>
       </div>
 
       <!-- Available Fields -->
-      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="bg-gradient-to-l from-emerald-50 to-white border-b border-slate-100 p-3.5 flex items-center gap-2">
+      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-l from-emerald-50 to-white border-b border-border p-3.5 flex items-center gap-2">
           <div class="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           </div>
-          <h4 class="font-black text-slate-800 text-[12px]">فیلدهای موجود</h4>
+          <h4 class="font-black text-foreground text-[12px]">فیلدهای موجود</h4>
         </div>
 
-        <div class="p-3 border-b border-slate-100">
-          <input type="text" [(ngModel)]="fieldSearch" placeholder="جستجوی فیلد..." class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-400 placeholder:text-slate-400">
+        <div class="p-3 border-b border-border">
+          <input type="text" [(ngModel)]="fieldSearch" placeholder="جستجوی فیلد..." class="w-full px-3 py-2 bg-surface border border-border rounded-lg text-xs outline-none focus:border-emerald-400 placeholder:text-slate-400">
         </div>
 
         <div class="max-h-[280px] overflow-y-auto p-2 space-y-2 field-list-scroll">
@@ -238,7 +238,7 @@
               class="w-full text-right px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all flex items-center justify-between gap-2"
               [ngClass]="isFieldOnCanvas(f.key)
                 ? 'bg-emerald-50 text-emerald-600 cursor-not-allowed opacity-60'
-                : 'bg-white text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-100'">
+                : 'bg-background text-foreground hover:bg-indigo-50 hover:text-indigo-700 border border-border'">
               <span class="truncate">{{f.label}}</span>
               <svg *ngIf="!isFieldOnCanvas(f.key)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 opacity-40"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <svg *ngIf="isFieldOnCanvas(f.key)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0"><polyline points="20 6 9 17 4 12"/></svg>
@@ -261,25 +261,25 @@
     <!-- ─── LEFT PANEL: Print Settings (3/12 — Sticky) ─── -->
     <div *ngIf="mode === 'print'" class="xl:col-span-3 space-y-3">
       <div class="sticky top-0 space-y-3">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-slate-100 p-3 flex items-center gap-2">
+        <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
+          <div class="bg-gradient-to-l from-indigo-50 to-white border-b border-border p-3 flex items-center gap-2">
             <div class="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </div>
-            <h4 class="font-black text-slate-800 text-[11px]">تنظیمات چاپ</h4>
+            <h4 class="font-black text-foreground text-[11px]">تنظیمات چاپ</h4>
           </div>
           <div class="p-3 space-y-3">
 
             <!-- تعداد کپی -->
             <div class="space-y-1">
               <label class="block text-[10px] font-bold text-slate-600">تعداد کپی هر آیتم</label>
-              <input type="number" min="1" [(ngModel)]="bulkQuantity" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
+              <input type="number" min="1" [(ngModel)]="bulkQuantity" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-indigo-400">
             </div>
 
             <!-- نوع کاغذ -->
             <div class="space-y-1">
               <label class="block text-[10px] font-bold text-slate-600">نوع کاغذ</label>
-              <select [(ngModel)]="tempPrintSettings.paper_type" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
+              <select [(ngModel)]="tempPrintSettings.paper_type" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-full px-2 py-1.5 bg-surface border border-border rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
                 <option value="A4">A4</option>
                 <option value="A3">A3</option>
                 <option value="roll">رول حرارتی</option>
@@ -289,7 +289,7 @@
             <!-- حاشیه -->
             <div class="space-y-1" *ngIf="tempPrintSettings.paper_type !== 'roll'">
               <label class="block text-[10px] font-bold text-slate-600">حاشیه (mm)</label>
-              <input type="number" [(ngModel)]="tempPrintSettings.margin_mm" (ngModelChange)="onPrintSettingChange()" min="0" max="30" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
+              <input type="number" [(ngModel)]="tempPrintSettings.margin_mm" (ngModelChange)="onPrintSettingChange()" min="0" max="30" [disabled]="isGeneratingPreview" class="w-full text-center px-2 py-1.5 bg-surface border border-border rounded-lg text-[11px] font-bold outline-none focus:border-indigo-400">
             </div>
 
             <!-- مقیاس (Scale) -->
@@ -304,21 +304,21 @@
             <!-- Landscape -->
             <div class="flex items-center gap-2" *ngIf="tempPrintSettings.paper_type !== 'roll'">
               <input type="checkbox" id="landscapeMode" [(ngModel)]="tempPrintSettings.landscape" (ngModelChange)="onPrintSettingChange()" [disabled]="isGeneratingPreview" class="w-3.5 h-3.5 text-indigo-600 rounded focus:ring-indigo-500">
-              <label for="landscapeMode" class="text-[10px] font-bold text-slate-700 cursor-pointer">افقی (Landscape)</label>
+              <label for="landscapeMode" class="text-[10px] font-bold text-foreground cursor-pointer">افقی (Landscape)</label>
             </div>
 
             <!-- Collation -->
-            <div class="space-y-1.5 pt-2 border-t border-slate-100" *ngIf="bulkQuantity > 1">
+            <div class="space-y-1.5 pt-2 border-t border-border" *ngIf="bulkQuantity > 1">
               <label class="block text-[10px] font-bold text-slate-600">نحوه چیدمان</label>
               <div class="flex gap-1">
                 <button (click)="tempPrintSettings.collation = 'group'; onPrintSettingChange()"
                   class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
-                  [ngClass]="tempPrintSettings.collation === 'group' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                  [ngClass]="tempPrintSettings.collation === 'group' ? 'bg-indigo-600 text-white' : 'bg-surface text-slate-600 hover:bg-slate-200'">
                   دسته‌ای
                 </button>
                 <button (click)="tempPrintSettings.collation = 'collate'; onPrintSettingChange()"
                   class="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-colors"
-                  [ngClass]="tempPrintSettings.collation === 'collate' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+                  [ngClass]="tempPrintSettings.collation === 'collate' ? 'bg-indigo-600 text-white' : 'bg-surface text-slate-600 hover:bg-slate-200'">
                   مجموعه‌ای
                 </button>
               </div>
@@ -328,9 +328,9 @@
             </div>
 
             <!-- توضیحات ویژه -->
-            <div class="space-y-1 pt-2 border-t border-slate-100">
+            <div class="space-y-1 pt-2 border-t border-border">
               <label class="block text-[10px] font-bold text-slate-600">توضیحات ویژه (موقت)</label>
-              <input type="text" [(ngModel)]="customRemark" (ngModelChange)="onPrintSettingChange()" placeholder="مثال: بخش فنی" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] outline-none focus:border-indigo-400 placeholder:text-slate-400">
+              <input type="text" [(ngModel)]="customRemark" (ngModelChange)="onPrintSettingChange()" placeholder="مثال: بخش فنی" class="w-full px-2 py-1.5 bg-surface border border-border rounded-lg text-[11px] outline-none focus:border-indigo-400 placeholder:text-slate-400">
               <!-- هشدار عدم وجود فیلد روی بوم -->
               <div *ngIf="customRemark && !hasCustomRemarkField" class="px-2 py-1.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-lg text-[9px] font-bold flex items-start gap-1.5">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -339,7 +339,7 @@
             </div>
 
             <!-- دکمه چاپ -->
-            <div class="pt-3 border-t border-slate-100 mt-4">
+            <div class="pt-3 border-t border-border mt-4">
               <button (click)="directPrint()" [disabled]="isPrinting"
                 class="w-full py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700">
                 <span *ngIf="isPrinting" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
@@ -357,26 +357,26 @@
     <div class="flex flex-col gap-4" [ngClass]="mode === 'print' ? 'xl:col-span-9' : 'xl:col-span-7'">
       
       <!-- Toolbar (Above Canvas) -->
-      <div *ngIf="selectedElement && mode === 'settings'" class="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden flex flex-col p-3 gap-2 fade-in">
+      <div *ngIf="selectedElement && mode === 'settings'" class="bg-background rounded-xl border border-amber-200 shadow-sm overflow-hidden flex flex-col p-3 gap-2 fade-in">
         
         <!-- Row 1: Title, Font Settings, Actions -->
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <div class="flex items-center gap-1.5 border-l border-slate-200 pl-4">
+            <div class="flex items-center gap-1.5 border-l border-border pl-4">
               <div class="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </div>
-              <span class="font-black text-slate-800 text-xs whitespace-nowrap">{{selectedElement.label}}</span>
+              <span class="font-black text-foreground text-xs whitespace-nowrap">{{selectedElement.label}}</span>
             </div>
             
             <!-- Font settings (only text) -->
             <div class="flex items-center gap-2" *ngIf="selectedElement.type !== 'qrcode'">
-              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+              <div class="flex items-center gap-1 bg-surface border border-border rounded-lg px-2 py-1">
                 <span class="text-[10px] text-slate-400 font-bold">سایز:</span>
                 <input type="number" [(ngModel)]="selectedElement.fontSize" title="سایز فونت" class="w-12 text-center bg-transparent text-xs font-bold outline-none focus:text-amber-600">
               </div>
               
-              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+              <div class="flex items-center gap-1 bg-surface border border-border rounded-lg px-2 py-1">
                 <span class="text-[10px] text-slate-400 font-bold">وزن:</span>
                 <select [(ngModel)]="selectedElement.fontWeight" title="وزن فونت" class="bg-transparent text-xs font-bold outline-none focus:text-amber-600 appearance-none cursor-pointer">
                   <option value="normal">عادی</option>
@@ -384,7 +384,7 @@
                 </select>
               </div>
               
-              <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+              <div class="flex items-center gap-1 bg-surface border border-border rounded-lg px-2 py-1">
                 <span class="text-[10px] text-slate-400 font-bold">تراز:</span>
                 <select [(ngModel)]="selectedElement.textAlign" title="تراز متن" class="bg-transparent text-xs font-bold outline-none focus:text-amber-600 appearance-none cursor-pointer">
                   <option value="right">راست</option>
@@ -393,7 +393,7 @@
                 </select>
               </div>
               
-              <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
+              <label class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 cursor-pointer select-none bg-surface px-2 py-1 rounded-lg border border-border hover:bg-surface transition-colors">
                 <input type="checkbox" [(ngModel)]="selectedElement.wrapText" class="w-3.5 h-3.5 text-amber-500 rounded border-slate-300"> 
                 شکستن متن
               </label>
@@ -407,17 +407,17 @@
         </div>
 
         <!-- Row 2: Prefix, Suffix, Position -->
-        <div class="flex items-center justify-between border-t border-slate-100 pt-2">
+        <div class="flex items-center justify-between border-t border-border pt-2">
           
           <!-- Prefix/Suffix/Wrap (only text) -->
           <div class="flex items-center gap-3" *ngIf="selectedElement.type !== 'qrcode'">
             <div class="flex items-center gap-2">
               <span class="text-[11px] font-bold text-slate-500">پیشوند:</span>
-              <input type="text" [(ngModel)]="selectedElement.prefix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400">
+              <input type="text" [(ngModel)]="selectedElement.prefix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-amber-400">
             </div>
             <div class="flex items-center gap-2">
               <span class="text-[11px] font-bold text-slate-500">پسوند:</span>
-              <input type="text" [(ngModel)]="selectedElement.suffix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400">
+              <input type="text" [(ngModel)]="selectedElement.suffix" placeholder="ندارد..." class="w-24 px-2 py-1.5 bg-surface border border-border rounded-lg text-xs font-bold outline-none focus:border-amber-400">
             </div>
           </div>
           
@@ -428,31 +428,31 @@
           <div class="flex items-center gap-2 text-xs font-mono text-slate-500">
             <div class="flex items-center gap-1">
               <span>X:</span>
-              <input type="number" [(ngModel)]="selectedElement.x" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+              <input type="number" [(ngModel)]="selectedElement.x" class="w-12 text-center px-1 py-1 bg-surface border border-border rounded outline-none focus:border-amber-400">
             </div>
             <div class="flex items-center gap-1">
               <span>Y:</span>
-              <input type="number" [(ngModel)]="selectedElement.y" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+              <input type="number" [(ngModel)]="selectedElement.y" class="w-12 text-center px-1 py-1 bg-surface border border-border rounded outline-none focus:border-amber-400">
             </div>
             <div class="flex items-center gap-1 ml-2">
               <span>W:</span>
-              <input type="number" [(ngModel)]="selectedElement.width" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+              <input type="number" [(ngModel)]="selectedElement.width" class="w-12 text-center px-1 py-1 bg-surface border border-border rounded outline-none focus:border-amber-400">
             </div>
             <div class="flex items-center gap-1">
               <span>H:</span>
-              <input type="number" [(ngModel)]="selectedElement.height" class="w-12 text-center px-1 py-1 bg-slate-50 border border-slate-200 rounded outline-none focus:border-amber-400">
+              <input type="number" [(ngModel)]="selectedElement.height" class="w-12 text-center px-1 py-1 bg-surface border border-border rounded outline-none focus:border-amber-400">
             </div>
           </div>
           
         </div>
       </div>
 
-      <div class="canvas-container bg-slate-100/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-4 md:p-6 relative flex flex-col flex-1" [style.minHeight]="mode === 'print' ? 'calc(95vh - 180px)' : '420px'">
+      <div class="canvas-container bg-surface/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-4 md:p-6 relative flex flex-col flex-1" [style.minHeight]="mode === 'print' ? 'calc(95vh - 180px)' : '420px'">
 
 
         <!-- Canvas Header -->
         <div class="flex items-center justify-between mb-5 z-10">
-          <h3 class="font-black text-slate-700 text-[13px] flex items-center gap-2">
+          <h3 class="font-black text-foreground text-[13px] flex items-center gap-2">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
             بوم طراحی لیبل
           </h3>
@@ -482,7 +482,7 @@
         <!-- The Canvas -->
         <div *ngIf="mode === 'settings'" class="flex-1 flex items-center justify-center">
           <div #canvas
-            class="label-canvas relative bg-white shadow-2xl rounded border border-slate-300 overflow-hidden cursor-crosshair ring-8 ring-white/50"
+            class="label-canvas relative bg-background shadow-2xl rounded border border-slate-300 overflow-hidden cursor-crosshair ring-8 ring-white/50"
             [style.width.px]="canvasWidth"
             [style.height.px]="canvasHeight"
             (click)="deselectAll()">
@@ -504,7 +504,7 @@
               (click)="selectElement(el, $event)">
 
               <!-- Text Element -->
-              <div *ngIf="el.type !== 'qrcode'" class="w-full h-full flex px-1 text-slate-800 overflow-hidden"
+              <div *ngIf="el.type !== 'qrcode'" class="w-full h-full flex px-1 text-foreground overflow-hidden"
                 [ngClass]="el.wrapText ? 'items-start whitespace-normal break-words' : 'items-center whitespace-nowrap text-ellipsis'"
                 [style.fontSize.px]="getFontPx(el.fontSize)"
                 [style.fontWeight]="el.fontWeight"
@@ -516,16 +516,19 @@
               </div>
 
               <!-- QR Element -->
-              <div *ngIf="el.type === 'qrcode'" class="w-full h-full flex items-center justify-center bg-white">
-                <div class="qr-placeholder flex flex-col items-center justify-center">
-                  <svg width="60%" height="60%" viewBox="0 0 24 24" fill="none" stroke="#1e1e1e" stroke-width="1.5">
+              <div *ngIf="el.type === 'qrcode'" class="w-full h-full flex flex-col items-center justify-between bg-background pt-1">
+                <div class="flex-1 flex items-center justify-center w-full min-h-0">
+                  <svg class="h-full max-h-[85%] w-auto" viewBox="0 0 24 24" fill="none" stroke="#1e1e1e" stroke-width="1.5">
                     <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                     <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7" rx="1"/>
                     <rect x="5" y="5" width="3" height="3" fill="#1e1e1e"/><rect x="16" y="5" width="3" height="3" fill="#1e1e1e"/>
                     <rect x="5" y="16" width="3" height="3" fill="#1e1e1e"/>
                   </svg>
-                  <span class="text-[7px] font-bold text-slate-400 mt-0.5">QR Code</span>
                 </div>
+                <span class="text-foreground font-bold truncate px-1 w-full text-center leading-none pb-1" 
+                      [style.fontSize.px]="(el.width < el.height ? el.width : el.height) * scaleFactor * 0.15 * 0.8">
+                  {{ getPreviewValue(el.field) || 'QR Code' }}
+                </span>
               </div>
 
               <!-- Resize handle -->
@@ -557,7 +560,7 @@
 
         <!-- Canvas Footer -->
         <div *ngIf="mode === 'settings'" class="mt-5 text-center z-10">
-          <p class="text-[10px] text-slate-500 font-bold bg-slate-100/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
+          <p class="text-[10px] text-slate-500 font-bold bg-surface/80 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
             <span *ngIf="template.elements.length > 0">{{template.elements.length}} المان روی بوم</span>
             <span *ngIf="template.elements.length === 0">بوم خالی — فیلدها را اضافه کنید</span>
              · کلید Delete برای حذف · Escape برای لغو انتخاب

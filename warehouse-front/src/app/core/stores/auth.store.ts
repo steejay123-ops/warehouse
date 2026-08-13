@@ -16,7 +16,12 @@ import { CustomRouteReuseStrategy } from '../strategies/custom-route-reuse-strat
 export class AuthStore {
   /** ID انبار فعال — 'ALL' برای نمایش تجمیعی */
   private readonly _activeWarehouseId = signal<number | string | null>(
-    localStorage.getItem('wh_active_id') || null
+    (() => {
+      const val = localStorage.getItem('wh_active_id');
+      if (!val || val === 'null' || val === 'undefined') return 'ALL';
+      if (val === 'ALL') return 'ALL';
+      return isNaN(+val) ? val : +val;
+    })()
   );
 
   private readonly router = inject(Router);

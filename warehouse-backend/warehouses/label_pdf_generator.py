@@ -241,7 +241,28 @@ class LabelPdfGenerator:
         img_buffer.seek(0)
         img = ImageReader(img_buffer)
 
-        c.drawImage(img, x, y, width=size, height=size)
+        # Allocate 15% of the height for the text at the bottom
+        text_height = size * 0.15
+        img_size = size - text_height
+        img_x = x + (size - img_size) / 2
+
+        # Draw the image
+        c.drawImage(img, img_x, y + text_height, width=img_size, height=img_size)
+
+        # Draw the text centered below the QR code
+        # Usually QR codes are English/digits, so Helvetica is safe.
+        font_size = text_height * 0.8
+        c.setFont(_FONT_NAME, font_size)
+        c.setFillColorRGB(0, 0, 0)
+        
+        # Reshape text if it has Persian characters just in case
+        try:
+            reshaped_text = arabic_reshaper.reshape(qr_data)
+            display_text = get_display(reshaped_text)
+        except:
+            display_text = qr_data
+            
+        c.drawCentredString(x + size / 2, y + text_height * 0.2, display_text)
 
     def _resolve_field(self, item, field_key):
         """Resolve a field key to its value from the Item."""

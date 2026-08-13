@@ -1,26 +1,39 @@
-<div class="h-full flex flex-col bg-slate-50" dir="rtl">
+<div class="h-full flex flex-col bg-surface" dir="rtl">
 
   <!-- Header -->
-  <div class="bg-white border-b border-slate-200 px-4 pt-4 pb-2 shrink-0">
+  <div class="bg-background border-b border-border px-4 pt-4 pb-2 shrink-0">
     <div class="flex items-center justify-between mb-3">
       <div>
-        <h1 class="text-base font-black text-slate-800">کارتابل مالی و مدارک</h1>
+        <h1 class="text-base font-black text-foreground">کارتابل مالی و مدارک</h1>
         <p class="text-[11px] text-slate-400 mt-0.5">بررسی اسناد و فیلدهای مالی کالاها</p>
       </div>
-      <app-offline-pending-badge />
+      <div class="flex items-center gap-2">
+        <!-- Refresh Button -->
+        <button type="button" [disabled]="isLoading" (click)="loadTasks()" class="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm disabled:opacity-50" title="بروزرسانی">
+          <svg *ngIf="!isLoading" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span *ngIf="isLoading" class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+        </button>
+        <app-offline-pending-badge />
+      </div>
     </div>
     <app-warehouse-selector class="block mb-3"
+      *ngIf="!authStore.isWarehouseContext()"
+      [allowAll]="true"
       [projects]="state.appState.projects"
-      [activeId]="state.appState.activeWarehouseId"
-      (changed)="state.appState.activeWarehouseId = $event; loadTasks()" />
+      [activeId]="authStore.activeWarehouseId()"
+      (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()" />
     <app-barcode-scanner [autofocus]="true" (scanned)="onBarcodeScanned($event)" #scanner />
   </div>
 
   <!-- Tabs -->
-  <div class="bg-white border-b border-slate-200 px-4 flex gap-1 shrink-0">
+  <div class="bg-background border-b border-border px-4 flex gap-1 shrink-0">
     <button (click)="setTab('my-tasks')"
       class="py-2.5 px-4 text-sm font-bold border-b-2 transition-colors"
-      [class]="currentTab==='my-tasks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      [class]="currentTab==='my-tasks' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-foreground'">
       کارهای من
       @if (pendingCount > 0) {
         <span class="mr-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{{ pendingCount }}</span>
@@ -28,34 +41,35 @@
     </button>
     <button (click)="setTab('pool')"
       class="py-2.5 px-4 text-sm font-bold border-b-2 transition-colors"
-      [class]="currentTab==='pool' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'">
+      [class]="currentTab==='pool' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-foreground'">
       استخر
     </button>
   </div>
 
   <!-- Filter Bar (my-tasks only) -->
   @if (currentTab === 'my-tasks') {
-    <div class="bg-white border-b border-slate-100 px-4 py-2 flex gap-2 items-center shrink-0">
+    <div class="bg-background border-b border-border px-4 py-2 flex gap-2 items-center shrink-0">
       <div class="flex gap-1 flex-1">
         <button (click)="setStatusFilter('pending')"
           class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
-          [class]="statusFilter==='pending' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          [class]="statusFilter==='pending' ? 'bg-amber-500 text-white' : 'bg-surface text-slate-600 hover:bg-slate-200'">
           در انتظار
         </button>
         <button (click)="setStatusFilter('processing')"
           class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
-          [class]="statusFilter==='processing' ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          [class]="statusFilter==='processing' ? 'bg-blue-500 text-white' : 'bg-surface text-slate-600 hover:bg-slate-200'">
           ارسال‌شده
         </button>
         <button (click)="setStatusFilter('all')"
           class="px-3 py-1 text-xs font-bold rounded-full transition-colors"
-          [class]="statusFilter==='all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
+          [class]="statusFilter==='all' ? 'bg-slate-700 text-white' : 'bg-surface text-slate-600 hover:bg-slate-200'">
           همه
         </button>
       </div>
       <input type="search" placeholder="جستجو کد / شرح / PO..."
-        class="text-xs border border-slate-200 rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"
-        (input)="onSearchChange($event)" />
+        class="text-xs border border-border rounded-lg px-3 py-1.5 w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearchChange($event)" />
     </div>
   }
 
@@ -80,15 +94,16 @@
       } @else {
         <ul class="space-y-2">
           @for (task of filteredTasks; track trackById($index, task)) {
-            <li class="bg-white rounded-xl border shadow-sm overflow-hidden"
-              [class]="task._offlinePending ? 'border-amber-300' : 'border-slate-200'">
+            <li class="bg-background rounded-xl border shadow-sm overflow-hidden"
+              [class]="task._offlinePending ? 'border-amber-300' : 'border-border'"
+              [class.status-updated-flash]="updatedTaskIds.has(task.id)">
               <div class="flex items-center gap-3 px-3 py-3">
                 <input type="checkbox" class="w-4 h-4 accent-blue-600 shrink-0"
                   [checked]="selectedTasks.has(task.id)"
                   (change)="toggleSelection(task.id)" />
                 <div class="flex-1 min-w-0 cursor-pointer" (click)="openDetail(task)">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-bold text-sm text-slate-800 font-mono" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
+                    <span class="font-bold text-sm text-foreground font-mono" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
                     <span class="text-[10px] font-bold px-2 py-0.5 rounded-full" [class]="getStatusColor(task.status)">
                       {{ getStatusLabel(task.status) }}
                     </span>
@@ -124,13 +139,14 @@
       } @else {
         <ul class="space-y-2">
           @for (task of poolTasks; track trackById($index, task)) {
-            <li class="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <li class="bg-background rounded-xl border border-border shadow-sm"
+              [class.status-updated-flash]="updatedTaskIds.has(task.id)">
               <div class="flex items-center gap-3 px-3 py-3">
                 <input type="checkbox" class="w-4 h-4 accent-blue-600 shrink-0"
                   [checked]="selectedPoolTasks.has(task.id)"
                   (change)="togglePoolSelection(task.id)" />
                 <div class="flex-1 min-w-0">
-                  <span class="font-bold text-sm text-slate-800 font-mono block" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
+                  <span class="font-bold text-sm text-foreground font-mono block" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
                   <p class="text-xs text-slate-500 truncate">{{ task.item_details?.description }}</p>
                 </div>
               </div>
@@ -144,7 +160,7 @@
 
   <!-- Bottom Bar: my-tasks -->
   @if (currentTab === 'my-tasks' && !selectedTask) {
-    <div class="bg-white border-t border-slate-200 px-4 py-3 shrink-0">
+    <div class="bg-background border-t border-border px-4 py-3 shrink-0">
       <button (click)="submitAll()" [disabled]="pendingCount === 0"
         class="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
         @if (selectedTasks.size > 0) { ارسال {{ selectedTasks.size }} مورد انتخابی }
@@ -154,7 +170,7 @@
   }
   <!-- Bottom Bar: pool -->
   @if (currentTab === 'pool' && !selectedTask) {
-    <div class="bg-white border-t border-slate-200 px-4 py-3 shrink-0">
+    <div class="bg-background border-t border-border px-4 py-3 shrink-0">
       <button (click)="claimSelectedTasks()" [disabled]="selectedPoolTasks.size === 0"
         class="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-bold py-2.5 rounded-xl transition-colors">
         بر عهده گرفتن {{ selectedPoolTasks.size }} مورد انتخابی
@@ -164,17 +180,17 @@
 
   <!-- ══ Detail Panel ══ -->
   @if (selectedTask) {
-    <div class="absolute inset-0 bg-white z-20 flex flex-col" dir="rtl">
+    <div class="absolute inset-0 bg-background z-20 flex flex-col" dir="rtl">
 
       <!-- Panel Header -->
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-200 shrink-0">
-        <button (click)="closeDetail()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 shrink-0">
+      <div class="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
+        <button (click)="closeDetail()" class="p-1.5 rounded-lg hover:bg-surface text-slate-500 shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
         </button>
         <div class="flex-1 min-w-0">
-          <p class="font-black text-slate-800 font-mono text-sm truncate" dir="ltr">{{ selectedTask.item_details?.fa_unic_code }}</p>
+          <p class="font-black text-foreground font-mono text-sm truncate" dir="ltr">{{ selectedTask.item_details?.fa_unic_code }}</p>
           <p class="text-xs text-slate-400 truncate">{{ selectedTask.item_details?.description }}</p>
         </div>
         <span class="text-[10px] font-bold px-2 py-1 rounded-full shrink-0" [class]="getStatusColor(selectedTask.status)">
@@ -186,7 +202,7 @@
       <div class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
         <!-- Item Info -->
-        <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1.5 border border-slate-100">
+        <div class="bg-surface rounded-xl p-3 text-xs text-slate-600 space-y-1.5 border border-border">
           @if (selectedTask.item_details?.po) {
             <div class="flex gap-2"><span class="text-slate-400 w-20 shrink-0">PO:</span><span class="font-mono" dir="ltr">{{ selectedTask.item_details?.po }}</span></div>
           }
@@ -203,12 +219,12 @@
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">شماره RTI اضافه‌شده</label>
             <input type="text" [(ngModel)]="f_added_rti_no" placeholder="RTI-..."
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">شماره RTI فاکتور</label>
             <input type="text" [(ngModel)]="f_inv_rti_number" placeholder="RTI-..."
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
         </div>
 
@@ -217,7 +233,7 @@
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">نوع فاکتور</label>
             <select [(ngModel)]="f_invoice_type"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-background">
               <option value="">انتخاب کنید</option>
               @for (item of invoiceTypes; track item[0]) {
                 <option [value]="item[0]">{{ item[1] }}</option>
@@ -227,7 +243,7 @@
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">تاریخ فاکتور</label>
             <input type="date" [(ngModel)]="f_invoice_date"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
         </div>
 
@@ -236,17 +252,17 @@
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">صفحه فاکتور</label>
             <input type="number" [(ngModel)]="f_invoice_page" min="1"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">ردیف صفحه</label>
             <input type="number" [(ngModel)]="f_page_row" min="1"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">تأمین‌کننده</label>
             <input type="text" [(ngModel)]="f_doc_supplier"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
           </div>
         </div>
 
@@ -255,22 +271,22 @@
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">ارزش کل</label>
             <input type="text" [(ngModel)]="f_total_value"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">مبلغ قیمت</label>
             <input type="text" [(ngModel)]="f_price_amount"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">قیمت واحد مشابه</label>
             <input type="text" [(ngModel)]="f_similar_unit_price"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400" dir="ltr"/>
           </div>
           <div>
             <label class="text-[11px] font-bold text-slate-500 block mb-1">ارز</label>
             <select [(ngModel)]="f_currency"
-              class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+              class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-background">
               <option value="">انتخاب کنید</option>
               @for (item of currencies; track item[0]) {
                 <option [value]="item[0]">{{ item[1] }}</option>
@@ -283,18 +299,18 @@
         <div>
           <label class="text-[11px] font-bold text-slate-500 block mb-1">آدرس پوشه</label>
           <input type="text" [(ngModel)]="f_folder_address"
-            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+            class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
         </div>
 
         <!-- Stamp + Signature -->
         <div class="flex gap-6">
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <input type="checkbox" [(ngModel)]="f_stamp" class="w-4 h-4 accent-blue-600"/>
-            <span class="text-sm font-bold text-slate-700">مهر</span>
+            <span class="text-sm font-bold text-foreground">مهر</span>
           </label>
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <input type="checkbox" [(ngModel)]="f_signature" class="w-4 h-4 accent-blue-600"/>
-            <span class="text-sm font-bold text-slate-700">امضا</span>
+            <span class="text-sm font-bold text-foreground">امضا</span>
           </label>
         </div>
 
@@ -302,15 +318,15 @@
         <div>
           <label class="text-[11px] font-bold text-slate-500 block mb-1">یادداشت کارشناس</label>
           <textarea [(ngModel)]="f_worker_note" rows="3" placeholder="توضیحات اضافی..."
-            class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"></textarea>
+            class="w-full text-sm border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"></textarea>
         </div>
 
       </div><!-- /panel body -->
 
       <!-- Panel Actions -->
-      <div class="bg-white border-t border-slate-200 px-4 py-3 flex gap-2 shrink-0">
+      <div class="bg-background border-t border-border px-4 py-3 flex gap-2 shrink-0">
         <button (click)="saveDraft()" [disabled]="isSaving"
-          class="flex-1 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-sm font-bold py-2.5 rounded-xl transition-colors">
+          class="flex-1 bg-surface hover:bg-slate-200 disabled:opacity-40 text-foreground text-sm font-bold py-2.5 rounded-xl transition-colors">
           @if (isSaving) { در حال ذخیره... } @else { ذخیره پیش‌نویس }
         </button>
         <button (click)="submitAll()" [disabled]="isSaving"

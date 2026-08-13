@@ -1,23 +1,30 @@
 <div class="space-y-6 fade-in text-right pb-10" dir="rtl">
     
   <!-- Header -->
-  <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+  <div class="bg-background p-4 rounded-xl border border-border shadow-sm flex items-center justify-between">
     <div>
-      <h2 class="text-sm font-black text-slate-800">داشبورد مانیتورینگ جامع انبار</h2>
+      <h2 class="text-sm font-black text-foreground">داشبورد مانیتورینگ جامع انبار</h2>
       <p class="text-[11px] text-slate-400 mt-0.5">نمای کلان پیشرفت، روند سرعت تیم و گلوگاه‌های عملیاتی</p>
     </div>
-    <button (click)="loadStats()" class="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
-      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-    </button>
+    <div class="flex items-center gap-2">
+      <!-- Refresh Button -->
+      <button type="button" [disabled]="isDashboardRefreshing" (click)="loadStats()" class="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm disabled:opacity-50" title="بروزرسانی">
+        <svg *ngIf="!isDashboardRefreshing" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span *ngIf="isDashboardRefreshing" class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+      </button>
+    </div>
   </div>
 
   <!-- Row 1: North Star (Overall Progress) & KPIs -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div [class.!opacity-50]="isDashboardRefreshing" [class.pointer-events-none]="isDashboardRefreshing" class="transition-opacity duration-300">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
     <!-- Overall Progress Donut Chart -->
-    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-center relative md:col-span-1">
+    <div class="bg-background p-6 rounded-2xl border border-border shadow-sm flex items-center justify-center relative md:col-span-1">
       <div class="flex flex-col items-center">
         <div class="relative w-36 h-36">
           <svg viewBox="0 0 36 36" class="w-full h-full transform -rotate-90">
@@ -29,12 +36,12 @@
               d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
           </svg>
           <div class="absolute inset-0 flex flex-col items-center justify-center">
-            <span class="text-3xl font-black text-slate-800">{{totalPercent}}٪</span>
+            <span class="text-3xl font-black text-foreground">{{totalPercent}}٪</span>
             <span class="text-[10px] font-bold text-slate-400 mt-0.5">پیشرفت کل</span>
           </div>
         </div>
         <div class="mt-4 text-center">
-          <p class="text-xs font-bold text-slate-700">شمارش شده: <span class="text-indigo-600">{{totalCounted | number}}</span> از {{overallStats.total | number}}</p>
+          <p class="text-xs font-bold text-foreground">شمارش شده: <span class="text-indigo-600">{{totalCounted | number}}</span> از {{overallStats.total | number}}</p>
         </div>
       </div>
     </div>
@@ -42,7 +49,7 @@
     <!-- Daily KPIs -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 md:col-span-2">
       <!-- Today's Count -->
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
+      <div class="bg-background p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
         <div class="flex justify-between items-start">
           <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-4">
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -56,18 +63,18 @@
             <svg *ngIf="todayTrend.dir === 'down'" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
           </span>
         </div>
-        <h3 class="text-3xl font-black text-slate-800">{{todayStats.count || 0 | number}} <span class="text-sm text-slate-400 font-normal">ردیف</span></h3>
+        <h3 class="text-3xl font-black text-foreground">{{todayStats.count || 0 | number}} <span class="text-sm text-slate-400 font-normal">ردیف</span></h3>
         <p class="text-xs text-slate-500 font-bold mt-1">عملکرد تیم اجرا (امروز)</p>
       </div>
 
       <!-- Yesterday's Count -->
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-        <div class="w-10 h-10 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center mb-4">
+      <div class="bg-background p-6 rounded-2xl border border-border shadow-sm flex flex-col justify-center">
+        <div class="w-10 h-10 rounded-full bg-surface text-slate-500 flex items-center justify-center mb-4">
           <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h3 class="text-3xl font-black text-slate-800">{{yesterdayStats.count || 0 | number}} <span class="text-sm text-slate-400 font-normal">ردیف</span></h3>
+        <h3 class="text-3xl font-black text-foreground">{{yesterdayStats.count || 0 | number}} <span class="text-sm text-slate-400 font-normal">ردیف</span></h3>
         <p class="text-xs text-slate-500 font-bold mt-1">عملکرد تیم اجرا (دیروز)</p>
       </div>
     </div>
@@ -77,8 +84,8 @@
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     
     <!-- Operational Pipeline (Funnel) -->
-    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-1">
-      <h3 class="text-sm font-black text-slate-800 mb-6">قیف عملیات (گلوگاه‌ها)</h3>
+    <div class="bg-background p-6 rounded-2xl border border-border shadow-sm lg:col-span-1">
+      <h3 class="text-sm font-black text-foreground mb-6">قیف عملیات (گلوگاه‌ها)</h3>
       <div class="flex flex-col gap-3">
         
         <!-- Step 1: Counted -->
@@ -87,9 +94,9 @@
             <span class="text-slate-600 font-bold">۱. شمارش شده</span>
             <span class="text-blue-600 font-black">{{overallStats.printed || 0 | number}}</span>
           </div>
-          <div class="w-full bg-slate-100 h-8 rounded-lg overflow-hidden flex justify-center">
+          <div class="w-full bg-surface h-8 rounded-lg overflow-hidden flex justify-center">
             <div class="bg-blue-500 h-full w-full rounded-lg relative overflow-hidden group">
-              <div class="absolute inset-0 bg-white/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
+              <div class="absolute inset-0 bg-background/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
             </div>
           </div>
         </div>
@@ -101,9 +108,9 @@
             <!-- (Since API doesn't return exact docs_approved overall, approximating with total counted - conflicts for illustration, or using a dedicated metric if added later) -->
             <span class="text-amber-600 font-black">{{(overallStats.printed - overallStats.conflicts) > 0 ? (overallStats.printed - overallStats.conflicts) : 0 | number}}</span>
           </div>
-          <div class="w-[85%] bg-slate-100 h-8 rounded-lg overflow-hidden flex justify-center">
+          <div class="w-[85%] bg-surface h-8 rounded-lg overflow-hidden flex justify-center">
             <div class="bg-amber-500 h-full w-full rounded-lg relative overflow-hidden group">
-              <div class="absolute inset-0 bg-white/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
+              <div class="absolute inset-0 bg-background/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
             </div>
           </div>
         </div>
@@ -114,9 +121,9 @@
             <span class="text-slate-600 font-bold">۳. تغذیه نهایی</span>
             <span class="text-emerald-600 font-black">{{overallStats.done || 0 | number}}</span>
           </div>
-          <div class="w-[70%] bg-slate-100 h-8 rounded-lg overflow-hidden flex justify-center">
+          <div class="w-[70%] bg-surface h-8 rounded-lg overflow-hidden flex justify-center">
             <div class="bg-emerald-500 h-full w-full rounded-lg relative overflow-hidden group">
-              <div class="absolute inset-0 bg-white/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
+              <div class="absolute inset-0 bg-background/20 w-1/2 skew-x-12 -translate-x-full group-hover:animate-shine"></div>
             </div>
           </div>
         </div>
@@ -125,10 +132,10 @@
     </div>
 
     <!-- Velocity Trend (Bar Chart with Target) -->
-    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2 flex flex-col">
+    <div class="bg-background p-6 rounded-2xl border border-border shadow-sm lg:col-span-2 flex flex-col">
       <div class="flex justify-between items-start mb-6">
         <div>
-          <h3 class="text-sm font-black text-slate-800">روند سرعت تیم (۷ روز گذشته)</h3>
+          <h3 class="text-sm font-black text-foreground">روند سرعت تیم (۷ روز گذشته)</h3>
           <p class="text-[11px] text-slate-400 mt-0.5">مقایسه خروجی روزانه نسبت به تارگت</p>
         </div>
         <div class="flex items-center gap-3 text-[10px] text-slate-500 font-bold">
@@ -157,7 +164,7 @@
             <div class="w-3 sm:w-5 bg-amber-500 rounded-t-sm transition-all duration-300 group-hover/col:brightness-110" [style.height]="getHeight(item.docs)"></div>
             <div class="w-3 sm:w-5 bg-emerald-500 rounded-t-sm transition-all duration-300 group-hover/col:brightness-110" [style.height]="getHeight(item.feed)"></div>
           </div>
-          <span class="text-[10px] font-bold text-slate-400 mt-3 group-hover/col:text-slate-800 transition-colors">{{item.day}}</span>
+          <span class="text-[10px] font-bold text-slate-400 mt-3 group-hover/col:text-foreground transition-colors">{{item.day}}</span>
         </div>
       </div>
     </div>
@@ -166,7 +173,7 @@
 
   <!-- Row 3: Action Center -->
   <div>
-    <h3 class="text-sm font-black text-slate-800 mb-3 px-2">اقدامات مورد نیاز (Action Center)</h3>
+    <h3 class="text-sm font-black text-foreground mb-3 px-2">اقدامات مورد نیاز (Action Center)</h3>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       
       <!-- Conflict Alert -->
@@ -197,5 +204,7 @@
 
     </div>
   </div>
+  </div>
 
 </div>
+

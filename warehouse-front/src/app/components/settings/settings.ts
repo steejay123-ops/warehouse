@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings';
 import { ToastService } from '../../services/toast.service';
 import { LabelDesigner } from '../label-designer/label-designer';
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-settings',
@@ -32,16 +33,26 @@ export class Settings implements OnInit {
   constructor(
     private settingsService: SettingsService,
     private toast: ToastService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit() {
+    this.route.queryParams.subscribe(params => {
+      if (params['tab']) {
+        const tab = params['tab'] as typeof this.activeTab;
+        if (['operations', 'label', 'backup'].includes(tab)) {
+          this.activeTab = tab;
+          this.cdr.detectChanges();
+        }
+      }
+    });
     this.loadSettings();
   }
 
   setTab(tab: 'operations' | 'label' | 'backup') {
-    this.activeTab = tab;
-    this.cdr.detectChanges();
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
   }
 
   loadSettings() {
@@ -49,13 +60,17 @@ export class Settings implements OnInit {
     this.settingsService.getGlobalSettings().subscribe({
       next: (res: any) => {
         this.settings = res;
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.show('error', 'خطا در دریافت تنظیمات سیستم.');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }

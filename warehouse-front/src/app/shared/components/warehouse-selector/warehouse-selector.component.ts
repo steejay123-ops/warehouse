@@ -20,14 +20,14 @@ import { AuthStore } from '../../../core/stores/auth.store';
   template: `
     <div class="relative w-full">
       <select
-        [ngModel]="activeId"
+        [ngModel]="!allowAll && activeId === 'ALL' ? null : (activeId !== null ? activeId.toString() : null)"
         (ngModelChange)="onChanged($event)"
         class="text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border-0 rounded-xl px-3 py-1.5 outline-none cursor-pointer transition-colors w-full"
       >
         <option *ngIf="!allowAll" [ngValue]="null" disabled hidden>انتخاب انبار...</option>
-        <option *ngIf="allowAll" [ngValue]="null">همه انبارها</option>
+        <option *ngIf="allowAll" [ngValue]="'ALL'">همه انبارها</option>
         @for (project of projects; track project.id) {
-          <option [value]="project.id">{{ project.name }}</option>
+          <option [ngValue]="project.id.toString()">{{ project.name }}</option>
         }
       </select>
     </div>
@@ -39,8 +39,8 @@ export class WarehouseSelectorComponent {
   @Input() allowAll: boolean = false;
   @Output() changed = new EventEmitter<number | string | null>();
 
-  onChanged(value: string | null): void {
-    const parsed = value === null ? null : (isNaN(+value) ? value : +value);
+  onChanged(value: string | number | null): void {
+    const parsed = value === 'ALL' ? 'ALL' : (value === null || value === 'null' ? null : (isNaN(+value) ? value : +value));
     this.changed.emit(parsed);
   }
 }

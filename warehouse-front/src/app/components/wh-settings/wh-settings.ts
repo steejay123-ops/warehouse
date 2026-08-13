@@ -6,6 +6,7 @@ import { ToastService, ConfirmDialogService } from '../../shared';
 import { AuthStore } from '../../core/stores/auth.store';
 import { LabelDesigner } from '../label-designer/label-designer';
 import { DynamicFields } from '../dynamic-fields/dynamic-fields';
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-wh-settings',
@@ -24,10 +25,21 @@ export class WhSettings implements OnInit {
     private toast: ToastService,
     private authStore: AuthStore,
     private confirm: ConfirmDialogService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit() {
+    this.route.queryParams.subscribe(params => {
+      if (params['tab']) {
+        const tab = params['tab'] as typeof this.activeTab;
+        if (['operations', 'label', 'dynamic'].includes(tab)) {
+          this.activeTab = tab;
+          this.cdr.detectChanges();
+        }
+      }
+    });
     this.warehouseId = Number(this.authStore.activeWarehouseId());
     if (this.warehouseId) {
       this.loadSettings();
@@ -35,8 +47,7 @@ export class WhSettings implements OnInit {
   }
 
   setTab(tab: 'operations' | 'label' | 'dynamic') {
-    this.activeTab = tab;
-    this.cdr.detectChanges();
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
   }
 
   loadSettings() {

@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ChangeDetectionStrategy, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, filter } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { DocTaskApiService } from '../../core/api/doc-task-api.service';
 import { DocTaskStore } from '../../core/services/doc-task-store';
@@ -10,10 +10,13 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { StateService } from '../../services/state.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
 import { environment } from '../../../environments/environment';
+import { Router, NavigationEnd } from '@angular/router';
+import { WebSocketService } from '../../core/http/websocket.service';
 
 @Component({
   selector: 'app-customs',
@@ -29,7 +32,6 @@ export class Customs implements OnInit, OnDestroy {
   selectedTask: DocTask | null = null;
   selectedTasks = new Set<number>();
   selectedPoolTasks = new Set<number>();
-  refreshInterval: any;
   currentTab: 'my-tasks' | 'pool' = 'my-tasks';
   isSaving = false;
 
@@ -38,6 +40,7 @@ export class Customs implements OnInit, OnDestroy {
   searchQuery = '';
   filteredTasks: DocTask[] = [];
   searchSubject = new Subject<string>();
+  private initialLoadDone = false;
 
   // Financial form fields
   f_added_rti_no = '';
@@ -61,6 +64,13 @@ export class Customs implements OnInit, OnDestroy {
 
   private pullSub: Subscription | null = null;
   private scanBusy = false;
+  private routerSub?: Subscription;
+  private wsSub?: Subscription;
+
+  updatedTaskIds = new Set<number>();
+  flashTimeout: any;
+  tasksLoaded = false;
+  poolTasksLoaded = false;
 
   @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
 
@@ -71,7 +81,10 @@ export class Customs implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     public state: StateService,
     private auth: AuthService,
+    public authStore: AuthStore,
     private store: DocTaskStore,
+    private router: Router,
+    private wsService: WebSocketService,
   ) {}
 
   private get activeWarehouseId(): number | null {
@@ -104,29 +117,57 @@ export class Customs implements OnInit, OnDestroy {
       }
     });
 
-    this.loadTasks();
-    this.refreshInterval = setInterval(() => {
-      if (!this.selectedTask) {
-        if (this.localFirst) {
-          this.store.refresh(this.activeWarehouseId!);
-        } else if (this.currentTab === 'my-tasks') {
-          this.loadTasks(false);
-        } else {
-          this.loadPoolTasks(false);
+    // ── URL State: خواندن استیت از آدرس مرورگر ──
+    this.syncStateFromUrl();
+    this.routerSub = this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe(() => this.syncStateFromUrl());
+
+    this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      if (data.type === 'doc_task_update' || data.event === 'doc_task_update') {
+        if (!this.selectedTask) {
+          if (this.localFirst) {
+            this.store.refresh(this.activeWarehouseId!);
+          } else if (this.currentTab === 'my-tasks') {
+            this.loadTasks(false);
+          } else {
+            this.loadPoolTasks(false);
+          }
         }
       }
-    }, 20000);
+    });
 
-    this.searchSubject.pipe(debounceTime(300), distinctUntilChanged()).subscribe(q => {
-      this.searchQuery = q;
-      this.applyFilters();
-      this.cdr.detectChanges();
+    this.searchSubject.pipe(debounceTime(2000), distinctUntilChanged()).subscribe(q => {
+      this.router.navigate([], { queryParams: { q: q || null }, queryParamsHandling: 'merge', replaceUrl: true });
     });
   }
 
   ngOnDestroy() {
-    if (this.refreshInterval) clearInterval(this.refreshInterval);
     this.pullSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+    this.wsSub?.unsubscribe();
+    if (this.flashTimeout) clearTimeout(this.flashTimeout);
+  }
+
+  private trackUpdates(oldList: any[], newList: any[]) {
+    const oldMap = new Map(oldList.map((t: any) => [t.id, t]));
+    let hasUpdates = false;
+
+    for (const t of newList) {
+      const oldItem = oldMap.get(t.id);
+      if (!oldItem || oldItem.status !== t.status) {
+        this.updatedTaskIds.add(t.id);
+        hasUpdates = true;
+      }
+    }
+
+    if (hasUpdates) {
+      if (this.flashTimeout) clearTimeout(this.flashTimeout);
+      this.flashTimeout = setTimeout(() => {
+        this.updatedTaskIds.clear();
+        this.cdr.detectChanges();
+      }, 4000);
+    }
   }
 
   // ════════════════════════════════════════════
@@ -153,9 +194,6 @@ export class Customs implements OnInit, OnDestroy {
     });
   }
 
-  onSearchChange(event: Event) {
-    this.searchSubject.next((event.target as HTMLInputElement).value);
-  }
 
   setStatusFilter(f: 'pending' | 'processing' | 'all') {
     this.statusFilter = f;
@@ -171,10 +209,16 @@ export class Customs implements OnInit, OnDestroy {
     if (showLoading) { this.isLoading = true; this.cdr.detectChanges(); }
     try {
       if (this.currentTab === 'my-tasks') {
-        this.tasks = await this.store.getMyTasks(this.activeWarehouseId!, this.currentUserId!);
+        const newTasks = await this.store.getMyTasks(this.activeWarehouseId!, this.currentUserId!);
+        this.trackUpdates(this.tasks, newTasks);
+        this.tasks = newTasks;
+        this.tasksLoaded = true;
         this.applyFilters();
       } else {
-        this.poolTasks = await this.store.getPoolTasks(this.activeWarehouseId!);
+        const newPoolTasks = await this.store.getPoolTasks(this.activeWarehouseId!);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
+        this.poolTasksLoaded = true;
       }
     } catch (e) {
       console.error('[Customs] خطا در خواندن از Dexie:', e);
@@ -199,15 +243,22 @@ export class Customs implements OnInit, OnDestroy {
 
     this.docTaskApi.getAll(params).subscribe({
       next: (res: any) => {
-        this.tasks = Array.isArray(res) ? res : (res.results || []);
+        const newTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.tasks, newTasks);
+        this.tasks = newTasks;
+        this.tasksLoaded = true;
         this.applyFilters();
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت اطلاعات');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }
@@ -224,24 +275,66 @@ export class Customs implements OnInit, OnDestroy {
 
     this.docTaskApi.poolTasks(params).subscribe({
       next: (res: any) => {
-        this.poolTasks = Array.isArray(res) ? res : [];
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        const newPoolTasks = Array.isArray(res) ? res : [];
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
+        this.poolTasksLoaded = true;
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت تسک‌های استخر');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }
 
+  /** خواندن تب فعال از پارامترهای آدرس مرورگر */
+  private syncStateFromUrl() {
+    if (!this.router.url.split('?')[0].includes('/customs')) return;
+    const params = this.router.parseUrl(this.router.url).queryParams;
+    
+    // 1. Sync Tab
+    const tab = params['tab'] as typeof this.currentTab;
+    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool'];
+    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
+    let tabChanged = false;
+    if (resolved !== this.currentTab) {
+      this.currentTab = resolved;
+      this.selectedTasks.clear();
+      this.selectedPoolTasks.clear();
+      tabChanged = true;
+    }
+
+    // 2. Sync Search Query
+    const q = params['q'] || '';
+    if (q !== this.searchQuery) {
+      this.searchQuery = q;
+      this.applyFilters();
+      this.cdr.detectChanges();
+    }
+
+    // 3. Load Data only if needed
+    if (tabChanged || !this.initialLoadDone) {
+      this.initialLoadDone = true;
+      if (resolved === 'my-tasks') this.loadTasks(!this.tasksLoaded);
+      else this.loadPoolTasks(!this.poolTasksLoaded);
+    }
+  }
+
   setTab(tab: 'my-tasks' | 'pool') {
-    this.currentTab = tab;
-    this.selectedTasks.clear();
-    this.selectedPoolTasks.clear();
-    if (tab === 'my-tasks') this.loadTasks();
-    else this.loadPoolTasks();
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
+  }
+
+  onSearchChange(val: string) {
+    this.searchQuery = val;
+    this.applyFilters();
+    this.searchSubject.next(val);
   }
 
   // ════════════════════════════════════════════
@@ -493,7 +586,7 @@ export class Customs implements OnInit, OnDestroy {
     if (s === 'DOC_PROCESSED') return 'bg-blue-100 text-blue-800';
     if (s === 'DOC_MANAGER_REVIEW') return 'bg-purple-100 text-purple-800';
     if (s === 'DOC_FINAL_APPROVED') return 'bg-green-100 text-green-800';
-    return 'bg-gray-100 text-gray-600';
+    return 'bg-surface text-gray-600';
   }
 
   get pendingCount(): number {

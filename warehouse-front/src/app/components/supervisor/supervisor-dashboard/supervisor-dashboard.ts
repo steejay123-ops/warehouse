@@ -1,4 +1,7 @@
-import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
+import { WebSocketService } from '../../../core/http/websocket.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CountTaskApiService } from '../../../core/api/count-task-api.service';
@@ -22,8 +25,13 @@ import { environment } from '../../../../environments/environment';
   templateUrl: './supervisor-dashboard.html',
   styleUrl: './supervisor-dashboard.css'
 })
-export class SupervisorDashboard implements OnInit {
+export class SupervisorDashboard implements OnInit, OnDestroy {
+  private wsSub?: Subscription;
+  updatedTaskIds = new Set<number>();
+  flashTimeout: any;
+  private routerSub?: Subscription;
   authStore = inject(AuthStore);
+  private router = inject(Router);
   tasks: CountTask[] = [];
   poolTasks: CountTask[] = [];
   isLoading = true;
@@ -69,16 +77,62 @@ export class SupervisorDashboard implements OnInit {
     private confirmDialog: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
     public state: StateService,
-    private http: HttpClient
+    private http: HttpClient,
+    private wsService: WebSocketService
   ) {}
 
   ngOnInit() {
-    this.loadTasks();
+    this.wsService.connect();
+    this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      if (data.type === 'count_task_update' || data.event === 'count_task_update' ||
+          data.type === 'doc_task_update' || data.event === 'doc_task_update') {
+        this.refreshCurrentTab();
+      }
+    });
+
+    // ── URL State: خواندن تب از آدرس مرورگر ──
+    this.syncTabFromUrl();
+    this.routerSub = this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe(() => this.syncTabFromUrl());
   }
 
-  loadTasks() {
-    this.isLoading = true;
-    this.cdr.detectChanges();
+  ngOnDestroy() {
+    this.wsSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+  }
+
+  refreshCurrentTab() {
+    if (this.currentTab === 'my-tasks') this.loadTasks(false);
+    else if (this.currentTab === 'pool') this.loadPoolTasks(false);
+    else if (this.currentTab === 'doc') this.loadDocTasks(false);
+    else this.loadDocPoolTasks(false);
+  }
+
+  private trackUpdates(oldList: any[], newList: any[]) {
+    const oldMap = new Map(oldList.map((t: any) => [t.id, t]));
+    let hasUpdates = false;
+    for (const t of newList) {
+      const oldItem = oldMap.get(t.id);
+      if (!oldItem || oldItem.status !== t.status || oldItem.counted_balance !== t.counted_balance) {
+        this.updatedTaskIds.add(t.id);
+        hasUpdates = true;
+      }
+    }
+    if (hasUpdates) {
+      if (this.flashTimeout) clearTimeout(this.flashTimeout);
+      this.flashTimeout = setTimeout(() => {
+        this.updatedTaskIds.clear();
+        this.cdr.detectChanges();
+      }, 4000);
+    }
+  }
+
+  loadTasks(showLoading = true) {
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
     
     const params: any = { as_role: 'supervisor', status: 'COUNTED', page_size: 1000 };
     const whId = this.state.appState.activeWarehouseId;
@@ -90,26 +144,34 @@ export class SupervisorDashboard implements OnInit {
       next: (res: any) => {
         try {
           const allTasks = Array.isArray(res) ? res : (res.results || []);
-          this.tasks = Array.isArray(allTasks) ? allTasks.filter((t: CountTask) => t.status === 'COUNTED' || t.status === 'MANAGER_REJECTED') : [];
+          const newTasks = Array.isArray(allTasks) ? allTasks.filter((t: CountTask) => t.status === 'COUNTED' || t.status === 'MANAGER_REJECTED') : [];
+          this.trackUpdates(this.tasks, newTasks);
+          this.tasks = newTasks;
         } catch (e) {
           console.error('Error assigning tasks:', e);
           this.tasks = [];
         }
         this.selectedTasks.clear();
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت اطلاعات');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }
 
-  loadPoolTasks() {
-    this.isLoading = true;
-    this.cdr.detectChanges();
+  loadPoolTasks(showLoading = true) {
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
     
     const params: any = { as_role: 'supervisor' };
     const whId = this.state.appState.activeWarehouseId;
@@ -119,28 +181,43 @@ export class SupervisorDashboard implements OnInit {
     
     this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
       next: (res: any) => {
-        this.poolTasks = Array.isArray(res) ? res : (res.results || []);
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت تسک‌های استخر');
-        this.isLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }
 
+  /** خواندن تب فعال از پارامترهای آدرس مرورگر */
+  private syncTabFromUrl() {
+    if (!this.router.url.split('?')[0].includes('/supervisor')) return;
+    const params = this.router.parseUrl(this.router.url).queryParams;
+    const tab = params['tab'] as typeof this.currentTab;
+    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool', 'doc', 'doc-pool'];
+    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
+    if (resolved !== this.currentTab) {
+      this.currentTab = resolved;
+      this.selectedTasks.clear();
+      this.selectedPoolTasks.clear();
+      this.selectedDocTasks.clear();
+      this.selectedDocPoolTasks.clear();
+    }
+    this.refreshCurrentTab();
+  }
+
   setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
-    this.currentTab = tab;
-    this.selectedTasks.clear();
-    this.selectedPoolTasks.clear();
-    this.selectedDocTasks.clear();
-    this.selectedDocPoolTasks.clear();
-    if (tab === 'my-tasks') this.loadTasks();
-    else if (tab === 'pool') this.loadPoolTasks();
-    else if (tab === 'doc') this.loadDocTasks();
-    else this.loadDocPoolTasks();
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
   }
 
   togglePoolSelection(taskId: number) {
@@ -284,9 +361,11 @@ export class SupervisorDashboard implements OnInit {
   //  Doc Task Tab
   // ════════════════════════════════════════════
 
-  loadDocTasks() {
-    this.isDocLoading = true;
-    this.cdr.detectChanges();
+  loadDocTasks(showLoading = true) {
+    if (showLoading) {
+      this.isDocLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'doc_supervisor', page_size: 1000 };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
@@ -294,15 +373,21 @@ export class SupervisorDashboard implements OnInit {
     this.docTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
-        this.docTasks = all.filter(t => t.status === 'DOC_PROCESSED');
+        const newDocTasks = all.filter(t => t.status === 'DOC_PROCESSED');
+        this.trackUpdates(this.docTasks, newDocTasks);
+        this.docTasks = newDocTasks;
         this.selectedDocTasks.clear();
-        this.isDocLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isDocLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت اسناد مالی');
-        this.isDocLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isDocLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }
@@ -382,23 +467,31 @@ export class SupervisorDashboard implements OnInit {
   //  Doc Pool Tab
   // ════════════════════════════════════════════
 
-  loadDocPoolTasks() {
-    this.isDocPoolLoading = true;
-    this.cdr.detectChanges();
+  loadDocPoolTasks(showLoading = true) {
+    if (showLoading) {
+      this.isDocPoolLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'doc_supervisor' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
 
     this.docTaskApi.poolTasks(params).subscribe({
       next: (res: any) => {
-        this.docPoolTasks = Array.isArray(res) ? res : (res.results || []);
-        this.isDocPoolLoading = false;
-        this.cdr.detectChanges();
+        const newDocPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.docPoolTasks, newDocPoolTasks);
+        this.docPoolTasks = newDocPoolTasks;
+        setTimeout(() => {
+          this.isDocPoolLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
       error: () => {
         this.toast.error('خطا در دریافت استخر اسناد');
-        this.isDocPoolLoading = false;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isDocPoolLoading = false;
+          this.cdr.detectChanges();
+        }, 600);
       }
     });
   }

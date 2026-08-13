@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -10,27 +10,35 @@ import { ClickOutsideDirective } from '../../shared/directives/click-outside.dir
 import { IdCards } from '../id-cards/id-cards';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
-import { Observable } from 'rxjs';
+import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
+import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
   selector: 'app-users',
-  imports: [CommonModule, FormsModule, ClickOutsideDirective, IdCards, ExcelImportModal],
+  imports: [CommonModule, FormsModule, ClickOutsideDirective, IdCards, ExcelImportModal, SmartDeleteModalComponent],
   templateUrl: './users.html',
   styleUrl: './users.css'
 })
-export class Users implements OnInit {
+export class Users implements OnInit, OnDestroy {
   activeTab = 'users';
   activeRoleTab = 'custom';
+  activePermTab = 'MAIN_MENU';
   searchQuery = '';
+  searchSubject = new Subject<string>();
+  private searchSub?: Subscription;
   
   openMenuId: string | null = null;
   
   isUserModalOpen = false;
   isRoleModalOpen = false;
-  isDeleteConfirmModalOpen = false;
-  roleToDelete: any = null;
-  usersCountToDelete: number = 0;
-  activePermTab = 'MAIN_MENU';
+  isDeleteModalOpen = false;
+  entityToDelete: any = null;
+  deleteImpactUrl = '';
+  deleteType: 'user' | 'role' = 'user';
+  isDeleting = false;
+  deleteErrorMessage = '';
 
   // Role Form
   editingRole: any = null;
@@ -63,11 +71,36 @@ export class Users implements OnInit {
     private accountsService: AccountsHttpService, 
     private whService: WarehouseHttpService,
     private cdr: ChangeDetectorRef,
-    private confirmDialog: ConfirmDialogService
+    private confirmDialog: ConfirmDialogService,
+    private route: ActivatedRoute,
+    private router: Router
   ) {}
 
   ngOnInit() {
+    this.route.queryParams.subscribe((params: any) => {
+      this.activeTab = params['tab'] || 'users';
+      this.activeRoleTab = params['roleTab'] || 'custom';
+      this.activePermTab = params['permTab'] || 'MAIN_MENU';
+      const q = params['q'] || '';
+      if (q !== this.searchQuery) {
+        this.searchQuery = q;
+      }
+      this.cdr.detectChanges();
+    });
+
+    this.searchSub = this.searchSubject.pipe(
+      debounceTime(2000)
+    ).subscribe(q => {
+      this.router.navigate([], { queryParams: { q: q || null }, queryParamsHandling: 'merge', replaceUrl: true });
+    });
+
     this.loadData();
+  }
+
+  ngOnDestroy() {
+    if (this.searchSub) {
+      this.searchSub.unsubscribe();
+    }
   }
 
   loadData() {
@@ -120,11 +153,15 @@ export class Users implements OnInit {
     this.isLoading = true;
     this.accountsService.getUsers().subscribe(res => {
       this.state.appState.users = res;
-      this.isLoading = false;
-      this.cdr.detectChanges();
+      setTimeout(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }, 600);
     }, error => {
-      this.isLoading = false;
-      this.cdr.detectChanges();
+      setTimeout(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }, 600);
     });
     
     this.whService.getAll().subscribe((res: any) => {
@@ -196,8 +233,20 @@ export class Users implements OnInit {
   }
 
   switchTab(tab: string) {
-    this.activeTab = tab;
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
     this.openMenuId = null;
+  }
+
+  switchRoleTab(tab: string) {
+    this.router.navigate([], { queryParams: { roleTab: tab }, queryParamsHandling: 'merge' });
+  }
+
+  switchPermTab(tab: string) {
+    this.router.navigate([], { queryParams: { permTab: tab }, queryParamsHandling: 'merge' });
+  }
+
+  onSearchChange(val: string) {
+    this.searchSubject.next(val);
   }
 
   toggleMenu(event: Event, menuId: string) {
@@ -407,36 +456,98 @@ export class Users implements OnInit {
     const role = this.state.appState.roles.find((r: any) => r.id === id);
     if (!role) return;
 
-    this.roleToDelete = role;
-    this.usersCountToDelete = this.getUsersInRoleCount(id);
-    this.isDeleteConfirmModalOpen = true;
+    this.entityToDelete = role;
+    this.deleteType = 'role';
+    this.deleteImpactUrl = `/api/auth/roles/${id}/delete_impact/`;
+    this.isDeleteModalOpen = true;
+    this.isDeleting = false;
+    this.deleteErrorMessage = '';
     this.cdr.detectChanges();
   }
 
-  confirmDeleteRole() {
-    if (!this.roleToDelete) return;
-    const id = this.roleToDelete.id;
+  deleteUser(id: number) {
+    const user = this.state.appState.users.find((u: any) => u.id === id);
+    if (!user) return;
     
-    this.accountsService.deleteRole(id).subscribe(() => {
-        this.state.appState.roles = this.state.appState.roles.filter((r: any) => r.id !== id);
-        
-        // Remove this role from all users in frontend state automatically
-        this.state.appState.users.forEach((u: any) => {
-            if (u.groups && u.groups.includes(id)) {
-                u.groups = u.groups.filter((gId: number) => gId !== id);
-            }
-        });
-        
-        this.toast.show('success', 'نقش مورد نظر حذف و دسترسی کاربران مرتبط بروزرسانی شد.');
-        this.isDeleteConfirmModalOpen = false;
-        this.roleToDelete = null;
-        this.cdr.detectChanges();
-    });
+    this.entityToDelete = user;
+    this.deleteType = 'user';
+    this.deleteImpactUrl = `/api/auth/users/${id}/delete_impact/`;
+    this.isDeleteModalOpen = true;
+    this.isDeleting = false;
+    this.deleteErrorMessage = '';
+    this.cdr.detectChanges();
   }
 
-  cancelDeleteRole() {
-      this.isDeleteConfirmModalOpen = false;
-      this.roleToDelete = null;
+  handleSoftDelete() {
+    if (!this.entityToDelete) return;
+    this.isDeleting = true;
+    this.deleteErrorMessage = '';
+    
+    if (this.deleteType === 'user') {
+        this.accountsService.toggleUserStatus(this.entityToDelete.id).subscribe({
+            next: (res) => {
+                const u = this.state.appState.users.find((x: any) => x.id === this.entityToDelete.id);
+                if (u) u.is_active = res.is_active;
+                this.toast.show('warning', `حساب کاربری مسدود و دسترسی وی قطع شد.`);
+                this.isDeleteModalOpen = false;
+                this.entityToDelete = null;
+                this.isDeleting = false;
+                this.cdr.detectChanges();
+            },
+            error: (err) => {
+                this.deleteErrorMessage = err.error?.error || 'خطایی رخ داد';
+                this.isDeleting = false;
+            }
+        });
+    } else {
+        // Roles don't really have soft delete in auth, but if they do we can implement it
+        this.deleteErrorMessage = 'امکان غیرفعال‌سازی نقش وجود ندارد. لطفاً حذف فیزیکی را انتخاب کنید.';
+        this.isDeleting = false;
+    }
+  }
+
+  handleHardDelete() {
+    if (!this.entityToDelete) return;
+    const id = this.entityToDelete.id;
+    this.isDeleting = true;
+    this.deleteErrorMessage = '';
+    
+    if (this.deleteType === 'role') {
+        this.accountsService.deleteRole(id).subscribe({
+            next: () => {
+                this.state.appState.roles = this.state.appState.roles.filter((r: any) => r.id !== id);
+                this.state.appState.users.forEach((u: any) => {
+                    if (u.groups && u.groups.includes(id)) {
+                        u.groups = u.groups.filter((gId: number) => gId !== id);
+                    }
+                });
+                this.toast.show('success', 'نقش مورد نظر حذف و دسترسی کاربران مرتبط بروزرسانی شد.');
+                this.isDeleteModalOpen = false;
+                this.entityToDelete = null;
+                this.isDeleting = false;
+                this.cdr.detectChanges();
+            },
+            error: (err) => {
+                this.deleteErrorMessage = err.error?.error || err.error?.detail || (typeof err.error === 'string' ? err.error : 'خطا در حذف نقش');
+                this.isDeleting = false;
+            }
+        });
+    } else {
+        this.accountsService.deleteUser(id).subscribe({
+            next: () => {
+                this.state.appState.users = this.state.appState.users.filter((u: any) => u.id !== id);
+                this.toast.show('success', 'حساب کاربری برای همیشه حذف شد.');
+                this.isDeleteModalOpen = false;
+                this.entityToDelete = null;
+                this.isDeleting = false;
+                this.cdr.detectChanges();
+            },
+            error: (err) => {
+                this.deleteErrorMessage = err.error?.error || err.error?.detail || (typeof err.error === 'string' ? err.error : 'این کاربر به دلیل داشتن تراکنش یا تاریخچه سیستم قابل حذف فیزیکی نیست. می‌توانید آن را تعلیق کنید.');
+                this.isDeleting = false;
+            }
+        });
+    }
   }
 
   formatDate(dStr: string) {

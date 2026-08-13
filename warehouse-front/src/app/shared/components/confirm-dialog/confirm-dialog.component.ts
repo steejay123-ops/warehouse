@@ -12,6 +12,7 @@ export interface ConfirmDialogConfig {
   cancelText?: string;
   extraText?: string;
   type?: 'danger' | 'warning' | 'info';
+  showCancel?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -36,6 +37,7 @@ export class ConfirmDialogService {
       confirmText: 'تایید',
       cancelText: 'انصراف',
       type: 'warning',
+      showCancel: true,
       ...config,
     });
     return new Promise((resolve) => {
@@ -95,12 +97,14 @@ export class ConfirmDialogService {
 
           <!-- Actions -->
           <div class="px-6 pb-6 pt-4 flex flex-col sm:flex-row items-center gap-2">
-            <button
-              (click)="dialog.cancel()"
-              class="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-            >
-              {{ config()?.cancelText }}
-            </button>
+            @if (config()?.showCancel) {
+              <button
+                (click)="dialog.cancel()"
+                class="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                {{ config()?.cancelText }}
+              </button>
+            }
             
             @if (config()?.extraText) {
               <button

@@ -38,7 +38,7 @@ export class WarehouseHttpService {
   constructor(private http: HttpClient) {}
 
   getAll(): Observable<Warehouse[]> {
-    return this.http.get<Warehouse[]>(`${this.baseUrl}?t=${new Date().getTime()}`);
+    return this.http.get<Warehouse[]>(this.baseUrl);
   }
 
   getById(id: number): Observable<Warehouse> {

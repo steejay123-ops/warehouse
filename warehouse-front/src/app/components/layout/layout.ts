@@ -13,10 +13,11 @@ import { OfflineSyncService } from '../../core/services/offline-sync.service';
 import { SyncErrorEntry } from '../../core/services/offline-db';
 import { ConfigApiService } from '../../core/api/config-api.service';
 import { ToastService } from '../../shared/components/toast/toast.component';
+import { DeepSyncModalComponent } from '../../shared/components/deep-sync-modal/deep-sync-modal.component';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, RouterOutlet],
+  imports: [CommonModule, RouterOutlet, DeepSyncModalComponent],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
@@ -37,7 +38,19 @@ export class Layout implements OnInit, OnDestroy {
   isSyncErrorsOpen = false;
   lastSyncTime: number | null = null;
   syncSuccessMessage: string | null = null;
+  pullProgress: { current: number, total: number | null, bytes: number } | null = null;
+  isPulling = false;
+  deepUpdateState: {
+    isActive: boolean;
+    mode: 'current' | 'all';
+    totalWarehouses: number;
+    currentIndex: number;
+    currentWarehouseName: string;
+  } | null = null;
   private syncSuccessTimer: any = null;
+  isDeepSyncModalOpen = false;
+  deepSyncWarehouses: {id: number; name: string}[] = [];
+  deepSyncPreselectId: number | null = null;
   private baseTitle = document.title;
   private offlineSubs: Subscription[] = [];
 
@@ -217,6 +230,27 @@ export class Layout implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       })
     );
+
+    this.offlineSubs.push(
+      syncService.pullProgress$.subscribe((progress: any) => {
+        this.pullProgress = progress;
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.isPulling$.subscribe((pulling: boolean) => {
+        this.isPulling = pulling;
+        this.cdr.detectChanges();
+      })
+    );
+
+    this.offlineSubs.push(
+      syncService.deepUpdateState$.subscribe((state) => {
+        this.deepUpdateState = state;
+        this.cdr.detectChanges();
+      })
+    );
   }
 
   ngOnDestroy() {
@@ -282,6 +316,104 @@ export class Layout implements OnInit, OnDestroy {
           );
         }
         break;
+    }
+  }
+
+  /**
+   * بروزرسانی عمیق (Full Resync)
+   * برای پاکسازی رکوردهای روح (Ghosts) و دریافت مجدد کل اطلاعات
+   */
+  async onDeepUpdate() {
+    if (this.isSyncing) return;
+
+    if (this.isOffline) {
+      this.toast.show('error', 'برای بروزرسانی عمیق باید به اینترنت متصل باشید.');
+      return;
+    }
+
+    // گارد وجود تغییرات ارسال نشده در صف
+    if (this.pendingCount > 0) {
+      this.toast.show('error', 'ابتدا باید تغییرات ذخیره‌نشده خود را همگام‌سازی (Sync) کنید تا از دست نروند.');
+      return;
+    }
+
+    const currentId = this.state.appState.currentProjectId;
+    this.deepSyncWarehouses = this.state.appState.projects || [];
+    this.deepSyncPreselectId = currentId && currentId !== 'ALL' ? Number(currentId) : null;
+    this.isDeepSyncModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  async startDeepSync(warehouseIds: number[]) {
+    this.isDeepSyncModalOpen = false;
+    
+    try {
+      this.isSyncing = true;
+      this.cdr.detectChanges();
+      
+      const syncService = OfflineSyncService.getInstance();
+      
+      // Pass the warehouse list so the service can get names
+      const warehousesMap: Record<number, string> = {};
+      this.deepSyncWarehouses.forEach(w => warehousesMap[w.id] = w.name);
+      
+      const summaries = await syncService.performDeepUpdate(warehouseIds, warehousesMap);
+      
+      let totalRecords = 0;
+      let totalBytes = 0;
+      let tableRows = '';
+      
+      summaries.forEach(s => {
+        totalRecords += s.records;
+        totalBytes += s.bytes;
+        tableRows += `
+          <tr class="border-b border-border last:border-0">
+            <td class="py-2 px-2 text-right">${s.warehouseName}</td>
+            <td class="py-2 px-2 text-center" dir="ltr">${s.records.toLocaleString()}</td>
+            <td class="py-2 px-2 text-left" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
+          </tr>
+        `;
+      });
+      
+      const htmlContent = `
+        <div class="mt-4 bg-surface rounded-lg overflow-hidden border border-border">
+          <table class="w-full text-xs">
+            <thead class="bg-surface text-slate-500">
+              <tr>
+                <th class="py-2 px-2 text-right">انبار</th>
+                <th class="py-2 px-2 text-center">رکوردها</th>
+                <th class="py-2 px-2 text-left">حجم</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+            <tfoot class="bg-slate-200/50 font-bold text-foreground border-t border-border">
+              <tr>
+                <td class="py-2 px-2 text-right">جمع کل</td>
+                <td class="py-2 px-2 text-center" dir="ltr">${totalRecords.toLocaleString()}</td>
+                <td class="py-2 px-2 text-left" dir="ltr">${(totalBytes / 1024).toFixed(1)} KB</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      await this.confirmDialog.open({
+        title: 'گزارش بروزرسانی عمیق',
+        message: 'دریافت اطلاعات با موفقیت به پایان رسید. جزئیات به شرح زیر است:' + htmlContent,
+        confirmText: 'تایید',
+        showCancel: false,
+        type: 'info'
+      });
+      
+      window.location.reload();
+    } catch (err: any) {
+      console.error('[DeepUpdate] Error:', err);
+      this.toast.show('error', 'خطا در بروزرسانی عمیق: ' + (err.message || 'خطای ناشناخته'));
+    } finally {
+      this.isSyncing = false;
+      this.cdr.detectChanges();
     }
   }
 

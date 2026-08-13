@@ -19,6 +19,8 @@ export class Dashboard implements OnInit {
   lastWeekStats: any = { count: 0, docs: 0, feed: 0 };
   overallStats: any = { total: 0, printed: 0, conflicts: 0, done: 0 };
 
+  isDashboardRefreshing = false;
+
   constructor(
     private cdr: ChangeDetectorRef,
     private itemApi: ItemApiService,
@@ -30,15 +32,27 @@ export class Dashboard implements OnInit {
   }
 
   loadStats() {
+    this.isDashboardRefreshing = true;
     const projectId = this.state.appState.activeWarehouseId?.toString() || 'ALL';
-    this.itemApi.getDashboardStats(projectId).subscribe((res: any) => {
-      this.weeklyData = res.weekly_data;
-      this.overallMax = res.overallMax || 10;
-      this.todayStats = res.today;
-      this.yesterdayStats = res.yesterday;
-      this.lastWeekStats = res.last_week_totals;
-      this.overallStats = res.overall;
-      this.cdr.detectChanges();
+    this.itemApi.getDashboardStats(projectId).subscribe({
+      next: (res: any) => {
+        this.weeklyData = res.weekly_data;
+        this.overallMax = res.overallMax || 10;
+        this.todayStats = res.today;
+        this.yesterdayStats = res.yesterday;
+        this.lastWeekStats = res.last_week_totals;
+        this.overallStats = res.overall;
+        setTimeout(() => {
+          this.isDashboardRefreshing = false;
+          this.cdr.detectChanges();
+        }, 600);
+      },
+      error: () => {
+        setTimeout(() => {
+          this.isDashboardRefreshing = false;
+          this.cdr.detectChanges();
+        }, 600);
+      }
     });
   }
 

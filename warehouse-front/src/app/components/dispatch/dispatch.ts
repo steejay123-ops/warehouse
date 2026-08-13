@@ -13,10 +13,11 @@ import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { SettingsService } from '../../services/settings';
 import { DraggableDirective } from '../../shared/directives/draggable.directive';
 import { LabelDesigner } from '../label-designer/label-designer';
+import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 
 @Component({
   selector: 'app-dispatch',
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective, LabelDesigner],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective, LabelDesigner, SmartDeleteModalComponent],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css'
 })
@@ -70,12 +71,19 @@ export class Dispatch implements OnInit {
   isLabelModalOpen = false;
   printItemsToPass: any[] = [];
 
+  // Delete Modal State
+  isDeleteModalOpen = false;
+  entityToDelete: any = null;
+  deleteImpactUrl = '';
+  isDeleting = false;
+  deleteErrorMessage = '';
+
   availableExportColumns: {key: string, label: string}[] = [];
 
   getRowClass = (row: any) => {
-    if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-slate-800';
-    if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-slate-800';
-    if (row.fieldStatus === 'counting') return 'bg-blue-100 hover:bg-blue-200 text-slate-800';
+    if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-foreground';
+    if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-foreground';
+    if (row.fieldStatus === 'counting') return 'bg-blue-100 hover:bg-blue-200 text-foreground';
     return '';
   };
 
@@ -113,7 +121,7 @@ export class Dispatch implements OnInit {
       if (prefs.visibleCols) {
         // Validate columns against known defaults to prevent empty tables from old preferences
         const validCols = this.state.appState.dispatchSettings.visibleCols;
-        const filteredCols = prefs.visibleCols.filter((c: string) => validCols.includes(c) || ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'has_conflict', 'is_fragile', 'is_heavy', 'needs_qc', 'plpkitem', 'pl', 'po', 'pk_number', 'item_no', 'unit', 'scope_discipline', 'bal4miv', 'new_location', 'hov_no', 'hov_date', 'msr_status', 'vendor', 'supplier', 'irn_no', 'item2', 'inventory_status', 'indent', 'remark', 'price_amount', 'currency', 'invoice_file', 'invoice_page', 'customs_field', 'customs_file', 'customs_file_page', 'price_remark', 'issue_remark', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'].includes(c));
+        const filteredCols = prefs.visibleCols.filter((c: string) => validCols.includes(c) || ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'has_conflict', 'is_fragile', 'is_heavy', 'needs_qc', 'plpkitem', 'pl', 'po', 'pk_number', 'item_no', 'unit', 'scope_discipline', 'bal4miv', 'new_location', 'hov_no', 'hov_date', 'msr_status', 'vendor', 'supplier', 'irn_no', 'item2', 'inventory_status', 'indent', 'remark', 'price_amount', 'currency', 'invoice_file', 'invoice_page', 'customs_field', 'customs_file', 'customs_file_page', 'price_remark', 'issue_remark', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name', 'actions'].includes(c));
         if (filteredCols.length > 0) {
           this.state.appState.dispatchSettings.visibleCols = filteredCols;
         }
@@ -644,6 +652,42 @@ export class Dispatch implements OnInit {
       // پیام خطا فقط از errorInterceptor می‌آید — او تفکیک «به سرور نرسیدیم» از
       // «سرور رد کرد» را می‌داند و متن دقیق DRF را هم نشان می‌دهد.
       error: () => {}
+    });
+  }
+
+  // ────────── Delete Methods ──────────
+  openDeleteModal(id: number) {
+    const item = this.items.find(i => i.id === id);
+    if (!item) return;
+    this.entityToDelete = item;
+    this.deleteImpactUrl = `/api/inventory/items/${id}/delete_impact/`;
+    this.isDeleteModalOpen = true;
+    this.isDeleting = false;
+    this.deleteErrorMessage = '';
+    this.cdr.detectChanges();
+  }
+
+  handleSoftDelete() {
+    this.deleteErrorMessage = 'برای کالاها امکان غیرفعال‌سازی (Soft-Delete) وجود ندارد.';
+  }
+
+  handleHardDelete() {
+    if (!this.entityToDelete) return;
+    this.isDeleting = true;
+    this.deleteErrorMessage = '';
+    this.itemApi.delete(this.entityToDelete.id).subscribe({
+      next: () => {
+        this.toast.show('success', 'کالا با موفقیت حذف شد.');
+        this.isDeleteModalOpen = false;
+        this.entityToDelete = null;
+        this.isDeleting = false;
+        this.loadItems();
+      },
+      error: (err: any) => {
+        this.deleteErrorMessage = err.error?.error || err.error?.detail || 'خطا در حذف کالا';
+        this.isDeleting = false;
+        this.cdr.detectChanges();
+      }
     });
   }
 

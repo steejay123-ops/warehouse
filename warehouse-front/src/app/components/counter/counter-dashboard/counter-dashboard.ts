@@ -12,11 +12,12 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { AuthStore } from '../../../core/stores/auth.store';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
-import { Router } from '@angular/router';
-import { Subject, Subscription } from 'rxjs';
+import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
+import { Subject, Subscription, filter } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { CountTaskStore } from '../../../core/services/count-task-store';
 import { BarcodeScannerComponent } from '../../../shared/components/barcode-scanner/barcode-scanner.component';
+import { WebSocketService } from '../../../core/http/websocket.service';
 
 @Component({
   selector: 'app-counter-dashboard',
@@ -33,7 +34,6 @@ export class CounterDashboard implements OnInit {
   selectedTask: CountTask | null = null;
   selectedTasks = new Set<number>();
   selectedPoolTasks = new Set<number>();
-  refreshInterval: any;
   currentTab: 'my-tasks' | 'pool' = 'my-tasks';
   
   // Detail view state
@@ -54,9 +54,15 @@ export class CounterDashboard implements OnInit {
   statusFilter: 'pending' | 'completed' | 'recount' | 'all' = 'pending';
   searchQuery: string = '';
   searchSubject = new Subject<string>();
+  private initialLoadDone = false;
   locationSort: 'asc' | 'desc' | '' = '';
+  updatedTaskIds = new Set<number>();
+  flashTimeout: any;
 
-  private pullSub: Subscription | null = null;
+  private pushSub?: Subscription;
+  private pullSub?: Subscription;
+  private wsSub?: Subscription;
+  private routerSub?: Subscription;
 
   @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
   private scanBusy = false;
@@ -71,8 +77,14 @@ export class CounterDashboard implements OnInit {
     private auth: AuthService,
     private http: HttpClient,
     private router: Router,
-    private store: CountTaskStore
-  ) {}
+    private route: ActivatedRoute,
+    private store: CountTaskStore,
+    private wsService: WebSocketService
+  ) {
+    this.searchSubject.pipe(debounceTime(2000), distinctUntilChanged()).subscribe(q => {
+      this.router.navigate([], { queryParams: { q: q || null }, queryParamsHandling: 'merge', replaceUrl: true });
+    });
+  }
 
   // ─── Local-First (فاز ۲) ───
 
@@ -105,35 +117,49 @@ export class CounterDashboard implements OnInit {
       }
     });
 
-    this.loadTasks();
-    this.refreshInterval = setInterval(() => {
-      if (!this.selectedTask) {
-        if (this.localFirst) {
-          // Local-First: رفرش دوره‌ای = Pull دلتا در پس‌زمینه (UI از Dexie می‌خواند)
-          this.store.refresh(this.activeWarehouseId!);
-        } else if (this.currentTab === 'my-tasks') {
-          this.loadTasks(false); // background refresh
-        } else {
-          this.loadPoolTasks(false);
-        }
+    this.wsService.connect();
+    this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      if (data.type === 'count_task_update' || data.event === 'count_task_update') {
+        this.refreshCurrentTab();
       }
-    }, 20000);
-
-    this.searchSubject.pipe(
-      debounceTime(300),
-      distinctUntilChanged()
-    ).subscribe(query => {
-      this.searchQuery = query;
-      this.applyFilters();
-      this.cdr.detectChanges();
     });
+
+    // ── URL State: خواندن تب از آدرس مرورگر ──
+    this.syncStateFromUrl();
+    this.routerSub = this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe(() => this.syncStateFromUrl());
   }
 
   ngOnDestroy() {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
+    this.pushSub?.unsubscribe();
     this.pullSub?.unsubscribe();
+    this.wsSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+  }
+
+  refreshCurrentTab() {
+    if (this.currentTab === 'my-tasks') this.loadTasks(false);
+    else if (this.currentTab === 'pool') this.loadPoolTasks(false);
+  }
+
+  private trackUpdates(oldList: any[], newList: any[]) {
+    const oldMap = new Map(oldList.map((t: any) => [t.id, t]));
+    let hasUpdates = false;
+    for (const t of newList) {
+      const oldItem = oldMap.get(t.id);
+      if (!oldItem || oldItem.status !== t.status || oldItem.counted_balance !== t.counted_balance) {
+        this.updatedTaskIds.add(t.id);
+        hasUpdates = true;
+      }
+    }
+    if (hasUpdates) {
+      if (this.flashTimeout) clearTimeout(this.flashTimeout);
+      this.flashTimeout = setTimeout(() => {
+        this.updatedTaskIds.clear();
+        this.cdr.detectChanges();
+      }, 4000);
+    }
   }
 
   applyFilters() {
@@ -188,9 +214,6 @@ export class CounterDashboard implements OnInit {
     }
   }
 
-  onSearchChange(event: any) {
-    this.searchSubject.next(event.target.value);
-  }
 
   setDateFilter(filter: 'today' | 'yesterday' | 'week' | 'all') {
     this.dateFilter = filter;
@@ -230,10 +253,14 @@ export class CounterDashboard implements OnInit {
     }
     try {
       if (this.currentTab === 'my-tasks') {
-        this.tasks = await this.store.getMyTasks(whId, userId);
+        const newTasks = await this.store.getMyTasks(whId, userId);
+        this.trackUpdates(this.tasks, newTasks);
+        this.tasks = newTasks;
         this.applyFilters();
       } else {
-        this.poolTasks = await this.store.getPoolTasks(whId);
+        const newPoolTasks = await this.store.getPoolTasks(whId);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
       }
     } catch (e) {
       console.error('[CounterDashboard] خطا در خواندن از Dexie:', e);
@@ -261,10 +288,12 @@ export class CounterDashboard implements OnInit {
     this.countTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         try {
-          this.tasks = Array.isArray(res) ? res : (res.results || []);
-          if (!Array.isArray(this.tasks)) {
-             this.tasks = [];
+          let newTasks = Array.isArray(res) ? res : (res.results || []);
+          if (!Array.isArray(newTasks)) {
+             newTasks = [];
           }
+          this.trackUpdates(this.tasks, newTasks);
+          this.tasks = newTasks;
           this.applyFilters();
         } catch (e) {
           console.error('Error assigning tasks:', e);
@@ -299,7 +328,9 @@ export class CounterDashboard implements OnInit {
     
     this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
       next: (res: any) => {
-        this.poolTasks = Array.isArray(res) ? res : (res.results || []);
+        const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -311,15 +342,46 @@ export class CounterDashboard implements OnInit {
     });
   }
 
-  setTab(tab: 'my-tasks' | 'pool') {
-    this.currentTab = tab;
-    this.selectedTasks.clear();
-    this.selectedPoolTasks.clear();
-    if (tab === 'my-tasks') {
-      this.loadTasks();
-    } else {
-      this.loadPoolTasks();
+  /** خواندن تب فعال از پارامترهای آدرس مرورگر */
+  private syncStateFromUrl() {
+    if (!this.router.url.split('?')[0].includes('/counter')) return;
+    const params = this.router.parseUrl(this.router.url).queryParams;
+    
+    // 1. Sync Tab
+    const tab = params['tab'] as typeof this.currentTab;
+    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool'];
+    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
+    let tabChanged = false;
+    if (resolved !== this.currentTab) {
+      this.currentTab = resolved;
+      this.selectedTasks.clear();
+      this.selectedPoolTasks.clear();
+      tabChanged = true;
     }
+
+    // 2. Sync Search Query
+    const q = params['q'] || '';
+    if (q !== this.searchQuery) {
+      this.searchQuery = q;
+      this.applyFilters();
+      this.cdr.detectChanges();
+    }
+
+    // 3. Load Data only if needed
+    if (tabChanged || !this.initialLoadDone) {
+      this.initialLoadDone = true;
+      this.refreshCurrentTab();
+    }
+  }
+
+  setTab(tab: 'my-tasks' | 'pool') {
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
+  }
+
+  onSearchChange(val: string) {
+    this.searchQuery = val;
+    this.applyFilters();
+    this.searchSubject.next(val);
   }
 
   togglePoolSelection(taskId: number) {

@@ -67,37 +67,42 @@
     </nav>
   </aside>
 
-  <div class="flex-1 flex flex-col min-w-0 bg-slate-50 relative">
+  <div class="flex-1 flex flex-col min-w-0 bg-surface relative">
     
     <!-- Top Header -->
-    <header class="bg-white border-b border-slate-200 p-4 h-[70px] flex items-center justify-between shadow-sm relative z-10 transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
+    <header class="bg-background border-b border-border p-4 h-[70px] flex items-center justify-between shadow-sm relative z-10 transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
       
       <!-- Right Side (RTL Start): Mobile Toggle, User, Notifications, Progress -->
       <div class="flex items-center gap-2 md:gap-4 flex-1 justify-start shrink-0">
-        <button (click)="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-600 shrink-0">
+        <button (click)="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-surface text-slate-600 shrink-0">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
-        <button (click)="toggleDesktopSidebar()" class="hidden md:block p-2 rounded-lg hover:bg-slate-100 text-slate-600 shrink-0 transition-colors" title="نمایش/مخفی کردن منو">
+        <button (click)="toggleDesktopSidebar()" class="hidden md:block p-2 rounded-lg hover:bg-surface text-slate-600 shrink-0 transition-colors" title="نمایش/مخفی کردن منو">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
         
         <div class="relative">
           <div *ngIf="isUserMenuOpen" class="fixed inset-0 z-40" (click)="closeUserMenu()"></div>
-          <button (click)="toggleUserMenu()" class="relative z-50 flex items-center gap-2 hover:bg-slate-100 p-1.5 pr-2 rounded-xl transition-colors border border-transparent hover:border-slate-200">
-            <span class="text-[11px] font-bold text-slate-700 hidden sm:block mr-1">{{userName}}</span>
+          <button (click)="toggleUserMenu()" class="relative z-50 flex items-center gap-2 hover:bg-surface p-1.5 pr-2 rounded-xl transition-colors border border-transparent hover:border-border">
+            <span class="text-[11px] font-bold text-foreground hidden sm:block mr-1">{{userName}}</span>
             <div class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">{{userAvatar}}</div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 hidden sm:block"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
           
-          <div *ngIf="isUserMenuOpen" class="absolute right-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden fade-in">
-            <div class="p-3 border-b border-slate-100 bg-slate-50">
-              <p class="text-xs font-bold text-slate-800 truncate mb-0.5">{{userName}}</p>
+          <div *ngIf="isUserMenuOpen" class="absolute right-0 top-full mt-1 w-56 bg-background border border-border rounded-2xl shadow-xl z-50 overflow-hidden fade-in">
+            <div class="p-3 border-b border-border bg-surface">
+              <p class="text-xs font-bold text-foreground truncate mb-0.5">{{userName}}</p>
               <p class="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md inline-block truncate max-w-full">{{userRole}}</p>
             </div>
             <div class="p-2 flex flex-col">
               <button (click)="goToChangePassword(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                 <span>تغییر رمز ورود</span>
+              </button>
+              <div class="h-px bg-surface my-1"></div>
+              <button (click)="onDeepUpdate(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-orange-600 hover:bg-orange-50" [disabled]="isOffline || pendingCount > 0" [title]="isOffline ? 'در حالت آفلاین در دسترس نیست' : (pendingCount > 0 ? 'لطفا ابتدا تغییرات را Sync کنید' : '')" [class.opacity-50]="isOffline || pendingCount > 0" [class.cursor-not-allowed]="isOffline || pendingCount > 0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                <span>بروزرسانی عمیق</span>
               </button>
               <button (click)="logout(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-rose-500 hover:bg-rose-50 mt-1">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -109,7 +114,7 @@
         
         <!-- Force Sync Button -->
         <!-- همیشه قابل کلیک است (حتی آفلاین) تا کاربر پاسخ روشن دریافت کند -->
-        <button (click)="onForceSync()" [disabled]="isSyncing" class="relative p-2 rounded-lg transition-colors shrink-0" [ngClass]="isSyncing ? 'bg-indigo-100 text-indigo-600' : (isOffline ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-slate-100 text-slate-500')" [title]="isSyncing ? 'در حال همگام‌سازی...' : (connectionState === 'offline' ? 'آفلاین — برای بررسی وضعیت کلیک کنید' : (connectionState === 'server-unreachable' ? 'سرور در دسترس نیست — برای تلاش مجدد کلیک کنید' : 'همگام‌سازی دستی (' + pendingCount + ' مورد در صف)'))">
+        <button (click)="onForceSync()" [disabled]="isSyncing" class="relative p-2 rounded-lg transition-colors shrink-0" [ngClass]="isSyncing ? 'bg-indigo-100 text-indigo-600' : (isOffline ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-surface text-slate-500')" [title]="isSyncing ? 'در حال همگام‌سازی...' : (connectionState === 'offline' ? 'آفلاین — برای بررسی وضعیت کلیک کنید' : (connectionState === 'server-unreachable' ? 'سرور در دسترس نیست — برای تلاش مجدد کلیک کنید' : 'همگام‌سازی دستی (' + pendingCount + ' مورد در صف)'))">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isSyncing"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           <span *ngIf="pendingCount > 0" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 border-2 border-white" [ngClass]="isOffline ? 'bg-amber-500' : 'bg-indigo-500'">{{pendingCount}}</span>
         </button>
@@ -117,15 +122,15 @@
         <!-- Sync Error Inbox Bell -->
         <div class="relative">
           <div *ngIf="isSyncErrorsOpen" class="fixed inset-0 z-40" (click)="closeSyncErrors()"></div>
-          <button (click)="toggleSyncErrors()" class="relative p-2 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors shrink-0" [ngClass]="syncErrorCount > 0 ? 'text-amber-500' : 'text-slate-500'">
+          <button (click)="toggleSyncErrors()" class="relative p-2 rounded-lg hover:bg-surface text-slate-500 transition-colors shrink-0" [ngClass]="syncErrorCount > 0 ? 'text-amber-500' : 'text-slate-500'">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
             <span *ngIf="syncErrorCount > 0" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 border-2 border-white">{{syncErrorCount}}</span>
           </button>
 
           <!-- Sync Errors Dropdown -->
-          <div *ngIf="isSyncErrorsOpen" class="absolute right-0 top-full mt-2 w-80 max-h-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden fade-in">
-            <div class="p-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-              <span class="text-xs font-bold text-slate-700">صندوق خطاهای همگام‌سازی</span>
+          <div *ngIf="isSyncErrorsOpen" class="absolute right-0 top-full mt-2 w-80 max-h-96 bg-background border border-border rounded-2xl shadow-2xl z-50 overflow-hidden fade-in">
+            <div class="p-3 border-b border-border bg-surface flex items-center justify-between">
+              <span class="text-xs font-bold text-foreground">صندوق خطاهای همگام‌سازی</span>
               <button *ngIf="syncErrors.length > 0" (click)="dismissAllSyncErrors()" class="text-[10px] text-rose-500 hover:text-rose-700 font-bold">پاک کردن همه</button>
             </div>
             <!-- حالت صف مسدود: مواردی که نیاز به تصمیم کاربر دارند -->
@@ -138,14 +143,14 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" class="mx-auto mb-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 <p class="text-xs text-slate-400 font-semibold">خطایی وجود ندارد</p>
               </div>
-              <div *ngFor="let err of syncErrors" class="p-3 border-b border-slate-100 hover:bg-slate-50 transition-colors">
+              <div *ngFor="let err of syncErrors" class="p-3 border-b border-border hover:bg-surface transition-colors">
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-1.5 mb-1">
                       <span class="text-[9px] font-bold px-1.5 py-0.5 rounded" [ngClass]="err.statusCode >= 400 ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'">{{err.statusCode || 'ERR'}}</span>
                       <span class="text-[10px] text-slate-400 font-bold">{{err.method}}</span>
                     </div>
-                    <p class="text-[11px] text-slate-700 font-semibold truncate">{{err.serverMessage}}</p>
+                    <p class="text-[11px] text-foreground font-semibold truncate">{{err.serverMessage}}</p>
                     <p class="text-[9px] text-slate-400 mt-0.5">{{formatSyncTime(err.failedAt)}}</p>
                   </div>
                   <button (click)="dismissSyncError(err.id!)" class="p-1 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors shrink-0" title="حذف — دادهٔ این تغییر دور ریخته می‌شود">
@@ -158,12 +163,12 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                     تلاش مجدد
                   </button>
-                  <button *ngIf="formatErrorPayload(err.body).length > 0" (click)="toggleErrorPayload(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                  <button *ngIf="formatErrorPayload(err.body).length > 0" (click)="toggleErrorPayload(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface text-slate-500 hover:bg-slate-200 transition-colors">
                     {{expandedErrorId === err.id ? 'بستن داده' : 'نمایش داده'}}
                   </button>
                 </div>
                 <!-- Payload: دادهٔ کاربر که سرور نپذیرفت -->
-                <div *ngIf="expandedErrorId === err.id" class="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                <div *ngIf="expandedErrorId === err.id" class="mt-2 p-2 bg-surface rounded-lg border border-border">
                   <div *ngFor="let field of formatErrorPayload(err.body)" class="flex items-start gap-1.5 py-0.5">
                     <span class="text-[9px] text-slate-400 font-bold shrink-0" dir="ltr">{{field.key}}:</span>
                     <span class="text-[9px] text-slate-600 break-all" dir="auto">{{field.value}}</span>
@@ -174,18 +179,18 @@
           </div>
         </div>
         
-        <div class="hidden lg:flex items-center gap-2 border-r border-slate-200 pr-4" *ngIf="!['counter', 'customs', 'supervisor'].includes(store.currentTab())" [title]="progressStats.tooltip">
+        <div class="hidden lg:flex items-center gap-2 border-r border-border pr-4" *ngIf="!['counter', 'customs', 'supervisor'].includes(store.currentTab())" [title]="progressStats.tooltip">
           <span class="text-xs text-slate-400 shrink-0">{{progressStats.label}}</span>
           <div class="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
             <div class="h-full rounded-full transition-all duration-500" [ngClass]="progressStats.colorClass" [style.width.%]="progressStats.percent"></div>
           </div>
-          <span class="text-xs font-bold text-slate-700 shrink-0">{{progressStats.percent}}٪</span>
+          <span class="text-xs font-bold text-foreground shrink-0">{{progressStats.percent}}٪</span>
         </div>
       </div>
 
       <!-- Center: Page Title -->
       <div class="flex-1 flex justify-center min-w-0 shrink-0">
-        <h1 class="text-sm font-bold text-slate-800 truncate">{{currentTitle}}</h1>
+        <h1 class="text-sm font-bold text-foreground truncate">{{currentTitle}}</h1>
       </div>
       
       <!-- Left Side (RTL End): Badge -->
@@ -202,13 +207,46 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.56 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
       <span *ngIf="connectionState === 'offline'">حالت آفلاین — اینترنت شما وصل نیست. تغییرات شما ذخیره شده و به محض اتصال مجدد، خودکار همگام‌سازی می‌شوند.</span>
       <span *ngIf="connectionState === 'server-unreachable'">سرور در دسترس نیست — تغییرات شما ذخیره شده و به محض بازگشت سرور، خودکار همگام‌سازی می‌شوند.</span>
-      <span *ngIf="pendingCount > 0" class="bg-white/20 px-2 py-0.5 rounded-full text-[10px]">{{pendingCount}} مورد در صف</span>
+      <span *ngIf="pendingCount > 0" class="bg-background/20 px-2 py-0.5 rounded-full text-[10px]">{{pendingCount}} مورد در صف</span>
     </div>
 
     <!-- ─── Syncing Banner ─── -->
-    <div *ngIf="isSyncing && !isOffline" class="bg-indigo-500 text-white px-4 py-2 flex items-center justify-center gap-3 text-xs font-bold shadow-sm z-10 relative">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-      <span>در حال همگام‌سازی داده‌ها با سرور...</span>
+    <div *ngIf="(isSyncing || isPulling) && !isOffline" class="bg-indigo-500 text-white px-4 py-2 flex flex-col items-center justify-center gap-2 text-xs font-bold shadow-sm z-10 relative">
+      <div class="flex items-center gap-3 w-full justify-center">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="animate-spin shrink-0"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        <span *ngIf="isSyncing && !isPulling">در حال ارسال تغییرات به سرور...</span>
+        <span *ngIf="isPulling">
+          <ng-container *ngIf="deepUpdateState">
+            <ng-container *ngIf="deepUpdateState.mode === 'all'">
+              در حال دریافت انبار {{deepUpdateState.currentIndex}} از {{deepUpdateState.totalWarehouses}} ({{deepUpdateState.currentWarehouseName}}):
+            </ng-container>
+            <ng-container *ngIf="deepUpdateState.mode === 'current'">
+              در حال دریافت {{deepUpdateState.currentWarehouseName}}:
+            </ng-container>
+          </ng-container>
+          <ng-container *ngIf="!deepUpdateState">
+            در حال دریافت اطلاعات:
+          </ng-container>
+          
+          <ng-container *ngIf="pullProgress">
+             {{pullProgress.current}} <ng-container *ngIf="pullProgress.total">از {{pullProgress.total}}</ng-container> رکورد
+             <span dir="ltr">({{ (pullProgress.bytes / 1024).toFixed(1) }} KB)</span>
+          </ng-container>
+          <ng-container *ngIf="!pullProgress">در حال ارتباط با سرور...</ng-container>
+        </span>
+      </div>
+      
+      <!-- Progress Bar (Only when pulling and total is known) -->
+      <div *ngIf="isPulling && pullProgress?.total" class="w-full max-w-md h-1.5 bg-indigo-700/50 rounded-full overflow-hidden">
+        <ng-container *ngIf="deepUpdateState?.mode === 'all'; else singleBar">
+           <div class="h-full bg-emerald-400 transition-all duration-300" 
+                [style.width.%]="(((deepUpdateState?.currentIndex || 1) - 1) + ((pullProgress?.current || 0) / (pullProgress?.total || 1))) / (deepUpdateState?.totalWarehouses || 1) * 100">
+           </div>
+        </ng-container>
+        <ng-template #singleBar>
+           <div class="h-full bg-emerald-400 transition-all duration-300" [style.width.%]="(pullProgress?.current || 0) / (pullProgress?.total || 1) * 100"></div>
+        </ng-template>
+      </div>
     </div>
 
     <!-- ─── Sync Success Banner ─── -->
@@ -222,7 +260,7 @@
        <span class="text-[12px] font-black text-white shrink-0">{{currentWarehouse?.name}}</span>
     </div>
 
-    <div class="flex-1 p-4 md:p-6 overflow-y-auto bg-slate-50 fade-in relative" id="content-container">
+    <div class="flex-1 p-4 md:p-6 overflow-y-auto bg-surface fade-in relative" id="content-container">
       
       <!-- Breadcrumbs -->
       <div *ngIf="store.isWarehouseContext()" class="mb-5 flex items-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
@@ -237,3 +275,11 @@
     </div>
   </div>
 </div>
+
+<app-deep-sync-modal
+  [isOpen]="isDeepSyncModalOpen"
+  [warehouses]="deepSyncWarehouses"
+  [preselectId]="deepSyncPreselectId"
+  (closed)="isDeepSyncModalOpen = false"
+  (startSync)="startDeepSync($event)">
+</app-deep-sync-modal>

@@ -4,11 +4,16 @@ from .models import Item, CountTask, CountTaskHistory, DocTask, DocTaskHistory, 
 class ItemSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     modified_by_name = serializers.SerializerMethodField()
-    warehouse_name = serializers.CharField(source='warehouse.project_name', read_only=True)
+    warehouse_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Item
         fields = '__all__'
+
+    def get_warehouse_name(self, obj):
+        if obj.warehouse:
+            return obj.warehouse.project_name or obj.warehouse.name
+        return None
 
     def get_created_by_name(self, obj):
         if obj.created_by:

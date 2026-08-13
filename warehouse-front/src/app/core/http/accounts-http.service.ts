@@ -72,6 +72,10 @@ export class AccountsHttpService {
     return this.http.put<User>(`${this.apiUrl}/auth/users/${id}/`, data);
   }
 
+  deleteUser(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/auth/users/${id}/`);
+  }
+
   adminResetPassword(id: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/auth/users/${id}/admin_reset_password/`, {});
   }

@@ -8,13 +8,13 @@ export class StateService {
     user: null,
     unit: 'admin',
     tab: 'dashboard',
-    activeWarehouseId: (localStorage.getItem('wh_active_id') === 'ALL' ? 'ALL' : (localStorage.getItem('wh_active_id') ? Number(localStorage.getItem('wh_active_id')) : null)) as any,
+    activeWarehouseId: (localStorage.getItem('wh_active_id') === 'ALL' ? 'ALL' : (localStorage.getItem('wh_active_id') ? Number(localStorage.getItem('wh_active_id')) : 'ALL')) as any,
     projects: [],
     rolesMap: {} as any,  // Deprecated: titles & colors now come from API (role.title, role.color)
     users: [],
     items: [],
     dispatchSettings: {
-      visibleCols: ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name'],
+      visibleCols: ['fa_unic_code', 'description', 'inventory', 'old_location', 'labelStatus', 'fieldAssignee', 'fieldStatus', 'docAssignee', 'docStatus', 'my_tag', 'created_at', 'updated_at', 'created_by_name', 'modified_by_name', 'actions'],
       filters: {},
       search: '',
       recentTags: ['اولویت الف', 'محموله مهر', 'سیستمی', 'تعمیری', 'اولویت ب'],

@@ -1,4 +1,7 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
+import { WebSocketService } from '../../core/http/websocket.service';
 import { CommonModule } from '@angular/common';
 import { AuthStore } from '../../core/stores/auth.store';
 import { FormsModule } from '@angular/forms';
@@ -16,10 +19,14 @@ import { environment } from '../../../environments/environment';
 @Component({
   selector: 'app-manager-review',
   standalone: true,
-  imports: [CommonModule, FormsModule, HasPermissionDirective, WarehouseSelectorComponent],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent],
   templateUrl: './manager-review.html'
 })
-export class ManagerReview implements OnInit {
+export class ManagerReview implements OnInit, OnDestroy {
+  private wsSub?: Subscription;
+  updatedTaskIds = new Set<number>();
+  flashTimeout: any;
+  private routerSub?: Subscription;
   currentTab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool' = 'my-tasks';
 
   // ── Count Task Tab ──
@@ -60,35 +67,92 @@ export class ManagerReview implements OnInit {
     private countTaskApi: CountTaskApiService,
     private docTaskApi: DocTaskApiService,
     private cdr: ChangeDetectorRef,
-    private http: HttpClient
+    private http: HttpClient,
+    private wsService: WebSocketService,
+    private router: Router
   ) {}
 
   ngOnInit() {
-    this.loadTasks();
+    this.wsService.connect();
+    this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      if (data.type === 'count_task_update' || data.event === 'count_task_update' || 
+          data.type === 'doc_task_update' || data.event === 'doc_task_update') {
+        this.refreshCurrentTab();
+      }
+    });
+
+    // ── URL State: خواندن تب از آدرس مرورگر ──
+    this.syncTabFromUrl();
+    this.routerSub = this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe(() => this.syncTabFromUrl());
+  }
+
+  ngOnDestroy() {
+    this.wsSub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+  }
+
+  refreshCurrentTab() {
+    if (this.currentTab === 'my-tasks') this.loadTasks(false);
+    else if (this.currentTab === 'pool') this.loadPoolTasks(false);
+    else if (this.currentTab === 'doc') this.loadDocTasks(false);
+    else this.loadDocPoolTasks(false);
+  }
+
+  private trackUpdates(oldList: any[], newList: any[]) {
+    const oldMap = new Map(oldList.map((t: any) => [t.id, t]));
+    let hasUpdates = false;
+    for (const t of newList) {
+      const oldItem = oldMap.get(t.id);
+      if (!oldItem || oldItem.status !== t.status || oldItem.counted_balance !== t.counted_balance) {
+        this.updatedTaskIds.add(t.id);
+        hasUpdates = true;
+      }
+    }
+    if (hasUpdates) {
+      if (this.flashTimeout) clearTimeout(this.flashTimeout);
+      this.flashTimeout = setTimeout(() => {
+        this.updatedTaskIds.clear();
+        this.cdr.detectChanges();
+      }, 4000);
+    }
+  }
+
+  /** خواندن تب فعال از پارامترهای آدرس مرورگر */
+  private syncTabFromUrl() {
+    if (!this.router.url.split('?')[0].includes('/manager-review')) return;
+    const params = this.router.parseUrl(this.router.url).queryParams;
+    const tab = params['tab'] as typeof this.currentTab;
+    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool', 'doc', 'doc-pool'];
+    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
+    if (resolved !== this.currentTab) {
+      this.currentTab = resolved;
+      this.selectedTasks.clear();
+      this.selectedPoolTasks.clear();
+      this.selectedDocTasks.clear();
+      this.selectedDocPoolTasks.clear();
+      this.selectedTask = null;
+    }
+    this.refreshCurrentTab();
     this.loadDocTasks();
     this.loadDocPoolTasks();
+    this.cdr.detectChanges();
   }
 
   setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
-    this.currentTab = tab;
-    this.selectedTasks.clear();
-    this.selectedPoolTasks.clear();
-    this.selectedDocTasks.clear();
-    this.selectedDocPoolTasks.clear();
-    this.selectedTask = null;
-    if (tab === 'my-tasks') this.loadTasks();
-    else if (tab === 'pool') this.loadPoolTasks();
-    else if (tab === 'doc') this.loadDocTasks();
-    else this.loadDocPoolTasks();
-    this.cdr.detectChanges();
+    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
   }
 
   // ════════════════════════════════════════════
   //  My Tasks Tab
   // ════════════════════════════════════════════
 
-  loadTasks() {
-    this.isLoading = true;
+  loadTasks(showLoading = true) {
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'manager', status: 'MANAGER_REVIEW' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
@@ -96,7 +160,9 @@ export class ManagerReview implements OnInit {
     this.countTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const all = Array.isArray(res) ? res : (res.results || []);
-        this.tasks = all.filter((t: CountTask) => t.status === 'MANAGER_REVIEW');
+        const newTasks = all.filter((t: CountTask) => t.status === 'MANAGER_REVIEW');
+        this.trackUpdates(this.tasks, newTasks);
+        this.tasks = newTasks;
         this.selectedTasks.clear();
         this.isLoading = false;
         this.cdr.detectChanges();
@@ -205,16 +271,20 @@ export class ManagerReview implements OnInit {
   //  Pool Tab
   // ════════════════════════════════════════════
 
-  loadPoolTasks() {
-    this.isLoading = true;
-    this.cdr.detectChanges();
+  loadPoolTasks(showLoading = true) {
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'manager' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
 
     this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
       next: (res: any) => {
-        this.poolTasks = Array.isArray(res) ? res : (res.results || []);
+        const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -254,9 +324,11 @@ export class ManagerReview implements OnInit {
   //  Doc Task Tab
   // ════════════════════════════════════════════
 
-  loadDocTasks() {
-    this.isDocLoading = true;
-    this.cdr.detectChanges();
+  loadDocTasks(showLoading = true) {
+    if (showLoading) {
+      this.isDocLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'manager', page_size: 1000 };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
@@ -264,7 +336,9 @@ export class ManagerReview implements OnInit {
     this.docTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
-        this.docTasks = all.filter(t => t.status === 'DOC_MANAGER_REVIEW' && t.assigned_manager !== null);
+        const newDocTasks = all.filter(t => t.status === 'DOC_MANAGER_REVIEW' && t.assigned_manager !== null);
+        this.trackUpdates(this.docTasks, newDocTasks);
+        this.docTasks = newDocTasks;
         this.selectedDocTasks.clear();
         this.isDocLoading = false;
         this.cdr.detectChanges();
@@ -352,16 +426,20 @@ export class ManagerReview implements OnInit {
   //  Doc Pool Tab
   // ════════════════════════════════════════════
 
-  loadDocPoolTasks() {
-    this.isDocPoolLoading = true;
-    this.cdr.detectChanges();
+  loadDocPoolTasks(showLoading = true) {
+    if (showLoading) {
+      this.isDocPoolLoading = true;
+      this.cdr.detectChanges();
+    }
     const params: any = { as_role: 'manager' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
 
     this.http.get<DocTask[]>(`${environment.apiUrl}/inventory/doc-tasks/pool_tasks/`, { params }).subscribe({
       next: (res: any) => {
-        this.docPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        const newDocPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.docPoolTasks, newDocPoolTasks);
+        this.docPoolTasks = newDocPoolTasks;
         this.isDocPoolLoading = false;
         this.cdr.detectChanges();
       },

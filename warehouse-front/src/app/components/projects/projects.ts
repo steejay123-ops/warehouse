@@ -1,28 +1,32 @@
-import { Component, OnInit, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { StateService } from '../../services/state.service';
 import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponent, HasPermissionDirective } from '../../shared';
+import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
 import { ImportResult } from '../../core/http/accounts-http.service';
 import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
-import { Observable } from 'rxjs';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 
 @Component({
   selector: 'app-projects',
-  imports: [CommonModule, FormsModule, ModalComponent, HasPermissionDirective, ExcelImportModal],
+  imports: [CommonModule, FormsModule, ModalComponent, HasPermissionDirective, ExcelImportModal, SmartDeleteModalComponent],
   templateUrl: './projects.html',
   styleUrl: './projects.css'
 })
-export class Projects implements OnInit {
+export class Projects implements OnInit, OnDestroy {
   @ViewChild('addModal') addModal!: ModalComponent;
   addModalOpen = false;
   editModalOpen = false;
   templateModalOpen = false;
 
   searchQuery = '';
+  searchSubject = new Subject<string>();
+  private searchSub?: Subscription;
   statusFilter = 'all';
   openDropdownId: number | null = null;
   
@@ -32,9 +36,18 @@ export class Projects implements OnInit {
   isExcelModalOpen = false;
   excelImportFn!: (file: File) => Observable<ImportResult>;
   excelTemplateFn!: () => void;
+  
+  isRefreshing = false;
 
   // Edit Model
   editingProject: any = null;
+
+  // Delete Modal
+  isDeleteModalOpen = false;
+  entityToDelete: any = null;
+  deleteImpactUrl = '';
+  isDeleting = false;
+  deleteErrorMessage = '';
 
   // Add Model
   newWh: Partial<Warehouse> = {
@@ -49,27 +62,59 @@ export class Projects implements OnInit {
     public state: StateService,
     private toast: ToastService,
     private confirm: ConfirmDialogService,
+    private route: ActivatedRoute,
     private router: Router,
     private cdr: ChangeDetectorRef,
     public store: AuthStore
   ) {}
 
   ngOnInit() {
+    this.route.queryParams.subscribe(params => {
+      const q = params['q'] || '';
+      if (q !== this.searchQuery) {
+        this.searchQuery = q;
+        this.cdr.detectChanges();
+      }
+    });
+
+    this.searchSub = this.searchSubject.pipe(
+      debounceTime(2000)
+    ).subscribe(q => {
+      this.router.navigate([], { queryParams: { q: q || null }, queryParamsHandling: 'merge', replaceUrl: true });
+    });
+
     this.store.setWarehouseContext(false);
     this.loadWarehouses();
   }
 
+  ngOnDestroy() {
+    if (this.searchSub) {
+      this.searchSub.unsubscribe();
+    }
+  }
+
+  onSearchChange(val: string) {
+    this.searchSubject.next(val);
+  }
+
   loadWarehouses() {
+    this.isRefreshing = true;
     this.whService.getAll().subscribe({
       next: (data) => {
         this.projects = data;
         this.state.appState.projects = data as any;
-        this.cdr.detectChanges();
+        setTimeout(() => {
+          this.isRefreshing = false;
+          this.cdr.detectChanges();
+        }, 600);
       },
-      // پیام خطا را errorInterceptor می‌سازد، چون تنها اوست که می‌داند خطا از
-      // نرسیدن به سرور است یا از پاسخ خودش. توست محلی روی آن سوار می‌شد و
-      // «آفلاین هستید» را زیر یک پیام مبهم پنهان می‌کرد.
-      error: () => {}
+      // نکته در خطاها: errorInterceptor پیام خطا را مدیریت می‌کند.
+      error: () => {
+        setTimeout(() => {
+          this.isRefreshing = false;
+          this.cdr.detectChanges();
+        }, 600);
+      }
     });
   }
 
@@ -118,23 +163,54 @@ export class Projects implements OnInit {
     this.cdr.detectChanges();
   }
 
-  async archiveWarehouse(id: number) {
+  openDeleteModal(id: number) {
     this.closeDropdowns();
     const p = this.projects.find((proj) => proj.id === id);
     if (p) {
-      const confirmed = await this.confirm.open({
-        title: 'غیرفعال‌سازی انبار',
-        message: `آیا از غیرفعال کردن انبار ${p.name} اطمینان دارید؟`,
-        confirmText: 'غیرفعال شود',
-        type: 'warning'
-      });
-      if (confirmed) {
-        this.whService.toggleArchive(id).subscribe(() => {
-          this.loadWarehouses();
-          this.toast.show('warning', `انبار ${p.name} غیرفعال شد.`);
-        });
-      }
+      this.entityToDelete = p;
+      this.deleteImpactUrl = `/api/warehouses/${id}/delete_impact/`;
+      this.isDeleteModalOpen = true;
+      this.isDeleting = false;
+      this.deleteErrorMessage = '';
     }
+  }
+
+  handleSoftDelete() {
+    if (!this.entityToDelete) return;
+    this.isDeleting = true;
+    this.deleteErrorMessage = '';
+    this.whService.toggleArchive(this.entityToDelete.id).subscribe({
+      next: () => {
+        this.loadWarehouses();
+        this.toast.show('warning', `انبار ${this.entityToDelete.name} بایگانی/غیرفعال شد.`);
+        this.isDeleteModalOpen = false;
+        this.entityToDelete = null;
+        this.isDeleting = false;
+      },
+      error: (err) => {
+        this.deleteErrorMessage = err.error?.error || 'خطایی رخ داد';
+        this.isDeleting = false;
+      }
+    });
+  }
+
+  handleHardDelete() {
+    if (!this.entityToDelete) return;
+    this.isDeleting = true;
+    this.deleteErrorMessage = '';
+    this.whService.delete(this.entityToDelete.id).subscribe({
+      next: () => {
+        this.loadWarehouses();
+        this.toast.show('success', `انبار ${this.entityToDelete.name} برای همیشه حذف شد.`);
+        this.isDeleteModalOpen = false;
+        this.entityToDelete = null;
+        this.isDeleting = false;
+      },
+      error: (err) => {
+        this.deleteErrorMessage = err.error?.error || err.error?.detail || (typeof err.error === 'string' ? err.error : 'متأسفانه این انبار به دلیل وابستگی اطلاعاتی قابل حذف فیزیکی نیست. لطفاً از گزینه بایگانی استفاده کنید.');
+        this.isDeleting = false;
+      }
+    });
   }
 
   async restoreWarehouse(id: number) {

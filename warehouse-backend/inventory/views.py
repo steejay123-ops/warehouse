@@ -5,12 +5,14 @@ from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
+from .signals import broadcast_count_task_update, broadcast_doc_task_update
 from .models import Item, ImportLog, ImportHistory, ItemFieldDefinition
 from .models import CountTaskHistory
 from common.sync_models import soft_delete_queryset
 from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer
 from django.forms.models import model_to_dict
 from warehouses.models import Warehouse
+from common.mixins import DeleteImpactMixin
 from .models import CountTask, DocTask
 from django.db.models import Q
 from django.utils import timezone
@@ -187,7 +189,7 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=500)
 
-class ItemViewSet(viewsets.ModelViewSet):
+class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = Item.objects.all()
     serializer_class = ItemSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, PriorityOrderingFilter]
@@ -595,6 +597,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 ))
             if tasks_to_create:
                 CountTask.objects.bulk_create(tasks_to_create)
+                broadcast_count_task_update()
 
         # Create DocTasks if it's a document dispatch
         if doc_status == 'processing':
@@ -617,6 +620,7 @@ class ItemViewSet(viewsets.ModelViewSet):
                 ))
             if doc_tasks_to_create:
                 DocTask.objects.bulk_create(doc_tasks_to_create)
+                broadcast_doc_task_update()
             
         return Response({'status': 'success', 'updated': items.count()})
 
@@ -1479,7 +1483,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         from accounts.permissions import HasMenuAccess
         from rest_framework.permissions import IsAuthenticated
         
-        if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks']:
+        if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks', 'get_export_columns', 'export_excel']:
             permission_classes = [HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('view_sys_recounts')]
         elif self.action == 'bulk_submit':
             permission_classes = [HasMenuAccess('view_sys_counter')]
@@ -1609,6 +1613,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             # Fetch valid IDs to update Items as well
             valid_task_ids = list(tasks.values_list('id', flat=True))
             if not valid_task_ids:
+                broadcast_count_task_update()
                 return Response({'success': True, 'claimed_count': 0})
 
             from .models import Item
@@ -1630,6 +1635,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
 
+        broadcast_count_task_update()
         return Response({'success': True, 'claimed_count': updated})
 
     def perform_create(self, serializer):
@@ -1721,6 +1727,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             CountTaskHistory.objects.bulk_create(histories)
             
         msg = f'{count} مورد برای سرپرست ارسال شد.' if target_status == 'COUNTED' else f'{count} مورد مستقیماً برای مدیر ارسال شد.'
+        broadcast_count_task_update()
         return Response({'message': msg})
 
     @action(detail=False, methods=['post'])
@@ -1750,6 +1757,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
+        broadcast_count_task_update()
         return Response({'message': f'{count} مورد تایید و برای مدیر ارسال شد.'})
 
     @action(detail=False, methods=['post'])
@@ -1800,6 +1808,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             if histories:
                 CountTaskHistory.objects.bulk_create(histories)
             
+        broadcast_count_task_update()
         return Response({'message': f'{count} مورد به صورت گروهی تایید نهایی شد.'})
 
     @action(detail=True, methods=['post'])
@@ -1824,6 +1833,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             note=note
         )
         
+        broadcast_count_task_update()
         return Response({'message': 'مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
 
     @action(detail=True, methods=['post'])
@@ -1880,7 +1890,287 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             note=note
         )
         
+        broadcast_count_task_update()
         return Response({'message': target_msg})
+
+    @action(detail=False, methods=['post'])
+    def bulk_cancel(self, request):
+        """لغو تخصیص گروهی — فقط رکوردهای PENDING_COUNT مجاز هستند."""
+        task_ids = request.data.get('task_ids', [])
+        if not task_ids:
+            return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
+
+        all_tasks = CountTask.objects.filter(id__in=task_ids)
+        eligible_tasks = all_tasks.filter(status='PENDING_COUNT')
+        ineligible_count = all_tasks.count() - eligible_tasks.count()
+
+        if eligible_tasks.count() == 0:
+            return Response(
+                {'error': 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» مجاز هستند.'},
+                status=400
+            )
+
+        item_ids = list(eligible_tasks.values_list('item_id', flat=True))
+
+        with transaction.atomic():
+            # پاک کردن تاریخچه مربوطه به صورت نرم
+            soft_delete_queryset(CountTaskHistory.objects.filter(task_id__in=eligible_tasks.values_list('id', flat=True)))
+            deleted_count = eligible_tasks.count()
+            eligible_tasks.delete()
+            # بازگرداندن وضعیت آیتم‌ها
+            Item.objects.filter(id__in=item_ids).update(
+                field_status='checking',
+                field_assignee=None,
+                updated_at=timezone.now()
+            )
+
+        msg = f'{deleted_count} وظیفه شمارش با موفقیت لغو تخصیص شد.'
+        if ineligible_count > 0:
+            msg += f' ({ineligible_count} رکورد به دلیل وضعیت نامعتبر نادیده گرفته شد.)'
+
+        broadcast_count_task_update()
+        return Response({'message': msg})
+
+    @action(detail=False, methods=['get'], url_path='get_export_columns')
+    def get_export_columns(self, request):
+        """لیست ستون‌های مجاز برای خروجی اکسل پیگیری شمارش"""
+        columns = [
+            {'key': 'warehouse_name',    'label': 'نام انبار'},
+            {'key': 'fa_unic_code',      'label': 'کد یکتا'},
+            {'key': 'description',       'label': 'شرح کالا'},
+            {'key': 'counter_name',      'label': 'شمارنده'},
+            {'key': 'supervisor_name',   'label': 'سرپرست'},
+            {'key': 'manager_name',      'label': 'مدیر'},
+            {'key': 'status',            'label': 'وضعیت'},
+            {'key': 'counted_balance',   'label': 'موجودی شمارش شده'},
+            {'key': 'inventory',         'label': 'موجودی سیستم'},
+            {'key': 'difference',        'label': 'اختلاف'},
+            {'key': 'created_at',        'label': 'تاریخ ایجاد'},
+            {'key': 'updated_at',        'label': 'تاریخ بروزرسانی'},
+            {'key': 'counter_note',      'label': 'یادداشت شمارنده'},
+            {'key': 'supervisor_note',   'label': 'یادداشت سرپرست'},
+            {'key': 'manager_note',      'label': 'یادداشت مدیر'},
+        ]
+        return Response(columns)
+
+    @action(detail=False, methods=['post'], url_path='export_excel')
+    def export_excel(self, request):
+        """خروجی اکسل صفحه پیگیری شمارش با تاریخ شمسی و وضعیت فارسی"""
+        import openpyxl
+        from django.http import HttpResponse
+
+        STATUS_FA = {
+            'PENDING_COUNT':      'در انتظار شمارش',
+            'COUNTED':            'شمارش شده',
+            'SUPERVISOR_REVIEW':  'در بررسی سرپرست',
+            'SUPERVISOR_REJECTED':'رد شده توسط سرپرست',
+            'MANAGER_REVIEW':     'در بررسی مدیر',
+            'MANAGER_REJECTED':   'رد شده توسط مدیر',
+            'FINAL_APPROVED':     'تأیید نهایی',
+        }
+
+        def to_jalali(dt):
+            if not dt:
+                return ''
+            try:
+                import jdatetime
+                from django.utils import timezone
+                if timezone.is_aware(dt):
+                    dt = timezone.localtime(dt)
+                jdt = jdatetime.datetime.fromgregorian(datetime=dt)
+                return jdt.strftime('%Y/%m/%d %H:%M')
+            except Exception as e:
+                # اگر خطایی رخ داد، لاگ بگیریم تا اشکال‌زدایی راحت‌تر باشد
+                import logging
+                logging.getLogger(__name__).error(f"Date conversion error: {e}")
+                return str(dt)
+
+        data_scope    = request.data.get('data_scope', 'all')
+        columns_scope = request.data.get('columns_scope', 'all_db')
+        columns_list  = request.data.get('columns_list', [])
+
+        # اعمال همان فیلترهای get_queryset
+        from django.http import QueryDict
+        original_query_params = request._request.GET
+        try:
+            q = QueryDict(mutable=True)
+            for k, v in request.data.items():
+                if isinstance(v, list):
+                    q.setlist(k, [str(x) for x in v])
+                elif v is not None:
+                    q[k] = str(v)
+            request._request.GET = q
+
+            if data_scope == 'selected':
+                selected_ids = request.data.get('selected_ids', [])
+                queryset = self.get_queryset().filter(id__in=selected_ids)
+            else:
+                queryset = self.get_queryset()
+        finally:
+            request._request.GET = original_query_params
+
+        # ستون‌ها
+        ALL_COLUMNS = [
+            {'key': 'warehouse_name',    'label': 'نام انبار'},
+            {'key': 'fa_unic_code',      'label': 'کد یکتا'},
+            {'key': 'description',       'label': 'شرح کالا'},
+            {'key': 'counter_name',      'label': 'شمارنده'},
+            {'key': 'supervisor_name',   'label': 'سرپرست'},
+            {'key': 'manager_name',      'label': 'مدیر'},
+            {'key': 'status',            'label': 'وضعیت'},
+            {'key': 'counted_balance',   'label': 'موجودی شمارش شده'},
+            {'key': 'inventory',         'label': 'موجودی سیستم'},
+            {'key': 'difference',        'label': 'اختلاف'},
+            {'key': 'created_at',        'label': 'تاریخ ایجاد'},
+            {'key': 'updated_at',        'label': 'تاریخ بروزرسانی'},
+            {'key': 'counter_note',      'label': 'یادداشت شمارنده'},
+            {'key': 'supervisor_note',   'label': 'یادداشت سرپرست'},
+            {'key': 'manager_note',      'label': 'یادداشت مدیر'},
+        ]
+        all_keys = [c['key'] for c in ALL_COLUMNS]
+        key_to_label = {c['key']: c['label'] for c in ALL_COLUMNS}
+
+        if columns_scope in ('visible', 'custom') and columns_list:
+            selected_keys = [k for k in columns_list if k in all_keys]
+            if not selected_keys:
+                selected_keys = all_keys
+        else:
+            selected_keys = all_keys
+
+        def get_cell(task, key):
+            if key == 'warehouse_name':
+                if task.item and task.item.warehouse:
+                    return getattr(task.item.warehouse, 'project_name', None) or task.item.warehouse.name or ''
+                return ''
+            elif key == 'fa_unic_code':
+                return getattr(task.item, 'fa_unic_code', '') if task.item else ''
+            elif key == 'description':
+                return getattr(task.item, 'description', '') if task.item else ''
+            elif key == 'counter_name':
+                if task.counter:
+                    return f"{task.counter.first_name} {task.counter.last_name}".strip() or task.counter.username
+                return ''
+            elif key == 'supervisor_name':
+                if task.supervisor:
+                    return f"{task.supervisor.first_name} {task.supervisor.last_name}".strip() or task.supervisor.username
+                return ''
+            elif key == 'manager_name':
+                if task.assigned_manager:
+                    return f"{task.assigned_manager.first_name} {task.assigned_manager.last_name}".strip() or task.assigned_manager.username
+                return ''
+            elif key == 'status':
+                return STATUS_FA.get(task.status, task.status)
+            elif key == 'counted_balance':
+                return task.counted_balance if task.counted_balance is not None else ''
+            elif key == 'inventory':
+                return getattr(task.item, 'inventory', '') if task.item else ''
+            elif key == 'difference':
+                inv = getattr(task.item, 'inventory', None) if task.item else None
+                cnt = task.counted_balance
+                if inv is not None and cnt is not None:
+                    try:
+                        return float(cnt) - float(inv)
+                    except Exception:
+                        return ''
+                return ''
+            elif key == 'created_at':
+                return to_jalali(task.created_at)
+            elif key == 'updated_at':
+                return to_jalali(task.updated_at)
+            elif key == 'counter_note':
+                return task.counter_note or ''
+            elif key == 'supervisor_note':
+                return task.supervisor_note or ''
+            elif key == 'manager_note':
+                return task.manager_note or ''
+            return ''
+
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'پیگیری شمارش'
+        
+        # راست‌چین کردن شیت
+        ws.sheet_view.rightToLeft = True
+
+        # استایل‌های ثابت
+        header_font = Font(name='Tahoma', bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid') # سرمه‌ای تیره و شیک
+        cell_font = Font(name='Tahoma', size=10)
+        
+        # رنگ‌های یکی‌درمیان ردیف‌ها
+        fill_even = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+        fill_odd = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+
+        center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E0E0E0'), right=Side(style='thin', color='E0E0E0'),
+            top=Side(style='thin', color='E0E0E0'), bottom=Side(style='thin', color='E0E0E0')
+        )
+
+        # هدر
+        headers = [key_to_label[k] for k in selected_keys]
+        ws.append(headers)
+        
+        for col_idx, cell in enumerate(ws[1], 1):
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_alignment
+            cell.border = thin_border
+
+        # فریز کردن سطر اول (برای اسکرول راحت)
+        ws.freeze_panes = 'A2'
+
+        # محاسبه عرض اولیه بر اساس هدرها
+        col_widths = {i: len(headers[i]) + 6 for i in range(len(headers))}
+
+        # داده‌ها
+        row_idx = 2
+        for task in queryset.select_related('item', 'item__warehouse', 'counter', 'supervisor', 'assigned_manager').iterator():
+            row_data = [str(get_cell(task, k)) for k in selected_keys]
+            ws.append(row_data)
+            
+            # تعیین رنگ پس‌زمینه ردیف
+            current_fill = fill_even if row_idx % 2 == 0 else fill_odd
+            
+            # استایل‌دهی به سلول‌ها و محاسبه عرض
+            for col_idx, val in enumerate(row_data):
+                cell = ws.cell(row=row_idx, column=col_idx + 1)
+                cell.font = cell_font
+                cell.fill = current_fill
+                cell.alignment = center_alignment
+                cell.border = thin_border
+                
+                # بروزرسانی عرض ستون (محدود کردن به حداکثر 60 برای جلوگیری از عرض بیش‌از‌حد)
+                lines = val.split('\n')
+                max_line_len = max([len(line) for line in lines]) if lines else 0
+                if max_line_len > col_widths.get(col_idx, 10):
+                    col_widths[col_idx] = min(max_line_len + 4, 60)
+            
+            row_idx += 1
+
+        # اعمال عرض ستون‌ها
+        for col_idx, width in col_widths.items():
+            ws.column_dimensions[get_column_letter(col_idx + 1)].width = width
+
+        # افزودن قابلیت فیلتر روی هدرها
+        if row_idx > 2:
+            last_col_letter = get_column_letter(len(selected_keys))
+            ws.auto_filter.ref = f"A1:{last_col_letter}{row_idx - 1}"
+
+        from io import BytesIO
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        response = HttpResponse(
+            buf.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="count_tracking_export.xlsx"'
+        return response
 
 class DocTaskViewSet(viewsets.ModelViewSet):
     serializer_class = DocTaskSerializer
@@ -1997,6 +2287,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
 
+        broadcast_doc_task_update()
         return Response({'success': True, 'claimed_count': updated})
 
     def perform_create(self, serializer):
@@ -2062,6 +2353,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         count = len(tasks_list)
         if count > 0:
             DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by'])
+            broadcast_doc_task_update()
         if histories:
             DocTaskHistory.objects.bulk_create(histories)
             
@@ -2095,6 +2387,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
             DocTaskHistory.objects.bulk_create(histories)
+            broadcast_doc_task_update()
             
         return Response({'message': f'{len(histories)} رکورد جهت تایید نهایی مدیر ارسال شد.'})
 
@@ -2124,6 +2417,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
             DocTaskHistory.objects.bulk_create(histories)
+            broadcast_doc_task_update()
             
         return Response({'message': f'{len(histories)} رکورد به بررسی‌کننده اسناد برگشت داده شد.'})
 
@@ -2153,6 +2447,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'manager_note'])
             DocTaskHistory.objects.bulk_create(histories)
+            broadcast_doc_task_update()
             
         return Response({'message': f'{len(histories)} رکورد به سرپرست اسناد (یا بررسی‌کننده) برگشت داده شد.'})
 
@@ -2182,6 +2477,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by'])
             DocTaskHistory.objects.bulk_create(histories)
             Item.objects.filter(id__in=item_ids_to_update).update(doc_status='approved', updated_at=timezone.now())
+            broadcast_doc_task_update()
             
         return Response({'message': f'{len(histories)} رکورد نهایی شد.'})
         
@@ -2198,6 +2494,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         deleted_count, _ = tasks.delete()
         Item.objects.filter(id__in=item_ids).update(doc_status='checking', doc_assignee=None, updated_at=timezone.now())
         
+        broadcast_doc_task_update()
         return Response({'message': f'{deleted_count} وظیفه ارجاع اسناد با موفقیت لغو شد.'})
 
 

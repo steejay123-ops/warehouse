@@ -6,10 +6,12 @@ from django.contrib.auth.models import Group, Permission
 from .models import CustomUser, CustomRole
 from .serializers import UserSerializer, CustomTokenObtainPairSerializer, CustomRoleSerializer, PermissionSerializer
 
+from common.mixins import DeleteImpactMixin
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     pagination_class = None
@@ -47,19 +49,54 @@ class UserViewSet(viewsets.ModelViewSet):
             
         return permission_classes
 
-    def destroy(self, request, *args, **kwargs):
-        user = self.get_object()
+    def _validate_user_deactivation(self, request, user, action_name="حذف"):
         from rest_framework.exceptions import ValidationError
+        from django.db.models import Q
+        from django.contrib.auth.models import Permission
         
-        # Protect last active superuser from deletion
+        # 1. Self-deletion guard
+        if request.user.id == user.id:
+            raise ValidationError(f"شما نمی‌توانید حساب کاربری خود را {action_name} کنید.")
+            
+        # 2. Protect last active superuser
         if user.is_superuser:
             active_superusers = CustomUser.objects.filter(
                 is_active=True, is_superuser=True
             ).exclude(id=user.id).count()
             
             if active_superusers == 0:
-                raise ValidationError("امکان حذف تنها مدیر (Admin) فعال سیستم وجود ندارد.")
+                raise ValidationError(f"امکان {action_name} تنها مدیر (Admin) فعال سیستم وجود ندارد.")
                 
+        # 3. Protect last key roles
+        KEY_PERMISSIONS = {
+            'can_act_as_counter': 'انبارگردان',
+            'can_act_as_supervisor': 'سرپرست انبار',
+            'can_act_as_manager': 'مدیر انبار',
+            'can_act_as_doc_worker': 'کارشناس اسناد',
+            'can_act_as_doc_supervisor': 'سرپرست اسناد'
+        }
+        
+        user_perms = set(
+            user.user_permissions.filter(codename__in=KEY_PERMISSIONS.keys()).values_list('codename', flat=True)
+        ) | set(
+            Permission.objects.filter(group__user=user, codename__in=KEY_PERMISSIONS.keys()).values_list('codename', flat=True)
+        )
+
+        for perm in user_perms:
+            other_active_users = CustomUser.objects.filter(
+                is_active=True
+            ).exclude(id=user.id).filter(
+                Q(user_permissions__codename=perm) | 
+                Q(groups__permissions__codename=perm)
+            ).count()
+            
+            if other_active_users == 0:
+                role_name = KEY_PERMISSIONS.get(perm, perm)
+                raise ValidationError(f"امکان {action_name} این کاربر وجود ندارد. سیستم باید حداقل یک کاربر فعال با دسترسی «{role_name}» داشته باشد.")
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        self._validate_user_deactivation(request, user, action_name="حذف")
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['patch'])
@@ -69,13 +106,7 @@ class UserViewSet(viewsets.ModelViewSet):
         
         # If user is currently active and is being deactivated
         if user.is_active:
-            if user.is_superuser:
-                active_superusers = CustomUser.objects.filter(
-                    is_active=True, is_superuser=True
-                ).exclude(id=user.id).count()
-                
-                if active_superusers == 0:
-                    raise ValidationError("امکان غیرفعال‌سازی تنها مدیر (Admin) فعال سیستم وجود ندارد.")
+            self._validate_user_deactivation(request, user, action_name="غیرفعال‌سازی")
                     
         user.is_active = not user.is_active
         user.save()
@@ -187,7 +218,7 @@ class UserViewSet(viewsets.ModelViewSet):
             'errors': result['errors']
         })
 
-class CustomRoleViewSet(viewsets.ModelViewSet):
+class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = CustomRole.objects.all()
     serializer_class = CustomRoleSerializer
     pagination_class = None

@@ -4,7 +4,9 @@ from rest_framework.response import Response
 from .models import Warehouse, SystemSetting
 from .serializers import WarehouseSerializer
 
-class WarehouseViewSet(viewsets.ModelViewSet):
+from common.mixins import DeleteImpactMixin
+
+class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
     pagination_class = None

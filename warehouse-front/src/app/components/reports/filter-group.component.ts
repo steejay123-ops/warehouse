@@ -30,7 +30,7 @@ import { FilterValueComponent } from './filter-value.component';
          [class.bg-amber-50/30]="group.op === 'OR'">
 
       <div class="flex items-center gap-2 flex-wrap">
-        <div class="flex rounded-lg overflow-hidden border border-border bg-background">
+        <div class="flex rounded-lg overflow-hidden border border-slate-200 bg-white">
           <button type="button" (click)="setOp('AND')"
                   class="px-2.5 py-1 text-[10px] font-black transition-colors"
                   [class.bg-indigo-600]="group.op === 'AND'" [class.text-white]="group.op === 'AND'"
@@ -46,19 +46,19 @@ import { FilterValueComponent } from './filter-value.component';
                 class="px-2.5 py-1 text-[10px] font-black rounded-lg border transition-colors"
                 [class.bg-rose-600]="group.not" [class.text-white]="group.not"
                 [class.border-rose-600]="group.not"
-                [class.bg-background]="!group.not" [class.text-slate-500]="!group.not"
-                [class.border-border]="!group.not">جز (NOT)</button>
+                [class.bg-white]="!group.not" [class.text-slate-500]="!group.not"
+                [class.border-slate-200]="!group.not">جز (NOT)</button>
 
         <button type="button" (click)="addCondition()" [disabled]="totalConditions >= 60"
                 title="{{ totalConditions >= 60 ? 'حداکثر ۶۰ شرط مجاز است' : '' }}"
-                class="text-[10px] font-bold text-indigo-600 bg-background border border-indigo-200 rounded-lg px-2 py-1 transition-colors"
+                class="text-[10px] font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg px-2 py-1 transition-colors"
                 [class.hover:text-indigo-800]="totalConditions < 60"
                 [class.opacity-40]="totalConditions >= 60" [class.cursor-not-allowed]="totalConditions >= 60">
           + شرط
         </button>
         @if (depth < maxDepth) {
           <button type="button" (click)="addGroup()"
-                  class="text-[10px] font-bold text-slate-600 hover:text-foreground bg-background border border-border rounded-lg px-2 py-1">
+                  class="text-[10px] font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg px-2 py-1">
             + گروه تودرتو
           </button>
         }
@@ -81,21 +81,21 @@ import { FilterValueComponent } from './filter-value.component';
             (removeSelf)="removeChild($index)"
             (changed)="changed.emit()" />
         } @else {
-          <div class="flex items-center gap-2 flex-wrap bg-background rounded-lg border p-2"
+          <div class="flex items-center gap-2 flex-wrap bg-white rounded-lg border p-2"
                [class.border-rose-300]="asCond(child).not"
-               [class.border-border]="!asCond(child).not">
+               [class.border-slate-200]="!asCond(child).not">
             <!-- نقیض شرط -->
             <button type="button" (click)="toggleNot(asCond(child))"
                     title="نقیض شرط"
                     class="w-6 h-6 shrink-0 text-xs font-black rounded-lg border transition-colors"
                     [class.bg-rose-600]="asCond(child).not" [class.text-white]="asCond(child).not"
                     [class.border-rose-600]="asCond(child).not"
-                    [class.bg-background]="!asCond(child).not" [class.text-slate-400]="!asCond(child).not"
-                    [class.border-border]="!asCond(child).not">!</button>
+                    [class.bg-white]="!asCond(child).not" [class.text-slate-400]="!asCond(child).not"
+                    [class.border-slate-200]="!asCond(child).not">!</button>
 
             <!-- فیلد -->
             <select [ngModel]="asCond(child).field" (ngModelChange)="setField(asCond(child), $event)"
-                    class="text-xs px-2 py-1.5 rounded-lg border border-border outline-none focus:border-indigo-400 min-w-36">
+                    class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36">
               <option value="" disabled>فیلد…</option>
               @for (f of fields; track f.key) {
                 <option [value]="f.key">{{ f.label }}</option>
@@ -104,7 +104,7 @@ import { FilterValueComponent } from './filter-value.component';
 
             <!-- اپراتور -->
             <select [ngModel]="asCond(child).operator" (ngModelChange)="setOperator(asCond(child), $event)"
-                    class="text-xs px-2 py-1.5 rounded-lg border border-border outline-none focus:border-indigo-400">
+                    class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400">
               @for (op of operatorsFor(asCond(child).field); track op) {
                 <option [value]="op">{{ opLabel(op) }}</option>
               }

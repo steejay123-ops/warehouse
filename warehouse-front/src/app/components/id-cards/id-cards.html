@@ -1,264 +1,1366 @@
-<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 fade-in text-right pb-10" dir="rtl">
-    
-    <!-- ستون تنظیمات (کنترل پنل) -->
-    <div class="xl:col-span-5 space-y-5">
+<div class="space-y-6 fade-in text-right pb-12 no-print" dir="rtl">
+
+  <!-- نوار ابزار و هدر صفحه -->
+  <div class="bg-white/90 backdrop-blur-md rounded-2xl p-4 md:p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><circle cx="12" cy="11" r="3"/><path d="M17 18c0-2.2-2.2-4-5-4s-5 1.8-5 4"/></svg>
+      </div>
+      <div>
+        <h1 class="text-base md:text-lg font-black text-slate-800 tracking-tight">طراحی و صدور کارت پرسنلی و گیت‌پاس</h1>
+        <p class="text-xs text-slate-500 mt-0.5">پیش‌نمایش سه‌بعدی دورو، پریست‌های چیدمان، بارکد تک‌بعدی/دوبعدی و موتور چاپ A4</p>
+      </div>
+    </div>
+
+    <!-- دکمه‌های عملیات سریع بالا -->
+    <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
       
-      <!-- ۱. منبع داده و آپلود -->
-      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
-        <div class="bg-surface border-b border-border p-4">
-          <h3 class="font-black text-foreground text-sm flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            ۱. تغذیه اطلاعات پرسنلی و اعتبار
-          </h3>
-        </div>
+      <!-- دکمه باز کردن مودال دانلود تصویر دیجیتال -->
+      <button (click)="openExportModal()" [disabled]="isExportingImage" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black shadow-md shadow-slate-300 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>دانلود تصویر (PNG)</span>
+      </button>
+
+      <!-- دکمه باز کردن مودال پیش‌نمایش شیت چاپ A4 -->
+      <button (click)="openSheetPreviewModal()" class="px-4 py-2.5 bg-white hover:bg-slate-50 text-indigo-700 border-2 border-indigo-200 hover:border-indigo-300 rounded-xl text-xs font-black shadow-sm transition-all flex items-center gap-2 active:scale-95">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span>پیش‌نمایش شیت چاپ A4</span>
+      </button>
+
+      <!-- ارسال به پرینتر -->
+      <button (click)="executeCardPrint()" class="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-200 transition-all flex items-center gap-2 active:scale-95">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span>چاپ شیت A4 ({{printableUsers.length}} کارت)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- شبکه اصلی بخش‌ها (۳ ستونه) -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- ستون ۱: لیست و انتخاب پرسنل (Personnel Selector) -->
+    <div class="lg:col-span-3 space-y-4">
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[740px]">
         
-        <div class="p-5 space-y-4">
-          <div class="grid grid-cols-2 gap-3">
-            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="idCardSettings.dataSource === 'db' ? 'border-indigo-500 bg-indigo-50/50' : 'border-border hover:border-indigo-300'" (click)="toggleIdDataSource('db')">
-              <input type="radio" name="id_source" [checked]="idCardSettings.dataSource === 'db'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-              <div>
-                <span class="block text-xs font-bold" [ngClass]="idCardSettings.dataSource === 'db' ? 'text-indigo-900' : 'text-foreground'">دیتابیس سیستم</span>
-                <span class="block text-[9px] text-slate-500 mt-1">پرسنل ثبت شده ({{users.length}} نفر)</span>
-              </div>
-            </label>
+        <!-- هدر سایدبار پرسنل -->
+        <div class="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-black text-slate-800">پرسنل انبار</span>
+            <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black">{{filteredUsers.length}}</span>
+          </div>
+          <button (click)="toggleSelectAll()" class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1">
+            <input type="checkbox" [checked]="areAllSelected" class="rounded text-indigo-600 focus:ring-0 cursor-pointer pointer-events-none">
+            <span>انتخاب همه</span>
+          </button>
+        </div>
+
+        <!-- فیلتر و جستجو -->
+        <div class="p-3 border-b border-slate-100 space-y-2 bg-white">
+          <div class="relative">
+            <input type="text" [(ngModel)]="searchQuery" placeholder="جستجوی نام، کد ملی..." class="w-full pl-3 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:bg-white focus:border-indigo-400 transition-all">
+            <svg class="absolute right-2.5 top-2.5 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <select [(ngModel)]="filterRoleId" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 outline-none">
+              <option value="ALL">همه نقش‌ها</option>
+              <option *ngFor="let r of rolesList" [value]="r.id">{{r.title || r.name}}</option>
+            </select>
+
+            <select [(ngModel)]="filterWarehouseId" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 outline-none">
+              <option value="ALL">همه انبارها</option>
+              <option *ngFor="let w of warehousesList" [value]="w.id">{{w.name}}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- فهرست اسکرول‌خور پرسنل -->
+        <div class="flex-1 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+          <div *ngIf="isLoading" class="p-6 text-center text-xs text-slate-400 font-bold">
+            در حال بارگذاری لیست پرسنل...
+          </div>
+
+          <div *ngIf="!isLoading && filteredUsers.length === 0" class="p-6 text-center text-xs text-slate-400 font-bold">
+            هیچ کاربری با این مشخصات یافت نشد.
+          </div>
+
+          <div *ngFor="let u of filteredUsers" (click)="selectUser(u)" [ngClass]="selectedUserId === u.id ? 'border-indigo-500 bg-indigo-50/60 ring-1 ring-indigo-500/20' : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50/60'" class="group p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5">
             
-            <label class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors" [ngClass]="idCardSettings.dataSource === 'external' ? 'border-indigo-500 bg-indigo-50/50' : 'border-border hover:border-indigo-300'" (click)="toggleIdDataSource('external')">
-              <input type="radio" name="id_source" [checked]="idCardSettings.dataSource === 'external'" class="mt-0.5 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
-              <div>
-                <span class="block text-xs font-bold" [ngClass]="idCardSettings.dataSource === 'external' ? 'text-indigo-900' : 'text-foreground'">پیمانکار / فایل خارجی</span>
-                <span class="block text-[9px] text-slate-500 mt-1">آپلود اکسل و عکس گروهی</span>
+            <div class="flex items-center gap-2.5 overflow-hidden">
+              <input type="checkbox" [checked]="isUserSelected(u.id)" (click)="toggleUserSelect(u.id, $event)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+              
+              <!-- تصویر آواتار -->
+              <div class="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center font-black text-slate-600 text-xs overflow-hidden shrink-0">
+                <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+                <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
               </div>
-            </label>
+
+              <div class="overflow-hidden">
+                <p class="text-xs font-black text-slate-800 truncate group-hover:text-indigo-600 transition-colors">{{u.first_name}} {{u.last_name}}</p>
+                <div class="flex items-center gap-1.5 mt-0.5">
+                  <span class="text-[9px] font-bold px-1.5 py-0.2 rounded text-indigo-700 bg-indigo-100/60 truncate">{{getUserRole(u).title}}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="shrink-0 text-left">
+              <span class="text-[9px] font-mono text-slate-400 block">{{getUserPersonnelCode(u)}}</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- فوتر سایدبار پرسنل -->
+        <div class="p-3 bg-slate-50 border-t border-slate-200 text-center flex items-center justify-between">
+          <span class="text-[11px] font-black text-slate-600">{{selectedCount}} پرسنل آماده چاپ</span>
+          <button *ngIf="selectedCount > 0" (click)="selectedUserIds.clear()" class="text-[10px] text-rose-600 font-bold hover:underline">پاکسازی</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ستون ۲: پیش‌نمایش سه‌بعدی دورو (3D Live Flip Canvas) -->
+    <div class="lg:col-span-5 flex flex-col items-center">
+      <div class="bg-gradient-to-b from-slate-100/90 to-slate-200/60 rounded-3xl border border-slate-200/80 p-6 shadow-inner w-full flex flex-col items-center justify-between min-h-[740px] relative overflow-hidden">
+        
+        <!-- بار کنترلی بالای بوم -->
+        <div class="w-full flex items-center justify-between z-20 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 bg-white/90 backdrop-blur rounded-lg border border-slate-200 text-[10px] font-black text-slate-700 shadow-sm flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full" [ngClass]="isCardFlipped ? 'bg-purple-500' : 'bg-emerald-500'"></span>
+              {{isCardFlipped ? 'نمای پشت کارت (Back)' : 'نمای روی کارت (Front)'}}
+            </span>
           </div>
 
-          <!-- تنظیمات حالت دیتابیس (تاریخ انقضای سراسری) -->
-          <div *ngIf="idCardSettings.dataSource === 'db'" id="id-db-settings" class="mt-4 pt-4 border-t border-border fade-in">
-             <label class="block text-[11px] font-bold text-slate-600 mb-2">اعتبار گیت‌پاس (تعداد روز از امروز)</label>
-             <input type="number" [(ngModel)]="idCardSettings.expiryDays" min="0" placeholder="مثال: 45 (اگر 0 باشد: تا پایان پروژه)" class="w-full text-center px-3 py-2.5 bg-background border border-border rounded-xl text-xs font-bold outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20 transition-all">
-             <p class="text-[9px] text-slate-400 mt-1.5 text-center">عدد ۰ معادل «تا پایان پروژه» محاسبه می‌شود.</p>
+          <!-- دکمه چرخش سه‌بعدی -->
+          <button (click)="toggleFlip()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-200 flex items-center gap-1.5 transition-all active:scale-95">
+            <svg class="transition-transform duration-500" [class.rotate-180]="isCardFlipped" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+            <span>چرخش ۳ بعدی</span>
+          </button>
+        </div>
+
+        <!-- کادر مرکزی کارت سه‌بعدی -->
+        <div class="flex-1 flex items-center justify-center w-full card-perspective-container my-auto py-2">
+          
+          <!-- کارت عمودی (PVC Vertical 54x85.6) -->
+          <div *ngIf="idCardSettings.cardType === 'pvc-vertical'" class="w-[245px] h-[390px] card-3d-wrapper cursor-pointer" [class.is-flipped]="isCardFlipped" (click)="toggleFlip()">
+            
+            <!-- رو (Front Face) -->
+            <div id="live-card-front-render" class="card-front-face bg-white border border-slate-200 flex flex-col relative text-right">
+              
+              <!-- افکت هولوگرام -->
+              <div *ngIf="idCardSettings.fields.hologram" class="hologram-sheen"></div>
+
+              <!-- هدر سربرگ -->
+              <div class="h-24 w-full flex flex-col items-center justify-start pt-3.5 text-white relative overflow-hidden" [style.background]="'linear-gradient(135deg, ' + effectiveCardColor + ', #0f172a)'">
+                <div class="absolute inset-0 pattern-dots opacity-20"></div>
+                <div class="relative z-10 flex flex-col items-center">
+                  <span class="text-lg font-black tracking-wider text-white drop-shadow">{{idCardSettings.customTexts.companyName}}</span>
+                  <span class="text-[7px] font-bold tracking-widest text-white/80 mt-0.5">{{idCardSettings.customTexts.companySub}}</span>
+                </div>
+              </div>
+
+              <!-- عکس پرسنلی (با کنترل موقعیت) -->
+              <div *ngIf="idCardSettings.fields.photo" class="flex -mt-9 relative z-20" [ngClass]="idCardSettings.photoPosition === 'right' ? 'justify-start px-4' : idCardSettings.photoPosition === 'left' ? 'justify-end px-4' : 'justify-center'">
+                <div class="w-20 h-24 bg-slate-100 rounded-xl border-4 border-white shadow-md flex items-center justify-center font-black text-slate-400 text-3xl overflow-hidden bg-cover bg-center">
+                  <img *ngIf="activeUser.avatar" [src]="activeUser.avatar" class="w-full h-full object-cover" alt="avatar">
+                  <span *ngIf="!activeUser.avatar">{{getUserAvatarInitial(activeUser)}}</span>
+                </div>
+              </div>
+
+              <!-- مشخصات پرسنلی -->
+              <div class="flex-1 flex flex-col px-4 pt-2 pb-3" [ngClass]="idCardSettings.photoPosition === 'right' ? 'text-right' : idCardSettings.photoPosition === 'left' ? 'text-left' : 'items-center text-center'">
+                <h2 class="font-black text-slate-900 text-base leading-tight w-full truncate">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
+                
+                <div *ngIf="idCardSettings.fields.role" class="mt-1 w-full">
+                  <span class="text-[10px] font-black px-2.5 py-0.5 rounded-full inline-block truncate max-w-full" [style.background]="effectiveCardColor + '18'" [style.color]="effectiveCardColor" [style.border]="'1px solid ' + effectiveCardColor + '40'">{{activeRole.title}}</span>
+                </div>
+
+                <div class="w-full mt-auto space-y-1 border-t border-slate-100 pt-2 text-[10px] text-right">
+                  <div *ngIf="idCardSettings.fields.personnelCode" class="flex justify-between items-center">
+                    <span class="text-slate-400 font-bold">کد پرسنلی:</span>
+                    <span class="font-mono font-black text-slate-700">{{getUserPersonnelCode(activeUser)}}</span>
+                  </div>
+
+                  <div *ngIf="idCardSettings.fields.projects" class="flex justify-between items-center" [title]="getWarehouseFullText(activeUser)">
+                    <span class="text-slate-400 font-bold">مجوز تردد:</span>
+                    <span class="font-bold text-indigo-600 truncate max-w-[125px]">{{getWarehouseSummary(activeUser, 1)}}</span>
+                  </div>
+                </div>
+
+                <!-- بارکد روی کارت عمودی (در صورت انتخاب) -->
+                <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both')" class="w-full flex flex-col items-center mt-2">
+                  <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-2 py-0.5 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-8">
+                    <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(activeUser))"></div>
+                    <span class="font-mono text-[8px] font-black text-slate-700 mt-0.5">{{getUserPersonnelCode(activeUser)}}</span>
+                  </div>
+                  <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-14 h-14 bg-white p-1 rounded-xl border border-slate-200 shadow-xs flex items-center justify-center">
+                    <div class="w-full h-full" [innerHTML]="getQrCodeSvg(getUserPersonnelCode(activeUser))"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- فوتر روی کارت عمودی -->
+              <div class="h-9 bg-slate-50 border-t border-slate-100 flex items-center justify-between px-3">
+                <div class="text-[8px] font-bold text-slate-400 text-right leading-tight">
+                  <span>کارت شناسایی پرسنلی</span>
+                  <span *ngIf="idCardSettings.fields.expiry" class="block text-slate-600 font-black mt-0.5">{{expiryText}}</span>
+                </div>
+                <div class="text-[8px] font-mono font-black text-slate-600">
+                  {{getUserPersonnelCode(activeUser)}}
+                </div>
+              </div>
+
+            </div>
+
+            <!-- پشت (Back Face) -->
+            <div id="live-card-back-render" class="card-back-face bg-slate-50 border border-slate-200 flex flex-col p-4 text-right security-waves">
+              
+              <!-- هدر پشت کارت -->
+              <div class="border-b border-slate-200 pb-2 mb-2 flex items-center justify-between">
+                <div>
+                  <span class="text-xs font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+                  <span class="text-[7px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+                </div>
+                <div class="w-2.5 h-2.5 rounded-full" [style.background]="effectiveCardColor"></div>
+              </div>
+
+              <!-- متن ضوابط و نکات ایمنی و کد ملی -->
+              <div class="space-y-1.5 text-[8px] text-slate-600 font-semibold leading-relaxed">
+                <p *ngIf="idCardSettings.fields.regulations">• {{idCardSettings.customTexts.regulationsText}}</p>
+                <p *ngIf="idCardSettings.fields.nationalCode">• کد ملی دارنده: <strong class="font-mono text-slate-800">{{activeUser.national_code || '---'}}</strong></p>
+                <p *ngIf="idCardSettings.fields.bloodType">• گروه خونی: <strong class="text-rose-700">{{getUserBloodType(activeUser)}}</strong></p>
+                <p *ngIf="idCardSettings.fields.emergencyContact">• تماس اضطراری: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(activeUser)}}</strong></p>
+                <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800">{{idCardSettings.globalProjectNote}}</strong></p>
+              </div>
+
+              <!-- بارکد پشت کارت عمودی (زون اختصاصی بزرگ استعلام اصالت) -->
+              <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="my-auto py-2 flex flex-col items-center justify-center">
+                <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-2 py-0.5 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-8">
+                  <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(activeUser))"></div>
+                  <span class="font-mono text-[8px] font-black text-slate-700 tracking-wider mt-0.5">{{getUserPersonnelCode(activeUser)}}</span>
+                </div>
+                <div *ngIf="idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-1">
+                  <div class="w-28 h-28 bg-white p-1.5 rounded-2xl border-2 border-slate-200 shadow-md flex items-center justify-center">
+                    <div class="w-full h-full" [innerHTML]="getQrCodeSvg(activeUser)"></div>
+                  </div>
+                  <span class="text-[8px] font-bold text-slate-500 tracking-tight flex items-center gap-1">
+                    <span>🛡️</span>
+                    <span>اسکن جهت استعلام اصالت دیجیتال</span>
+                  </span>
+                </div>
+              </div>
+
+              <!-- فوتر پشت کارت و مهر حراست -->
+              <div *ngIf="idCardSettings.fields.signature" class="mt-auto pt-1.5 border-t border-slate-200 flex items-center justify-between text-[7px] text-slate-500 font-bold">
+                <div>
+                  <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+                  <span class="block text-[6px] text-slate-400 mt-0.5 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+                </div>
+                <div class="w-11 h-6 border border-dashed border-slate-300 rounded flex items-center justify-center text-[7px] text-slate-400">
+                  مهر رسمی
+                </div>
+              </div>
+
+            </div>
+
           </div>
 
-          <!-- باکس آپلود فایل خارجی -->
-          <div *ngIf="idCardSettings.dataSource === 'external'" id="id-external-box" class="space-y-3 mt-4 pt-4 border-t border-border fade-in">
-            <div class="flex gap-3">
-              <button (click)="simulateIdExcelUpload()" class="flex-1 py-4 bg-surface border border-slate-300 border-dashed rounded-xl text-[11px] font-bold text-slate-600 hover:bg-surface hover:border-indigo-300 hover:text-indigo-600 transition-colors flex flex-col items-center gap-1.5">
-                <span class="text-xl">📄</span> آپلود اکسل اسامی
+          <!-- کارت افقی (Badge Horizontal 85.6x54) -->
+          <div *ngIf="idCardSettings.cardType === 'badge-horizontal'" class="w-[390px] h-[245px] card-3d-wrapper cursor-pointer" [class.is-flipped]="isCardFlipped" (click)="toggleFlip()">
+            
+            <!-- رو (Horizontal Front) -->
+            <div id="live-card-front-render" class="card-front-face bg-white border border-slate-200 flex text-right">
+              <!-- نوار عمودی رنگی -->
+              <div class="w-8 h-full flex items-center justify-center rotate-180 text-white text-[9px] font-black tracking-widest" [style.background]="effectiveCardColor" style="writing-mode: vertical-rl;">
+                GATE PASS · PERMIT
+              </div>
+
+              <div class="flex-1 flex flex-col p-3.5">
+                <!-- هدر -->
+                <div class="flex justify-between items-start border-b border-slate-100 pb-1.5 mb-1.5">
+                  <div>
+                    <span class="text-base font-black text-slate-900 leading-tight block">{{idCardSettings.customTexts.companyName}}</span>
+                    <span class="text-[7px] font-bold text-slate-400 block mt-0.5">{{idCardSettings.customTexts.companySub}}</span>
+                  </div>
+                  <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '1d'" class="h-6 w-28 bg-white rounded border border-slate-200 px-1" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(activeUser))"></div>
+                </div>
+
+                <!-- بدنه اطلاعات و عکس و زون QR -->
+                <div class="flex-1 flex gap-3 items-center" [ngClass]="idCardSettings.photoPosition === 'left' ? 'flex-row-reverse' : 'flex-row'">
+                  <!-- عکس پرسنلی -->
+                  <div *ngIf="idCardSettings.fields.photo" class="w-16 h-20 bg-slate-100 rounded-xl border-2 border-white shadow-sm flex items-center justify-center font-black text-slate-400 text-2xl overflow-hidden shrink-0">
+                    <img *ngIf="activeUser.avatar" [src]="activeUser.avatar" class="w-full h-full object-cover" alt="avatar">
+                    <span *ngIf="!activeUser.avatar">{{getUserAvatarInitial(activeUser)}}</span>
+                  </div>
+
+                  <!-- مشخصات متنی -->
+                  <div class="flex-1 flex flex-col justify-between overflow-hidden py-0.5">
+                    <div>
+                      <p class="text-[8px] text-slate-400 font-bold">نام و نام خانوادگی:</p>
+                      <h2 class="font-black text-slate-900 text-sm truncate">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
+                    </div>
+
+                    <div *ngIf="idCardSettings.fields.role">
+                      <span class="text-[9px] font-black px-2 py-0.5 rounded text-indigo-700 bg-indigo-50 border border-indigo-100 inline-block truncate max-w-full">{{activeRole.title}}</span>
+                    </div>
+
+                    <div *ngIf="idCardSettings.fields.projects" class="text-[8px] text-slate-600 font-semibold" [title]="getWarehouseFullText(activeUser)">
+                      <span>مجوز تردد: </span>
+                      <span class="font-bold text-slate-800">{{getWarehouseSummary(activeUser, 2)}}</span>
+                    </div>
+                  </div>
+
+                  <!-- زون اختصاصی و بزرگ QR Code در جلوی کارت -->
+                  <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-1 shrink-0">
+                    <div class="w-24 h-24 bg-white p-1.5 rounded-2xl border-2 border-slate-200 shadow-sm flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getQrCodeSvg(activeUser)"></div>
+                    </div>
+                    <span class="text-[7px] font-bold text-slate-500">استعلام اصالت کارت</span>
+                  </div>
+                </div>
+
+                <!-- فوتر افقی -->
+                <div class="mt-auto pt-1.5 border-t border-slate-100 flex items-center justify-between text-[8px]">
+                  <span *ngIf="idCardSettings.fields.expiry" class="text-slate-500 font-bold">اعتبار: <strong class="text-slate-800">{{expiryText}}</strong></span>
+                  <span *ngIf="!idCardSettings.fields.expiry" class="text-slate-400 font-bold">کارت شناسایی پرسنلی</span>
+                  <span *ngIf="idCardSettings.fields.personnelCode" class="font-mono font-black text-slate-700">{{getUserPersonnelCode(activeUser)}}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- پشت (Horizontal Back) -->
+            <div id="live-card-back-render" class="card-back-face bg-slate-50 border border-slate-200 p-3.5 flex flex-col justify-between text-right security-waves">
+              <div class="flex justify-between items-center border-b border-slate-200 pb-1.5">
+                <div>
+                  <span class="text-xs font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+                  <span class="text-[7px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+                </div>
+                <span *ngIf="idCardSettings.fields.nationalCode" class="font-mono text-[9px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">کد ملی: {{activeUser.national_code || '---'}}</span>
+              </div>
+
+              <div class="flex-1 flex gap-3 items-center py-1">
+                <!-- زون اختصاصی و بزرگ QR Code در چپ -->
+                <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="flex flex-col items-center gap-1 shrink-0">
+                  <div *ngIf="idCardSettings.barcodeType === '1d'" class="bg-white rounded border border-slate-200 px-1 py-0.5 h-8 w-28 flex flex-col items-center">
+                    <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(activeUser))"></div>
+                    <span class="font-mono text-[7px] font-black text-slate-700 mt-0.5">{{getUserPersonnelCode(activeUser)}}</span>
+                  </div>
+                  <div *ngIf="idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-1">
+                    <div class="w-24 h-24 bg-white p-1 rounded-xl border-2 border-slate-200 shadow-sm flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getQrCodeSvg(activeUser)"></div>
+                    </div>
+                    <span class="text-[7px] font-bold text-slate-500">استعلام اصالت کارت</span>
+                  </div>
+                </div>
+
+                <!-- مشخصات و ضوابط در راست -->
+                <div class="flex-1 space-y-1 text-[8px] text-slate-600 font-semibold leading-relaxed overflow-hidden">
+                  <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+                  <div class="grid grid-cols-2 gap-1 pt-0.5">
+                    <p *ngIf="idCardSettings.fields.bloodType">• گروه خونی: <strong class="text-rose-700">{{getUserBloodType(activeUser)}}</strong></p>
+                    <p *ngIf="idCardSettings.fields.emergencyContact">• تماس: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(activeUser)}}</strong></p>
+                  </div>
+                  <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800 truncate block">{{idCardSettings.globalProjectNote}}</strong></p>
+                </div>
+              </div>
+
+              <!-- فوتر پشت کارت افقی و مهر حراست -->
+              <div *ngIf="idCardSettings.fields.signature" class="flex items-center justify-between border-t border-slate-200 pt-1 mt-auto text-[7px] text-slate-500 font-bold">
+                <div>
+                  <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+                  <span class="block text-[6px] text-slate-400 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+                </div>
+                <div class="w-10 h-5 border border-dashed border-slate-300 rounded flex items-center justify-center text-[6px] text-slate-400">
+                  مهر رسمی
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- راهنمای تعاملی زیر بوم -->
+        <div class="w-full text-center z-20">
+          <p class="text-[11px] font-bold text-slate-500 flex items-center justify-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            برای مشاهده پشت و روی کارت، روی کارت یا دکمه چرخش کلیک کنید
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ستون ۳: کنترل پنل کامل و گزینه‌های چاپی (Control Panel) -->
+    <div class="lg:col-span-4 space-y-4">
+      
+      <!-- ۱. چیدمان‌های آماده پیش‌فرض (Presets) -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 p-3 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <h3 class="font-black text-slate-800 text-xs">۱. چیدمان‌های پیش‌فرض آماده</h3>
+        </div>
+
+        <div class="p-3 grid grid-cols-2 gap-2">
+          <button (click)="applyPreset('classic-vertical')" [ngClass]="idCardSettings.presetLayout === 'classic-vertical' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all">
+            <span class="text-base">🪪</span>
+            <span>کلاسیک عمودی</span>
+          </button>
+
+          <button (click)="applyPreset('badge-horizontal')" [ngClass]="idCardSettings.presetLayout === 'badge-horizontal' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all">
+            <span class="text-base">🏷️</span>
+            <span>گیت‌پاس افقی</span>
+          </button>
+
+          <button (click)="applyPreset('industrial-security')" [ngClass]="idCardSettings.presetLayout === 'industrial-security' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all">
+            <span class="text-base">⚠️</span>
+            <span>صنعتی انبار</span>
+          </button>
+
+          <button (click)="applyPreset('compact-minimal')" [ngClass]="idCardSettings.presetLayout === 'compact-minimal' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all">
+            <span class="text-base">📋</span>
+            <span>مینیمال / مهمان</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ۲. موقعیت المان‌ها، نوع بارکد و رنگ -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 p-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <h3 class="font-black text-slate-800 text-xs">۲. تنظیمات بارکد، موقعیت و رنگ</h3>
+          </div>
+          <span class="text-[10px] font-mono font-bold text-slate-400 uppercase">{{effectiveCardColor}}</span>
+        </div>
+
+        <div class="p-3.5 space-y-3">
+          
+          <!-- نوع بارکد (1D یا 2D) -->
+          <div class="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100">
+            <label class="block text-[10px] font-black text-indigo-900 mb-1.5">نوع بارکد امنیتی</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button (click)="setBarcodeType('1d')" [ngClass]="idCardSettings.barcodeType === '1d' ? 'bg-indigo-600 text-white font-black shadow-sm' : 'bg-white text-slate-700 border border-slate-200 font-bold'" class="py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1">
+                <span>||||||</span>
+                <span>تک‌بعدی (Code 39)</span>
               </button>
-              <button class="flex-1 py-4 bg-surface border border-slate-300 border-dashed rounded-xl text-[11px] font-bold text-slate-600 hover:bg-surface transition-colors flex flex-col items-center gap-1.5">
-                <span class="text-xl">🗂️</span> فایل ZIP تصاویر
+
+              <button (click)="setBarcodeType('2d')" [ngClass]="idCardSettings.barcodeType === '2d' ? 'bg-indigo-600 text-white font-black shadow-sm' : 'bg-white text-slate-700 border border-slate-200 font-bold'" class="py-1.5 px-2 rounded-lg text-[11px] transition-all flex items-center justify-center gap-1">
+                <span>▣</span>
+                <span>دوبعدی (QR Code)</span>
               </button>
             </div>
-            
-            <!-- مپینگ فیلدهای اکسل -->
-            <div *ngIf="showMappingSection" id="id-mapping-section" class="bg-surface border border-border rounded-xl p-4 mt-2 fade-in">
-              <p class="text-[10px] font-black text-indigo-700 mb-3 flex items-center gap-1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg> تخصیص ستون‌های فایل (Mapping)</p>
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">نام و نام خانوادگی</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">نام و نام خانوادگی</option><option value="1">کد ملی</option><option value="2">نقش/سمت</option><option value="3">اعتبار (روز)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">کد ملی (National ID)</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">نام و نام خانوادگی</option><option value="1">کد ملی</option><option value="2">نقش/سمت</option><option value="3">اعتبار (روز)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">سمت / نقش</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">نام و نام خانوادگی</option><option value="1">کد ملی</option><option value="2">نقش/سمت</option><option value="3">اعتبار (روز)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[9px] font-bold text-slate-600 mb-1">اعتبار به روز (انقضا)</label>
-                  <select class="w-full px-2 py-1.5 text-[10px] rounded border border-slate-300 outline-none">
-                    <option value="">-- انتخاب ستون --</option><option value="0">نام و نام خانوادگی</option><option value="1">کد ملی</option><option value="2">نقش/سمت</option><option value="3">اعتبار (روز)</option>
-                  </select>
-                </div>
-              </div>
+          </div>
+
+          <!-- موقعیت عکس و بارکد -->
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">موقعیت عکس</label>
+              <select [(ngModel)]="idCardSettings.photoPosition" (change)="setPhotoPosition(idCardSettings.photoPosition)" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 outline-none">
+                <option value="center">وسط (پیش‌فرض)</option>
+                <option value="right">سمت راست</option>
+                <option value="left">سمت چپ</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">محل بارکد</label>
+              <select [(ngModel)]="idCardSettings.barcodePlacement" (change)="setBarcodePlacement(idCardSettings.barcodePlacement)" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 outline-none">
+                <option value="back">پشت کارت</option>
+                <option value="front">روی کارت</option>
+                <option value="both">هر دو طرف</option>
+                <option value="none">بدون بارکد</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- پالت رنگ سازمانی -->
+          <div class="pt-2 border-t border-slate-100">
+            <label class="block text-[10px] font-bold text-slate-500 mb-1.5">رنگ سربرگ و هویت سازمانی</label>
+            <div class="flex items-center gap-2 flex-wrap">
+              <button *ngFor="let p of PRESET_COLORS" (click)="setCustomColor(p.color)" [style.background]="p.color" [title]="p.name" class="w-7 h-7 rounded-lg border-2 color-swatch-btn relative" [ngClass]="effectiveCardColor === p.color ? 'border-white ring-2 ring-indigo-500 shadow-md scale-110' : 'border-transparent'"></button>
+              
+              <label class="w-7 h-7 rounded-lg border border-slate-300 flex items-center justify-center cursor-pointer bg-slate-50 hover:bg-slate-100 transition-all text-xs font-bold text-slate-600 relative overflow-hidden" title="رنگ دلخواه">
+                <span>🎨</span>
+                <input type="color" [(ngModel)]="idCardSettings.customColor" (change)="setCustomColor(idCardSettings.customColor)" class="absolute opacity-0 inset-0 cursor-pointer">
+              </label>
+            </div>
+          </div>
+
+          <!-- چیدمان شیت چاپ -->
+          <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">فرمت شیت پرینتر</label>
+              <select [(ngModel)]="idCardSettings.printLayout" (change)="saveSettings()" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 outline-none">
+                <option value="a4-grid">شیت معمولی A4</option>
+                <option value="laminate-side-by-side">لمینت تاشو (رو و پشت)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">طرف چاپ کارت</label>
+              <select [(ngModel)]="idCardSettings.printSide" (change)="saveSettings()" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 outline-none">
+                <option value="both">چاپ دورو (رو و پشت)</option>
+                <option value="front">فقط روی کارت</option>
+                <option value="back">فقط پشت کارت</option>
+              </select>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- ۲. نوع کارت و چیدمان -->
-      <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
-        <div class="bg-surface border-b border-border p-4">
-          <h3 class="font-black text-foreground text-sm flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><circle cx="12" cy="11" r="3"/><path d="M17 18c0-2.2-2.2-4-5-4s-5 1.8-5 4"/></svg>
-            ۲. قالب کارت و اطلاعات چاپی
-          </h3>
-        </div>
-        
-        <div class="p-5 space-y-4">
+      <!-- ۳. بخش آکاردئونی ویرایش متن‌های ثابت و عناوین کارت -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <button (click)="isCustomTextsOpen = !isCustomTextsOpen" class="w-full bg-slate-50 border-b border-slate-200 p-3 flex items-center justify-between text-right hover:bg-slate-100 transition-colors">
+          <div class="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            <h3 class="font-black text-slate-800 text-xs">۳. ویرایش متن‌های ثابت و عناوین کارت</h3>
+          </div>
+          <svg class="transform transition-transform text-slate-400" [class.rotate-180]="isCustomTextsOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+
+        <div *ngIf="isCustomTextsOpen" class="p-3.5 space-y-2.5 fade-in">
           <div>
-            <label class="block text-[11px] font-bold text-slate-500 mb-2">نوع کارت (Template)</label>
-            <div class="grid grid-cols-2 gap-3">
-              <button (click)="updateCardFormat('pvc-vertical')" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'border border-border bg-background text-slate-600 hover:bg-surface'" class="card-format-btn text-xs font-bold py-2.5 rounded-xl transition-all">کارت پرسنلی عمودی</button>
-              <button (click)="updateCardFormat('badge-horizontal')" [ngClass]="idCardSettings.cardType === 'badge-horizontal' ? 'border-2 border-indigo-500 bg-indigo-50 text-indigo-700' : 'border border-border bg-background text-slate-600 hover:bg-surface'" class="card-format-btn text-xs font-bold py-2.5 rounded-xl transition-all">گیت‌پاس تردد افقی</button>
-            </div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">نام سازمان / شرکت</label>
+            <input type="text" [(ngModel)]="idCardSettings.customTexts.companyName" (change)="saveSettings()" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
           </div>
 
-          <div class="border-t border-border pt-4 space-y-3">
-            <label class="block text-[11px] font-bold text-slate-500 mb-2">اطلاعات نمایشی روی کارت</label>
-            
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" [(ngModel)]="idCardSettings.fields.role" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <span class="text-xs font-semibold text-foreground group-hover:text-indigo-600 transition-colors">عنوان شغلی / نقش سازمانی</span>
-            </label>
-            
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" [(ngModel)]="idCardSettings.fields.nationalCode" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <span class="text-xs font-semibold text-foreground group-hover:text-indigo-600 transition-colors">کد ملی (National ID)</span>
-            </label>
-            
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" [(ngModel)]="idCardSettings.fields.projects" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <span class="text-xs font-semibold text-foreground group-hover:text-indigo-600 transition-colors">زون‌های مجاز تردد (انبارها)</span>
-            </label>
-            
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" [(ngModel)]="idCardSettings.fields.expiry" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <span class="text-xs font-semibold text-foreground group-hover:text-indigo-600 transition-colors">چاپ تاریخ اعتبار (انقضا)</span>
-            </label>
-            
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" [(ngModel)]="idCardSettings.fields.qr" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-              <span class="text-xs font-semibold text-foreground group-hover:text-indigo-600 transition-colors">تولید هوشمند QR Code اصالت‌سنجی</span>
-            </label>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">زیرعنوان لاتین شرکت</label>
+            <input type="text" [(ngModel)]="idCardSettings.customTexts.companySub" (change)="saveSettings()" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none text-left" dir="ltr">
+          </div>
 
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">تیتر پشت کارت</label>
+            <input type="text" [(ngModel)]="idCardSettings.customTexts.backHeaderTitle" (change)="saveSettings()" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">متن ضوابط و تعهدنامه حراست</label>
+            <textarea rows="2" [(ngModel)]="idCardSettings.customTexts.regulationsText" (change)="saveSettings()" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none"></textarea>
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">عنوان مهر / امضای حراست</label>
+            <input type="text" [(ngModel)]="idCardSettings.customTexts.signatureTitle" (change)="saveSettings()" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+          </div>
+
+          <!-- دکمه بازنشانی به پیش‌فرض -->
+          <button (click)="resetToDefaultTexts()" class="w-full py-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            <span>بازنشانی متن‌ها به حالت پیش‌فرض سازمانی</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ۴. فیلد عمومی سراسری و اعتبار -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 p-3 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <h3 class="font-black text-slate-800 text-xs">۴. فیلد عمومی سراسری (پروژه/شرکت)</h3>
+        </div>
+
+        <div class="p-3.5 space-y-2.5">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">عنوان پروژه / پیمانکار مجری (درج روی تمام کارت‌ها)</label>
+            <input type="text" [(ngModel)]="idCardSettings.globalProjectNote" (change)="saveSettings()" placeholder="مثال: فاز ۲ توسعه پالایشگاه" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">اعتبار گیت‌پاس (تعداد روز از امروز)</label>
+            <input type="number" [(ngModel)]="idCardSettings.expiryDays" (change)="saveSettings()" min="0" placeholder="0 = نامحدود" class="w-full text-center px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none">
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[10px] font-bold text-slate-500">دامنه سفارشی لینک استعلام QR Code</label>
+              <span class="text-[9px] text-emerald-600 font-bold">پیش‌فرض: خودکار بر اساس دامنه مرورگر</span>
+            </div>
+            <input type="text" [(ngModel)]="idCardSettings.customDomain" (change)="saveSettings()" placeholder="اختیاری — مثال: https://app.farsalish.ir" class="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold outline-none text-left" dir="ltr">
+            <p class="text-[8px] text-slate-400 mt-1">در صورت خالی بودن، QR Code بر اساس دامنه جاری مرورگر تولید می‌شود. اگر سیستم روی لوکال یا شبکه داخلی است و می‌خواهید کارت‌ها برای اسکن اینترنتی چاپ شوند، دامنه عمومی سرور را اینجا وارد کنید.</p>
           </div>
         </div>
       </div>
-      
-      <button (click)="executeCardPrint()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black shadow-lg shadow-indigo-200 transition-all active:scale-[0.98] flex justify-center items-center gap-2">
+
+      <!-- ۵. سوئیچ‌های تفکیک‌شده روشن/خاموش فیلدها -->
+      <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-slate-50 border-b border-slate-200 p-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <h3 class="font-black text-slate-800 text-xs">۵. مدیریت نمایش تک‌تک فیلدها</h3>
+          </div>
+        </div>
+
+        <div class="p-3.5 space-y-2 text-xs">
+          
+          <div class="text-[10px] font-black text-indigo-700 border-b pb-1">المان‌های روی کارت (Front):</div>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">تصویر پرسنلی (عکس)</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.photo" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">سمت / نقش سازمانی</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.role" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">کد پرسنلی (EMP-xxx)</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.personnelCode" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">زون‌های مجاز تردد</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.projects" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">افکت هولوگرام امنیتی</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.hologram" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <div class="text-[10px] font-black text-indigo-700 border-b pt-2 pb-1">المان‌های پشت کارت (Back):</div>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">کد ملی دارنده کارت</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.nationalCode" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">گروه خونی (خوانده‌شده از پرونده)</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.bloodType" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">شماره تماس اضطراری</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.emergencyContact" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">متن ضوابط حراست</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.regulations" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+          <label class="flex items-center justify-between py-1 cursor-pointer">
+            <span class="font-bold text-slate-700">مهر و امضای حراست</span>
+            <input type="checkbox" [(ngModel)]="idCardSettings.fields.signature" (change)="saveSettings()" class="rounded text-indigo-600 focus:ring-0">
+          </label>
+
+        </div>
+      </div>
+
+      <!-- دکمه بزرگ پرینت -->
+      <button (click)="executeCardPrint()" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-2xl text-xs font-black shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 active:scale-95">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        ارسال به پرینتر (چیدمان خودکار در A4)
+        <span>ارسال به پرینتر (شیت استاندارد A4)</span>
       </button>
 
     </div>
 
-    <!-- ستون پیش‌نمایش زنده -->
-    <div class="xl:col-span-7">
-      <div class="bg-surface/80 rounded-3xl border-2 border-dashed border-slate-300 shadow-inner p-6 md:p-10 h-full flex flex-col relative min-h-[500px] overflow-hidden">
-        
-        <div class="flex items-center justify-between mb-8 z-20">
-          <h3 class="font-black text-foreground text-sm">پیش‌نمایش زنده کارت (Live Preview)</h3>
-          <span class="px-3 py-1 bg-emerald-100 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold animate-pulse">ابعاد استاندارد 86×54</span>
+  </div>
+
+</div>
+
+<!-- ==========================================================================
+     مودال حرفه‌ای پیش‌نمایش و دانلود تصویر دیجیتال (Digital Export Modal)
+     ========================================================================== -->
+<div *ngIf="isExportModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4" dir="rtl">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="closeExportModal()"></div>
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden relative modal-enter z-10">
+    
+    <!-- هدر مودال -->
+    <div class="p-5 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </div>
-        
-        <!-- بوم پیش‌نمایش مرکزی -->
-        <div class="flex-1 flex items-center justify-center relative z-10" id="card-preview-canvas">
-          
-          <!-- PVC Vertical -->
-          <div *ngIf="idCardSettings.cardType === 'pvc-vertical'" id="live-card-preview-vertical" class="bg-background rounded-[16px] shadow-2xl overflow-hidden transition-all duration-300 w-[240px] h-[380px] border border-border relative flex flex-col ring-8 ring-white ring-opacity-40" style="aspect-ratio: 54/86;">
-            <!-- هدر و لوگو با فونت وزیر -->
-            <div class="h-24 w-full flex flex-col items-center justify-start pt-3 text-white relative overflow-hidden" [style.background]="'linear-gradient(135deg, ' + activeRole.color + ', #1e293b)'">
-              <div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 12px 12px;"></div>
-              <div class="relative z-10 flex flex-col items-center">
-                <span class="text-xl font-black tracking-widest text-white/95 drop-shadow-md">فارس عــالیش</span>
-                <span class="text-[7px] font-bold tracking-widest opacity-80 mt-0.5">FARS AALISH CO. - REG: 420</span>
-              </div>
-            </div>
-
-            <!-- عکس پرسنلی (با حاشیه امن از متن بالا) -->
-            <div class="flex justify-center -mt-8 relative z-20">
-              <div class="w-20 h-24 bg-surface rounded-xl border-4 border-white shadow-md flex items-center justify-center text-4xl font-black text-slate-300 overflow-hidden bg-cover bg-center">
-                {{activeUser.avatar}}
-              </div>
-            </div>
-
-            <!-- اطلاعات هویتی -->
-            <div class="flex-1 flex flex-col items-center px-4 pt-2 pb-4 text-center">
-              <h2 class="font-black text-foreground text-lg leading-tight w-full truncate">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
-              
-              <div *ngIf="idCardSettings.fields.role" class="mt-1 w-full">
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full inline-block truncate max-w-full" [style.background]="activeRole.color + '15'" [style.color]="activeRole.color" [style.border]="'1px solid ' + activeRole.color + '40'">{{activeRole.title}}</span>
-              </div>
-
-              <div class="w-full mt-auto space-y-1.5 border-t border-border pt-2.5">
-                <div *ngIf="idCardSettings.fields.nationalCode" class="flex justify-between items-center text-[10px]">
-                  <span class="text-slate-400 font-semibold">کد ملی:</span>
-                  <span class="font-mono font-bold text-foreground">{{activeUser.national_code}}</span>
-                </div>
-                <div *ngIf="idCardSettings.fields.projects" class="flex justify-between items-center text-[10px]">
-                  <span class="text-slate-400 font-semibold">تردد مجاز:</span>
-                  <span class="font-mono font-bold text-indigo-600 truncate max-w-[120px]">{{activeUser.assigned_warehouses?.join(', ')}}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- فوتر و QR -->
-            <div class="h-16 bg-surface border-t border-border flex items-center justify-between px-3">
-              <div class="text-[8px] font-bold text-slate-400 text-right leading-tight flex-1">
-                <p>کارت شناسایی پرسنلی</p>
-                <p *ngIf="idCardSettings.fields.expiry" class="mt-0.5 text-slate-600">اعتبار: <span class="font-bold text-foreground">{{expiryText}}</span></p>
-              </div>
-              <div *ngIf="idCardSettings.fields.qr" class="w-10 h-10 shrink-0 ml-1">
-                <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMTAgMTBoMjB2MjBIMTB6TTMwIDEwaDIwdjIwSDMwek01MCAxMGgyMHYyMEg1MHpNNzAgMTBoMjB2MjBINzB6TTEwIDMwaDIwdjIwSDEwek0zMCAzMGgyMHYyMEgzMHpNNTAgMzBoMjB2MjBINTB6TTcwIDMwaDIwdjIwSDcwek0xMCA1MGgyMHYyMEgxMHpNMzAgNTBoMjB2MjBIMzB6TTUwIDUwaDIwdjIwSDUwek03MCA1MGgyMHYyMEg3MHpNMTAgNzBoMjB2MjBIMTB6TTMwIDcwaDIwdjIwSDMwek01MCA3MGgyMHYyMEg1MHpNNzAgNzBoMjB2MjBINzB6IiBvcGFjaXR5PSIuMSIvPjxwYXRoIGZpbGw9IiMxZTFlMWUiIGQ9Ik0xMCAxMGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNSA1aDEwdjEwSDUwem0xNS0xMGgzMHYzMEg2MHptNSA1aDIwdjIwSDY1ek0xMCA2MGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNS0xMGgxMHYxMEg1MHptMTUtMTBoMTB2MTBINjV6bTAtMTVWMzBINTB2MTBoMTV2MTVoMTVWNDBoLTE1em0xNSAzNWgxMHYxMEg4MHptLTE1IDEwaDEwdjEwSDY1em0tMTUgMGgxMHYxMEg1MHoiLz48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMjAgMjBoMTB2MTBIMjB6TTY1IDIwaDEwdjEwSDY1ek0yMCA3MGgxMHYxMEgyMHpNNDAgNDBoMTB2MTBINDB6TTQ1IDY1aDEwdjEwSDQ1eiIvPjwvc3ZnPg==" class="w-full h-full opacity-80 mix-blend-multiply" alt="QR">
-              </div>
-            </div>
-          </div>
-
-          <!-- Badge Horizontal -->
-          <div *ngIf="idCardSettings.cardType === 'badge-horizontal'" id="live-card-preview-horizontal" class="bg-background rounded-[16px] shadow-2xl overflow-hidden transition-all duration-300 w-[380px] h-[240px] border border-border relative flex ring-8 ring-white ring-opacity-40" style="aspect-ratio: 86/54;">
-            <!-- نوار رنگی حراست -->
-            <div class="w-7 h-full flex items-center justify-center rotate-180 text-white text-[9px] font-bold tracking-widest" [style.background]="activeRole.color" style="writing-mode: vertical-rl;">
-              GATE PASS · PERMIT
-            </div>
-
-            <div class="flex-1 flex flex-col p-3 px-4">
-              <!-- هدر شرکت -->
-              <div class="flex justify-between items-start border-b border-border pb-2 mb-2">
-                <div class="flex flex-col">
-                  <span class="text-lg font-black text-foreground tracking-wider">فارس عــالیش</span>
-                  <span class="text-[7px] font-bold text-slate-400 tracking-widest mt-0.5">FARS AALISH - GATE PASS</span>
-                </div>
-                <div *ngIf="idCardSettings.fields.qr" class="w-10 h-10">
-                  <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMTAgMTBoMjB2MjBIMTB6TTMwIDEwaDIwdjIwSDMwek01MCAxMGgyMHYyMEg1MHpNNzAgMTBoMjB2MjBINzB6TTEwIDMwaDIwdjIwSDEwek0zMCAzMGgyMHYyMEgzMHpNNTAgMzBoMjB2MjBINTB6TTcwIDMwaDIwdjIwSDcwek0xMCA1MGgyMHYyMEgxMHpNMzAgNTBoMjB2MjBIMzB6TTUwIDUwaDIwdjIwSDUwek03MCA1MGgyMHYyMEg3MHpNMTAgNzBoMjB2MjBIMTB6TTMwIDcwaDIwdjIwSDMwek01MCA3MGgyMHYyMEg1MHpNNzAgNzBoMjB2MjBINzB6IiBvcGFjaXR5PSIuMSIvPjxwYXRoIGZpbGw9IiMxZTFlMWUiIGQ9Ik0xMCAxMGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNSA1aDEwdjEwSDUwem0xNS0xMGgzMHYzMEg2MHptNSA1aDIwdjIwSDY1ek0xMCA2MGgzMHYzMEgxMHptNSA1aDIwdjIwSDE1em0zNS0xMGgxMHYxMEg1MHptMTUtMTBoMTB2MTBINjV6bTAtMTVWMzBINTB2MTBoMTV2MTVoMTVWNDBoLTE1em0xNSAzNWgxMHYxMEg4MHptLTE1IDEwaDEwdjEwSDY1em0tMTUgMGgxMHYxMEg1MHoiLz48cGF0aCBmaWxsPSIjMWUxZTFlIiBkPSJNMjAgMjBoMTB2MTBIMjB6TTY1IDIwaDEwdjEwSDY1ek0yMCA3MGgxMHYxMEgyMHpNNDAgNDBoMTB2MTBINDB6TTQ1IDY1aDEwdjEwSDQ1eiIvPjwvc3ZnPg==" class="w-full h-full opacity-70 mix-blend-multiply" alt="QR">
-                </div>
-              </div>
-
-              <!-- اطلاعات هویتی و عکس -->
-              <div class="flex-1 flex text-right gap-4">
-                <div class="flex-1 flex flex-col justify-between py-1">
-                  <div>
-                    <p class="text-[9px] text-slate-400 font-bold mb-0.5">نام و نام خانوادگی:</p>
-                    <h2 class="font-black text-foreground text-base">{{activeUser.first_name}} {{activeUser.last_name}}</h2>
-                  </div>
-                  <div *ngIf="idCardSettings.fields.role">
-                    <p class="text-[9px] text-slate-400 font-bold mb-0.5">مسئولیت / واحد:</p>
-                    <p class="font-bold text-sm" [style.color]="activeRole.color">{{activeRole.title}}</p>
-                  </div>
-                  <div *ngIf="idCardSettings.fields.projects">
-                    <p class="text-[9px] text-slate-400 font-bold mb-0.5">مجوز تردد در سایت‌ها:</p>
-                    <p class="font-mono font-bold text-xs text-foreground">{{activeUser.assigned_warehouses?.join(' - ')}}</p>
-                  </div>
-                </div>
-                
-                <div class="w-16 h-20 bg-surface rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0 self-start mt-2">
-                  <span class="text-[8px] text-slate-400 font-bold text-center leading-tight">محل<br>عکس</span>
-                </div>
-              </div>
-              
-              <!-- فوتر -->
-              <div class="mt-auto pt-1.5 border-t border-border flex items-center justify-between mb-1">
-                 <div *ngIf="idCardSettings.fields.expiry" class="text-[9px] text-slate-500 font-bold">
-                    اعتبار: <span class="font-black text-foreground">{{expiryText}}</span>
-                 </div>
-                 <div *ngIf="idCardSettings.fields.nationalCode" class="text-left">
-                    <span class="text-[9px] text-slate-400 font-bold">NID: </span>
-                    <span class="font-mono font-black text-foreground text-[11px]">{{activeUser.national_code}}</span>
-                 </div>
-              </div>
-            </div>
-          </div>
-
+        <div>
+          <h2 class="text-base font-bold text-slate-800">خروجی و دانلود تصویر دیجیتال (PNG)</h2>
+          <p class="text-xs text-slate-500">پرسنل انتخابی: {{activeUser.first_name}} {{activeUser.last_name}} ({{getUserPersonnelCode(activeUser)}})</p>
         </div>
-        
+      </div>
+      <button (click)="closeExportModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-200">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- بدنه مودال -->
+    <div class="p-6 space-y-4">
+      
+      <!-- ۱. انتخاب سطح کارت برای خروجی -->
+      <div>
+        <label class="block text-xs font-black text-slate-700 mb-2">۱. سطح کارت برای دانلود</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button (click)="exportSide = 'both'" [ngClass]="exportSide === 'both' ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-3 rounded-xl text-xs flex flex-col items-center gap-1 transition-all">
+            <span class="text-lg">🪪🪪</span>
+            <span>دورو (رو و پشت)</span>
+          </button>
+
+          <button (click)="exportSide = 'front'" [ngClass]="exportSide === 'front' ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-3 rounded-xl text-xs flex flex-col items-center gap-1 transition-all">
+            <span class="text-lg">🖼️</span>
+            <span>فقط روی کارت</span>
+          </button>
+
+          <button (click)="exportSide = 'back'" [ngClass]="exportSide === 'back' ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-3 rounded-xl text-xs flex flex-col items-center gap-1 transition-all">
+            <span class="text-lg">📑</span>
+            <span>فقط پشت کارت</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ۲. انتخاب کیفیت و وضوح -->
+      <div>
+        <label class="block text-xs font-black text-slate-700 mb-2">۲. وضوح و رزولوشن تصویر خروجی</label>
+        <div class="grid grid-cols-3 gap-2">
+          <button (click)="exportScale = 1" [ngClass]="exportScale === 1 ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2.5 rounded-xl text-xs flex flex-col items-center gap-0.5 transition-all">
+            <span>۱× استاندارد</span>
+            <span class="text-[10px] text-slate-400 font-mono">72 DPI</span>
+          </button>
+
+          <button (click)="exportScale = 2" [ngClass]="exportScale === 2 ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2.5 rounded-xl text-xs flex flex-col items-center gap-0.5 transition-all">
+            <span>۲× باکیفیت HD (پیشنهادی)</span>
+            <span class="text-[10px] text-slate-400 font-mono">150 DPI</span>
+          </button>
+
+          <button (click)="exportScale = 3" [ngClass]="exportScale === 3 ? 'border-2 border-indigo-600 bg-indigo-50 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold'" class="p-2.5 rounded-xl text-xs flex flex-col items-center gap-0.5 transition-all">
+            <span>۳× فوق‌العاده Ultra</span>
+            <span class="text-[10px] text-slate-400 font-mono">300 DPI</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- فوتر مودال -->
+    <div class="p-5 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 rounded-b-3xl">
+      <button (click)="closeExportModal()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors">انصراف</button>
+      <button (click)="exportDigitalCard(exportSide, exportScale)" [disabled]="isExportingImage" class="px-6 py-2.5 rounded-xl text-xs font-black text-white shadow-md active:scale-95 transition-all flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>{{isExportingImage ? 'در حال رندر و دانلود...' : 'تولید و دانلود فوری فایل تصویر'}}</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     مودال پیش‌نمایش زنده شیت چاپ A4 (Interactive Print Sheet Preview Modal)
+     ========================================================================== -->
+<div *ngIf="isPreviewSheetModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md fade-in no-print" (click)="closeSheetPreviewModal()">
+  <div class="bg-slate-100 rounded-3xl max-w-5xl w-full max-h-[92vh] shadow-2xl flex flex-col overflow-hidden border border-slate-300" (click)="$event.stopPropagation()">
+    
+    <!-- هدر مودال -->
+    <div class="p-4 bg-white border-b border-slate-200 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </div>
+        <div>
+          <h3 class="font-black text-slate-800 text-sm md:text-base">پیش‌نمایش زنده شیت چاپ A4 (شبیه‌ساز دقیق پرینتر)</h3>
+          <p class="text-[11px] text-slate-500 font-semibold mt-0.5">مشاهده صفحات رو و پشت، چیدمان آینه‌ای دو‌رو و خطوط راهنمای برش قبل از چاپ</p>
+        </div>
+      </div>
+
+      <!-- کنترل تب‌های رو و پشت در شیت -->
+      <div class="flex items-center gap-2">
+        <div *ngIf="idCardSettings.printLayout === 'a4-grid' && (idCardSettings.printSide === 'both')" class="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          <button (click)="previewSheetActiveTab = 'front'" [ngClass]="previewSheetActiveTab === 'front' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 font-bold'" class="px-3 py-1.5 rounded-lg text-xs transition-all">
+            صفحه ۱: روی کارت‌ها (Front)
+          </button>
+          <button (click)="previewSheetActiveTab = 'back'" [ngClass]="previewSheetActiveTab === 'back' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 font-bold'" class="px-3 py-1.5 rounded-lg text-xs transition-all">
+            صفحه ۲: پشت کارت‌ها (Back - آینه‌ای)
+          </button>
+        </div>
+
+        <button (click)="closeSheetPreviewModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
     </div>
-    
+
+    <!-- بدنه شبیه‌ساز برگه A4 -->
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-start bg-slate-200/70 custom-scrollbar">
+      
+      <!-- قاب برگه A4 شبیه‌سازی‌شده -->
+      <div class="bg-white shadow-2xl rounded-sm p-6 max-w-[800px] w-full min-h-[600px] border border-slate-300 relative flex flex-col items-center justify-start scale-95 origin-top transition-transform">
+        
+        <div class="w-full flex justify-between items-center text-[10px] text-slate-400 font-bold border-b border-slate-100 pb-2 mb-4">
+          <span>شیت استاندارد A4 (ابعاد ۲۱۰ × ۲۹۷ میلی‌متر)</span>
+          <span *ngIf="idCardSettings.printLayout === 'laminate-side-by-side'">شیت لمینت تاشو · {{printableUsers.length}} کارت</span>
+          <span *ngIf="idCardSettings.printLayout === 'a4-grid' && previewSheetActiveTab === 'front'">صفحه روی کارت‌ها · {{printableUsers.length}} کارت آماده</span>
+          <span *ngIf="idCardSettings.printLayout === 'a4-grid' && previewSheetActiveTab === 'back'">صفحه پشت کارت‌ها (تراز آینه‌ای برای چاپ دورو)</span>
+        </div>
+
+        <!-- محتوای شیت در پیش‌نمایش مودال -->
+        <ng-container *ngIf="idCardSettings.printLayout === 'a4-grid'">
+          <!-- پیش‌نمایش روی کارت‌ها -->
+          <div *ngIf="previewSheetActiveTab === 'front'" class="print-sheet-grid" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-sheet-vertical' : 'print-sheet-horizontal'">
+            <ng-container *ngFor="let u of printableUsers">
+              
+              <!-- کارت عمودی در پیش‌نمایش شیت -->
+              <div *ngIf="idCardSettings.cardType === 'pvc-vertical'" class="print-card-unit print-card-vertical bg-white flex flex-col relative text-right overflow-hidden shadow-sm">
+                <div class="h-20 w-full flex flex-col items-center justify-start pt-2 text-white relative overflow-hidden shrink-0" [style.background]="'linear-gradient(135deg, ' + effectiveCardColor + ', #0f172a)'">
+                  <div class="absolute inset-0 pattern-dots opacity-25"></div>
+                  <span class="text-[11px] font-black tracking-wider text-white drop-shadow relative z-10">{{idCardSettings.customTexts.companyName}}</span>
+                  <span class="text-[6px] font-bold tracking-widest text-white/90 mt-0.5 relative z-10">{{idCardSettings.customTexts.companySub}}</span>
+                </div>
+
+                <div *ngIf="idCardSettings.fields.photo" class="flex -mt-7 relative z-20 shrink-0" [ngClass]="idCardSettings.photoPosition === 'right' ? 'justify-start px-3' : idCardSettings.photoPosition === 'left' ? 'justify-end px-3' : 'justify-center'">
+                  <div class="w-14 h-16 bg-slate-100 rounded-lg border-2 border-white shadow-sm flex items-center justify-center font-black text-slate-400 text-lg overflow-hidden bg-cover bg-center">
+                    <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+                    <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+                  </div>
+                </div>
+
+                <div class="flex-1 flex flex-col px-3 pt-1 pb-1" [ngClass]="idCardSettings.photoPosition === 'right' ? 'text-right' : idCardSettings.photoPosition === 'left' ? 'text-left' : 'items-center text-center'">
+                  <h2 class="font-black text-slate-900 text-xs leading-tight w-full truncate">{{u.first_name}} {{u.last_name}}</h2>
+                  <div *ngIf="idCardSettings.fields.role" class="mt-0.5 w-full">
+                    <span class="text-[8px] font-black px-1.5 py-0.2 rounded-full inline-block truncate max-w-full" [style.background]="effectiveCardColor + '18'" [style.color]="effectiveCardColor" [style.border]="'0.5pt solid ' + effectiveCardColor + '50'">{{getUserRole(u).title}}</span>
+                  </div>
+
+                  <div class="w-full mt-auto space-y-0.5 border-t border-slate-100 pt-1 text-[8px] text-right">
+                    <div *ngIf="idCardSettings.fields.personnelCode" class="flex justify-between items-center">
+                      <span class="text-slate-400 font-bold">کد پرسنلی:</span>
+                      <span class="font-mono font-black text-slate-700">{{getUserPersonnelCode(u)}}</span>
+                    </div>
+                    <div *ngIf="idCardSettings.fields.projects" class="flex justify-between items-center" [title]="getWarehouseFullText(u)">
+                      <span class="text-slate-400 font-bold">مجوز تردد:</span>
+                      <span class="font-bold text-indigo-700 truncate max-w-[95px]">{{getWarehouseSummary(u, 1)}}</span>
+                    </div>
+                  </div>
+
+                  <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both')" class="w-full flex flex-col items-center mt-1">
+                    <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-1 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-6">
+                      <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                      <span class="font-mono text-[6px] font-black text-slate-700 mt-0.2">{{getUserPersonnelCode(u)}}</span>
+                    </div>
+                    <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-12 h-12 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="h-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between px-2 text-[7px] shrink-0">
+                  <span *ngIf="idCardSettings.fields.expiry" class="text-slate-600 font-bold">اعتبار: {{expiryText}}</span>
+                  <span *ngIf="!idCardSettings.fields.expiry" class="text-slate-400">کارت پرسنلی</span>
+                  <span class="font-mono font-bold text-slate-500">{{getUserPersonnelCode(u)}}</span>
+                </div>
+              </div>
+
+              <!-- کارت افقی در پیش‌نمایش شیت -->
+              <div *ngIf="idCardSettings.cardType === 'badge-horizontal'" class="print-card-unit bg-white flex text-right overflow-hidden relative shadow-sm">
+                <div class="w-6 h-full flex items-center justify-center rotate-180 text-white text-[7px] font-black tracking-widest shrink-0" [style.background]="effectiveCardColor" style="writing-mode: vertical-rl;">
+                  GATE PASS · PERMIT
+                </div>
+
+                <div class="flex-1 flex flex-col p-2.5">
+                  <div class="flex justify-between items-start border-b border-slate-100 pb-1 mb-1">
+                    <div>
+                      <span class="text-xs font-black text-slate-900 block leading-tight">{{idCardSettings.customTexts.companyName}}</span>
+                      <span class="text-[6px] font-bold text-slate-400 block mt-0.2">{{idCardSettings.customTexts.companySub}}</span>
+                    </div>
+                    <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '1d'" class="h-5 w-24 bg-white rounded border border-slate-200 px-0.5" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                  </div>
+
+                  <div class="flex-1 flex gap-2 items-center" [ngClass]="idCardSettings.photoPosition === 'left' ? 'flex-row-reverse' : 'flex-row'">
+                    <div *ngIf="idCardSettings.fields.photo" class="w-12 h-14 bg-slate-100 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center font-black text-slate-400 text-lg overflow-hidden shrink-0">
+                      <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+                      <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+                    </div>
+
+                    <div class="flex-1 flex flex-col justify-between overflow-hidden py-0.5">
+                      <div>
+                        <p class="text-[7px] text-slate-400 font-bold">نام و نام خانوادگی:</p>
+                        <h2 class="font-black text-slate-900 text-xs truncate">{{u.first_name}} {{u.last_name}}</h2>
+                      </div>
+
+                      <div *ngIf="idCardSettings.fields.role">
+                        <span class="text-[8px] font-black px-1.5 py-0.2 rounded text-indigo-700 bg-indigo-50 border border-indigo-100 inline-block truncate max-w-full">{{getUserRole(u).title}}</span>
+                      </div>
+
+                      <div *ngIf="idCardSettings.fields.projects" class="text-[7px] text-slate-600 font-semibold" [title]="getWarehouseFullText(u)">
+                        <span>مجوز: </span>
+                        <span class="font-bold text-slate-800">{{getWarehouseSummary(u, 2)}}</span>
+                      </div>
+                    </div>
+
+                    <!-- زون اختصاصی و بزرگ QR Code -->
+                    <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-0.5 shrink-0">
+                      <div class="w-16 h-16 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                        <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+                      </div>
+                      <span class="text-[5px] font-bold text-slate-500">استعلام اصالت</span>
+                    </div>
+                  </div>
+
+                  <div class="mt-auto pt-1 border-t border-slate-100 flex items-center justify-between text-[7px]">
+                    <span *ngIf="idCardSettings.fields.expiry" class="text-slate-500 font-bold">اعتبار: <strong class="text-slate-800">{{expiryText}}</strong></span>
+                    <span *ngIf="!idCardSettings.fields.expiry" class="text-slate-400">کارت شناسایی</span>
+                    <span *ngIf="idCardSettings.fields.personnelCode" class="font-mono font-black text-slate-700">{{getUserPersonnelCode(u)}}</span>
+                  </div>
+                </div>
+              </div>
+
+            </ng-container>
+          </div>
+
+          <!-- پیش‌نمایش پشت کارت‌ها (آینه‌ای) -->
+          <div *ngIf="previewSheetActiveTab === 'back'" class="print-sheet-grid" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-sheet-vertical' : 'print-sheet-horizontal'">
+            <ng-container *ngFor="let u of getMirroredPrintableUsers(idCardSettings.cardType === 'pvc-vertical' ? 3 : 2)">
+              
+              <!-- خانه خالی برای حفظ تراز ستون‌ها -->
+              <div *ngIf="!u" class="print-card-unit print-card-placeholder opacity-0 pointer-events-none" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'"></div>
+
+              <!-- پشت کارت عمودی -->
+              <div *ngIf="u && idCardSettings.cardType === 'pvc-vertical'" class="print-card-unit print-card-vertical bg-slate-50 flex flex-col p-2.5 text-right relative overflow-hidden security-waves shadow-sm">
+                <div class="border-b border-slate-200 pb-1 mb-1 flex items-center justify-between">
+                  <div>
+                    <span class="text-[9px] font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+                    <span class="text-[6px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+                  </div>
+                  <div class="w-2 h-2 rounded-full" [style.background]="effectiveCardColor"></div>
+                </div>
+
+                <div class="space-y-1 text-[7px] text-slate-600 font-semibold leading-relaxed my-auto">
+                  <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+                  <p *ngIf="idCardSettings.fields.nationalCode">• کد ملی: <strong class="font-mono text-slate-800">{{u.national_code || '---'}}</strong></p>
+                  <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: <strong class="text-rose-700">{{u.blood_type}}</strong></p>
+                  <p *ngIf="idCardSettings.fields.emergencyContact">• تماس اضطراری: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(u)}}</strong></p>
+                  <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800">{{idCardSettings.globalProjectNote}}</strong></p>
+                </div>
+
+                <!-- زون بزرگ QR Code در پیش‌نمایش پشت کارت عمودی -->
+                <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="my-auto py-1 flex flex-col items-center justify-center">
+                  <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-1 py-0.2 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-6">
+                    <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                    <span class="font-mono text-[6px] font-black text-slate-700 mt-0.2">{{getUserPersonnelCode(u)}}</span>
+                  </div>
+                  <div *ngIf="idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-0.5">
+                    <div class="w-20 h-20 bg-white p-1 rounded-xl border border-slate-200 shadow-xs flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+                    </div>
+                    <span class="text-[5px] font-bold text-slate-500">استعلام اصالت دیجیتال</span>
+                  </div>
+                </div>
+
+                <div *ngIf="idCardSettings.fields.signature" class="mt-auto pt-1 border-t border-slate-200 flex items-center justify-between text-[6px] text-slate-500 font-bold">
+                  <div>
+                    <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+                    <span class="block text-[5px] text-slate-400 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+                  </div>
+                  <div class="w-8 h-4 border border-dashed border-slate-400 rounded flex items-center justify-center text-[5px] text-slate-400">
+                    مهر رسمی
+                  </div>
+                </div>
+              </div>
+
+              <!-- پشت کارت افقی -->
+              <div *ngIf="u && idCardSettings.cardType === 'badge-horizontal'" class="print-card-unit bg-slate-50 p-2.5 flex flex-col justify-between text-right relative overflow-hidden security-waves shadow-sm">
+                <div class="flex justify-between items-center border-b border-slate-200 pb-1">
+                  <div>
+                    <span class="text-[9px] font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+                    <span class="text-[6px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+                  </div>
+                  <span *ngIf="idCardSettings.fields.nationalCode" class="font-mono text-[8px] font-bold text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">کد ملی: {{u.national_code || '---'}}</span>
+                </div>
+
+                <div class="flex-1 flex gap-2 items-center py-1">
+                  <!-- زون بزرگ QR Code در چپ -->
+                  <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="flex flex-col items-center gap-0.5 shrink-0">
+                    <div *ngIf="idCardSettings.barcodeType === '1d'" class="bg-white rounded border border-slate-200 px-1 h-6 w-20 flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                    </div>
+                    <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-16 h-16 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                      <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+                    </div>
+                    <span class="text-[5px] font-bold text-slate-500">استعلام اصالت</span>
+                  </div>
+
+                  <!-- مشخصات در راست -->
+                  <div class="flex-1 space-y-0.5 text-[6px] text-slate-600 font-semibold leading-relaxed overflow-hidden">
+                    <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+                    <div class="grid grid-cols-2 gap-1 pt-0.5">
+                      <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: <strong class="text-rose-700">{{u.blood_type}}</strong></p>
+                      <p *ngIf="idCardSettings.fields.emergencyContact">• تماس: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(u)}}</strong></p>
+                    </div>
+                    <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800 truncate block">{{idCardSettings.globalProjectNote}}</strong></p>
+                  </div>
+                </div>
+
+                <div *ngIf="idCardSettings.fields.signature" class="flex items-center justify-between border-t border-slate-200 pt-1 mt-auto text-[6px] text-slate-500 font-bold">
+                  <div>
+                    <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+                    <span class="block text-[5px] text-slate-400 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+                  </div>
+                  <div class="w-8 h-4 border border-dashed border-slate-400 rounded flex items-center justify-center text-[5px] text-slate-400">
+                    مهر رسمی
+                  </div>
+                </div>
+              </div>
+
+            </ng-container>
+          </div>
+        </ng-container>
+
+        <!-- پیش‌نمایش شیت لمینت تاشو -->
+        <div *ngIf="idCardSettings.printLayout === 'laminate-side-by-side'" class="print-sheet-laminate">
+          <ng-container *ngFor="let u of printableUsers">
+            
+            <div class="print-laminate-pair" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-laminate-vertical' : 'print-laminate-horizontal'">
+              <!-- روی کارت -->
+              <div class="print-card-unit bg-white flex flex-col justify-between text-right p-2.5 relative overflow-hidden" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'">
+                <div class="flex items-center justify-between border-b pb-1 mb-1" [style.border-color]="effectiveCardColor">
+                  <div>
+                    <span class="font-black text-[11px] text-slate-900 block">{{idCardSettings.customTexts.companyName}}</span>
+                    <span *ngIf="idCardSettings.fields.role" class="text-[6px] font-bold text-slate-600">{{getUserRole(u).title}}</span>
+                  </div>
+                  <span *ngIf="idCardSettings.fields.personnelCode" class="text-[7px] font-mono font-bold">{{getUserPersonnelCode(u)}}</span>
+                </div>
+
+                <div class="flex items-center gap-2 my-auto">
+                  <div *ngIf="idCardSettings.fields.photo" class="w-12 h-14 rounded border border-slate-300 bg-slate-100 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
+                    <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+                    <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+                  </div>
+
+                  <div class="space-y-0.5 text-[8px] overflow-hidden">
+                    <p class="font-black text-[11px] text-slate-900 truncate">{{u.first_name}} {{u.last_name}}</p>
+                    <p *ngIf="idCardSettings.fields.projects" class="text-slate-600 font-bold truncate">مجوز: {{getWarehouseSummary(u, idCardSettings.cardType === 'pvc-vertical' ? 1 : 2)}}</p>
+                    <p *ngIf="idCardSettings.fields.bloodType && u.blood_type" class="text-rose-700 font-black">گروه خونی: {{u.blood_type}}</p>
+                  </div>
+                </div>
+
+                <div class="border-t pt-1 flex items-center justify-between text-[7px] text-slate-600 font-bold">
+                  <span *ngIf="idCardSettings.fields.expiry">اعتبار: {{expiryText}}</span>
+                  <span class="text-[7px] font-mono font-bold text-indigo-700">FRONT</span>
+                </div>
+              </div>
+
+              <!-- پشت کارت -->
+              <div class="print-card-unit bg-slate-50 flex flex-col justify-between text-right p-2.5 relative overflow-hidden" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'">
+                <div class="flex items-center justify-between border-b pb-1 mb-1" [style.border-color]="effectiveCardColor">
+                  <span class="font-black text-[9px] text-slate-900 truncate">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+                  <span *ngIf="idCardSettings.fields.nationalCode" class="font-mono text-[7px] font-bold text-slate-700">{{u.national_code || '---'}}</span>
+                </div>
+
+                <div class="space-y-0.5 text-[7px] text-slate-600 font-semibold leading-tight my-auto">
+                  <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+                  <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: {{u.blood_type}}</p>
+                  <p *ngIf="idCardSettings.fields.emergencyContact">• تماس اضطراری: {{getUserEmergencyContact(u)}}</p>
+                  <p *ngIf="idCardSettings.fields.globalNote">• پروژه: {{idCardSettings.globalProjectNote}}</p>
+                </div>
+
+                <div class="border-t pt-1 flex items-center justify-between text-[6px]">
+                  <span *ngIf="idCardSettings.fields.signature" class="font-bold text-slate-500 truncate max-w-[80px]">{{idCardSettings.customTexts.signatureTitle}}</span>
+                  <div *ngIf="idCardSettings.fields.barcode" class="h-5 w-20 flex items-center justify-center mr-auto">
+                    <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                    <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-5 h-5" [innerHTML]="getQrCodeSvg(getUserPersonnelCode(u))"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </ng-container>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- فوتر مودال -->
+    <div class="p-4 bg-white border-t border-slate-200 flex items-center justify-between">
+      <span class="text-xs text-slate-500 font-bold">جهت تغییر هر یک از مشخصات کارت، از کنترل‌پنل سمت چپ استفاده کنید.</span>
+      <div class="flex items-center gap-3">
+        <button (click)="closeSheetPreviewModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors">بستن</button>
+        <button (click)="executeCardPrint(); closeSheetPreviewModal()" class="px-5 py-2 rounded-xl text-xs font-black text-white shadow-md bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          <span>تایید و ارسال به پرینتر</span>
+        </button>
+      </div>
+    </div>
+
   </div>
+</div>
+
+<!-- ==========================================================================
+     بخش مخصوص چاپ شیت A4 (@media print - کاملاً ایزوله)
+     ========================================================================== -->
+<div id="id-cards-print-sheet" class="print-only-container" dir="rtl">
+  
+  <!-- حالت ۱: شیت معمولی (A4 Grid) -->
+  <div *ngIf="idCardSettings.printLayout === 'a4-grid'">
+    
+    <!-- شیت روی کارت‌ها (Front Sheet) -->
+    <div *ngIf="idCardSettings.printSide === 'both' || idCardSettings.printSide === 'front'" class="print-sheet-grid" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-sheet-vertical' : 'print-sheet-horizontal'">
+      <ng-container *ngFor="let u of printableUsers">
+        
+        <!-- کارت عمودی در شیت چاپ -->
+        <div *ngIf="idCardSettings.cardType === 'pvc-vertical'" class="print-card-unit print-card-vertical bg-white flex flex-col relative text-right overflow-hidden">
+          <div class="h-20 w-full flex flex-col items-center justify-start pt-2 text-white relative overflow-hidden shrink-0" [style.background]="'linear-gradient(135deg, ' + effectiveCardColor + ', #0f172a)'">
+            <div class="absolute inset-0 pattern-dots opacity-25"></div>
+            <span class="text-[11px] font-black tracking-wider text-white drop-shadow relative z-10">{{idCardSettings.customTexts.companyName}}</span>
+            <span class="text-[6px] font-bold tracking-widest text-white/90 mt-0.5 relative z-10">{{idCardSettings.customTexts.companySub}}</span>
+          </div>
+
+          <div *ngIf="idCardSettings.fields.photo" class="flex -mt-7 relative z-20 shrink-0" [ngClass]="idCardSettings.photoPosition === 'right' ? 'justify-start px-3' : idCardSettings.photoPosition === 'left' ? 'justify-end px-3' : 'justify-center'">
+            <div class="w-14 h-16 bg-slate-100 rounded-lg border-2 border-white shadow-sm flex items-center justify-center font-black text-slate-400 text-lg overflow-hidden bg-cover bg-center">
+              <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+              <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+            </div>
+          </div>
+
+          <div class="flex-1 flex flex-col px-3 pt-1 pb-1" [ngClass]="idCardSettings.photoPosition === 'right' ? 'text-right' : idCardSettings.photoPosition === 'left' ? 'text-left' : 'items-center text-center'">
+            <h2 class="font-black text-slate-900 text-xs leading-tight w-full truncate">{{u.first_name}} {{u.last_name}}</h2>
+            <div *ngIf="idCardSettings.fields.role" class="mt-0.5 w-full">
+              <span class="text-[8px] font-black px-1.5 py-0.2 rounded-full inline-block truncate max-w-full" [style.background]="effectiveCardColor + '18'" [style.color]="effectiveCardColor" [style.border]="'0.5pt solid ' + effectiveCardColor + '50'">{{getUserRole(u).title}}</span>
+            </div>
+
+            <div class="w-full mt-auto space-y-0.5 border-t border-slate-100 pt-1 text-[8px] text-right">
+              <div *ngIf="idCardSettings.fields.personnelCode" class="flex justify-between items-center">
+                <span class="text-slate-400 font-bold">کد پرسنلی:</span>
+                <span class="font-mono font-black text-slate-700">{{getUserPersonnelCode(u)}}</span>
+              </div>
+              <div *ngIf="idCardSettings.fields.projects" class="flex justify-between items-center" [title]="getWarehouseFullText(u)">
+                <span class="text-slate-400 font-bold">مجوز تردد:</span>
+                <span class="font-bold text-indigo-700 truncate max-w-[95px]">{{getWarehouseSummary(u, 1)}}</span>
+              </div>
+            </div>
+
+            <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both')" class="w-full flex flex-col items-center mt-1">
+              <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-1 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-6">
+                <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+                <span class="font-mono text-[6px] font-black text-slate-700 mt-0.2">{{getUserPersonnelCode(u)}}</span>
+              </div>
+              <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-12 h-12 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between px-2 text-[7px] shrink-0">
+            <span *ngIf="idCardSettings.fields.expiry" class="text-slate-600 font-bold">اعتبار: {{expiryText}}</span>
+            <span *ngIf="!idCardSettings.fields.expiry" class="text-slate-400">کارت پرسنلی</span>
+            <span class="font-mono font-bold text-slate-500">{{getUserPersonnelCode(u)}}</span>
+          </div>
+        </div>
+
+        <!-- کارت افقی در شیت چاپ -->
+        <div *ngIf="idCardSettings.cardType === 'badge-horizontal'" class="print-card-unit bg-white flex text-right overflow-hidden relative">
+          <div class="w-6 h-full flex items-center justify-center rotate-180 text-white text-[7px] font-black tracking-widest shrink-0" [style.background]="effectiveCardColor" style="writing-mode: vertical-rl;">
+            GATE PASS · PERMIT
+          </div>
+
+          <div class="flex-1 flex flex-col p-2.5">
+            <div class="flex justify-between items-start border-b border-slate-100 pb-1 mb-1">
+              <div>
+                <span class="text-xs font-black text-slate-900 block leading-tight">{{idCardSettings.customTexts.companyName}}</span>
+                <span class="text-[6px] font-bold text-slate-400 block mt-0.2">{{idCardSettings.customTexts.companySub}}</span>
+              </div>
+              <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '1d'" class="h-5 w-24 bg-white rounded border border-slate-200 px-0.5" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+            </div>
+
+            <div class="flex-1 flex gap-2 items-center" [ngClass]="idCardSettings.photoPosition === 'left' ? 'flex-row-reverse' : 'flex-row'">
+              <div *ngIf="idCardSettings.fields.photo" class="w-12 h-14 bg-slate-100 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center font-black text-slate-400 text-lg overflow-hidden shrink-0">
+                <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+                <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+              </div>
+
+              <div class="flex-1 flex flex-col justify-between overflow-hidden py-0.5">
+                <div>
+                  <p class="text-[7px] text-slate-400 font-bold">نام و نام خانوادگی:</p>
+                  <h2 class="font-black text-slate-900 text-xs truncate">{{u.first_name}} {{u.last_name}}</h2>
+                </div>
+
+                <div *ngIf="idCardSettings.fields.role">
+                  <span class="text-[8px] font-black px-1.5 py-0.2 rounded text-indigo-700 bg-indigo-50 border border-indigo-100 inline-block truncate max-w-full">{{getUserRole(u).title}}</span>
+                </div>
+
+                <div *ngIf="idCardSettings.fields.projects" class="text-[7px] text-slate-600 font-semibold" [title]="getWarehouseFullText(u)">
+                  <span>مجوز: </span>
+                  <span class="font-bold text-slate-800">{{getWarehouseSummary(u, 2)}}</span>
+                </div>
+              </div>
+
+              <!-- زون اختصاصی و بزرگ QR Code -->
+              <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'front' || idCardSettings.barcodePlacement === 'both') && idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-0.5 shrink-0">
+                <div class="w-16 h-16 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                  <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+                </div>
+                <span class="text-[5px] font-bold text-slate-500">استعلام اصالت</span>
+              </div>
+            </div>
+
+            <div class="mt-auto pt-1 border-t border-slate-100 flex items-center justify-between text-[7px]">
+              <span *ngIf="idCardSettings.fields.expiry" class="text-slate-500 font-bold">اعتبار: <strong class="text-slate-800">{{expiryText}}</strong></span>
+              <span *ngIf="!idCardSettings.fields.expiry" class="text-slate-400">کارت شناسایی</span>
+              <span *ngIf="idCardSettings.fields.personnelCode" class="font-mono font-black text-slate-700">{{getUserPersonnelCode(u)}}</span>
+            </div>
+          </div>
+        </div>
+
+      </ng-container>
+    </div>
+
+    <!-- شیت پشت کارت‌ها (Back Sheet - تراز آینه‌ای برای چاپ دورو) -->
+    <div *ngIf="idCardSettings.printSide === 'both' || idCardSettings.printSide === 'back'" class="print-sheet-grid print-page-break" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-sheet-vertical' : 'print-sheet-horizontal'">
+      <ng-container *ngFor="let u of getMirroredPrintableUsers(idCardSettings.cardType === 'pvc-vertical' ? 3 : 2)">
+        
+        <!-- خانه خالی برای حفظ تراز ستون‌ها در صورت ناکامل بودن سطر آخر -->
+        <div *ngIf="!u" class="print-card-unit print-card-placeholder opacity-0 pointer-events-none" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'"></div>
+
+        <!-- پشت کارت عمودی -->
+        <div *ngIf="u && idCardSettings.cardType === 'pvc-vertical'" class="print-card-unit print-card-vertical bg-slate-50 flex flex-col p-2.5 text-right relative overflow-hidden security-waves">
+          <div class="border-b border-slate-200 pb-1 mb-1 flex items-center justify-between">
+            <div>
+              <span class="text-[9px] font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+              <span class="text-[6px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+            </div>
+            <div class="w-2 h-2 rounded-full" [style.background]="effectiveCardColor"></div>
+          </div>
+
+          <div class="space-y-1 text-[7px] text-slate-600 font-semibold leading-relaxed my-auto">
+            <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+            <p *ngIf="idCardSettings.fields.nationalCode">• کد ملی: <strong class="font-mono text-slate-800">{{u.national_code || '---'}}</strong></p>
+            <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: <strong class="text-rose-700">{{u.blood_type}}</strong></p>
+            <p *ngIf="idCardSettings.fields.emergencyContact">• تماس اضطراری: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(u)}}</strong></p>
+            <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800">{{idCardSettings.globalProjectNote}}</strong></p>
+          </div>
+
+          <!-- زون بزرگ QR Code در چاپ پشت کارت عمودی -->
+          <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="my-auto py-1 flex flex-col items-center justify-center">
+            <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full px-1 py-0.2 flex flex-col items-center justify-center bg-white rounded border border-slate-200 h-6">
+              <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+              <span class="font-mono text-[6px] font-black text-slate-700 mt-0.2">{{getUserPersonnelCode(u)}}</span>
+            </div>
+            <div *ngIf="idCardSettings.barcodeType === '2d'" class="flex flex-col items-center gap-0.5">
+              <div class="w-20 h-20 bg-white p-1 rounded-xl border border-slate-200 shadow-xs flex items-center justify-center">
+                <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+              </div>
+              <span class="text-[5px] font-bold text-slate-500">استعلام اصالت دیجیتال</span>
+            </div>
+          </div>
+
+          <div *ngIf="idCardSettings.fields.signature" class="mt-auto pt-1 border-t border-slate-200 flex items-center justify-between text-[6px] text-slate-500 font-bold">
+            <div>
+              <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+              <span class="block text-[5px] text-slate-400 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+            </div>
+            <div class="w-8 h-4 border border-dashed border-slate-400 rounded flex items-center justify-center text-[5px] text-slate-400">
+              مهر رسمی
+            </div>
+          </div>
+        </div>
+
+        <!-- پشت کارت افقی -->
+        <div *ngIf="u && idCardSettings.cardType === 'badge-horizontal'" class="print-card-unit bg-slate-50 p-2.5 flex flex-col justify-between text-right relative overflow-hidden security-waves">
+          <div class="flex justify-between items-center border-b border-slate-200 pb-1">
+            <div>
+              <span class="text-[9px] font-black text-slate-800 block">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+              <span class="text-[6px] text-slate-400 font-bold uppercase">{{idCardSettings.customTexts.backHeaderSub}}</span>
+            </div>
+            <span *ngIf="idCardSettings.fields.nationalCode" class="font-mono text-[8px] font-bold text-slate-700 bg-white px-1.5 py-0.2 rounded border border-slate-200">کد ملی: {{u.national_code || '---'}}</span>
+          </div>
+
+          <div class="flex-1 flex gap-2 items-center py-1">
+            <!-- زون بزرگ QR Code در چپ -->
+            <div *ngIf="idCardSettings.fields.barcode && (idCardSettings.barcodePlacement === 'back' || idCardSettings.barcodePlacement === 'both')" class="flex flex-col items-center gap-0.5 shrink-0">
+              <div *ngIf="idCardSettings.barcodeType === '1d'" class="bg-white rounded border border-slate-200 px-1 h-6 w-20 flex items-center justify-center">
+                <div class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+              </div>
+              <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-16 h-16 bg-white p-0.5 rounded-lg border border-slate-200 shadow-xs flex items-center justify-center">
+                <div class="w-full h-full" [innerHTML]="getQrCodeSvg(u)"></div>
+              </div>
+              <span class="text-[5px] font-bold text-slate-500">استعلام اصالت</span>
+            </div>
+
+            <!-- مشخصات در راست -->
+            <div class="flex-1 space-y-0.5 text-[6px] text-slate-600 font-semibold leading-relaxed overflow-hidden">
+              <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+              <div class="grid grid-cols-2 gap-1 pt-0.5">
+                <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: <strong class="text-rose-700">{{u.blood_type}}</strong></p>
+                <p *ngIf="idCardSettings.fields.emergencyContact">• تماس: <strong class="font-mono text-slate-800">{{getUserEmergencyContact(u)}}</strong></p>
+              </div>
+              <p *ngIf="idCardSettings.fields.globalNote">• پروژه: <strong class="text-slate-800 truncate block">{{idCardSettings.globalProjectNote}}</strong></p>
+            </div>
+          </div>
+
+          <div *ngIf="idCardSettings.fields.signature" class="flex items-center justify-between border-t border-slate-200 pt-1 mt-auto text-[6px] text-slate-500 font-bold">
+            <div>
+              <span>{{idCardSettings.customTexts.signatureTitle}}</span>
+              <span class="block text-[5px] text-slate-400 uppercase">{{idCardSettings.customTexts.signatureSub}}</span>
+            </div>
+            <div class="w-8 h-4 border border-dashed border-slate-400 rounded flex items-center justify-center text-[5px] text-slate-400">
+              مهر رسمی
+            </div>
+          </div>
+        </div>
+
+      </ng-container>
+    </div>
+
+  </div>
+
+  <!-- حالت ۲: شیت لمینت تاشو (Laminate Side-by-Side) -->
+  <div *ngIf="idCardSettings.printLayout === 'laminate-side-by-side'" class="print-sheet-laminate">
+    <ng-container *ngFor="let u of printableUsers">
+      
+      <div class="print-laminate-pair" [ngClass]="idCardSettings.cardType === 'pvc-vertical' ? 'print-laminate-vertical' : 'print-laminate-horizontal'">
+        <!-- روی کارت -->
+        <div class="print-card-unit bg-white flex flex-col justify-between text-right p-2.5 relative overflow-hidden" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'">
+          <div class="flex items-center justify-between border-b pb-1 mb-1" [style.border-color]="effectiveCardColor">
+            <div>
+              <span class="font-black text-[11px] text-slate-900 block">{{idCardSettings.customTexts.companyName}}</span>
+              <span *ngIf="idCardSettings.fields.role" class="text-[6px] font-bold text-slate-600">{{getUserRole(u).title}}</span>
+            </div>
+            <span *ngIf="idCardSettings.fields.personnelCode" class="text-[7px] font-mono font-bold">{{getUserPersonnelCode(u)}}</span>
+          </div>
+
+          <div class="flex items-center gap-2 my-auto">
+            <div *ngIf="idCardSettings.fields.photo" class="w-12 h-14 rounded border border-slate-300 bg-slate-100 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
+              <img *ngIf="u.avatar" [src]="u.avatar" class="w-full h-full object-cover" alt="avatar">
+              <span *ngIf="!u.avatar">{{getUserAvatarInitial(u)}}</span>
+            </div>
+
+            <div class="space-y-0.5 text-[8px] overflow-hidden">
+              <p class="font-black text-[11px] text-slate-900 truncate">{{u.first_name}} {{u.last_name}}</p>
+              <p *ngIf="idCardSettings.fields.projects" class="text-slate-600 font-bold truncate">مجوز: {{getWarehouseSummary(u, idCardSettings.cardType === 'pvc-vertical' ? 1 : 2)}}</p>
+              <p *ngIf="idCardSettings.fields.bloodType && u.blood_type" class="text-rose-700 font-black">گروه خونی: {{u.blood_type}}</p>
+            </div>
+          </div>
+
+          <div class="border-t pt-1 flex items-center justify-between text-[7px] text-slate-600 font-bold">
+            <span *ngIf="idCardSettings.fields.expiry">اعتبار: {{expiryText}}</span>
+            <span class="text-[7px] font-mono font-bold text-indigo-700">FRONT</span>
+          </div>
+        </div>
+
+        <!-- پشت کارت -->
+        <div class="print-card-unit bg-slate-50 flex flex-col justify-between text-right p-2.5 relative overflow-hidden" [class.print-card-vertical]="idCardSettings.cardType === 'pvc-vertical'">
+          <div class="flex items-center justify-between border-b pb-1 mb-1" [style.border-color]="effectiveCardColor">
+            <span class="font-black text-[9px] text-slate-900 truncate">{{idCardSettings.customTexts.backHeaderTitle}}</span>
+            <span *ngIf="idCardSettings.fields.nationalCode" class="font-mono text-[7px] font-bold text-slate-700">{{u.national_code || '---'}}</span>
+          </div>
+
+          <div class="space-y-0.5 text-[7px] text-slate-600 font-semibold leading-tight my-auto">
+            <p *ngIf="idCardSettings.fields.regulations" class="line-clamp-2">• {{idCardSettings.customTexts.regulationsText}}</p>
+            <p *ngIf="idCardSettings.fields.bloodType && u.blood_type">• گروه خونی: {{u.blood_type}}</p>
+            <p *ngIf="idCardSettings.fields.emergencyContact">• تماس اضطراری: {{getUserEmergencyContact(u)}}</p>
+            <p *ngIf="idCardSettings.fields.globalNote">• پروژه: {{idCardSettings.globalProjectNote}}</p>
+          </div>
+
+          <div class="border-t pt-1 flex items-center justify-between text-[6px]">
+            <span *ngIf="idCardSettings.fields.signature" class="font-bold text-slate-500 truncate max-w-[80px]">{{idCardSettings.customTexts.signatureTitle}}</span>
+            <div *ngIf="idCardSettings.fields.barcode" class="h-6 w-20 flex items-center justify-center mr-auto">
+              <div *ngIf="idCardSettings.barcodeType === '1d'" class="w-full h-full" [innerHTML]="getBarcodeSvg(getUserPersonnelCode(u))"></div>
+              <div *ngIf="idCardSettings.barcodeType === '2d'" class="w-6 h-6" [innerHTML]="getQrCodeSvg(u)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </ng-container>
+  </div>
+
+</div>

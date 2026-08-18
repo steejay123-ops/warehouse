@@ -1,7 +1,7 @@
-<div id="app-screen" class="min-h-screen flex-col md:flex-row flex">
+<div id="app-screen" class="h-[100dvh] overflow-hidden flex-col md:flex-row flex">
   <div *ngIf="isSidebarOpen" class="fixed inset-0 bg-slate-900/60 z-40 md:hidden" (click)="closeSidebar()"></div>
 
-  <aside id="sidebar" [class.translate-x-0]="isSidebarOpen" [class.translate-x-full]="!isSidebarOpen" [ngClass]="{'md:w-0 md:opacity-0 md:overflow-hidden md:invisible': isDesktopSidebarCollapsed, 'md:w-72': !isDesktopSidebarCollapsed}" class="fixed md:static inset-y-0 right-0 w-72 bg-slate-900 flex flex-col z-50 transition-all duration-300 md:translate-x-0 whitespace-nowrap" style="min-height:100vh">
+  <aside id="sidebar" [class.translate-x-0]="isSidebarOpen" [class.translate-x-full]="!isSidebarOpen" [ngClass]="{'md:w-0 md:opacity-0 md:overflow-hidden md:invisible': isDesktopSidebarCollapsed, 'md:w-72': !isDesktopSidebarCollapsed}" class="fixed md:static inset-y-0 right-0 w-72 bg-slate-900 flex flex-col z-50 transition-all duration-300 md:translate-x-0 whitespace-nowrap" style="height:100vh">
     <div class="p-5 border-b border-slate-800 flex items-center gap-3">
       <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
         <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
@@ -67,39 +67,44 @@
     </nav>
   </aside>
 
-  <div class="flex-1 flex flex-col min-w-0 bg-surface relative">
+  <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-50 relative">
     
     <!-- Top Header -->
-    <header class="bg-background border-b border-border p-4 h-[70px] flex items-center justify-between shadow-sm relative z-10 transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
+    <header class="bg-white border-b border-slate-200 p-4 h-[70px] flex items-center justify-between shadow-sm relative z-10 transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
       
       <!-- Right Side (RTL Start): Mobile Toggle, User, Notifications, Progress -->
       <div class="flex items-center gap-2 md:gap-4 flex-1 justify-start shrink-0">
-        <button (click)="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-surface text-slate-600 shrink-0">
+        <button (click)="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-slate-50 text-slate-600 shrink-0">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
-        <button (click)="toggleDesktopSidebar()" class="hidden md:block p-2 rounded-lg hover:bg-surface text-slate-600 shrink-0 transition-colors" title="نمایش/مخفی کردن منو">
+        <button (click)="toggleDesktopSidebar()" class="hidden md:block p-2 rounded-lg hover:bg-slate-50 text-slate-600 shrink-0 transition-colors" title="نمایش/مخفی کردن منو">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
         
         <div class="relative">
           <div *ngIf="isUserMenuOpen" class="fixed inset-0 z-40" (click)="closeUserMenu()"></div>
-          <button (click)="toggleUserMenu()" class="relative z-50 flex items-center gap-2 hover:bg-surface p-1.5 pr-2 rounded-xl transition-colors border border-transparent hover:border-border">
-            <span class="text-[11px] font-bold text-foreground hidden sm:block mr-1">{{userName}}</span>
-            <div class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">{{userAvatar}}</div>
+          <button (click)="toggleUserMenu()" class="relative z-50 flex items-center gap-2 hover:bg-slate-50 p-1.5 pr-2 rounded-xl transition-colors border border-transparent hover:border-slate-200">
+            <span class="text-[11px] font-bold text-slate-800 hidden sm:block mr-1">{{userName}}</span>
+            <img *ngIf="auth.userAvatarUrl()" [src]="auth.userAvatarUrl()" class="w-8 h-8 rounded-full object-cover border border-indigo-200 shadow-sm shrink-0" alt="avatar" />
+            <div *ngIf="!auth.userAvatarUrl()" class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">{{userAvatar}}</div>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400 hidden sm:block"><polyline points="6 9 12 15 18 9"></polyline></svg>
           </button>
           
-          <div *ngIf="isUserMenuOpen" class="absolute right-0 top-full mt-1 w-56 bg-background border border-border rounded-2xl shadow-xl z-50 overflow-hidden fade-in">
-            <div class="p-3 border-b border-border bg-surface">
-              <p class="text-xs font-bold text-foreground truncate mb-0.5">{{userName}}</p>
+          <div *ngIf="isUserMenuOpen" class="absolute right-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden fade-in">
+            <div class="p-3 border-b border-slate-200 bg-slate-50">
+              <p class="text-xs font-bold text-slate-800 truncate mb-0.5">{{userName}}</p>
               <p class="text-[10px] font-semibold text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md inline-block truncate max-w-full">{{userRole}}</p>
             </div>
             <div class="p-2 flex flex-col">
+              <button (click)="openAvatarModal()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>
+                <span>ویرایش تصویر پروفایل</span>
+              </button>
               <button (click)="goToChangePassword(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                 <span>تغییر رمز ورود</span>
               </button>
-              <div class="h-px bg-surface my-1"></div>
+              <div class="h-px bg-slate-50 my-1"></div>
               <button (click)="onDeepUpdate(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-orange-600 hover:bg-orange-50" [disabled]="isOffline || pendingCount > 0" [title]="isOffline ? 'در حالت آفلاین در دسترس نیست' : (pendingCount > 0 ? 'لطفا ابتدا تغییرات را Sync کنید' : '')" [class.opacity-50]="isOffline || pendingCount > 0" [class.cursor-not-allowed]="isOffline || pendingCount > 0">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                 <span>بروزرسانی عمیق</span>
@@ -111,10 +116,54 @@
             </div>
           </div>
         </div>
+
+        <!-- ─── History Navigation Segmented Pill (بعد از نام کاربری) ─── -->
+        <div class="flex items-center bg-slate-100/90 hover:bg-slate-200/60 p-0.5 rounded-xl border border-slate-200/90 shadow-xs transition-all shrink-0 select-none" dir="rtl">
+          <!-- Back Button (صفحه قبل) -->
+          <button 
+            type="button"
+            (click)="navHistory.back()" 
+            [disabled]="!navHistory.canGoBack()" 
+            class="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-white active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed disabled:active:scale-100 transition-all flex items-center justify-center cursor-pointer shadow-xs disabled:shadow-none"
+            title="صفحه قبل (Alt + راست)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          
+          <!-- Subtle Divider -->
+          <div class="w-px h-3.5 bg-slate-300/70 mx-0.5"></div>
+          
+          <!-- Forward Button (صفحه بعد) -->
+          <button 
+            type="button"
+            (click)="navHistory.forward()" 
+            [disabled]="!navHistory.canGoForward()" 
+            class="p-1.5 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-white active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed disabled:active:scale-100 transition-all flex items-center justify-center cursor-pointer shadow-xs disabled:shadow-none"
+            title="صفحه بعد (Alt + چپ)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+        </div>
         
+        <!-- Keyboard Shortcuts Help Button -->
+        <button (click)="toggleShortcutsHelp()" class="p-2 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors shrink-0 cursor-pointer" title="راهنمای کلیدهای میانبر (Shift + ?)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <line x1="6" y1="8" x2="6.01" y2="8"></line>
+            <line x1="10" y1="8" x2="10.01" y2="8"></line>
+            <line x1="14" y1="8" x2="14.01" y2="8"></line>
+            <line x1="18" y1="8" x2="18.01" y2="8"></line>
+            <line x1="6" y1="12" x2="6.01" y2="12"></line>
+            <line x1="18" y1="12" x2="18.01" y2="12"></line>
+            <line x1="7" y1="16" x2="17" y2="16"></line>
+          </svg>
+        </button>
+
         <!-- Force Sync Button -->
         <!-- همیشه قابل کلیک است (حتی آفلاین) تا کاربر پاسخ روشن دریافت کند -->
-        <button (click)="onForceSync()" [disabled]="isSyncing" class="relative p-2 rounded-lg transition-colors shrink-0" [ngClass]="isSyncing ? 'bg-indigo-100 text-indigo-600' : (isOffline ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-surface text-slate-500')" [title]="isSyncing ? 'در حال همگام‌سازی...' : (connectionState === 'offline' ? 'آفلاین — برای بررسی وضعیت کلیک کنید' : (connectionState === 'server-unreachable' ? 'سرور در دسترس نیست — برای تلاش مجدد کلیک کنید' : 'همگام‌سازی دستی (' + pendingCount + ' مورد در صف)'))">
+        <button (click)="onForceSync()" [disabled]="isSyncing" class="relative p-2 rounded-lg transition-colors shrink-0" [ngClass]="isSyncing ? 'bg-indigo-100 text-indigo-600' : (isOffline ? 'hover:bg-amber-100 text-amber-600' : 'hover:bg-slate-50 text-slate-500')" [title]="isSyncing ? 'در حال همگام‌سازی...' : (connectionState === 'offline' ? 'آفلاین — برای بررسی وضعیت کلیک کنید' : (connectionState === 'server-unreachable' ? 'سرور در دسترس نیست — برای تلاش مجدد کلیک کنید' : 'همگام‌سازی دستی (' + pendingCount + ' مورد در صف)'))">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isSyncing"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           <span *ngIf="pendingCount > 0" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 border-2 border-white" [ngClass]="isOffline ? 'bg-amber-500' : 'bg-indigo-500'">{{pendingCount}}</span>
         </button>
@@ -122,15 +171,15 @@
         <!-- Sync Error Inbox Bell -->
         <div class="relative">
           <div *ngIf="isSyncErrorsOpen" class="fixed inset-0 z-40" (click)="closeSyncErrors()"></div>
-          <button (click)="toggleSyncErrors()" class="relative p-2 rounded-lg hover:bg-surface text-slate-500 transition-colors shrink-0" [ngClass]="syncErrorCount > 0 ? 'text-amber-500' : 'text-slate-500'">
+          <button (click)="toggleSyncErrors()" class="relative p-2 rounded-lg hover:bg-slate-50 text-slate-500 transition-colors shrink-0" [ngClass]="syncErrorCount > 0 ? 'text-amber-500' : 'text-slate-500'">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
             <span *ngIf="syncErrorCount > 0" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 border-2 border-white">{{syncErrorCount}}</span>
           </button>
 
           <!-- Sync Errors Dropdown -->
-          <div *ngIf="isSyncErrorsOpen" class="absolute right-0 top-full mt-2 w-80 max-h-96 bg-background border border-border rounded-2xl shadow-2xl z-50 overflow-hidden fade-in">
-            <div class="p-3 border-b border-border bg-surface flex items-center justify-between">
-              <span class="text-xs font-bold text-foreground">صندوق خطاهای همگام‌سازی</span>
+          <div *ngIf="isSyncErrorsOpen" class="absolute right-0 top-full mt-2 w-80 max-h-96 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden fade-in">
+            <div class="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-800">صندوق خطاهای همگام‌سازی</span>
               <button *ngIf="syncErrors.length > 0" (click)="dismissAllSyncErrors()" class="text-[10px] text-rose-500 hover:text-rose-700 font-bold">پاک کردن همه</button>
             </div>
             <!-- حالت صف مسدود: مواردی که نیاز به تصمیم کاربر دارند -->
@@ -143,14 +192,14 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" class="mx-auto mb-2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 <p class="text-xs text-slate-400 font-semibold">خطایی وجود ندارد</p>
               </div>
-              <div *ngFor="let err of syncErrors" class="p-3 border-b border-border hover:bg-surface transition-colors">
+              <div *ngFor="let err of syncErrors" class="p-3 border-b border-slate-200 hover:bg-slate-50 transition-colors">
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-1.5 mb-1">
                       <span class="text-[9px] font-bold px-1.5 py-0.5 rounded" [ngClass]="err.statusCode >= 400 ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-600'">{{err.statusCode || 'ERR'}}</span>
                       <span class="text-[10px] text-slate-400 font-bold">{{err.method}}</span>
                     </div>
-                    <p class="text-[11px] text-foreground font-semibold truncate">{{err.serverMessage}}</p>
+                    <p class="text-[11px] text-slate-800 font-semibold truncate">{{err.serverMessage}}</p>
                     <p class="text-[9px] text-slate-400 mt-0.5">{{formatSyncTime(err.failedAt)}}</p>
                   </div>
                   <button (click)="dismissSyncError(err.id!)" class="p-1 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors shrink-0" title="حذف — دادهٔ این تغییر دور ریخته می‌شود">
@@ -163,12 +212,12 @@
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
                     تلاش مجدد
                   </button>
-                  <button *ngIf="formatErrorPayload(err.body).length > 0" (click)="toggleErrorPayload(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-surface text-slate-500 hover:bg-slate-200 transition-colors">
+                  <button *ngIf="formatErrorPayload(err.body).length > 0" (click)="toggleErrorPayload(err.id!)" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-50 text-slate-500 hover:bg-slate-200 transition-colors">
                     {{expandedErrorId === err.id ? 'بستن داده' : 'نمایش داده'}}
                   </button>
                 </div>
                 <!-- Payload: دادهٔ کاربر که سرور نپذیرفت -->
-                <div *ngIf="expandedErrorId === err.id" class="mt-2 p-2 bg-surface rounded-lg border border-border">
+                <div *ngIf="expandedErrorId === err.id" class="mt-2 p-2 bg-slate-50 rounded-lg border border-slate-200">
                   <div *ngFor="let field of formatErrorPayload(err.body)" class="flex items-start gap-1.5 py-0.5">
                     <span class="text-[9px] text-slate-400 font-bold shrink-0" dir="ltr">{{field.key}}:</span>
                     <span class="text-[9px] text-slate-600 break-all" dir="auto">{{field.value}}</span>
@@ -179,18 +228,18 @@
           </div>
         </div>
         
-        <div class="hidden lg:flex items-center gap-2 border-r border-border pr-4" *ngIf="!['counter', 'customs', 'supervisor'].includes(store.currentTab())" [title]="progressStats.tooltip">
+        <div class="hidden lg:flex items-center gap-2 border-r border-slate-200 pr-4" *ngIf="!['counter', 'customs', 'supervisor'].includes(store.currentTab())" [title]="progressStats.tooltip">
           <span class="text-xs text-slate-400 shrink-0">{{progressStats.label}}</span>
           <div class="w-20 bg-slate-200 h-1.5 rounded-full overflow-hidden shrink-0">
             <div class="h-full rounded-full transition-all duration-500" [ngClass]="progressStats.colorClass" [style.width.%]="progressStats.percent"></div>
           </div>
-          <span class="text-xs font-bold text-foreground shrink-0">{{progressStats.percent}}٪</span>
+          <span class="text-xs font-bold text-slate-800 shrink-0">{{progressStats.percent}}٪</span>
         </div>
       </div>
 
       <!-- Center: Page Title -->
       <div class="flex-1 flex justify-center min-w-0 shrink-0">
-        <h1 class="text-sm font-bold text-foreground truncate">{{currentTitle}}</h1>
+        <h1 class="text-sm font-bold text-slate-800 truncate">{{currentTitle}}</h1>
       </div>
       
       <!-- Left Side (RTL End): Badge -->
@@ -207,7 +256,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path><path d="M10.71 5.05A16 16 0 0 1 22.56 9"></path><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
       <span *ngIf="connectionState === 'offline'">حالت آفلاین — اینترنت شما وصل نیست. تغییرات شما ذخیره شده و به محض اتصال مجدد، خودکار همگام‌سازی می‌شوند.</span>
       <span *ngIf="connectionState === 'server-unreachable'">سرور در دسترس نیست — تغییرات شما ذخیره شده و به محض بازگشت سرور، خودکار همگام‌سازی می‌شوند.</span>
-      <span *ngIf="pendingCount > 0" class="bg-background/20 px-2 py-0.5 rounded-full text-[10px]">{{pendingCount}} مورد در صف</span>
+      <span *ngIf="pendingCount > 0" class="bg-white/20 px-2 py-0.5 rounded-full text-[10px]">{{pendingCount}} مورد در صف</span>
     </div>
 
     <!-- ─── Syncing Banner ─── -->
@@ -260,7 +309,7 @@
        <span class="text-[12px] font-black text-white shrink-0">{{currentWarehouse?.name}}</span>
     </div>
 
-    <div class="flex-1 p-4 md:p-6 overflow-y-auto bg-surface fade-in relative" id="content-container">
+    <div class="flex-1 p-4 md:p-6 overflow-y-auto bg-slate-50 fade-in relative" id="content-container">
       
       <!-- Breadcrumbs -->
       <div *ngIf="store.isWarehouseContext()" class="mb-5 flex items-center gap-1.5 text-[11px] font-bold text-slate-400 select-none">
@@ -283,3 +332,151 @@
   (closed)="isDeepSyncModalOpen = false"
   (startSync)="startDeepSync($event)">
 </app-deep-sync-modal>
+
+<!-- User Profile Avatar Cropper Modal -->
+<app-avatar-cropper-modal
+  *ngIf="isAvatarModalOpen"
+  [title]="'ویرایش تصویر پروفایل شخصی'"
+  [currentAvatarUrl]="auth.userAvatarUrl()"
+  [isSaving]="isSavingAvatar"
+  (closed)="isAvatarModalOpen = false"
+  (saved)="onSaveAvatar($event)"
+  (removed)="onRemoveAvatar()"
+></app-avatar-cropper-modal>
+
+<!-- Keyboard Shortcuts Help Modal -->
+<div *ngIf="isShortcutsHelpOpen" class="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md fade-in" (click)="isShortcutsHelpOpen = false" dir="rtl">
+  <div class="bg-white rounded-3xl shadow-2xl border border-slate-200/80 max-w-3xl w-full overflow-hidden flex flex-col max-h-[90vh] transition-all" (click)="$event.stopPropagation()">
+    
+    <!-- Modal Header -->
+    <div class="p-6 border-b border-slate-100 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white relative overflow-hidden">
+      <!-- Decorative Background Glow -->
+      <div class="absolute -top-12 -left-12 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-12 -right-12 w-48 h-48 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      
+      <div class="flex items-center justify-between relative z-10 mb-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+              <line x1="6" y1="8" x2="6.01" y2="8"></line>
+              <line x1="10" y1="8" x2="10.01" y2="8"></line>
+              <line x1="14" y1="8" x2="14.01" y2="8"></line>
+              <line x1="18" y1="8" x2="18.01" y2="8"></line>
+              <line x1="6" y1="12" x2="6.01" y2="12"></line>
+              <line x1="18" y1="12" x2="18.01" y2="12"></line>
+              <line x1="7" y1="16" x2="17" y2="16"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-white tracking-tight">راهنمای کلیدهای میانبر سامانه</h3>
+            <p class="text-xs text-indigo-200/80 mt-0.5">Keyboard Shortcuts & Hotkeys Reference</p>
+          </div>
+        </div>
+        <button (click)="isShortcutsHelpOpen = false" class="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer" title="بستن (Esc)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Live Search Bar -->
+      <div class="relative z-10">
+        <div class="relative flex items-center">
+          <input
+            type="text"
+            [(ngModel)]="shortcutsSearchQuery"
+            placeholder="جستجوی سریع میانبرها (مثلاً ذخیره، چاپ، اسکنر، Ctrl، Shift...)"
+            class="w-full bg-white/10 hover:bg-white/15 focus:bg-white/20 text-white placeholder-indigo-200/60 text-xs font-semibold py-2.5 pr-10 pl-9 rounded-2xl border border-white/15 focus:border-indigo-400 focus:outline-none transition-all shadow-inner"
+          >
+          <div class="absolute right-3.5 flex items-center pointer-events-none text-indigo-300">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </div>
+          <button
+            *ngIf="shortcutsSearchQuery"
+            (click)="shortcutsSearchQuery = ''"
+            class="absolute left-3 text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+            title="پاک کردن جستجو">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Category Filter Tabs -->
+    <div class="px-6 pt-4 pb-2 border-b border-slate-100 bg-slate-50/70 flex items-center gap-1.5 overflow-x-auto select-none no-scrollbar">
+      <button
+        *ngFor="let cat of shortcutsCategories"
+        (click)="shortcutsActiveCategory = cat.id"
+        class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
+        [ngClass]="shortcutsActiveCategory === cat.id ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-200' : 'bg-white hover:bg-slate-200/70 text-slate-600 border border-slate-200/80'">
+        <span>{{cat.label}}</span>
+        <span class="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black" [ngClass]="shortcutsActiveCategory === cat.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'">{{cat.id === 'all' ? allShortcuts.length : (cat.count || 5)}}</span>
+      </button>
+    </div>
+
+    <!-- Shortcuts List Body -->
+    <div class="p-6 overflow-y-auto max-h-[55vh] space-y-2.5">
+      
+      <!-- Empty Search Result -->
+      <div *ngIf="filteredShortcuts.length === 0" class="py-12 text-center text-slate-400">
+        <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </div>
+        <p class="text-xs font-bold text-slate-600">کلید میانبری با این عبارت یافت نشد</p>
+        <p class="text-[11px] text-slate-400 mt-1">لطفاً عبارت دیگری را جستجو کنید یا دسته‌بندی را تغییر دهید.</p>
+      </div>
+
+      <!-- Shortcut Rows -->
+      <div
+        *ngFor="let item of filteredShortcuts"
+        class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white hover:bg-indigo-50/40 border border-slate-200/80 hover:border-indigo-200 transition-all shadow-xs group">
+        
+        <!-- Right: Title & Description -->
+        <div class="flex items-start sm:items-center gap-3">
+          <span
+            class="px-2 py-0.5 rounded-lg text-[10px] font-black shrink-0 mt-0.5 sm:mt-0"
+            [ngClass]="{
+              'bg-indigo-50 text-indigo-700 border border-indigo-100': item.categoryColor === 'indigo',
+              'bg-emerald-50 text-emerald-700 border border-emerald-100': item.categoryColor === 'emerald',
+              'bg-blue-50 text-blue-700 border border-blue-100': item.categoryColor === 'blue',
+              'bg-purple-50 text-purple-700 border border-purple-100': item.categoryColor === 'purple'
+            }">
+            {{item.categoryLabel}}
+          </span>
+          <div>
+            <h4 class="text-xs font-extrabold text-slate-800 group-hover:text-indigo-900 transition-colors">{{item.title}}</h4>
+            <p class="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{{item.description}}</p>
+          </div>
+        </div>
+
+        <!-- Left: Pristine 3D Keycaps -->
+        <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center" dir="ltr">
+          <ng-container *ngFor="let k of item.keys; let isLast = last">
+            <span class="keycap" [class.keycap-arrow]="k === '↑' || k === '↓' || k === '←' || k === '→' || k === '↑↓←→'">{{k}}</span>
+            <span *ngIf="!isLast" class="text-slate-400 font-black text-xs mx-0.5">+</span>
+          </ng-container>
+
+          <!-- Alternative Keycap if present -->
+          <ng-container *ngIf="item.altKeys">
+            <span class="text-slate-300 font-bold text-[10px] mx-1">یا</span>
+            <ng-container *ngFor="let ak of item.altKeys; let isLastAlt = last">
+              <span class="keycap keycap-accent">{{ak}}</span>
+              <span *ngIf="!isLastAlt" class="text-indigo-400 font-black text-xs mx-0.5">+</span>
+            </ng-container>
+          </ng-container>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="p-4 px-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2 text-slate-500 font-semibold text-[11px]">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>نمایش <strong>{{filteredShortcuts.length}}</strong> میانبر فعال</span>
+      </div>
+      <button (click)="isShortcutsHelpOpen = false" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs active:scale-95">
+        بستن راهنما (Esc)
+      </button>
+    </div>
+  </div>
+</div>

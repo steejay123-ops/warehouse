@@ -1,5 +1,6 @@
-import { Component, OnInit, OnDestroy, computed, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { filter, Subscription } from 'rxjs';
@@ -14,10 +15,13 @@ import { SyncErrorEntry } from '../../core/services/offline-db';
 import { ConfigApiService } from '../../core/api/config-api.service';
 import { ToastService } from '../../shared/components/toast/toast.component';
 import { DeepSyncModalComponent } from '../../shared/components/deep-sync-modal/deep-sync-modal.component';
+import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
+import { AccountsHttpService } from '../../core/http/accounts-http.service';
+import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, RouterOutlet, DeepSyncModalComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
@@ -25,7 +29,272 @@ export class Layout implements OnInit, OnDestroy {
 
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
+  isShortcutsHelpOpen = false;
+  shortcutsSearchQuery = '';
+  shortcutsActiveCategory: string = 'all';
   isDesktopSidebarCollapsed = localStorage.getItem('desktopSidebarCollapsed') === 'true';
+
+  shortcutsCategories = [
+    { id: 'all', label: 'همه کلیدها', count: 20 },
+    { id: 'global', label: 'عمومی و منو', count: 5 },
+    { id: 'counting', label: 'انبارگردانی و اسکنر', count: 5 },
+    { id: 'table', label: 'جدول اطلاعات و فرم‌ها', count: 5 },
+    { id: 'design', label: 'طراحی لیبل و کارت', count: 5 },
+  ];
+
+  allShortcuts = [
+    // Global & Navigation
+    {
+      category: 'global',
+      categoryLabel: 'عمومی',
+      categoryColor: 'indigo',
+      title: 'صفحه قبل (Back)',
+      description: 'بازگشت به صفحه قبلی در تاریخچه ناوبری',
+      keys: ['Alt', '→'],
+      altKeys: null,
+    },
+    {
+      category: 'global',
+      categoryLabel: 'عمومی',
+      categoryColor: 'indigo',
+      title: 'صفحه بعد (Forward)',
+      description: 'حرکت به صفحه بعدی در تاریخچه ناوبری',
+      keys: ['Alt', '←'],
+      altKeys: null,
+    },
+    {
+      category: 'global',
+      categoryLabel: 'عمومی',
+      categoryColor: 'indigo',
+      title: 'جمع / باز کردن منو',
+      description: 'تغییر وضعیت نمایش نوار کناری (Sidebar)',
+      keys: ['Ctrl', 'B'],
+      altKeys: null,
+    },
+    {
+      category: 'global',
+      categoryLabel: 'عمومی',
+      categoryColor: 'indigo',
+      title: 'بستن پنجره / انصراف',
+      description: 'بستن تمام مودال‌ها، پنجره‌ها و منوهای باز',
+      keys: ['Esc'],
+      altKeys: null,
+    },
+    {
+      category: 'global',
+      categoryLabel: 'عمومی',
+      categoryColor: 'indigo',
+      title: 'راهنمای کلیدها',
+      description: 'نمایش پنجره راهنمای کلیدهای میانبر',
+      keys: ['Shift', '?'],
+      altKeys: ['F1'],
+    },
+
+    // Counting & Scanner
+    {
+      category: 'counting',
+      categoryLabel: 'انبارگردانی',
+      categoryColor: 'emerald',
+      title: 'ثبت فوری شمارش',
+      description: 'ثبت مقدار وارد شده در کادر و ذخیره پیش‌نویس',
+      keys: ['Enter'],
+      altKeys: ['Ctrl', 'Enter'],
+    },
+    {
+      category: 'counting',
+      categoryLabel: 'انبارگردانی',
+      categoryColor: 'emerald',
+      title: 'فوکوس روی بارکدخوان',
+      description: 'انتقال سریع مکان‌نما به کادر اسکنر بارکد',
+      keys: ['F2'],
+      altKeys: ['Alt', 'B'],
+    },
+    {
+      category: 'counting',
+      categoryLabel: 'انبارگردانی',
+      categoryColor: 'emerald',
+      title: 'تب تسک‌های من',
+      description: 'سوئیچ سریع به فهرست کالاهای تخصیص‌یافته',
+      keys: ['Alt', '1'],
+      altKeys: null,
+    },
+    {
+      category: 'counting',
+      categoryLabel: 'انبارگردانی',
+      categoryColor: 'emerald',
+      title: 'تب استخر کالاها',
+      description: 'سوئیچ سریع به فهرست استخر آزاد کالاها',
+      keys: ['Alt', '2'],
+      altKeys: null,
+    },
+    {
+      category: 'counting',
+      categoryLabel: 'انبارگردانی',
+      categoryColor: 'emerald',
+      title: 'تایید سریع کالاها (Approve)',
+      description: 'تایید کالاهای انتخاب‌شده در کارتابل سرپرست و مدیر',
+      keys: ['A'],
+      altKeys: null,
+    },
+
+    // Table & Dialogs
+    {
+      category: 'table',
+      categoryLabel: 'جدول اطلاعات',
+      categoryColor: 'blue',
+      title: 'ذخیره تغییرات جدول',
+      description: 'ثبت و اعمال نهایی تمامی ویرایش‌های انجام‌شده در سلول‌ها',
+      keys: ['Ctrl', 'S'],
+      altKeys: null,
+    },
+    {
+      category: 'table',
+      categoryLabel: 'جدول اطلاعات',
+      categoryColor: 'blue',
+      title: 'لغو آخرین تغییر (Undo)',
+      description: 'بازگردانی آخرین ویرایش سلول جدول به مقدار قبل',
+      keys: ['Ctrl', 'Z'],
+      altKeys: null,
+    },
+    {
+      category: 'table',
+      categoryLabel: 'جدول اطلاعات',
+      categoryColor: 'blue',
+      title: 'تکرار تغییر (Redo)',
+      description: 'اعمال مجدد تغییری که لغو شده بود',
+      keys: ['Ctrl', 'Y'],
+      altKeys: null,
+    },
+    {
+      category: 'table',
+      categoryLabel: 'جدول اطلاعات',
+      categoryColor: 'blue',
+      title: 'انتخاب همه سطرها',
+      description: 'انتخاب یا لغو انتخاب تمامی ردیف‌های جدول',
+      keys: ['Ctrl', 'A'],
+      altKeys: null,
+    },
+    {
+      category: 'table',
+      categoryLabel: 'دیالوگ‌ها',
+      categoryColor: 'blue',
+      title: 'تایید در دیالوگ‌ها',
+      description: 'تایید عملیات در پنجره‌های حذف، خروج و پیام‌ها',
+      keys: ['Enter'],
+      altKeys: null,
+    },
+
+    // Design & Canvas
+    {
+      category: 'design',
+      categoryLabel: 'طراحی',
+      categoryColor: 'purple',
+      title: 'جابجایی دقیق المان (Nudge)',
+      description: 'حرکت دادن المان روی بوم به اندازه ۱ میلی‌متر',
+      keys: ['↑', '↓', '←', '→'],
+      altKeys: null,
+    },
+    {
+      category: 'design',
+      categoryLabel: 'طراحی',
+      categoryColor: 'purple',
+      title: 'جابجایی سریع المان',
+      description: 'حرکت دادن سریع المان روی بوم به اندازه ۵ میلی‌متر',
+      keys: ['Shift', '↑↓←→'],
+      altKeys: null,
+    },
+    {
+      category: 'design',
+      categoryLabel: 'طراحی',
+      categoryColor: 'purple',
+      title: 'کپی و جایگذاری المان',
+      description: 'تکثیر و کپی کردن المان انتخاب‌شده روی بوم',
+      keys: ['Ctrl', 'C'],
+      altKeys: ['Ctrl', 'V'],
+    },
+    {
+      category: 'design',
+      categoryLabel: 'کارت پرسنلی',
+      categoryColor: 'purple',
+      title: 'چرخش سه‌بعدی کارت',
+      description: 'چرخش کارت بین نمای رو (Front) و پشت (Back)',
+      keys: ['Space'],
+      altKeys: ['F'],
+    },
+    {
+      category: 'design',
+      categoryLabel: 'چاپ',
+      categoryColor: 'purple',
+      title: 'چاپ شیت / کارت',
+      description: 'ارسال مستقیم شیت آماده یا کارت به پرینتر',
+      keys: ['Ctrl', 'P'],
+      altKeys: null,
+    },
+  ];
+
+  get filteredShortcuts() {
+    return this.allShortcuts.filter(item => {
+      const matchCat = this.shortcutsActiveCategory === 'all' || item.category === this.shortcutsActiveCategory;
+      if (!matchCat) return false;
+      if (!this.shortcutsSearchQuery.trim()) return true;
+      const q = this.shortcutsSearchQuery.toLowerCase().trim();
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.categoryLabel.toLowerCase().includes(q) ||
+        item.keys.some(k => k.toLowerCase().includes(q)) ||
+        (item.altKeys && item.altKeys.some((k: string) => k.toLowerCase().includes(q)))
+      );
+    });
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleGlobalKeyDown(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    const isInsideInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+    // Escape: close shortcuts modal, user menu, sync errors
+    if (event.key === 'Escape') {
+      if (this.isShortcutsHelpOpen) {
+        event.preventDefault();
+        this.isShortcutsHelpOpen = false;
+        this.cdr.detectChanges();
+        return;
+      }
+      if (this.isUserMenuOpen) {
+        event.preventDefault();
+        this.isUserMenuOpen = false;
+        this.cdr.detectChanges();
+        return;
+      }
+      if (this.isSyncErrorsOpen) {
+        event.preventDefault();
+        this.isSyncErrorsOpen = false;
+        this.cdr.detectChanges();
+        return;
+      }
+    }
+
+    // Ctrl+B: Toggle desktop sidebar
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'b' || event.key === 'B')) {
+      event.preventDefault();
+      this.toggleDesktopSidebar();
+      return;
+    }
+
+    // Shift + ? or F1: Show Shortcuts Cheatsheet Modal
+    if (!isInsideInput) {
+      if (event.key === '?' || event.key === '؟' || event.key === 'F1') {
+        event.preventDefault();
+        this.toggleShortcutsHelp();
+      }
+    }
+  }
+
+  toggleShortcutsHelp() {
+    this.isShortcutsHelpOpen = !this.isShortcutsHelpOpen;
+    this.cdr.detectChanges();
+  }
 
   // ─── Offline / Sync UI ───
   /** وضعیت سه‌حالته اتصال: online | server-unreachable | offline */
@@ -68,6 +337,51 @@ export class Layout implements OnInit, OnDestroy {
   closeUserMenu() {
     this.isUserMenuOpen = false;
     this.cdr.detectChanges();
+  }
+
+  isAvatarModalOpen = false;
+  isSavingAvatar = false;
+
+  openAvatarModal() {
+    this.isAvatarModalOpen = true;
+    this.closeUserMenu();
+  }
+
+  onSaveAvatar(blob: Blob) {
+    this.isSavingAvatar = true;
+    this.accountsService.updateMyAvatar(blob).subscribe({
+      next: (res) => {
+        this.isSavingAvatar = false;
+        this.isAvatarModalOpen = false;
+        this.auth.updateUserAvatar(res.avatar);
+        this.toast.show('success', 'تصویر پروفایل شما با موفقیت بروزرسانی شد.');
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isSavingAvatar = false;
+        const msg = err.error?.error || 'خطا در بارگذاری تصویر پروفایل';
+        this.toast.show('error', msg);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onRemoveAvatar() {
+    this.isSavingAvatar = true;
+    this.accountsService.deleteMyAvatar().subscribe({
+      next: () => {
+        this.isSavingAvatar = false;
+        this.isAvatarModalOpen = false;
+        this.auth.updateUserAvatar(null);
+        this.toast.show('success', 'تصویر پروفایل حذف شد.');
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isSavingAvatar = false;
+        this.toast.show('error', 'خطا در حذف تصویر پروفایل');
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /** لیست پروژه‌ها از StateService خوانده می‌شود */
@@ -136,7 +450,9 @@ export class Layout implements OnInit, OnDestroy {
     private whService: WarehouseHttpService,
     private cdr: ChangeDetectorRef,
     private toast: ToastService,
-    private configApi: ConfigApiService
+    private configApi: ConfigApiService,
+    private accountsService: AccountsHttpService,
+    public navHistory: NavigationHistoryService
   ) {
     // Sanitize icons
     for (const k in this.rawIcons) {
@@ -144,10 +460,16 @@ export class Layout implements OnInit, OnDestroy {
     }
 
     // Track current tab from URL
+    const initialClean = (this.router.url || '').split('?')[0];
+    const initialTab = initialClean.split('/')[1] || 'dashboard';
+    this.store.setCurrentTab(initialTab);
+    this.updateTitle(initialTab);
+
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd)
     ).subscribe((e) => {
-      const tab = e.url.split('/')[1] || 'dashboard';
+      const cleanUrl = (e.urlAfterRedirects || e.url || '').split('?')[0];
+      const tab = cleanUrl.split('/')[1] || 'dashboard';
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
     });
@@ -367,7 +689,7 @@ export class Layout implements OnInit, OnDestroy {
         totalRecords += s.records;
         totalBytes += s.bytes;
         tableRows += `
-          <tr class="border-b border-border last:border-0">
+          <tr class="border-b border-slate-200 last:border-0">
             <td class="py-2 px-2 text-right">${s.warehouseName}</td>
             <td class="py-2 px-2 text-center" dir="ltr">${s.records.toLocaleString()}</td>
             <td class="py-2 px-2 text-left" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
@@ -376,9 +698,9 @@ export class Layout implements OnInit, OnDestroy {
       });
       
       const htmlContent = `
-        <div class="mt-4 bg-surface rounded-lg overflow-hidden border border-border">
+        <div class="mt-4 bg-slate-50 rounded-lg overflow-hidden border border-slate-200">
           <table class="w-full text-xs">
-            <thead class="bg-surface text-slate-500">
+            <thead class="bg-slate-50 text-slate-500">
               <tr>
                 <th class="py-2 px-2 text-right">انبار</th>
                 <th class="py-2 px-2 text-center">رکوردها</th>
@@ -388,7 +710,7 @@ export class Layout implements OnInit, OnDestroy {
             <tbody>
               ${tableRows}
             </tbody>
-            <tfoot class="bg-slate-200/50 font-bold text-foreground border-t border-border">
+            <tfoot class="bg-slate-200/50 font-bold text-slate-800 border-t border-slate-200">
               <tr>
                 <td class="py-2 px-2 text-right">جمع کل</td>
                 <td class="py-2 px-2 text-center" dir="ltr">${totalRecords.toLocaleString()}</td>

@@ -10,9 +10,9 @@ import { ReportTemplate } from '../../core/models/report.model';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="bg-background rounded-2xl border border-border shadow-sm overflow-hidden">
-      <div class="px-3 py-2.5 border-b border-border flex items-center justify-between">
-        <span class="text-xs font-black text-foreground">قالب‌های ذخیره‌شده</span>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-3 py-2.5 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-800">قالب‌های ذخیره‌شده</span>
         <span class="text-[10px] text-slate-400">{{ templates.length }}</span>
       </div>
 
@@ -23,11 +23,11 @@ import { ReportTemplate } from '../../core/models/report.model';
           </div>
         }
         @for (t of templates; track t.id) {
-          <div class="p-2.5 hover:bg-surface transition-colors cursor-pointer group"
+          <div class="p-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
                [class.bg-indigo-50]="t.id === activeId"
                (click)="load.emit(t)">
             <div class="flex items-center gap-1.5">
-              <span class="text-xs font-bold text-foreground truncate flex-1">{{ t.name }}</span>
+              <span class="text-xs font-bold text-slate-800 truncate flex-1">{{ t.name }}</span>
               @if (t.is_public) {
                 <span class="text-[9px] bg-emerald-100 text-emerald-700 rounded-full px-1.5 py-0.5 font-bold shrink-0">عمومی</span>
               }

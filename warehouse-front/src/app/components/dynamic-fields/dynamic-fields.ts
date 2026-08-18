@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -6,6 +6,7 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmDialogService } from '../../shared';
 import { DynamicFieldApiService } from '../../core/api';
 import { DynamicFieldDefinition } from '../../core/models';
+import { AuthStore } from '../../core/stores/auth.store';
 
 @Component({
   selector: 'app-dynamic-fields',
@@ -32,24 +33,41 @@ export class DynamicFields implements OnInit {
   sourceWarehouseId: number | null = null;
   isCopying = false;
 
+  get currentWarehouseId(): number | null {
+    const val = this.authStore.activeWarehouseId();
+    return val && val !== 'ALL' ? Number(val) : null;
+  }
+
   get otherWarehouses() {
-    return this.state.appState.projects?.filter((w: any) => w.id !== this.state.appState.activeWarehouseId) || [];
+    return this.state.appState.projects?.filter((w: any) => w.id !== this.currentWarehouseId) || [];
   }
 
   constructor(
     public state: StateService,
     private toast: ToastService,
+    private authStore: AuthStore,
     private fieldApi: DynamicFieldApiService,
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService
-  ) {}
+  ) {
+    effect(() => {
+      const whId = this.authStore.activeWarehouseId();
+      if (whId && whId !== 'ALL') {
+        this.loadFields();
+      } else {
+        this.fields = [];
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
 
   ngOnInit() {
     this.loadFields();
   }
 
   loadFields() {
-    const whId = this.state.appState.activeWarehouseId;
+    const whId = this.currentWarehouseId;
     if (!whId) return;
     
     this.isLoading = true;
@@ -79,7 +97,7 @@ export class DynamicFields implements OnInit {
       return;
     }
     
-    this.newField.warehouse = this.state.appState.activeWarehouseId;
+    this.newField.warehouse = this.currentWarehouseId;
     
     this.isLoading = true;
     this.fieldApi.createField(this.newField).subscribe({
@@ -185,7 +203,7 @@ export class DynamicFields implements OnInit {
 
   confirmCopy() {
     if (!this.sourceWarehouseId) return;
-    const targetId = this.state.appState.activeWarehouseId;
+    const targetId = this.currentWarehouseId;
     if (!targetId) return;
 
     this.isCopying = true;

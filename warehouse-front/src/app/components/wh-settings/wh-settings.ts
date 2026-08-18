@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings';
@@ -7,6 +7,13 @@ import { AuthStore } from '../../core/stores/auth.store';
 import { LabelDesigner } from '../label-designer/label-designer';
 import { DynamicFields } from '../dynamic-fields/dynamic-fields';
 import { ActivatedRoute, Router } from '@angular/router';
+import { 
+  FieldPermissionConfig, 
+  CATEGORY_LABELS, 
+  mergeFieldPermissions,
+  mergeDocFieldPermissions 
+} from '../../core/models/field-config.model';
+import { DynamicFieldApiService } from '../../core/api/dynamic-field-api.service';
 
 @Component({
   selector: 'app-wh-settings',
@@ -16,45 +23,113 @@ import { ActivatedRoute, Router } from '@angular/router';
 })
 export class WhSettings implements OnInit {
   isLoading = true;
-  settings: any = {};
+  settings: any = null;
   warehouseId: number | null = null;
-  activeTab: 'operations' | 'label' | 'dynamic' = 'operations';
+  activeTab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields' = 'operations';
+
+  // ── Counter Field Permissions State ────────────────────────────────────────
+  fieldConfigs: FieldPermissionConfig[] = [];
+  selectedCategory: string = 'all';
+  fieldSearchTerm: string = '';
+  categoryLabels = CATEGORY_LABELS;
+  categoryKeys = Object.keys(CATEGORY_LABELS);
+  dynamicFieldsList: any[] = [];
+
+  // ── Customs / Financial Field Permissions State ─────────────────────────────
+  docFieldConfigs: FieldPermissionConfig[] = [];
+  selectedDocCategory: string = 'all';
+  docFieldSearchTerm: string = '';
+
+  // ── Barcode Scanner Delimiters State ─────────────────────────────────────────
+  scannerPreset: 'default' | 'control' | 'hybrid' | 'excel' | 'custom' = 'default';
 
   constructor(
     private settingsService: SettingsService,
+    private dynamicFieldApi: DynamicFieldApiService,
     private toast: ToastService,
-    private authStore: AuthStore,
+    public authStore: AuthStore,
     private confirm: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
     private router: Router
-  ) {}
+  ) {
+    effect(() => {
+      const activeId = this.authStore.activeWarehouseId();
+      const numId = activeId && activeId !== 'ALL' ? Number(activeId) : null;
+      if (numId !== this.warehouseId) {
+        this.warehouseId = numId;
+        if (this.warehouseId) {
+          this.loadSettings();
+        } else {
+          this.settings = null;
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
 
   ngOnInit() {
     this.route.queryParams.subscribe(params => {
       if (params['tab']) {
         const tab = params['tab'] as typeof this.activeTab;
-        if (['operations', 'label', 'dynamic'].includes(tab)) {
+        if (['operations', 'label', 'dynamic', 'counter_fields', 'doc_fields'].includes(tab)) {
           this.activeTab = tab;
           this.cdr.detectChanges();
         }
       }
     });
-    this.warehouseId = Number(this.authStore.activeWarehouseId());
-    if (this.warehouseId) {
+    const currentActive = this.authStore.activeWarehouseId();
+    this.warehouseId = currentActive && currentActive !== 'ALL' ? Number(currentActive) : null;
+    if (this.warehouseId && !this.settings) {
       this.loadSettings();
+    } else if (!this.warehouseId) {
+      this.isLoading = false;
     }
   }
 
-  setTab(tab: 'operations' | 'label' | 'dynamic') {
+  setTab(tab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields') {
+    this.activeTab = tab;
     this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
+    this.cdr.detectChanges();
+  }
+
+  setCategory(cat: string) {
+    this.selectedCategory = cat;
+    this.cdr.detectChanges();
+  }
+
+  setDocCategory(cat: string) {
+    this.selectedDocCategory = cat;
+    this.cdr.detectChanges();
   }
 
   loadSettings() {
     this.isLoading = true;
+    this.dynamicFieldApi.getFields(this.warehouseId!).subscribe({
+      next: (dfRes: any) => {
+        this.dynamicFieldsList = Array.isArray(dfRes) ? dfRes : (dfRes?.results || []);
+        this.fetchWarehouseSettings();
+      },
+      error: () => {
+        this.dynamicFieldsList = [];
+        this.fetchWarehouseSettings();
+      }
+    });
+  }
+
+  private fetchWarehouseSettings() {
     this.settingsService.getWarehouseSettings(this.warehouseId!).subscribe({
       next: (res: any) => {
         this.settings = res;
+        const savedCounter = res?.field_permissions_counter?.value;
+        this.fieldConfigs = mergeFieldPermissions(savedCounter, this.dynamicFieldsList);
+        const savedDoc = res?.field_permissions_doc?.value;
+        this.docFieldConfigs = mergeDocFieldPermissions(savedDoc, this.dynamicFieldsList);
+        const rowSep = res?.scanner_row_delimiter?.value ?? ';';
+        const colSep = res?.scanner_col_delimiter?.value ?? '|';
+        this.scannerPreset = this.detectScannerPreset(rowSep, colSep);
+
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -66,6 +141,138 @@ export class WhSettings implements OnInit {
     });
   }
 
+  // ── Scanner Separator Methods ───────────────────────────────────────────────
+  onScannerPresetChange(val: string) {
+    this.scannerPreset = val as any;
+    if (!this.settings.scanner_row_delimiter) {
+      this.settings.scanner_row_delimiter = { value: ';', is_override: true };
+    }
+    if (!this.settings.scanner_col_delimiter) {
+      this.settings.scanner_col_delimiter = { value: '|', is_override: true };
+    }
+    this.settings.scanner_row_delimiter.is_override = true;
+    this.settings.scanner_col_delimiter.is_override = true;
+
+    if (val === 'default') {
+      this.settings.scanner_row_delimiter.value = ';';
+      this.settings.scanner_col_delimiter.value = '|';
+    } else if (val === 'control') {
+      this.settings.scanner_row_delimiter.value = 'Chr(30)';
+      this.settings.scanner_col_delimiter.value = 'Chr(31)';
+    } else if (val === 'hybrid') {
+      this.settings.scanner_row_delimiter.value = 'Chr(30) & ";"';
+      this.settings.scanner_col_delimiter.value = 'Chr(31) & "|"';
+    } else if (val === 'excel') {
+      this.settings.scanner_row_delimiter.value = '\\n';
+      this.settings.scanner_col_delimiter.value = '\\t';
+    }
+    this.cdr.detectChanges();
+  }
+
+  detectScannerPreset(rowSep: string, colSep: string): 'default' | 'control' | 'hybrid' | 'excel' | 'custom' {
+    if (rowSep === 'Chr(30)' && colSep === 'Chr(31)') return 'control';
+    if (rowSep === 'Chr(30) & ";"' && colSep === 'Chr(31) & "|"') return 'hybrid';
+    if (rowSep === '\\n' && colSep === '\\t') return 'excel';
+    if (rowSep === ';' && colSep === '|') return 'default';
+    return 'custom';
+  }
+
+  // ── Counter Field Methods ──────────────────────────────────────────────────
+  get filteredFieldConfigs(): FieldPermissionConfig[] {
+    return this.fieldConfigs.filter(f => {
+      const matchCat = this.selectedCategory === 'all' || f.category === this.selectedCategory;
+      const search = this.fieldSearchTerm.trim().toLowerCase();
+      const matchSearch = !search || 
+        f.default_label.toLowerCase().includes(search) || 
+        (f.custom_label && f.custom_label.toLowerCase().includes(search)) ||
+        f.key.toLowerCase().includes(search);
+      return matchCat && matchSearch;
+    });
+  }
+
+  toggleFieldVisible(field: FieldPermissionConfig) {
+    field.visible = !field.visible;
+    if (!field.visible) {
+      field.editable = false;
+    }
+    this.cdr.detectChanges();
+  }
+
+  toggleFieldEditable(field: FieldPermissionConfig) {
+    field.editable = !field.editable;
+    if (field.editable) {
+      field.visible = true;
+    }
+    this.cdr.detectChanges();
+  }
+
+  resetFieldLabel(field: FieldPermissionConfig) {
+    field.custom_label = '';
+    this.cdr.detectChanges();
+  }
+
+  resetAllFieldsToDefault() {
+    this.fieldConfigs = mergeFieldPermissions(null, this.dynamicFieldsList);
+    this.toast.show('info', 'تنظیمات فیلدها به مقادیر اولیه بازنشانی شد.');
+    this.cdr.detectChanges();
+  }
+
+  selectAllVisible(val: boolean) {
+    this.filteredFieldConfigs.forEach(f => {
+      f.visible = val;
+      if (!val) f.editable = false;
+    });
+    this.cdr.detectChanges();
+  }
+
+  // ── Customs / Financial Field Methods ───────────────────────────────────────
+  get filteredDocFieldConfigs(): FieldPermissionConfig[] {
+    return this.docFieldConfigs.filter(f => {
+      const matchCat = this.selectedDocCategory === 'all' || f.category === this.selectedDocCategory;
+      const search = this.docFieldSearchTerm.trim().toLowerCase();
+      const matchSearch = !search || 
+        f.default_label.toLowerCase().includes(search) || 
+        (f.custom_label && f.custom_label.toLowerCase().includes(search)) ||
+        f.key.toLowerCase().includes(search);
+      return matchCat && matchSearch;
+    });
+  }
+
+  toggleDocFieldVisible(field: FieldPermissionConfig) {
+    field.visible = !field.visible;
+    if (!field.visible) {
+      field.editable = false;
+    }
+    this.cdr.detectChanges();
+  }
+
+  toggleDocFieldEditable(field: FieldPermissionConfig) {
+    field.editable = !field.editable;
+    if (field.editable) {
+      field.visible = true;
+    }
+    this.cdr.detectChanges();
+  }
+
+  resetDocFieldLabel(field: FieldPermissionConfig) {
+    field.custom_label = '';
+    this.cdr.detectChanges();
+  }
+
+  resetAllDocFieldsToDefault() {
+    this.docFieldConfigs = mergeDocFieldPermissions(null, this.dynamicFieldsList);
+    this.toast.show('info', 'تنظیمات فیلدهای کارتابل مالی به مقادیر اولیه بازنشانی شد.');
+    this.cdr.detectChanges();
+  }
+
+  selectAllDocVisible(val: boolean) {
+    this.filteredDocFieldConfigs.forEach(f => {
+      f.visible = val;
+      if (!val) f.editable = false;
+    });
+    this.cdr.detectChanges();
+  }
+
   saveSettings() {
     this.isLoading = true;
     
@@ -74,10 +281,32 @@ export class WhSettings implements OnInit {
     for (const key of Object.keys(this.settings)) {
       payload[key] = this.settings[key].value;
     }
+
+    // Serialize Counter fieldConfigs
+    const configMap: Record<string, any> = {};
+    this.fieldConfigs.forEach(f => {
+      configMap[f.key] = {
+        visible: f.visible,
+        editable: f.editable,
+        custom_label: f.custom_label?.trim() || ''
+      };
+    });
+    payload['field_permissions_counter'] = configMap;
+
+    // Serialize Customs/Doc fieldConfigs
+    const docConfigMap: Record<string, any> = {};
+    this.docFieldConfigs.forEach(f => {
+      docConfigMap[f.key] = {
+        visible: f.visible,
+        editable: f.editable,
+        custom_label: f.custom_label?.trim() || ''
+      };
+    });
+    payload['field_permissions_doc'] = docConfigMap;
     
     this.settingsService.saveWarehouseSettings(this.warehouseId!, payload).subscribe({
       next: () => {
-        this.toast.show('success', 'تنظیمات انبار با موفقیت ذخیره شد.');
+        this.toast.show('success', 'تنظیمات انبار و فیلدهای کارتابل‌ها با موفقیت ذخیره شد.');
         this.loadSettings();
       },
       error: () => {
@@ -85,6 +314,55 @@ export class WhSettings implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+
+  get hasOperationsOverride(): boolean {
+    if (!this.settings) return false;
+    const opKeys = [
+      'manager_approval_mode',
+      'require_supervisor_approval',
+      'require_doc_supervisor_approval',
+      'blind_counting',
+      'default_conflict_strategy',
+      'default_tag_status',
+      'offline_sync_interval_minutes',
+      'offline_cache_ttl_minutes'
+    ];
+    return opKeys.some(k => this.settings[k]?.is_override);
+  }
+
+  async resetOperationsSettings() {
+    const confirmed = await this.confirm.open({
+      title: 'حذف تنظیمات اختصاصی قوانین عملیاتی',
+      message: 'آیا از حذف تمام تنظیمات اختصاصی این بخش و بازگشت به تنظیمات کلان سیستم اطمینان دارید؟',
+      confirmText: 'بله، حذف شود',
+      type: 'warning'
+    });
+    
+    if (confirmed) {
+      this.isLoading = true;
+      const opKeys = [
+        'manager_approval_mode',
+        'require_supervisor_approval',
+        'require_doc_supervisor_approval',
+        'blind_counting',
+        'default_conflict_strategy',
+        'default_tag_status',
+        'offline_sync_interval_minutes',
+        'offline_cache_ttl_minutes'
+      ];
+      this.settingsService.resetWarehouseSettings(this.warehouseId!, opKeys).subscribe({
+        next: () => {
+          this.toast.show('success', 'تنظیمات قوانین عملیاتی به مقادیر پیش‌فرض کلان بازگشت.');
+          this.loadSettings();
+        },
+        error: () => {
+          this.toast.show('error', 'خطا در بازنشانی تنظیمات.');
+          this.isLoading = false;
+        }
+      });
+    }
   }
 
   async resetSetting(key: string) {

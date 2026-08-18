@@ -14,9 +14,9 @@ import { ToastService } from '../../shared/components/toast/toast.component';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="bg-background rounded-xl border border-border p-3 space-y-2 shadow-sm">
+    <div class="bg-white rounded-xl border border-slate-200 p-3 space-y-2 shadow-sm">
       <div class="flex items-center justify-between gap-2">
-        <div class="text-xs font-bold text-foreground">
+        <div class="text-xs font-bold text-slate-800">
           خروجی Excel ({{ job?.total_rows ?? totalRows }} ردیف)
         </div>
         <button type="button" (click)="close.emit()" class="text-slate-400 hover:text-slate-600 text-xs">✕</button>
@@ -36,7 +36,7 @@ import { ToastService } from '../../shared/components/toast/toast.component';
           </button>
         </div>
       } @else {
-        <div class="w-full bg-surface rounded-full h-2 overflow-hidden">
+        <div class="w-full bg-slate-50 rounded-full h-2 overflow-hidden">
           <div class="bg-indigo-500 h-2 rounded-full transition-all duration-500"
                [style.width.%]="job?.progress ?? 0"></div>
         </div>

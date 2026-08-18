@@ -1,0 +1,177 @@
+<div dir="rtl" align="right" class="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 font-sans relative overflow-hidden selection:bg-indigo-500 selection:text-white">
+  
+  <!-- پس‌زمینه نوری داینامیک -->
+  <div class="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute -bottom-40 -right-40 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-slate-900/50 rounded-full blur-3xl pointer-events-none"></div>
+
+  <div class="w-full max-w-md z-10 space-y-4">
+    
+    <!-- هدر سامانه استعلام -->
+    <div class="text-center space-y-2">
+      <div class="inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/80 border border-slate-800 backdrop-blur-md shadow-inner text-xs font-bold text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        <span>سامانه رسمی اصالت‌سنجی کارت‌های سازمانی و تردد</span>
+      </div>
+      <h1 class="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center justify-center gap-2">
+        <span>فارس عــالیش</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">SECURITY GATE</span>
+      </h1>
+    </div>
+
+    <!-- وضعیت بارگذاری -->
+    <div *ngIf="isLoading" class="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl backdrop-blur-xl">
+      <div class="w-16 h-16 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
+      <p class="text-sm font-bold text-slate-300">در حال اتصال به سرور مرکزی و استعلام اصالت کارت...</p>
+      <span class="text-xs text-slate-500 font-mono">{{code || 'دریافت مشخصات'}}</span>
+    </div>
+
+    <!-- خطا یا عدم یافت شدن کارت -->
+    <div *ngIf="!isLoading && error && !personnel" class="bg-rose-950/40 border border-rose-800/60 rounded-3xl p-6 text-center space-y-4 shadow-2xl backdrop-blur-xl">
+      <div class="w-16 h-16 bg-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mx-auto text-3xl shadow-inner border border-rose-500/30">
+        ✕
+      </div>
+      <div class="space-y-1">
+        <h2 class="text-base font-black text-rose-300">کارت شناسایی نامعتبر است</h2>
+        <p class="text-xs text-rose-200/80 leading-relaxed">{{error}}</p>
+      </div>
+      <div class="pt-2">
+        <button (click)="verifyCode(code)" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white transition-all">
+          استعلام مجدد
+        </button>
+      </div>
+    </div>
+
+    <!-- کارت اصالت تایید شده (Verified Digital Card) -->
+    <div *ngIf="!isLoading && personnel" class="space-y-4 animate-in fade-in zoom-in-95 duration-300">
+      
+      <!-- بنر وضعیت اصالت -->
+      <div [ngClass]="personnel.is_active ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300' : 'bg-amber-950/50 border-amber-500/40 text-amber-300'" class="border rounded-2xl p-3 flex items-center justify-between shadow-lg backdrop-blur-md">
+        <div class="flex items-center gap-3">
+          <div [ngClass]="personnel.is_active ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl font-bold border shrink-0">
+            <span *ngIf="personnel.is_active">✓</span>
+            <span *ngIf="!personnel.is_active">!</span>
+          </div>
+          <div>
+            <div class="text-xs font-black">
+              {{ personnel.is_active ? 'کارت شناسایی معتبر و فعال در سامانه' : 'کارت شناسایی پرسنلی غیرفعال / معلق' }}
+            </div>
+            <div class="text-[10px] text-slate-400 mt-0.5">
+              تایید شده توسط دیتابیس مرکزی حراست و مدیریت انبارها
+            </div>
+          </div>
+        </div>
+        <div class="text-left shrink-0">
+          <span class="text-[9px] font-mono px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">VERIFIED</span>
+        </div>
+      </div>
+
+      <!-- کارت پرسنلی رسمی دیجیتال -->
+      <div class="bg-slate-900/80 border border-slate-800/80 rounded-3xl p-5 shadow-2xl backdrop-blur-xl relative overflow-hidden space-y-4">
+        
+        <!-- نوار گرادیانت بالایی -->
+        <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-emerald-500 to-sky-500"></div>
+
+        <!-- بخش تصویر و نام پرسنل -->
+        <div class="flex items-center gap-4 pt-1">
+          <!-- تصویر پرسنلی -->
+          <div class="w-20 h-24 rounded-2xl bg-slate-800 border-2 border-slate-700 shadow-md flex items-center justify-center overflow-hidden shrink-0 relative group">
+            <img *ngIf="personnel.avatar" [src]="getAvatarUrl(personnel.avatar)" [alt]="personnel.first_name" class="w-full h-full object-cover">
+            <span *ngIf="!personnel.avatar" class="text-3xl font-black text-slate-500">{{getAvatarInitial(personnel.first_name)}}</span>
+            <div class="absolute bottom-1 right-1 w-3 h-3 rounded-full border-2 border-slate-900" [ngClass]="personnel.is_active ? 'bg-emerald-500' : 'bg-amber-500'"></div>
+          </div>
+
+          <!-- نام و سمت -->
+          <div class="flex-1 min-w-0 space-y-1.5">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono font-black text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{{personnel.personnel_code}}</span>
+              <span *ngIf="personnel.company" class="text-[10px] text-slate-400 truncate">{{personnel.company}}</span>
+            </div>
+
+            <h2 class="text-lg font-black text-white truncate leading-tight">{{personnel.first_name}} {{personnel.last_name}}</h2>
+
+            <!-- نقش‌ها -->
+            <div class="flex flex-wrap gap-1">
+              <span *ngFor="let role of personnel.roles" class="text-[10px] font-bold px-2.5 py-0.5 rounded-full" [style.background]="(role.color || '#4f46e5') + '25'" [style.color]="role.color || '#818cf8'" [style.border]="'1px solid ' + (role.color || '#4f46e5') + '40'">
+                {{role.title}}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- تفکیک‌کننده -->
+        <div class="border-t border-slate-800/80 my-2"></div>
+
+        <!-- جدول مشخصات کلیدی -->
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60">
+            <span class="text-[10px] text-slate-400 block font-bold mb-0.5">کد ملی دارنده:</span>
+            <span class="font-mono font-bold text-slate-200 text-xs">{{personnel.national_code}}</span>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60">
+            <span class="text-[10px] text-slate-400 block font-bold mb-0.5">گروه خونی:</span>
+            <span class="font-bold text-rose-400 text-xs">{{personnel.blood_type || 'O+'}}</span>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60">
+            <span class="text-[10px] text-slate-400 block font-bold mb-0.5">تماس اضطراری:</span>
+            <span class="font-mono font-bold text-slate-300 text-xs">{{personnel.emergency_contact}}</span>
+          </div>
+
+          <div class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/60">
+            <span class="text-[10px] text-slate-400 block font-bold mb-0.5">حوزه عملیاتی:</span>
+            <span class="font-bold text-slate-300 text-xs truncate block">{{personnel.operational_zone}}</span>
+          </div>
+        </div>
+
+        <!-- مجوزهای تردد در انبارها -->
+        <div class="bg-slate-950/60 rounded-xl p-3 border border-slate-800/60 space-y-1.5">
+          <span class="text-[10px] text-slate-400 block font-bold">مجوزهای معتبر ورود و تردد به انبارها:</span>
+          <div class="flex flex-wrap gap-1.5">
+            <span *ngFor="let wh of personnel.assigned_warehouses" class="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-indigo-950/60 text-indigo-300 border border-indigo-800/50 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+              <span>{{wh}}</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- مهر رسمی و زمان استعلام -->
+        <div class="border-t border-slate-800/80 pt-3 flex items-center justify-between text-[10px] text-slate-400">
+          <div class="space-y-0.5">
+            <div class="flex items-center gap-1 text-slate-300 font-bold">
+              <span>🛡️ مهر الکترونیکی حراست انبار</span>
+            </div>
+            <div class="text-[9px] text-slate-500 font-mono">
+              {{verificationTimestamp}}
+            </div>
+          </div>
+          <div class="w-12 h-12 rounded-full border border-dashed border-emerald-500/40 flex items-center justify-center text-[8px] font-bold text-emerald-400 text-center leading-tight">
+            اصالت<br>تایید شد
+          </div>
+        </div>
+
+      </div>
+
+      <!-- دکمه‌های اقدام -->
+      <div class="flex items-center gap-2 pt-1">
+        <button (click)="verifyCode(code)" class="flex-1 py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs font-bold text-slate-200 transition-all flex items-center justify-center gap-2">
+          <span>🔄</span>
+          <span>استعلام مجدد وضعیت</span>
+        </button>
+        <a routerLink="/login" class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all flex items-center justify-center gap-1">
+          <span>ورود به سامانه</span>
+        </a>
+      </div>
+
+    </div>
+
+    <!-- فوتر امنیتی -->
+    <div class="text-center text-[10px] text-slate-500 space-y-0.5 pt-2">
+      <p>کلیه حقوق و اطلاعات این سامانه متعلق به شرکت بازرگانی فارس عالیش می‌باشد.</p>
+      <p class="font-mono text-[9px]">AALISH WAREHOUSE AUTHENTICATION ENGINE v5.0</p>
+    </div>
+
+  </div>
+
+</div>

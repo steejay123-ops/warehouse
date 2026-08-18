@@ -17,7 +17,7 @@
           </svg>
           <span *ngIf="isLoading" class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
         </button>
-        <button *ngIf="activeTab === 'operations'" [disabled]="isLoading" (click)="saveGlobalSettings()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 hover:shadow-indigo-200" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+        <button *ngIf="activeTab === 'operations' || activeTab === 'counter_fields' || activeTab === 'doc_fields'" [disabled]="isLoading" (click)="saveGlobalSettings()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 hover:shadow-indigo-200" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
           <span *ngIf="isLoading" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
           <svg *ngIf="!isLoading" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           ذخیره و اعمال تنظیمات
@@ -35,9 +35,35 @@
         [class.font-black]="activeTab === 'operations'"
         [class.text-slate-500]="activeTab !== 'operations'"
         [class.hover:bg-slate-50]="activeTab !== 'operations'"
-        class="flex-1 min-w-[200px] px-5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5 whitespace-nowrap outline-none">
+        class="flex-1 min-w-[150px] px-3.5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap outline-none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'operations' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        قوانین عملیاتی و انبارگردانی فیزیکی
+        قوانین عملیاتی
+      </button>
+
+      <button 
+        type="button"
+        (click)="setTab('counter_fields')"
+        [class.bg-indigo-50]="activeTab === 'counter_fields'"
+        [class.text-indigo-700]="activeTab === 'counter_fields'"
+        [class.font-black]="activeTab === 'counter_fields'"
+        [class.text-slate-500]="activeTab !== 'counter_fields'"
+        [class.hover:bg-slate-50]="activeTab !== 'counter_fields'"
+        class="flex-1 min-w-[160px] px-3.5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap outline-none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'counter_fields' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        فیلدهای انبارگردان
+      </button>
+
+      <button 
+        type="button"
+        (click)="setTab('doc_fields')"
+        [class.bg-indigo-50]="activeTab === 'doc_fields'"
+        [class.text-indigo-700]="activeTab === 'doc_fields'"
+        [class.font-black]="activeTab === 'doc_fields'"
+        [class.text-slate-500]="activeTab !== 'doc_fields'"
+        [class.hover:bg-slate-50]="activeTab !== 'doc_fields'"
+        class="flex-1 min-w-[160px] px-3.5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap outline-none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'doc_fields' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        فیلدهای کارتابل مالی
       </button>
       
       <button 
@@ -48,10 +74,11 @@
         [class.font-black]="activeTab === 'label'"
         [class.text-slate-500]="activeTab !== 'label'"
         [class.hover:bg-slate-50]="activeTab !== 'label'"
-        class="flex-1 min-w-[200px] px-5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5 whitespace-nowrap outline-none">
+        class="flex-1 min-w-[150px] px-3.5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap outline-none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'label' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         طراح لیبل (Global)
       </button>
+
 
       <button 
         type="button"
@@ -61,7 +88,7 @@
         [class.font-black]="activeTab === 'backup'"
         [class.text-slate-500]="activeTab !== 'backup'"
         [class.hover:bg-slate-50]="activeTab !== 'backup'"
-        class="flex-1 min-w-[200px] px-5 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2.5 whitespace-nowrap outline-none">
+        class="flex-1 min-w-[170px] px-4 py-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 whitespace-nowrap outline-none">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" [attr.stroke]="activeTab === 'backup' ? '#4f46e5' : 'currentColor'" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         پشتیبان‌گیری و بازیابی
       </button>
@@ -94,8 +121,19 @@
                 <h5 class="text-[13px] font-black text-slate-800">تایید اجباری سرپرست</h5>
                 <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">آیا کارهای شمارش شده قبل از رسیدن به دست مدیر باید توسط سرپرست نیز تایید شوند؟</p>
               </div>
-              <label class="toggle-switch shrink-0 mr-auto pointer-events-none">
+              <label class="toggle-switch shrink-0 mr-auto pointer-events-none" role="switch" [attr.aria-checked]="settings.require_supervisor_approval">
                 <input type="checkbox" [checked]="settings.require_supervisor_approval">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.require_doc_supervisor_approval = !settings.require_doc_supervisor_approval">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">تایید سرپرست اسناد</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">عدم تایید اسناد نیاز به بررسی مدیر دارد یا سرپرست اسناد بررسی کند؟</p>
+              </div>
+              <label class="toggle-switch shrink-0 mr-auto pointer-events-none" role="switch" [attr.aria-checked]="settings.require_doc_supervisor_approval">
+                <input type="checkbox" [checked]="settings.require_doc_supervisor_approval">
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -105,16 +143,6 @@
               <select [(ngModel)]="settings.blind_counting" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
                 <option value="blind">کور (شمارشگر موجودی سیستمی را نبیند)</option>
                 <option value="visible">قابل مشاهده برای شمارشگر</option>
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-2.5">حداکثر دفعات مجاز بازشماری</label>
-              <select [(ngModel)]="settings.max_recounts" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
-                <option [ngValue]="-1">بی‌نهایت (بدون محدودیت)</option>
-                <option [ngValue]="1">یک بار</option>
-                <option [ngValue]="2">دو بار</option>
-                <option [ngValue]="3">سه بار</option>
               </select>
             </div>
 
@@ -169,7 +197,437 @@
               </select>
             </div>
 
+            <!-- ── Barcode Scanner Delimiters Section ── -->
+            <div class="pt-6 border-t border-slate-100 space-y-4">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                </div>
+                <div>
+                  <h5 class="text-xs font-bold text-slate-800">جداکننده‌های اسکنر بارکد و کدهای چندردیفه (۲D/QR)</h5>
+                  <p class="text-[11px] text-slate-400">تعیین کاراکترهای تفکیک سطرها و ستون‌ها در اسکن دسته‌ای و ورود داده</p>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-2">الگوی پیش‌فرض جداکننده‌ها (Presets)</label>
+                <select [ngModel]="scannerPreset" (ngModelChange)="onScannerPresetChange($event)" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                  <option value="default">🔹 استاندارد متنی: سمی‌کالن ( ; ) برای سطر | خط عمودی ( | ) برای ستون</option>
+                  <option value="control">🔹 کنترلی صنعتی (ASCII): کاراکتر Chr(30) سطر | کاراکتر Chr(31) ستون</option>
+                  <option value="hybrid">🔹 ترکیبی هوشمند: کاراکتر Chr(30) + سمی‌کالن | کاراکتر Chr(31) + پایپ</option>
+                  <option value="excel">🔹 فرمت اکسل (TSV): اینتر (\n) برای سطر | کلید Tab (\t) برای ستون</option>
+                  <option value="custom">✏️ حالت سفارشی (تعریف دستی کاراکترها)</option>
+                </select>
+              </div>
+
+              <!-- Custom Delimiters Inputs (Only if custom selected) -->
+              <div *ngIf="scannerPreset === 'custom'" class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-200">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">کاراکتر جداکننده ردیف‌ها (Row Separator)</label>
+                  <input type="text" [(ngModel)]="settings.scanner_row_delimiter" placeholder="مثال: ; یا Chr(30) یا \n" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">کاراکتر جداکننده ستون‌ها (Cell Separator)</label>
+                  <input type="text" [(ngModel)]="settings.scanner_col_delimiter" placeholder="مثال: | یا Chr(31) یا \t" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </div>
+              </div>
+            </div>
+
           </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- Counter Field Permissions Section                         -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div *ngIf="activeTab === 'counter_fields'" class="space-y-6 fade-in">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          
+          <!-- Header -->
+          <div class="bg-slate-50 border-b border-slate-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h4 class="font-black text-slate-800 text-[13px] flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                فیلدهای قابل نمایش و ویرایش در کارتابل انبارگردان
+              </h4>
+              <p class="text-[11px] text-slate-500 mt-1">مدیریت دسترسی انبارگردان به ستون‌های جدول کالا، شخصی‌سازی عناوین نمایشی و تعیین قابلیت ویرایش فیلدها</p>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" (click)="resetAllFieldsToDefault()" class="px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 border border-amber-200 shadow-sm" title="بازنشانی همه فیلدها به مقادیر اولیه کارخانه">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                بازنشانی به پیش‌فرض‌ها
+              </button>
+              <button type="button" (click)="selectAllVisible(true)" class="px-2.5 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-xl text-[11px] font-bold transition-all">
+                نمایش همه
+              </button>
+              <button type="button" (click)="selectAllVisible(false)" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 rounded-xl text-[11px] font-bold transition-all">
+                مخفی‌سازی همه
+              </button>
+            </div>
+          </div>
+
+          <!-- Filter & Search Toolbar -->
+          <div class="p-5 border-b border-slate-100 bg-white space-y-3">
+            <div class="flex flex-col sm:flex-row gap-3">
+              
+              <!-- Search Bar -->
+              <div class="relative flex-1">
+                <input 
+                  type="text" 
+                  [(ngModel)]="fieldSearchTerm" 
+                  placeholder="جستجوی نام ستون، عنوان یا کد سیستمی فیلد..."
+                  class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
+                <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <button *ngIf="fieldSearchTerm" (click)="fieldSearchTerm = ''" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+              </div>
+
+              <!-- Counter Badge -->
+              <div class="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl text-xs font-bold shrink-0">
+                <span>تعداد فیلدها:</span>
+                <span class="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-[10px]">{{ filteredFieldConfigs.length }} از {{ fieldConfigs.length }}</span>
+              </div>
+            </div>
+
+            <!-- Categories Tabs -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <button 
+                *ngFor="let cat of categoryKeys"
+                type="button"
+                (click)="selectedCategory = cat"
+                [class.bg-indigo-600]="selectedCategory === cat"
+                [class.text-white]="selectedCategory === cat"
+                [class.shadow-md]="selectedCategory === cat"
+                [class.bg-slate-100]="selectedCategory !== cat"
+                [class.text-slate-600]="selectedCategory !== cat"
+                [class.hover:bg-slate-200]="selectedCategory !== cat"
+                class="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5">
+                {{ categoryLabels[cat] }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Table of Fields -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold">
+                  <th class="py-3.5 px-4 w-12 text-center">#</th>
+                  <th class="py-3.5 px-4 min-w-[160px]">نام ستون در دیتابیس (پیش‌فرض)</th>
+                  <th class="py-3.5 px-4 min-w-[220px]">عنوان نمایشی سفارشی (برای انبارگردان)</th>
+                  <th class="py-3.5 px-4 min-w-[120px]">دسته‌بندی</th>
+                  <th class="py-3.5 px-4 w-28 text-center">نوع داده</th>
+                  <th class="py-3.5 px-4 w-28 text-center">قابل نمایش</th>
+                  <th class="py-3.5 px-4 w-28 text-center">قابل ویرایش</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr *ngFor="let f of filteredFieldConfigs; let i = index" 
+                    class="hover:bg-indigo-50/30 transition-colors"
+                    [class.bg-slate-50]="!f.visible">
+                  
+                  <!-- Index -->
+                  <td class="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">{{ i + 1 }}</td>
+                  
+                  <!-- Default Column Name & Key -->
+                  <td class="py-3 px-4">
+                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>{{ f.default_label }}</span>
+                      <span *ngIf="f.is_dynamic" class="text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold border border-purple-100">پویا</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-mono" dir="ltr">{{ f.key }}</span>
+                  </td>
+
+                  <!-- Custom Display Label Input -->
+                  <td class="py-3 px-4">
+                    <div class="relative flex items-center">
+                      <input 
+                        type="text" 
+                        [(ngModel)]="f.custom_label" 
+                        [placeholder]="f.default_label"
+                        class="w-full pr-3 pl-8 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 rounded-lg text-xs text-slate-700 outline-none transition-all" />
+                      <button 
+                        *ngIf="f.custom_label" 
+                        type="button" 
+                        (click)="resetFieldLabel(f)" 
+                        title="بازنشانی به نام ستون اصلی"
+                        class="absolute left-2 text-slate-400 hover:text-rose-500 transition-colors text-xs font-bold">
+                        ↺
+                      </button>
+                    </div>
+                  </td>
+
+                  <!-- Category Badge -->
+                  <td class="py-3 px-4">
+                    <span class="inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                      {{ categoryLabels[f.category] || f.category }}
+                    </span>
+                  </td>
+
+                  <!-- Data Type Badge -->
+                  <td class="py-3 px-4 text-center">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono"
+                          [class.bg-blue-50]="f.data_type === 'text'"
+                          [class.text-blue-700]="f.data_type === 'text'"
+                          [class.bg-emerald-50]="f.data_type === 'number'"
+                          [class.text-emerald-700]="f.data_type === 'number'"
+                          [class.bg-amber-50]="f.data_type === 'date'"
+                          [class.text-amber-700]="f.data_type === 'date'"
+                          [class.bg-violet-50]="f.data_type === 'textarea'"
+                          [class.text-violet-700]="f.data_type === 'textarea'"
+                          [class.bg-teal-50]="f.data_type === 'boolean'"
+                          [class.text-teal-700]="f.data_type === 'boolean'">
+                      {{ f.data_type }}
+                    </span>
+                  </td>
+
+                  <!-- Visible Checkbox Toggle -->
+                  <td class="py-3 px-4 text-center">
+                    <button 
+                      type="button" 
+                      (click)="toggleFieldVisible(f)"
+                      [class.bg-indigo-600]="f.visible"
+                      [class.text-white]="f.visible"
+                      [class.shadow-md]="f.visible"
+                      [class.bg-slate-100]="!f.visible"
+                      [class.text-slate-400]="!f.visible"
+                      class="w-8 h-8 rounded-xl inline-flex items-center justify-center transition-all active:scale-90"
+                      [title]="f.visible ? 'فیلد در کارتابل انبارگردان نمایش داده می‌شود' : 'فیلد مخفی است'">
+                      <svg *ngIf="f.visible" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg *ngIf="!f.visible" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </td>
+
+                  <!-- Editable Checkbox Toggle -->
+                  <td class="py-3 px-4 text-center">
+                    <button 
+                      type="button" 
+                      (click)="toggleFieldEditable(f)"
+                      [disabled]="!f.visible"
+                      [class.bg-emerald-600]="f.editable"
+                      [class.text-white]="f.editable"
+                      [class.shadow-md]="f.editable"
+                      [class.bg-slate-100]="!f.editable"
+                      [class.text-slate-400]="!f.editable"
+                      [class.opacity-40]="!f.visible"
+                      [class.cursor-not-allowed]="!f.visible"
+                      class="w-8 h-8 rounded-xl inline-flex items-center justify-center transition-all active:scale-90"
+                      [title]="!f.visible ? 'فیلد مخفی قابل ویرایش نیست' : (f.editable ? 'انبارگردان می‌تواند این فیلد را ویرایش کند' : 'فیلد فقط خواندنی است')">
+                      <svg *ngIf="f.editable" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                      <svg *ngIf="!f.editable" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
+                  </td>
+
+                </tr>
+
+                <tr *ngIf="filteredFieldConfigs.length === 0">
+                  <td colspan="7" class="py-12 text-center text-slate-400">
+                    <svg class="mx-auto mb-2 text-slate-300" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    فیلدی با مشخصات جستجو شده یافت نشد.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- Customs / Financial Field Permissions Section              -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div *ngIf="activeTab === 'doc_fields'" class="space-y-6 fade-in">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          
+          <!-- Header -->
+          <div class="bg-slate-50 border-b border-slate-100 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h4 class="font-black text-slate-800 text-[13px] flex items-center gap-2">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                فیلدهای قابل نمایش و ویرایش در کارتابل مالی و مدارک
+              </h4>
+              <p class="text-[11px] text-slate-500 mt-1">مدیریت دسترسی کارشناسان مالی به ستون‌های جدول کالا، شخصی‌سازی عناوین نمایشی و تعیین فیلدهای قابل ویرایش در فرم مالی</p>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" (click)="resetAllDocFieldsToDefault()" class="px-3 py-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 border border-amber-200 shadow-sm" title="بازنشانی همه فیلدها به مقادیر اولیه کارخانه">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                بازنشانی به پیش‌فرض‌ها
+              </button>
+              <button type="button" (click)="selectAllDocVisible(true)" class="px-2.5 py-2 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 rounded-xl text-[11px] font-bold transition-all">
+                نمایش همه
+              </button>
+              <button type="button" (click)="selectAllDocVisible(false)" class="px-2.5 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-700 text-slate-700 rounded-xl text-[11px] font-bold transition-all">
+                مخفی‌سازی همه
+              </button>
+            </div>
+          </div>
+
+          <!-- Filter & Search Toolbar -->
+          <div class="p-5 border-b border-slate-100 bg-white space-y-3">
+            <div class="flex flex-col sm:flex-row gap-3">
+              
+              <!-- Search Bar -->
+              <div class="relative flex-1">
+                <input 
+                  type="text" 
+                  [(ngModel)]="docFieldSearchTerm" 
+                  placeholder="جستجوی نام ستون، عنوان یا کد سیستمی فیلد..."
+                  class="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
+                <svg class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <button *ngIf="docFieldSearchTerm" (click)="docFieldSearchTerm = ''" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+              </div>
+
+              <!-- Counter Badge -->
+              <div class="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-xl text-xs font-bold shrink-0">
+                <span>تعداد فیلدها:</span>
+                <span class="bg-indigo-600 text-white px-2 py-0.5 rounded-lg text-[10px]">{{ filteredDocFieldConfigs.length }} از {{ docFieldConfigs.length }}</span>
+              </div>
+            </div>
+
+            <!-- Categories Tabs -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <button 
+                *ngFor="let cat of categoryKeys"
+                type="button"
+                (click)="selectedDocCategory = cat"
+                [class.bg-indigo-600]="selectedDocCategory === cat"
+                [class.text-white]="selectedDocCategory === cat"
+                [class.shadow-md]="selectedDocCategory === cat"
+                [class.bg-slate-100]="selectedDocCategory !== cat"
+                [class.text-slate-600]="selectedDocCategory !== cat"
+                [class.hover:bg-slate-200]="selectedDocCategory !== cat"
+                class="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5">
+                {{ categoryLabels[cat] }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Table of Fields -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold">
+                  <th class="py-3.5 px-4 w-12 text-center">#</th>
+                  <th class="py-3.5 px-4 min-w-[160px]">نام ستون در دیتابیس (پیش‌فرض)</th>
+                  <th class="py-3.5 px-4 min-w-[220px]">عنوان نمایشی سفارشی (برای کارتابل مالی)</th>
+                  <th class="py-3.5 px-4 min-w-[120px]">دسته‌بندی</th>
+                  <th class="py-3.5 px-4 w-28 text-center">نوع داده</th>
+                  <th class="py-3.5 px-4 w-28 text-center">قابل نمایش</th>
+                  <th class="py-3.5 px-4 w-28 text-center">قابل ویرایش</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr *ngFor="let f of filteredDocFieldConfigs; let i = index" 
+                    class="hover:bg-indigo-50/30 transition-colors"
+                    [class.bg-slate-50]="!f.visible">
+                  
+                  <!-- Index -->
+                  <td class="py-3 px-4 text-center text-slate-400 font-mono text-[11px]">{{ i + 1 }}</td>
+                  
+                  <!-- Default Column Name & Key -->
+                  <td class="py-3 px-4">
+                    <div class="font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>{{ f.default_label }}</span>
+                      <span *ngIf="f.is_dynamic" class="text-[9px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold border border-purple-100">پویا</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-mono" dir="ltr">{{ f.key }}</span>
+                  </td>
+
+                  <!-- Custom Display Label Input -->
+                  <td class="py-3 px-4">
+                    <div class="relative flex items-center">
+                      <input 
+                        type="text" 
+                        [(ngModel)]="f.custom_label" 
+                        [placeholder]="f.default_label"
+                        class="w-full pr-3 pl-8 py-1.5 bg-white border border-slate-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 rounded-lg text-xs text-slate-700 outline-none transition-all" />
+                      <button 
+                        *ngIf="f.custom_label" 
+                        type="button" 
+                        (click)="resetDocFieldLabel(f)" 
+                        title="بازنشانی به نام ستون اصلی"
+                        class="absolute left-2 text-slate-400 hover:text-rose-500 transition-colors text-xs font-bold">
+                        ↺
+                      </button>
+                    </div>
+                  </td>
+
+                  <!-- Category Badge -->
+                  <td class="py-3 px-4">
+                    <span class="inline-block px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                      {{ categoryLabels[f.category] || f.category }}
+                    </span>
+                  </td>
+
+                  <!-- Data Type Badge -->
+                  <td class="py-3 px-4 text-center">
+                    <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono"
+                          [class.bg-blue-50]="f.data_type === 'text'"
+                          [class.text-blue-700]="f.data_type === 'text'"
+                          [class.bg-emerald-50]="f.data_type === 'number'"
+                          [class.text-emerald-700]="f.data_type === 'number'"
+                          [class.bg-amber-50]="f.data_type === 'date'"
+                          [class.text-amber-700]="f.data_type === 'date'"
+                          [class.bg-violet-50]="f.data_type === 'textarea'"
+                          [class.text-violet-700]="f.data_type === 'textarea'"
+                          [class.bg-teal-50]="f.data_type === 'boolean'"
+                          [class.text-teal-700]="f.data_type === 'boolean'">
+                      {{ f.data_type }}
+                    </span>
+                  </td>
+
+                  <!-- Visible Checkbox Toggle -->
+                  <td class="py-3 px-4 text-center">
+                    <button 
+                      type="button" 
+                      (click)="toggleDocFieldVisible(f)"
+                      [class.bg-indigo-600]="f.visible"
+                      [class.text-white]="f.visible"
+                      [class.shadow-md]="f.visible"
+                      [class.bg-slate-100]="!f.visible"
+                      [class.text-slate-400]="!f.visible"
+                      class="w-8 h-8 rounded-xl inline-flex items-center justify-center transition-all active:scale-90"
+                      [title]="f.visible ? 'فیلد در کارتابل مالی نمایش داده می‌شود' : 'فیلد مخفی است'">
+                      <svg *ngIf="f.visible" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg *ngIf="!f.visible" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </td>
+
+                  <!-- Editable Checkbox Toggle -->
+                  <td class="py-3 px-4 text-center">
+                    <button 
+                      type="button" 
+                      (click)="toggleDocFieldEditable(f)"
+                      [disabled]="!f.visible"
+                      [class.bg-emerald-600]="f.editable"
+                      [class.text-white]="f.editable"
+                      [class.shadow-md]="f.editable"
+                      [class.bg-slate-100]="!f.editable"
+                      [class.text-slate-400]="!f.editable"
+                      [class.opacity-40]="!f.visible"
+                      [class.cursor-not-allowed]="!f.visible"
+                      class="w-8 h-8 rounded-xl inline-flex items-center justify-center transition-all active:scale-90"
+                      [title]="!f.visible ? 'فیلد مخفی قابل ویرایش نیست' : (f.editable ? 'کارشناس مالی می‌تواند این فیلد را ویرایش کند' : 'فیلد فقط خواندنی است')">
+                      <svg *ngIf="f.editable" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                      <svg *ngIf="!f.editable" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </button>
+                  </td>
+
+                </tr>
+
+                <tr *ngIf="filteredDocFieldConfigs.length === 0">
+                  <td colspan="7" class="py-12 text-center text-slate-400">
+                    <svg class="mx-auto mb-2 text-slate-300" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    فیلدی با مشخصات جستجو شده یافت نشد.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
         </div>
       </div>
 
@@ -193,8 +651,21 @@
       <!-- ══════════════════════════════════════════════════════════ -->
       <div *ngIf="activeTab === 'backup'" class="space-y-6 fade-in">
 
+        <!-- بنر عدم دسترسی سوپریوزر -->
+        <div *ngIf="!isSuperUser()" class="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex items-start gap-4">
+          <div class="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-700">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-amber-900 text-sm">محدودیت دسترسی امنیتی</h4>
+            <p class="text-xs text-amber-700 mt-1.5 leading-relaxed font-medium">
+              عملیات دریافت نسخه پشتیبان و بازیابی کامل پایگاه داده تنها برای <strong>مدیران ارشد (Superuser)</strong> مجاز است. در صورتی که نیاز به پشتیبان‌گیری دارید، با مدیر کل سیستم تماس بگیرید.
+            </p>
+          </div>
+        </div>
+
         <!-- ── کارت ۱: دانلود نسخه پشتیبان ── -->
-        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden" [class.opacity-60]="!isSuperUser()" [class.pointer-events-none]="!isSuperUser()">
           <div class="bg-slate-50 border-b border-slate-100 p-5 flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl flex items-center justify-center" style="background: linear-gradient(135deg,#ede9fe,#c7d2fe)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -251,7 +722,7 @@
         </div>
 
         <!-- ── کارت ۲: بازیابی اطلاعات ── -->
-        <div class="bg-white rounded-3xl border border-red-100 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-3xl border border-red-100 shadow-sm overflow-hidden" [class.opacity-60]="!isSuperUser()" [class.pointer-events-none]="!isSuperUser()">
           <div class="bg-red-50 border-b border-red-100 p-5 flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl flex items-center justify-center bg-red-100">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>

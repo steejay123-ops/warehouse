@@ -7,7 +7,7 @@ import { ToastService, ModalComponent, ConfirmDialogService, StatusBadgeComponen
 import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { AuthStore } from '../../core/stores/auth.store';
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
-import { ImportResult } from '../../core/http/accounts-http.service';
+import { AccountsHttpService, ImportResult } from '../../core/http/accounts-http.service';
 import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
 import { Observable, Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
@@ -22,7 +22,6 @@ export class Projects implements OnInit, OnDestroy {
   @ViewChild('addModal') addModal!: ModalComponent;
   addModalOpen = false;
   editModalOpen = false;
-  templateModalOpen = false;
 
   searchQuery = '';
   searchSubject = new Subject<string>();
@@ -31,6 +30,14 @@ export class Projects implements OnInit, OnDestroy {
   openDropdownId: number | null = null;
   
   projects: Warehouse[] = [];
+
+  // Color Palette Preset for Warehouses
+  readonly colorPalette: string[] = [
+    '#6366f1', '#4f46e5', '#3b82f6', '#0284c7', 
+    '#0d9488', '#10b981', '#059669', '#16a34a',
+    '#eab308', '#d97706', '#ea580c', '#e11d48',
+    '#8b5cf6', '#9333ea', '#64748b', '#0f172a'
+  ];
 
   // Excel Import/Export
   isExcelModalOpen = false;
@@ -53,10 +60,11 @@ export class Projects implements OnInit, OnDestroy {
   newWh: Partial<Warehouse> = {
     code: '', name: '', project_name: '', type: '', location: '', gps_coordinates: '', phone_number: '',
     manager: null, is_active: true, capacity: null, parent_warehouse: null,
-    description: '', operator_company: ''
+    description: '', operator_company: '', color: '#6366f1'
   };
 
   private whService = inject(WarehouseHttpService);
+  private accountsService = inject(AccountsHttpService);
 
   constructor(
     public state: StateService,
@@ -73,18 +81,23 @@ export class Projects implements OnInit, OnDestroy {
       const q = params['q'] || '';
       if (q !== this.searchQuery) {
         this.searchQuery = q;
-        this.cdr.detectChanges();
       }
+      const status = params['status'] || 'all';
+      if (status !== this.statusFilter) {
+        this.statusFilter = status;
+      }
+      this.cdr.detectChanges();
     });
 
     this.searchSub = this.searchSubject.pipe(
-      debounceTime(2000)
+      debounceTime(300)
     ).subscribe(q => {
-      this.router.navigate([], { queryParams: { q: q || null }, queryParamsHandling: 'merge', replaceUrl: true });
+      this.router.navigate([], { queryParams: { q: q ? q.trim() : null }, queryParamsHandling: 'merge', replaceUrl: true });
     });
 
     this.store.setWarehouseContext(false);
     this.loadWarehouses();
+    this.loadUsers();
   }
 
   ngOnDestroy() {
@@ -93,8 +106,31 @@ export class Projects implements OnInit, OnDestroy {
     }
   }
 
+  loadUsers() {
+    if (!this.state.appState.users || this.state.appState.users.length === 0) {
+      this.accountsService.getUsers().subscribe({
+        next: (users: any) => {
+          this.state.appState.users = users;
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          console.error('Error loading users for warehouse managers:', err);
+        }
+      });
+    }
+  }
+
   onSearchChange(val: string) {
     this.searchSubject.next(val);
+  }
+
+  onStatusFilterChange(val: string) {
+    this.statusFilter = val;
+    this.router.navigate([], {
+      queryParams: { status: val !== 'all' ? val : null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   loadWarehouses() {
@@ -106,25 +142,66 @@ export class Projects implements OnInit, OnDestroy {
         setTimeout(() => {
           this.isRefreshing = false;
           this.cdr.detectChanges();
-        }, 600);
+        }, 300);
       },
-      // نکته در خطاها: errorInterceptor پیام خطا را مدیریت می‌کند.
       error: () => {
         setTimeout(() => {
           this.isRefreshing = false;
           this.cdr.detectChanges();
-        }, 600);
+        }, 300);
       }
     });
   }
 
+  get activeProjectsCount(): number {
+    return this.projects.filter(p => p.is_active).length;
+  }
+
+  getWarehouseInitials(p: Warehouse): string {
+    if (p.code && p.code.trim()) {
+      const code = p.code.trim();
+      if (code.length <= 3) return code;
+      return code.slice(-2);
+    }
+    if (p.name && p.name.trim()) {
+      const words = p.name.trim().split(/\s+/);
+      if (words.length >= 2) {
+        return (words[0][0] + words[1][0]).toUpperCase();
+      }
+      return p.name.trim().slice(0, 2);
+    }
+    return String(p.id || '');
+  }
+
   get filteredProjects() {
+    const q = (this.searchQuery || '').trim().toLowerCase();
     return this.projects.filter((p) => {
-      const pCode = p.code || '';
-      const matchSearch = p.name.includes(this.searchQuery) || pCode.includes(this.searchQuery) || (p.location && p.location.includes(this.searchQuery));
+      let matchSearch = true;
+      if (q) {
+        const pCode = (p.code || '').toLowerCase();
+        const pName = (p.name || '').toLowerCase();
+        const pLoc = (p.location || '').toLowerCase();
+        const pType = (p.type || '').toLowerCase();
+        const pOp = (p.operator_company || '').toLowerCase();
+        const pDesc = (p.description || '').toLowerCase();
+
+        let managerName = '';
+        if (p.manager && this.state.appState.users) {
+          const mgr = this.state.appState.users.find((u: any) => u.id === p.manager);
+          if (mgr) {
+            managerName = `${mgr.first_name || ''} ${mgr.last_name || ''} ${mgr.username || ''}`.toLowerCase();
+          }
+        }
+
+        matchSearch = pName.includes(q) || pCode.includes(q) || pLoc.includes(q) ||
+                      pType.includes(q) || pOp.includes(q) || pDesc.includes(q) ||
+                      managerName.includes(q);
+      }
+
       let matchStatus = true;
       if (this.statusFilter === 'active') matchStatus = p.is_active === true;
       if (this.statusFilter === 'inactive') matchStatus = p.is_active === false;
+
       return matchSearch && matchStatus;
     });
   }
@@ -134,10 +211,10 @@ export class Projects implements OnInit, OnDestroy {
     this.state.appState.activeWarehouseId = id as any;
   }
 
-  goToDispatch(id: number) {
+  goToWarehouseWorkspace(id: number) {
     this.handleWarehouseSwitch(id);
     this.store.setWarehouseContext(true);
-    const p = this.state.appState.projects.find((x: any) => x.id === id);
+    const p = this.projects.find((x) => x.id === id);
     if (p) {
       this.toast.info(`شما وارد محیط انبار «${p.name}» شدید`);
     }
@@ -219,14 +296,14 @@ export class Projects implements OnInit, OnDestroy {
     if (p) {
       const confirmed = await this.confirm.open({
         title: 'فعال‌سازی انبار',
-        message: `آیا می‌خواهید انبار ${p.name} را مجدداً فعال کنید؟`,
+        message: `آیا می‌خواهید انبار «${p.name}» را مجدداً فعال کنید؟`,
         confirmText: 'بله، فعال شود',
         type: 'info'
       });
       if (confirmed) {
         this.whService.toggleArchive(id).subscribe(() => {
            this.loadWarehouses();
-           this.toast.show('success', `انبار ${p.name} با موفقیت فعال شد.`);
+           this.toast.show('success', `انبار «${p.name}» با موفقیت فعال شد.`);
         });
       }
     }
@@ -237,18 +314,31 @@ export class Projects implements OnInit, OnDestroy {
     const p = this.projects.find((proj) => proj.id === id);
     if (p) {
       this.editingProject = JSON.parse(JSON.stringify(p));
+      if (!this.editingProject.color) this.editingProject.color = '#6366f1';
       this.editModalOpen = true;
     }
   }
 
   saveWarehouseEdit() {
-    this.whService.update(this.editingProject.id, this.editingProject).subscribe({
+    if (!this.editingProject.name || this.editingProject.name.trim() === '') {
+      return this.toast.show('warning', 'وارد کردن نام انبار الزامی است');
+    }
+
+    const payload: any = { ...this.editingProject };
+    if (!payload.code || String(payload.code).trim() === '') {
+      payload.code = null;
+    }
+
+    this.whService.update(this.editingProject.id, payload).subscribe({
        next: () => {
          this.loadWarehouses();
          this.toast.show('success', 'تغییرات با موفقیت ذخیره شد.');
          this.editModalOpen = false;
        },
-       error: () => {}
+       error: (err) => {
+         const msg = err.error?.code?.[0] || err.error?.name?.[0] || err.error?.detail || 'خطا در ذخیره تغییرات انبار';
+         this.toast.show('error', msg);
+       }
     });
   }
 
@@ -256,44 +346,33 @@ export class Projects implements OnInit, OnDestroy {
     this.newWh = {
       code: '', name: '', project_name: '', type: '', location: '', gps_coordinates: '', phone_number: '',
       manager: null, is_active: true, capacity: null, parent_warehouse: null,
-      description: '', operator_company: ''
+      description: '', operator_company: '', color: '#6366f1'
     };
     this.addModalOpen = true;
   }
 
   saveNewWarehouse() {
-    if(!this.newWh.name) {
+    if (!this.newWh.name || this.newWh.name.trim() === '') {
       return this.toast.show('warning', 'وارد کردن نام انبار الزامی است');
     }
     
-    // Convert empty string code to null to trigger auto-generation in backend
     const payload: any = { ...this.newWh };
     if (!payload.code || payload.code.trim() === '') {
       payload.code = null;
     }
 
     this.whService.create(payload).subscribe({
-      next: (res) => {
+      next: () => {
         this.loadWarehouses();
-        this.toast.show('success', 'انبار با موفقیت ایجاد شد');
+        this.toast.show('success', 'انبار جدید با موفقیت ایجاد شد');
         this.addModalOpen = false;
       },
       error: (err) => {
-        this.toast.show('error', 'خطا در ایجاد انبار');
+        const msg = err.error?.code?.[0] || err.error?.name?.[0] || err.error?.detail || 'خطا در ایجاد انبار جدید';
+        this.toast.show('error', msg);
         console.error(err);
       }
     });
-  }
-
-  downloadTemplate() {
-    const link = document.createElement('a');
-    link.href = 'assets/template.xlsx';
-    link.download = 'Warehouse_Template.xlsx';
-    link.click();
-  }
-
-  goToDocs() {
-    this.router.navigate(['/docs']);
   }
 
   // ── Excel Import/Export ──────────────────────────────────────────

@@ -152,6 +152,10 @@ export class LabelDesigner implements OnInit, OnChanges, OnDestroy {
     if (changes['printItems'] && this.printItems) {
       this.initItemsConfig();
     }
+    if (changes['warehouseId'] && !changes['warehouseId'].firstChange) {
+      this.loadAllTemplates();
+      this.loadFields();
+    }
   }
 
   initItemsConfig() {
@@ -625,9 +629,11 @@ export class LabelDesigner implements OnInit, OnChanges, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  selectElement(el: LabelElement, event: MouseEvent) {
+  selectElement(el: LabelElement, event?: MouseEvent) {
     if (this.mode === 'print') return;
-    event.stopPropagation();
+    if (event) {
+      event.stopPropagation();
+    }
     this.selectedElementId = el.id;
     this.cdr.detectChanges();
   }
@@ -851,14 +857,73 @@ export class LabelDesigner implements OnInit, OnChanges, OnDestroy {
     return this.template.elements.some(e => e.field === '__custom_remark__');
   }
 
-  /** Keyboard shortcut: Delete selected element */
+  copiedElement: LabelElement | null = null;
+
+  /** Keyboard shortcuts for Label Designer Canvas */
   onKeyDown(event: KeyboardEvent) {
-    if (this.mode === 'print') return;
-    if (event.key === 'Delete' && this.selectedElement) {
-      this.removeElement(this.selectedElement);
-    }
+    const target = event.target as HTMLElement;
+    const isInsideInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+    // Escape: Deselect all
     if (event.key === 'Escape') {
       this.deselectAll();
+      return;
+    }
+
+    // Ctrl+S to save template
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      event.preventDefault();
+      this.saveTemplate();
+      return;
+    }
+
+    // If user is editing text in an input, do not intercept other keys
+    if (isInsideInput || this.mode === 'print') return;
+
+    // Delete / Backspace: Remove selected element
+    if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedElement) {
+      event.preventDefault();
+      this.removeElement(this.selectedElement);
+      return;
+    }
+
+    // Ctrl+C: Copy selected element
+    if ((event.ctrlKey || event.metaKey) && event.key === 'c' && this.selectedElement) {
+      event.preventDefault();
+      this.copiedElement = JSON.parse(JSON.stringify(this.selectedElement));
+      this.toast.show('success', 'المان کپی شد');
+      return;
+    }
+
+    // Ctrl+V: Paste copied element
+    if ((event.ctrlKey || event.metaKey) && event.key === 'v' && this.copiedElement) {
+      event.preventDefault();
+      const newEl: LabelElement = {
+        ...JSON.parse(JSON.stringify(this.copiedElement)),
+        id: this.generateId(),
+        x: Math.min(this.template.width_mm - 20, this.copiedElement.x + 5),
+        y: Math.min(this.template.height_mm - 10, this.copiedElement.y + 5),
+      };
+      this.template.elements.push(newEl);
+      this.selectElement(newEl);
+      this.cdr.detectChanges();
+      return;
+    }
+
+    // Nudge with Arrow Keys (1mm / 5mm with Shift)
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) && this.selectedElement) {
+      event.preventDefault();
+      const step = event.shiftKey ? 5 : 1;
+      if (event.key === 'ArrowLeft') {
+        this.selectedElement.x = Math.max(0, this.selectedElement.x - step);
+      } else if (event.key === 'ArrowRight') {
+        this.selectedElement.x = Math.min(this.template.width_mm - this.selectedElement.width, this.selectedElement.x + step);
+      } else if (event.key === 'ArrowUp') {
+        this.selectedElement.y = Math.max(0, this.selectedElement.y - step);
+      } else if (event.key === 'ArrowDown') {
+        this.selectedElement.y = Math.min(this.template.height_mm - this.selectedElement.height, this.selectedElement.y + step);
+      }
+      this.cdr.detectChanges();
     }
   }
 

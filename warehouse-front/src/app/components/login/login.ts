@@ -40,6 +40,7 @@ export class Login implements OnInit, OnDestroy {
    */
   connectionState: ConnectionState = 'online';
   private stateSub?: Subscription;
+  private configSub?: Subscription;
 
   /** متن و رنگ نشان بالای فرم ورود */
   get statusLabel(): string {
@@ -53,6 +54,17 @@ export class Login implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash;
+      const match = hash.match(/#\/?verify-card(?:\/([^/?#]+))?/);
+      if (match) {
+        const code = match[1];
+        const targetUrl = code ? `/verify-card/${code}` : '/verify-card';
+        this.router.navigateByUrl(targetUrl);
+        return;
+      }
+    }
+
     const network = NetworkStatusService.getInstance();
     this.connectionState = network.state;
     this.stateSub = network.state$.subscribe((state) => {
@@ -60,7 +72,7 @@ export class Login implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    this.configApi.getPublicConfig().subscribe({
+    this.configSub = this.configApi.getPublicConfig().subscribe({
       next: (config) => {
         OfflineSyncService.getInstance().applyRemoteConfig(config);
         if (config.system_version) {
@@ -74,6 +86,13 @@ export class Login implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.stateSub?.unsubscribe();
+    this.configSub?.unsubscribe();
+  }
+
+  clearError() {
+    if (this.loginErrorMessage) {
+      this.loginErrorMessage = null;
+    }
   }
 
   togglePassword() {
@@ -88,10 +107,16 @@ export class Login implements OnInit, OnDestroy {
   }
 
   handleLogin() {
+    const trimmedUsername = this.username ? this.username.trim() : '';
+    if (!trimmedUsername || !this.password) {
+      this.loginErrorMessage = 'لطفاً نام کاربری و رمز عبور را وارد کنید.';
+      return;
+    }
+
     this.isLoggingIn = true;
     this.loginErrorMessage = null;
 
-    this.auth.login(this.username, this.password).subscribe({
+    this.auth.login(trimmedUsername, this.password).subscribe({
       next: () => {
         this.isLoggingIn = false;
         
@@ -104,8 +129,26 @@ export class Login implements OnInit, OnDestroy {
         }
 
         this.toast.success('ورود موفقیت‌آمیز بود');
-        this.router.navigate(['/dashboard']).then(() => {
-          if (this.router.url === '/login' || this.router.url === '/') {
+        
+        let targetRoute = '/dashboard';
+        if (perms.includes('admin_all') || perms.includes('view_sys_dashboard')) {
+          targetRoute = '/dashboard';
+        } else if (perms.includes('view_sys_counter')) {
+          targetRoute = '/counter';
+        } else if (perms.includes('view_sys_supervisor')) {
+          targetRoute = '/supervisor';
+        } else if (perms.includes('view_sys_manager_review')) {
+          targetRoute = '/manager-review';
+        } else if (perms.includes('view_wh_docs')) {
+          targetRoute = '/docs';
+        } else if (perms.includes('view_wh_dispatch')) {
+          targetRoute = '/dispatch';
+        } else if (perms.includes('view_wh_dashboard')) {
+          targetRoute = '/dashboard';
+        }
+
+        this.router.navigate([targetRoute]).then((navigated) => {
+          if (!navigated && (this.router.url === '/login' || this.router.url === '/')) {
               this.auth.logout();
               this.loginErrorMessage = 'شما دسترسی ورود به هیچ‌کدام از بخش‌های سامانه را ندارید.';
           }
@@ -114,8 +157,14 @@ export class Login implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.isLoggingIn = false;
+        const status = err?.status ?? 0;
         const detail = err?.error?.detail || err?.detail;
-        if (detail === 'No active account found with the given credentials') {
+
+        if (status === 0 || status === 530 || (status >= 502 && status <= 504)) {
+          this.loginErrorMessage = 'خطا در ارتباط با سرور. لطفاً اتصال اینترنت یا وضعیت سرور را بررسی نمایید.';
+        } else if (status === 429) {
+          this.loginErrorMessage = detail || 'تعداد تلاش‌های ناموفق شما بیش از حد مجاز است. لطفاً بعداً تلاش کنید.';
+        } else if (detail === 'No active account found with the given credentials' || status === 401 || status === 400) {
           this.loginErrorMessage = 'نام کاربری یا رمز عبور اشتباه است.';
         } else {
           this.loginErrorMessage = detail || 'نام کاربری یا رمز عبور نادرست است.';

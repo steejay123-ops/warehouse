@@ -657,6 +657,9 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
+    const target = event.target as HTMLElement;
+    const isInsideInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
     if ((event.ctrlKey || event.metaKey) && !event.altKey) {
       if (event.code === 'KeyZ' && !event.shiftKey) {
         event.preventDefault();
@@ -664,8 +667,45 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
       } else if (event.code === 'KeyY' || (event.code === 'KeyZ' && event.shiftKey)) {
         event.preventDefault();
         this.redo();
+      } else if (event.code === 'KeyS') {
+        if (this.pendingChanges.size > 0) {
+          event.preventDefault();
+          this.confirmUpdate();
+        }
+      } else if (event.code === 'KeyA' && !isInsideInput && this.selectable) {
+        event.preventDefault();
+        this.selectAllRows(!this.isAllSelected);
       }
     }
+
+    if (event.key === 'Escape') {
+      if (this.editingCell) {
+        this.cancelEditing();
+      } else if (this.isConfirming) {
+        this.isConfirming = false;
+      } else if (this.isRevertConfirming) {
+        this.isRevertConfirming = false;
+      } else if (this.isViewManagerOpen) {
+        this.isViewManagerOpen = false;
+      } else if (this.isColumnToggleOpen) {
+        this.isColumnToggleOpen = false;
+      } else if (this.activeFilterDropdown) {
+        this.activeFilterDropdown = null;
+      }
+    }
+  }
+
+  selectAllRows(select: boolean = true) {
+    if (!this.selectable) return;
+    const newSet = new Set(this.selectedIds);
+    if (select) {
+      this.data.forEach(r => newSet.add(this.getRowKey(r)));
+    } else {
+      this.data.forEach(r => newSet.delete(this.getRowKey(r)));
+    }
+    this.selectedIds = newSet;
+    this.selectionChanged.emit(newSet);
+    this.cdr.detectChanges();
   }
 
   @HostListener('window:beforeunload', ['$event'])

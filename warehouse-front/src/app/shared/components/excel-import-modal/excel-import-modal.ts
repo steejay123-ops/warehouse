@@ -1,23 +1,25 @@
-import { Component, Input, Output, EventEmitter, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { ImportResult } from '../../../core/http/accounts-http.service';
 
 @Component({
   selector: 'app-excel-import-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './excel-import-modal.html',
   styleUrl: './excel-import-modal.css'
 })
 export class ExcelImportModal {
   @Input() title = 'آپلود فایل اکسل';
   @Input() templateDownloadFn!: () => void;
-  @Input() importFn!: (file: File) => Observable<ImportResult>;
+  @Input() importFn!: (file: File, updateExisting: boolean) => Observable<ImportResult>;
   @Output() closed = new EventEmitter<void>();
   @Output() imported = new EventEmitter<ImportResult>();
 
   selectedFile: File | null = null;
+  updateExisting = false;
   isDragging = false;
   isUploading = false;
   uploadProgress = 0;
@@ -100,7 +102,7 @@ export class ExcelImportModal {
       }
     }, 200);
 
-    this.importFn(this.selectedFile).subscribe({
+    this.importFn(this.selectedFile, this.updateExisting).subscribe({
       next: (res) => {
         clearInterval(progressInterval);
         this.uploadProgress = 100;
@@ -132,5 +134,22 @@ export class ExcelImportModal {
 
   close() {
     this.closed.emit();
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (!this.isUploading) {
+      this.close();
+    }
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  handleKeyDown(event: KeyboardEvent) {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if (this.selectedFile && !this.isUploading) {
+        event.preventDefault();
+        this.startUpload();
+      }
+    }
   }
 }

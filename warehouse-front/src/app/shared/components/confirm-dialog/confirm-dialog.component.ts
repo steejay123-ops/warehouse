@@ -1,4 +1,4 @@
-import { Component, Injectable, signal } from '@angular/core';
+import { Component, Injectable, signal, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 // ══════════════════════════════════════════════════
@@ -139,6 +139,20 @@ export class ConfirmDialogService {
 })
 export class ConfirmDialogComponent {
   constructor(public dialog: ConfirmDialogService) {}
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.dialog.isOpen()) {
+      this.dialog.cancel();
+    }
+  }
+
+  @HostListener('document:keydown.enter')
+  onEnter(): void {
+    if (this.dialog.isOpen()) {
+      this.dialog.confirm();
+    }
+  }
 
   get config() { return this.dialog.config; }
 

@@ -66,6 +66,17 @@
         {{ fileError }}
       </div>
 
+      <!-- Upsert Option Toggle -->
+      <div class="upsert-toggle-container" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
+        <div>
+          <span style="font-size:11px; font-weight:bold; color:#1e293b; display:block;">به‌روزرسانی رکوردهای تکراری (حالت هوشمند)</span>
+          <span style="font-size:9px; color:#64748b; display:block; margin-top:2px;">در صورت وجود رکورد با شناسه مشابه، مشخصات آن به‌روزرسانی شود.</span>
+        </div>
+        <label style="cursor:pointer; display:flex; align-items:center;">
+          <input type="checkbox" [(ngModel)]="updateExisting" style="width:16px; height:16px; cursor:pointer; accent-color:#4f46e5;">
+        </label>
+      </div>
+
       <!-- Template Download Hint -->
       <div class="template-hint">
         <span class="hint-icon">💡</span>
@@ -83,15 +94,19 @@
       <div *ngIf="result.success" class="result-summary success">
         <div class="summary-icon">✅</div>
         <div class="summary-details">
-          <h3>آپلود با موفقیت انجام شد</h3>
+          <h3>پردازش با موفقیت انجام شد</h3>
           <div class="summary-stats">
             <div class="stat">
               <span class="stat-value">{{ result.summary.total_rows }}</span>
               <span class="stat-label">کل سطرها</span>
             </div>
-            <div class="stat stat-success">
+            <div class="stat stat-success" *ngIf="result.summary.created > 0">
               <span class="stat-value">{{ result.summary.created }}</span>
               <span class="stat-label">ایجاد شده</span>
+            </div>
+            <div class="stat stat-info" *ngIf="result.summary.updated && result.summary.updated > 0" style="color:#0284c7;">
+              <span class="stat-value">{{ result.summary.updated }}</span>
+              <span class="stat-label">به‌روزرسانی شده</span>
             </div>
             <div class="stat stat-warning" *ngIf="result.summary.skipped > 0">
               <span class="stat-value">{{ result.summary.skipped }}</span>

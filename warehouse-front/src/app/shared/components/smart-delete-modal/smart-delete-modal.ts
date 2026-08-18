@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, EventEmitter, Input, Output, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -94,5 +94,22 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
 
   onCancel() {
     this.cancel.emit();
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (!this.isSubmitting) {
+      this.onCancel();
+    }
+  }
+
+  @HostListener('document:keydown.enter')
+  handleEnter() {
+    if (this.isSubmitting) return;
+    if (this.activeTab === 'soft') {
+      this.onSoftDelete();
+    } else if (this.activeTab === 'hard' && this.isHardDeleteEnabled) {
+      this.onHardDelete();
+    }
   }
 }

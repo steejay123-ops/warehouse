@@ -1,0 +1,138 @@
+<!-- Backdrop -->
+<div class="modal-backdrop" (click)="close()"></div>
+
+<!-- Modal Container -->
+<div class="modal-container" dir="rtl">
+  <!-- Header -->
+  <div class="modal-header">
+    <div class="header-title-group">
+      <div class="header-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>
+      </div>
+      <div>
+        <h2>{{ title }}</h2>
+        <span class="header-subtitle">برش و بهینه‌سازی استاندارد تصویر پرسنلی</span>
+      </div>
+    </div>
+    <button class="close-btn" (click)="close()" title="بستن">✕</button>
+  </div>
+
+  <!-- Body -->
+  <div class="modal-body">
+    <!-- Top Action Toolbar -->
+    <div class="toolbar-section">
+      <div class="source-buttons">
+        <button type="button" class="tool-btn primary" (click)="fileInput.click()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>انتخاب فایل عکس</span>
+        </button>
+        <input #fileInput type="file" accept="image/*" (change)="onFileSelected($event)" style="display: none" />
+
+        <button *ngIf="cameraAvailable" type="button" class="tool-btn camera" (click)="startCamera()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>ثبت با دوربین / وب‌کم</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Viewport Area -->
+    <div class="viewport-wrapper">
+      <!-- Mode: Camera -->
+      <div *ngIf="activeMode === 'camera'" class="camera-container">
+        <video #cameraVideo autoplay playsinline muted class="camera-video"></video>
+        
+        <div class="camera-overlay">
+          <div class="camera-target-box ratio-1-1"></div>
+        </div>
+
+        <div *ngIf="cameraError" class="camera-error-banner">
+          ⚠️ {{ cameraError }}
+        </div>
+
+        <div class="camera-controls">
+          <button type="button" class="cam-btn cancel" (click)="cancelCamera()">انصراف</button>
+          <button type="button" class="cam-btn snap" (click)="captureFromCamera()" [disabled]="!isCameraReady">
+            <div class="shutter-circle"></div>
+            <span>{{ isCameraReady ? 'ثبت عکس' : 'در حال آماده‌سازی...' }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode: Crop Canvas -->
+      <div *ngIf="activeMode === 'crop'" class="canvas-container" (drop)="onDrop($event)" (dragover)="onDragOver($event)">
+        <!-- Placeholder if no image is loaded yet -->
+        <div *ngIf="!imageLoaded" class="empty-dropzone" (click)="fileInput.click()">
+          <div class="drop-icon">📸</div>
+          <p class="drop-main-text">تصویر پرسنلی را اینجا رها کنید</p>
+          <p class="drop-sub-text">یا بر روی «انتخاب فایل عکس» کلیک نمایید</p>
+          <span class="drop-pill">JPG, PNG, WebP</span>
+        </div>
+
+        <!-- Canvas Active Viewport with Touch & Mouse Gestures -->
+        <div
+          *ngIf="imageLoaded"
+          class="canvas-box ratio-1-1"
+          (touchstart)="onTouchStart($event)"
+          (touchmove)="onTouchMove($event)"
+          (touchend)="onTouchEnd($event)"
+          (pointerdown)="onPointerDown($event)"
+          (pointermove)="onPointerMove($event)"
+          (pointerup)="onPointerUp($event)"
+          (wheel)="onWheel($event)"
+        >
+          <!-- Floating Rotate Button in Top Right Corner -->
+          <button
+            type="button"
+            class="floating-rotate-btn"
+            (click)="rotateRight(); $event.stopPropagation()"
+            (pointerdown)="$event.stopPropagation()"
+            (touchstart)="$event.stopPropagation()"
+            title="چرخش ۹۰ درجه تصویر"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          </button>
+
+          <canvas
+            #cropCanvas
+            [width]="320"
+            [height]="320"
+            class="crop-canvas"
+          ></canvas>
+
+          <!-- Mask Guide Overlay -->
+          <div class="crop-mask-overlay mask-circle"></div>
+        </div>
+
+        <p *ngIf="imageLoaded" class="canvas-hint">
+          💡 جابه‌جایی با کشیدن ماوس/دست • بزرگ‌نمایی با اسکرول ماوس یا زوم دو انگشتی
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Actions -->
+  <div class="modal-footer">
+    <div class="footer-left">
+      <button *ngIf="currentAvatarUrl" type="button" class="btn btn-danger-outline" (click)="removeAvatar()" [disabled]="isSaving">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        <span>حذف عکس فعلی</span>
+      </button>
+    </div>
+
+    <div class="footer-right">
+      <button type="button" class="btn btn-secondary" (click)="close()" [disabled]="isSaving">انصراف</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        [disabled]="!imageLoaded || isSaving"
+        (click)="saveCroppedImage()"
+      >
+        <span *ngIf="!isSaving">ذخیره و اعمال تصویر</span>
+        <span *ngIf="isSaving" class="btn-loading-content">
+          <span class="btn-spinner"></span>
+          <span>در حال بهینه‌سازی...</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>

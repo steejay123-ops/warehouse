@@ -28,13 +28,18 @@ class Warehouse(models.Model):
     modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_warehouses')
 
     def save(self, *args, **kwargs):
+        # ۱. نرمال‌سازی کد: تبدیل رشته خالی یا فاصله‌ای به None جهت ثبت NULL در پایگاه داده
+        if self.code is not None:
+            self.code = str(self.code).strip()
+            if not self.code:
+                self.code = None
+
+        # ۲. در صورتی که کد خالی باشد، شناسه عددی انبار به عنوان کد پیش‌فرض تنظیم می‌شود
         if not self.code:
-            # We need an ID to generate a code if we want it to be like "WH-ID",
-            # but since ID is not generated until after save, we can assign a temporary one or wait.
-            # A simpler approach is to generate a random code or set it to 'WH-<temp>' and update it.
+            # ذخیره اولیه با کد None (در SQL مقادیر NULL قید یکتایی را نقض نمی‌کنند)
             super().save(*args, **kwargs)
             self.code = str(self.id)
-            # Using update to prevent infinite recursion
+            # به‌روزرسانی مستقیم رکورد در دیتابیس بدون فراخوانی مجدد save و دور زدن لوپ بازگشتی
             Warehouse.objects.filter(id=self.id).update(code=self.code)
         else:
             super().save(*args, **kwargs)
@@ -57,8 +62,21 @@ class SystemSetting(models.Model):
     class Meta:
         unique_together = ('key', 'warehouse')
         
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from .services import clear_setting_cache
+        clear_setting_cache(self.key, self.warehouse_id)
+
+    def delete(self, *args, **kwargs):
+        key = self.key
+        wh_id = self.warehouse_id
+        super().delete(*args, **kwargs)
+        from .services import clear_setting_cache
+        clear_setting_cache(key, wh_id)
+
     def __str__(self):
         return f"{self.key} - {'Global' if not self.warehouse else self.warehouse.name}"
+
 
 
 class LabelTemplate(models.Model):

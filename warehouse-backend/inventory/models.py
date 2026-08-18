@@ -187,6 +187,7 @@ class ItemPhoto(models.Model):
 class CountTask(SyncModelMixin):
     STATUS_CHOICES = [
         ('PENDING_COUNT', 'در انتظار شمارش'),
+        ('INITIAL_COUNT', 'شمارش اولیه (ثبت موقت)'),
         ('COUNTED', 'شمارش شده (نزد سرپرست)'),
         ('SUPERVISOR_REJECTED', 'رد شده توسط سرپرست'),
         ('MANAGER_REVIEW', 'در انتظار تایید مدیر'),
@@ -309,6 +310,7 @@ class DocTaskHistory(models.Model):
     task = models.ForeignKey(DocTask, on_delete=models.CASCADE, related_name='history', verbose_name="تسک اسناد")
     action_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='doc_action_histories', verbose_name="انجام‌دهنده")
     action_type = models.CharField(max_length=50, verbose_name="نوع عملیات")
+    data_snapshot = models.JSONField(null=True, blank=True, verbose_name="اسنپ‌شات اطلاعات در لحظه عملیات")
     note = models.TextField(null=True, blank=True, verbose_name="یادداشت در زمان ثبت")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
 
@@ -317,3 +319,4 @@ class DocTaskHistory(models.Model):
 
     def __str__(self):
         return f"{self.action_type} on {self.task_id} by {self.action_by_id}"
+

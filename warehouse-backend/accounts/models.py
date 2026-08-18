@@ -11,6 +11,11 @@ class CustomUser(AbstractUser):
     phone_number = models.CharField(max_length=15, null=True, blank=True)
     operational_zone = models.CharField(max_length=100, null=True, blank=True)
     supervisor = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='subordinates')
+    company = models.CharField(max_length=150, null=True, blank=True, verbose_name="شرکت متبوع")
+    address = models.TextField(null=True, blank=True, verbose_name="آدرس")
+    avatar = models.ImageField(upload_to='avatars/%Y/%m/', null=True, blank=True, verbose_name="تصویر پرسنلی")
+    blood_type = models.CharField(max_length=10, null=True, blank=True, verbose_name="گروه خونی")
+    emergency_contact = models.CharField(max_length=50, null=True, blank=True, verbose_name="شماره تماس اضطراری")
     
     assigned_warehouses = models.ManyToManyField('warehouses.Warehouse', related_name='assigned_users', blank=True)
     ui_preferences = models.JSONField(default=dict, blank=True)

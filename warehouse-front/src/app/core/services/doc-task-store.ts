@@ -58,7 +58,7 @@ export class DocTaskStore {
   async getMyTasks(warehouseId: number, userId: number): Promise<DocTask[]> {
     const rows = await offlineDb.docTasks
       .where('warehouse_id').equals(warehouseId).toArray();
-    return rows.filter((t: DocTask) => t.doc_worker === userId && !t._offlinePending === false || (t.doc_worker === userId));
+    return rows.filter((t: DocTask) => t.doc_worker === userId);
   }
 
   /** تسک‌های استخر (بدون کارشناس، در انتظار بررسی) */
@@ -117,13 +117,14 @@ export class DocTaskStore {
 
   /**
    * ارسال گروهی تسک‌های بررسی‌شده.
-   * وضعیت محلی خوش‌بینانه DOC_PROCESSED (یا DOC_MANAGER_REVIEW) می‌شود.
+   * وضعیت محلی خوش‌بینانه بر اساس skip_supervisor به DOC_MANAGER_REVIEW یا DOC_PROCESSED تبدیل می‌شود.
    */
   async submitTasks(tasks: DocTask[], userId: number): Promise<void> {
     const withSyncId = tasks.filter((t) => t.sync_id);
     for (const t of withSyncId) {
+      const nextStatus = t.skip_supervisor ? 'DOC_MANAGER_REVIEW' : 'DOC_PROCESSED';
       await offlineDb.docTasks.update(t.sync_id!, {
-        status: 'DOC_PROCESSED',
+        status: nextStatus,
         _offlinePending: true,
       });
     }
@@ -136,6 +137,37 @@ export class DocTaskStore {
         sync_ids: withSyncId.map((t) => t.sync_id),
       },
       { userId, entityType: 'doc_task_bulk' }
+    );
+
+    this.sync.processQueue();
+  }
+
+  /**
+   * بر عهده گرفتن گروهی تسک‌ها از استخر عمومی (Local-First Claim)
+   */
+  async claimTasks(tasks: DocTask[], userId: number, asRole: 'doc_worker' | 'doc_supervisor' = 'doc_worker'): Promise<void> {
+    const withSyncId = tasks.filter((t) => t.sync_id);
+    for (const t of withSyncId) {
+      const updateData: Partial<DocTask> & { _offlinePending: boolean } = {
+        _offlinePending: true
+      };
+      if (asRole === 'doc_worker') {
+        updateData.doc_worker = userId;
+      } else {
+        updateData.doc_supervisor = userId;
+      }
+      await offlineDb.docTasks.update(t.sync_id!, updateData);
+    }
+
+    await this.sync.enqueue(
+      'POST',
+      `${environment.apiUrl}/inventory/doc-tasks/claim_tasks/`,
+      {
+        task_ids: tasks.map((t) => t.id).filter((id) => !!id),
+        sync_ids: withSyncId.map((t) => t.sync_id),
+        as_role: asRole,
+      },
+      { userId, entityType: 'doc_task_claim' }
     );
 
     this.sync.processQueue();

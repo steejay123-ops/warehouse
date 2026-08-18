@@ -45,6 +45,7 @@ export interface AuthUserProfile {
   phone_number: string | null;
   operational_zone: string | null;
   supervisor_id: number | null;
+  avatar?: string | null;
   avatar_letter: string;
   department: string;
   role_titles: string[];

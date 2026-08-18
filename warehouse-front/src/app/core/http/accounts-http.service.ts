@@ -29,6 +29,11 @@ export interface User {
   national_code: string;
   phone_number: string;
   operational_zone: string;
+  company?: string;
+  address?: string;
+  avatar?: string | null;
+  blood_type?: string | null;
+  emergency_contact?: string | null;
   supervisor: number | null;
   is_active: boolean;
   groups: number[];
@@ -40,7 +45,7 @@ export interface User {
 
 export interface ImportResult {
   success: boolean;
-  summary: { total_rows: number; created: number; skipped: number };
+  summary: { total_rows: number; created: number; updated?: number; skipped: number };
   errors: { row: number; field: string; message: string }[];
 }
 
@@ -113,9 +118,10 @@ export class AccountsHttpService {
     return this.http.get(`${this.apiUrl}/auth/users/export_excel/`, { responseType: 'blob' });
   }
 
-  importUsersExcel(file: File): Observable<ImportResult> {
+  importUsersExcel(file: File, updateExisting: boolean = false): Observable<ImportResult> {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('update_existing', String(updateExisting));
     return this.http.post<ImportResult>(`${this.apiUrl}/auth/users/import_excel/`, formData);
   }
 
@@ -128,13 +134,35 @@ export class AccountsHttpService {
     return this.http.get(`${this.apiUrl}/auth/roles/export_excel/`, { responseType: 'blob' });
   }
 
-  importRolesExcel(file: File): Observable<ImportResult> {
+  importRolesExcel(file: File, updateExisting: boolean = false): Observable<ImportResult> {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('update_existing', String(updateExisting));
     return this.http.post<ImportResult>(`${this.apiUrl}/auth/roles/import_excel/`, formData);
   }
 
   downloadRolesTemplate(): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/auth/roles/download_template/`, { responseType: 'blob' });
+  }
+
+  // ── Avatar Management ────────────────────────────────────────────
+  updateMyAvatar(file: Blob): Observable<{ success: boolean; avatar: string; message: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file, 'avatar.webp');
+    return this.http.post<any>(`${this.apiUrl}/auth/users/me/avatar/`, formData);
+  }
+
+  deleteMyAvatar(): Observable<{ success: boolean; avatar: null; message: string }> {
+    return this.http.delete<any>(`${this.apiUrl}/auth/users/me/avatar/`);
+  }
+
+  updateUserAvatar(userId: number, file: Blob): Observable<{ success: boolean; avatar: string; message: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file, 'avatar.webp');
+    return this.http.post<any>(`${this.apiUrl}/auth/users/${userId}/avatar/`, formData);
+  }
+
+  deleteUserAvatar(userId: number): Observable<{ success: boolean; avatar: null; message: string }> {
+    return this.http.delete<any>(`${this.apiUrl}/auth/users/${userId}/avatar/`);
   }
 }

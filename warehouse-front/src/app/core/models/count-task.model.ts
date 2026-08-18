@@ -2,6 +2,7 @@ import { Item } from './item.model';
 
 export type CountTaskStatus = 
   | 'PENDING_COUNT'
+  | 'INITIAL_COUNT'
   | 'COUNTED'
   | 'SUPERVISOR_REJECTED'
   | 'MANAGER_REVIEW'
@@ -42,6 +43,8 @@ export interface CountTask {
   item_details?: Item;
   history?: CountTaskHistory[];
   is_blind?: boolean;
+  skip_supervisor?: boolean;
+  new_location?: string;
 
   // ─── فیلدهای Local-First ───
   /** شناسه پایدار سینک (کلید upsert در Dexie) */

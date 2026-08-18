@@ -183,32 +183,107 @@ export const offlineInterceptor: HttpInterceptorFn = (
     }
   };
 
-  const handleOfflineGet = (): Observable<any> => {
+  // ─── مدیریت GET با الگوی Stale-While-Revalidate (SWR) ───
+  const handleGetSWR = (): Observable<any> => {
     const cacheKey = req.urlWithParams;
+
     return from(syncService.getCachedEntry(cacheKey)).pipe(
-      switchMap(async (entry) => {
+      switchMap((entry) => {
+        // ۱. اگر داده در کش محلی IndexedDB موجود باشد (تحویل فوری ۰ میلی‌ثانیه):
         if (entry !== null) {
-          // ادغام با داده‌های صف
-          const merged = await mergeWithQueue(entry.response, req.url);
-          console.log(
-            `[OfflineInterceptor] 📦 خوانده شد از کش (+ ادغام): ${cacheKey}${entry.isStale ? ' — کهنه' : ''}`
+          return from(mergeWithQueue(entry.response, req.url)).pipe(
+            switchMap((merged) => {
+              console.log(
+                `[OfflineInterceptor] ⚡ تحویل آنی SWR از کش محلی (0ms): ${cacheKey}${entry.isStale ? ' (Stale)' : ''}`
+              );
+
+              // استعلام آرام و نامحسوس در پس‌زمینه (Background Revalidation)
+              if (network.isBrowserOnline) {
+                next(req)
+                  .pipe(
+                    timeout(10_000),
+                    catchError((err) => {
+                      if (err?.status && isServerUnreachable(err.status)) {
+                        network.reportServerUnreachable();
+                      }
+                      console.log(
+                        `[OfflineInterceptor] 🤫 استعلام پس‌زمینه بدون مزاحمت گذشت (سرور غیرقابل‌دسترس/آفلاین): ${req.url}`
+                      );
+                      return of(null);
+                    })
+                  )
+                  .subscribe(async (event) => {
+                    if (event instanceof HttpResponse && event.ok) {
+                      network.reportServerReachable();
+                      // به‌روزرسانی کش IndexedDB
+                      await syncService.cacheResponse(cacheKey, event.body);
+                      // ادغام با رکوردهای صف آفلاین
+                      const freshMerged = await mergeWithQueue(event.body, req.url);
+                      // اطلاع‌رسانی به کل برنامه جهت به‌روزرسانی زنده و هایلایت انیمیشنی
+                      syncService.notifyDataUpdated(req.url, freshMerged);
+                      console.log(`[OfflineInterceptor] 🔄 داده‌های جدید پس‌زمینه دریافت و منتشر شد: ${req.url}`);
+                    }
+                  });
+              }
+
+              return of(
+                new HttpResponse({
+                  body: merged,
+                  status: 200,
+                  statusText: entry.isStale ? 'OK (Offline SWR Cache - Stale)' : 'OK (Offline SWR Cache + Merged)',
+                  url: req.url,
+                })
+              );
+            })
           );
-          return new HttpResponse({
-            body: merged,
-            status: 200,
-            statusText: entry.isStale ? 'OK (Offline Cache - Stale)' : 'OK (Offline Cache + Merged)',
-            url: req.url,
-          });
         }
-        // کش خالی — خطای آفلاین (به صورت error پرتاب می‌شود، نه پاسخ موفق)
-        console.warn(`[OfflineInterceptor] ⚠️ کش موجود نیست: ${cacheKey}`);
+
+        // ۲. اگر در کش داده‌ای نباشد (بازدید اول):
+        if (network.isBrowserOnline) {
+          return next(req).pipe(
+            timeout(10_000),
+            tap((event) => {
+              if (event instanceof HttpResponse && event.ok) {
+                network.reportServerReachable();
+                syncService.cacheResponse(cacheKey, event.body);
+              }
+            }),
+            catchError((error: HttpErrorResponse) => {
+              if (isServerUnreachable(error.status)) {
+                network.reportServerUnreachable();
+                console.warn(`[OfflineInterceptor] ⚠️ سرور در دسترس نیست و کش اولیه خالی است: ${req.url}`);
+                req.context.set(OFFLINE_NO_CACHE, true);
+                return throwError(
+                  () =>
+                    new HttpErrorResponse({
+                      error: {
+                        detail:
+                          'ارتباط با سرور برقرار نشد و داده‌ای در حافظه آفلاین موجود نیست. لطفاً اتصال شبکه را بررسی نمایید.',
+                      },
+                      status: 503,
+                      statusText: 'Offline - No Cache',
+                      url: req.url,
+                    })
+                );
+              }
+              network.reportServerReachable();
+              return throwError(() => error);
+            })
+          );
+        }
+
+        // ۳. حالت کاملاً آفلاین و بدون کش قبلی
+        console.warn(`[OfflineInterceptor] ⚠️ آفلاین کامل و کش موجود نیست: ${cacheKey}`);
         req.context.set(OFFLINE_NO_CACHE, true);
-        throw new HttpErrorResponse({
-          error: { detail: 'داده‌ای در حافظه آفلاین یافت نشد. لطفاً ابتدا در حالت آنلاین داده‌ها را بارگذاری کنید.' },
-          status: 503,
-          statusText: 'Offline - No Cache',
-          url: req.url,
-        });
+        return throwError(
+          () =>
+            new HttpErrorResponse({
+              error: { detail: 'دستگاه در حالت آفلاین است و داده‌ای در حافظه محلی ذخیره نشده است.' },
+              status: 503,
+              statusText: 'Offline - No Cache',
+              url: req.url,
+            })
+        );
       })
     );
   };
@@ -253,76 +328,31 @@ export const offlineInterceptor: HttpInterceptorFn = (
   };
 
   // ─── مسیر اصلی ───
-  // نکته: تصمیم بر اساس وضعیت *مرورگر* گرفته می‌شود، نه وضعیت سرور.
-  // اگر سرور خاموش باشد (Lie-Fi) همین درخواست خودش probe است و
-  // نتیجه‌اش به NetworkStatusService گزارش می‌شود.
-  if (network.isBrowserOnline) {
-    // ─── حالت آنلاین (با محافظت از Lie-Fi) ───
-    //
-    // روی اینترنت بسیار کند یک GET ممکن است هرگز نه موفق شود نه رد؛ کاربر فقط
-    // اسپینر می‌بیند در حالی که نسخه کش‌شده آماده است. مهلت را به status 0
-    // ترجمه می‌کنیم تا catchError پایین‌تر همان مسیر Lie-Fi را برود و از کش بخواند.
-    //
-    // فقط GET: قطع کردن یک POST/PATCH تضمین نمی‌کند سرور آن را ندیده باشد،
-    // و صف‌کردنش باعث ارسال دوباره و رکورد تکراری می‌شود.
-    const upstream =
-      req.method === 'GET'
-        ? next(req).pipe(
-            timeout(SLOW_NETWORK_TIMEOUT_MS),
-            catchError((error: any) => {
-              if (error?.name !== 'TimeoutError') return throwError(() => error);
-              console.warn(
-                `[OfflineInterceptor] 🐌 شبکه کند — مهلت ${SLOW_NETWORK_TIMEOUT_MS}ms تمام شد: ${req.url}`
-              );
-              return throwError(
-                () =>
-                  new HttpErrorResponse({
-                    status: 0,
-                    statusText: 'Slow Network Timeout',
-                    url: req.url,
-                  })
-              );
-            })
-          )
-        : next(req);
+  if (req.method === 'GET') {
+    return handleGetSWR();
+  }
 
-    return upstream.pipe(
+  // ─── متدهای تغییری (POST / PUT / PATCH / DELETE) ───
+  if (network.isBrowserOnline) {
+    return next(req).pipe(
       tap((event) => {
         if (event instanceof HttpResponse) {
-          // هر پاسخی از سرور یعنی سرور در دسترس است
           network.reportServerReachable();
-
-          // برای GET پاسخ را کش می‌کنیم
-          if (req.method === 'GET' && event.ok) {
-            const cacheKey = req.urlWithParams;
-            syncService.cacheResponse(cacheKey, event.body);
-          }
         }
       }),
       catchError((error: HttpErrorResponse) => {
-        // اگر به بک‌اند نرسیدیم (Lie-Fi: سرور قطع ولی مرورگر فکر می‌کند آنلاینیم)
         if (isServerUnreachable(error.status)) {
           network.reportServerUnreachable();
           console.warn(
-            `[OfflineInterceptor] 🌐 Lie-Fi detected (status ${error.status})! ${req.method} ${req.url}. Falling back to offline.`
+            `[OfflineInterceptor] 🌐 خطای اتصال در متد تغییری (${error.status})! ذخیره در صف آفلاین: ${req.method} ${req.url}`
           );
-          if (req.method === 'GET') {
-            return handleOfflineGet();
-          } else {
-            return handleOfflineMutation();
-          }
+          return handleOfflineMutation();
         }
-        // خطای HTTP واقعی (400/403/500 و ...) یعنی سرور پاسخ داده و در دسترس است
         network.reportServerReachable();
         return throwError(() => error);
       })
     );
   }
 
-  // ─── حالت کاملاً آفلاین ───
-  if (req.method === 'GET') {
-    return handleOfflineGet();
-  } else {
-    return handleOfflineMutation();
-  }
+  return handleOfflineMutation();
 };

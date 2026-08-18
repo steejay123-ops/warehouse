@@ -43,8 +43,16 @@ export class CountTaskApiService {
     return this.api.post<{ message: string }>(`${this.endpoint}/${id}/reject/`, { note });
   }
 
+  bulkReject(taskIds: number[], note: string): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_reject/`, { task_ids: taskIds, note });
+  }
+
   managerReject(id: number | string, note: string): Observable<{ message: string }> {
     return this.api.post<{ message: string }>(`${this.endpoint}/${id}/manager_reject/`, { note });
+  }
+
+  bulkManagerReject(taskIds: number[], note: string): Observable<{ message: string }> {
+    return this.api.post<{ message: string }>(`${this.endpoint}/bulk_manager_reject/`, { task_ids: taskIds, note });
   }
 
   getExportColumns(): Observable<{ key: string; label: string }[]> {

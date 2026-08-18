@@ -34,9 +34,20 @@ export class AuthService {
     return u ? `${u.first_name} ${u.last_name}` : '';
   });
   readonly userAvatar = computed(() => this._user()?.avatar_letter ?? '');
+  readonly userAvatarUrl = computed(() => this._user()?.avatar ?? null);
   readonly userDepartment = computed(() => this._user()?.department ?? '');
   readonly userRoleTitles = computed(() => this._user()?.role_titles ?? []);
   readonly userPermissions = computed(() => this._user()?.permissions ?? []);
+
+  updateUserAvatar(avatarUrl: string | null) {
+    const current = this._user();
+    if (current) {
+      const finalAvatar = avatarUrl ? (avatarUrl.includes('?') ? avatarUrl : `${avatarUrl}?t=${Date.now()}`) : null;
+      const updated = { ...current, avatar: finalAvatar };
+      this._user.set(updated);
+      localStorage.setItem(USER_KEY, JSON.stringify(updated));
+    }
+  }
 
   /** Mock database — فقط در حالت useMockData */
   private readonly mockUsers: Record<string, any> = {

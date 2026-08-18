@@ -4,7 +4,7 @@ import { offlineDb } from './offline-db';
 import { OfflineSyncService } from './offline-sync.service';
 import { SyncPullService } from './sync-pull.service';
 import { environment } from '../../../environments/environment';
-import { CountTask } from '../models/count-task.model';
+import { CountTask, CountTaskStatus } from '../models/count-task.model';
 
 /**
  * CountTaskStore — مخزن Local-First تسک‌های شمارش (فاز ۲)
@@ -92,25 +92,31 @@ export class CountTaskStore {
   // ════════════════════════════════════════════
 
   /**
-   * ذخیرهٔ پیش‌نویس شمارش — status تغییری نمی‌کند.
+   * ذخیرهٔ پیش‌نویس شمارش — در صورت وجود مقدار و وضعیت PENDING_COUNT، به INITIAL_COUNT تغییر می‌یابد.
    * baseUpdatedAt = نسخه‌ای که کاربر رویش تغییر داده → سرور تداخل را 409 می‌کند.
    */
   async saveDraft(
     task: CountTask,
-    changes: { counted_balance: string | null; counter_note: string },
+    changes: { counted_balance: string | null; counter_note: string; status?: CountTaskStatus },
     userId: number
   ): Promise<void> {
     if (!task.sync_id) throw new Error('sync_id missing');
 
-    await offlineDb.countTasks.update(task.sync_id, {
+    const newStatus = changes.status || (task.status === 'PENDING_COUNT' && changes.counted_balance !== null ? 'INITIAL_COUNT' : task.status);
+    const updatePayload = {
       ...changes,
+      status: newStatus,
+    };
+
+    await offlineDb.countTasks.update(task.sync_id, {
+      ...updatePayload,
       _offlinePending: true,
     });
 
     await this.sync.enqueue(
       'PATCH',
       `${environment.apiUrl}/inventory/count-tasks/${task.id}/`,
-      { ...changes, base_updated_at: task.updated_at },
+      { ...updatePayload, base_updated_at: task.updated_at },
       {
         userId,
         entityType: 'count_task',

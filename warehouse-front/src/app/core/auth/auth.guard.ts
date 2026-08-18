@@ -31,6 +31,17 @@ export const AuthGuard: CanActivateFn = (route, state) => {
   const auth = inject(AuthService);
   const router = inject(Router);
 
+  // اگر URL حاوی هش verify-card باشد (مثلاً از لینک‌های قدیمی یا اسکن با #)، مستقیماً بدون لاگین هدایت شود
+  if (typeof window !== 'undefined' && window.location.hash) {
+    const hash = window.location.hash;
+    const match = hash.match(/#\/?verify-card(?:\/([^/?#]+))?/);
+    if (match) {
+      const code = match[1];
+      const targetUrl = code ? `/verify-card/${code}` : '/verify-card';
+      return router.parseUrl(targetUrl);
+    }
+  }
+
   if (auth.isLoggedIn()) {
     const user = auth.user();
     if (user?.requires_password_change) {

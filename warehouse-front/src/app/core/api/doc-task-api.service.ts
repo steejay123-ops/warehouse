@@ -76,4 +76,34 @@ export class DocTaskApiService {
       { task_ids: taskIds, note }
     );
   }
+
+  /** دریافت ستون‌های خروجی اکسل */
+  getExportColumns(params?: any): Observable<{key: string, label: string}[]> {
+    return this.http.get<{key: string, label: string}[]>(`${environment.apiUrl}/${this.endpoint}/get_export_columns/`, { params: params as any });
+  }
+
+  /** دریافت فایل اکسل */
+  exportExcel(payload: any): Observable<Blob> {
+    return this.http.post(
+      `${environment.apiUrl}/${this.endpoint}/export_excel/`,
+      payload,
+      { responseType: 'blob' }
+    );
+  }
+
+  /** دانلود قالب اکسل نمونه آزمایشی با فیلدهای داینامیک و سلول‌های کشویی */
+  downloadTemplate(warehouseId?: number | string | null): Observable<Blob> {
+    const params: any = {};
+    if (warehouseId && strVal(warehouseId) !== 'ALL' && strVal(warehouseId) !== '-1') {
+      params.warehouse_id = warehouseId;
+    }
+    return this.http.get(
+      `${environment.apiUrl}/${this.endpoint}/download_template/`,
+      { params, responseType: 'blob' }
+    );
+  }
+}
+
+function strVal(v: any): string {
+  return v !== null && v !== undefined ? String(v) : '';
 }

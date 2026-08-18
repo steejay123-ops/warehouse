@@ -114,6 +114,17 @@ export class OfflineSyncService {
   private _rejected$ = new Subject<SyncErrorEntry>();
   readonly rejected$ = this._rejected$.asObservable();
 
+  /**
+   * جریان اطلاع‌رسانی بروزرسانی زنده داده‌ها از سرور در پس‌زمینه (Stale-While-Revalidate)
+   */
+  private _liveDataUpdates$ = new Subject<{ url: string; data: any; timestamp: number }>();
+  readonly liveDataUpdates$ = this._liveDataUpdates$.asObservable();
+
+  /** انتشار تغییرات داده‌ای دریافت شده از استعلام پس‌زمینه */
+  notifyDataUpdated(url: string, data: any): void {
+    this._liveDataUpdates$.next({ url, data, timestamp: Date.now() });
+  }
+
   private constructor() {}
 
   /** دریافت نمونه سینگلتون */

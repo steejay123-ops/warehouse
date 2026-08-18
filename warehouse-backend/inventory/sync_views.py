@@ -174,10 +174,12 @@ class SyncPullView(APIView):
 
     def _build_queryset(self, model_key, warehouse_id, user, full_access):
         if model_key == 'dynamic_fields':
-            return ItemFieldDefinition.all_objects.filter(warehouse_id=warehouse_id)
+            return ItemFieldDefinition.all_objects.filter(warehouse_id=warehouse_id).select_related('created_by')
 
         if model_key == 'items':
-            base = Item.all_objects.filter(warehouse_id=warehouse_id)
+            base = Item.all_objects.filter(warehouse_id=warehouse_id).select_related(
+                'warehouse', 'created_by', 'modified_by'
+            )
             if full_access:
                 return base
             # شمارشگر: فقط آیتم‌های تسک‌های خودش/استخر + همه tombstoneها (فقط sync_id)
@@ -191,9 +193,10 @@ class SyncPullView(APIView):
 
         if model_key == 'doc_tasks':
             base = DocTask.objects.filter(item__warehouse_id=warehouse_id).select_related(
-                'item', 'doc_worker', 'doc_supervisor', 'assigned_manager', 'created_by', 'modified_by'
+                'item', 'item__warehouse', 'item__created_by', 'item__modified_by',
+                'doc_worker', 'doc_supervisor', 'assigned_manager', 'created_by', 'modified_by'
             ).prefetch_related(
-                Prefetch('history', queryset=DocTaskHistory.objects.order_by('created_at'))
+                Prefetch('history', queryset=DocTaskHistory.objects.order_by('created_at').select_related('action_by'))
             )
             if full_access:
                 return base
@@ -205,9 +208,10 @@ class SyncPullView(APIView):
 
         # count_tasks
         base = CountTask.all_objects.filter(item__warehouse_id=warehouse_id).select_related(
-            'item', 'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
+            'item', 'item__warehouse', 'item__created_by', 'item__modified_by',
+            'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
         ).prefetch_related(
-            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at'))
+            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by'))
         )
         if full_access:
             return base
@@ -218,14 +222,14 @@ class SyncPullView(APIView):
         )
 
     def _serialize(self, model_key, obj, blind):
-        if model_key == 'doc_tasks':
-            return DocTaskSerializer(obj).data
-        if obj.is_deleted:
+        if getattr(obj, 'is_deleted', False):
             return {
-                'sync_id': str(obj.sync_id) if obj.sync_id else None,
+                'sync_id': str(obj.sync_id) if getattr(obj, 'sync_id', None) else None,
                 'is_deleted': True,
                 'updated_at': obj.updated_at.isoformat(),
             }
+        if model_key == 'doc_tasks':
+            return DocTaskSerializer(obj).data
         if model_key == 'dynamic_fields':
             return ItemFieldDefinitionSerializer(obj).data
         if model_key == 'items':
@@ -234,4 +238,5 @@ class SyncPullView(APIView):
                 data.pop('inventory', None)
                 data.pop('bal4miv', None)
             return data
-        return CountTaskSerializer(obj).data
+        return CountTaskSerializer(obj, context={'is_blind': blind}).data
+

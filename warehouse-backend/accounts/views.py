@@ -35,16 +35,18 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         return qs
 
     def get_permissions(self):
-        from rest_framework.permissions import IsAuthenticated
+        from rest_framework.permissions import IsAuthenticated, AllowAny
         from .permissions import HasMenuAccess
         
-        if self.action in ['change_password', 'update_preferences']:
+        if self.action == 'verify_card':
+            permission_classes = [AllowAny()]
+        elif self.action in ['change_password', 'update_preferences', 'my_avatar']:
             permission_classes = [IsAuthenticated()]
         elif self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
             permission_classes = [HasMenuAccess('view_sys_users')]
         elif self.action in ['create', 'import_excel']:
             permission_classes = [HasMenuAccess('perm_usr_add')]
-        else: # update, partial_update, destroy, toggle_status
+        else: # update, partial_update, destroy, toggle_status, user_avatar
             permission_classes = [HasMenuAccess('perm_usr_edit')]
             
         return permission_classes
@@ -156,6 +158,64 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             return Response({'status': 'success', 'preferences': user.ui_preferences})
         return Response({'error': 'Invalid preferences format'}, status=400)
 
+    @action(detail=False, methods=['post', 'delete'], url_path='me/avatar')
+    def my_avatar(self, request):
+        """Update or delete the authenticated user's own avatar."""
+        from .avatar_utils import process_and_optimize_avatar, delete_user_avatar_file
+        user = request.user
+        
+        if request.method == 'DELETE':
+            delete_user_avatar_file(user)
+            user.avatar = None
+            user.save()
+            return Response({'success': True, 'avatar': None, 'message': 'تصویر پروفایل با موفقیت حذف شد.'})
+            
+        avatar_file = request.FILES.get('avatar')
+        if not avatar_file:
+            return Response({'error': 'فایل تصویری ارسال نشده است.'}, status=400)
+            
+        try:
+            optimized_file = process_and_optimize_avatar(avatar_file)
+            delete_user_avatar_file(user)
+            user.avatar = optimized_file
+            user.save()
+            return Response({
+                'success': True,
+                'avatar': user.avatar.url,
+                'message': 'تصویر پروفایل با موفقیت بروزرسانی شد.'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+    @action(detail=True, methods=['post', 'delete'], url_path='avatar')
+    def user_avatar(self, request, pk=None):
+        """Update or delete avatar for a specific user (admin action)."""
+        from .avatar_utils import process_and_optimize_avatar, delete_user_avatar_file
+        user = self.get_object()
+        
+        if request.method == 'DELETE':
+            delete_user_avatar_file(user)
+            user.avatar = None
+            user.save()
+            return Response({'success': True, 'avatar': None, 'message': 'تصویر کاربر با موفقیت حذف شد.'})
+            
+        avatar_file = request.FILES.get('avatar')
+        if not avatar_file:
+            return Response({'error': 'فایل تصویری ارسال نشده است.'}, status=400)
+            
+        try:
+            optimized_file = process_and_optimize_avatar(avatar_file)
+            delete_user_avatar_file(user)
+            user.avatar = optimized_file
+            user.save()
+            return Response({
+                'success': True,
+                'avatar': user.avatar.url,
+                'message': 'تصویر کاربر با موفقیت بروزرسانی شد.'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
     # ── Excel Import/Export Actions ──────────────────────────────────
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
@@ -172,7 +232,7 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def import_excel(self, request):
-        """Upload an Excel file and bulk-create users."""
+        """Upload an Excel file and bulk-create or update users."""
         from .excel_utils import parse_users_excel
         file = request.FILES.get('file')
         if not file:
@@ -181,19 +241,38 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if not file.name.endswith('.xlsx'):
             return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
 
-        result = parse_users_excel(file)
+        update_existing = request.POST.get('update_existing') in ('true', 'True', True, '1', 1) or request.data.get('update_existing') in ('true', 'True', True, '1', 1)
+        result = parse_users_excel(file, update_existing=update_existing)
 
         # If there are file-level errors (row=0), return immediately
         file_errors = [e for e in result['errors'] if e['row'] == 0]
         if file_errors:
-            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
+            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
 
         created_count = 0
+        updated_count = 0
         for row_data in result['valid_rows']:
+            is_update = row_data.pop('is_update', False)
+            user_id = row_data.pop('user_id', None)
             roles = row_data.pop('roles', [])
             warehouses = row_data.pop('warehouses', [])
-            password = row_data.get('national_code') or '123456'
 
+            if is_update and user_id:
+                user = CustomUser.objects.filter(id=user_id).first()
+                if user:
+                    for k, v in row_data.items():
+                        setattr(user, k, v)
+                    if request.user and request.user.is_authenticated:
+                        user.modified_by = request.user
+                    user.save()
+                    if roles:
+                        user.groups.set(roles)
+                    if warehouses:
+                        user.assigned_warehouses.set(warehouses)
+                    updated_count += 1
+                    continue
+
+            password = row_data.get('national_code') or '123456'
             user = CustomUser(**row_data)
             user.set_password(password)
             user.requires_password_change = True
@@ -207,15 +286,68 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 user.assigned_warehouses.set(warehouses)
             created_count += 1
 
-        total_rows = created_count + len(result['errors'])
+        total_rows = created_count + updated_count + len(result['errors'])
         return Response({
             'success': True,
             'summary': {
                 'total_rows': total_rows,
                 'created': created_count,
+                'updated': updated_count,
                 'skipped': len(result['errors'])
             },
             'errors': result['errors']
+        })
+
+    @action(detail=False, methods=['get'], url_path='verify_card')
+    def verify_card(self, request):
+        """Public verification endpoint for personnel ID card scanning."""
+        code = request.query_params.get('code', '').strip()
+        user_id = None
+        if code.upper().startswith('EMP-'):
+            try:
+                user_id = int(code[4:]) - 1000
+            except ValueError:
+                pass
+        elif code.isdigit():
+            user_id = int(code)
+            
+        user = None
+        if user_id is not None and user_id > 0:
+            user = CustomUser.objects.filter(id=user_id).first()
+        if not user and code:
+            user = CustomUser.objects.filter(national_code=code).first() or CustomUser.objects.filter(username=code).first()
+            
+        if not user:
+            return Response({'valid': False, 'message': 'پرسنل با این شناسه در سامانه یافت نشد.'}, status=404)
+            
+        roles = []
+        for g in user.groups.all():
+            try:
+                cr = g.customrole
+                roles.append({'id': cr.id, 'title': cr.title or cr.name, 'color': cr.color or '#4f46e5'})
+            except Exception:
+                roles.append({'id': g.id, 'title': g.name, 'color': '#4f46e5'})
+                
+        wh_names = list(user.assigned_warehouses.values_list('name', flat=True))
+        
+        avatar_url = user.avatar.url if user.avatar else None
+        
+        return Response({
+            'valid': True,
+            'is_active': user.is_active,
+            'id': user.id,
+            'personnel_code': f"EMP-{1000 + user.id}",
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'national_code': user.national_code or '---',
+            'phone_number': user.phone_number or '---',
+            'operational_zone': user.operational_zone or 'انبار مرکزی',
+            'company': user.company or 'فارس عــالیش',
+            'avatar': avatar_url,
+            'blood_type': user.blood_type or 'O+',
+            'emergency_contact': user.emergency_contact or user.phone_number or '۰۲۱-۸۸۹۹۰۰۱۱',
+            'roles': roles if roles else [{'id': 0, 'title': 'پرسنل عملیات انبار', 'color': '#4f46e5'}],
+            'assigned_warehouses': wh_names if wh_names else ['انبار مرکزی']
         })
 
 class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
@@ -246,7 +378,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def import_excel(self, request):
-        """Upload an Excel file and bulk-create roles."""
+        """Upload an Excel file and bulk-create or update roles."""
         from .roles_excel_utils import parse_roles_excel
         file = request.FILES.get('file')
         if not file:
@@ -255,40 +387,59 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if not file.name.endswith('.xlsx'):
             return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
 
-        result = parse_roles_excel(file)
+        update_existing = request.POST.get('update_existing') in ('true', 'True', True, '1', 1) or request.data.get('update_existing') in ('true', 'True', True, '1', 1)
+        result = parse_roles_excel(file, update_existing=update_existing)
 
         file_errors = [e for e in result['errors'] if e['row'] == 0]
         if file_errors:
-            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
+            return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
 
         created_count = 0
-        # Two-pass creation: first create roles without parents, then set parents
-        created_roles = {}
+        updated_count = 0
+        # Two-pass creation: first create/update roles without parents, then set parents
+        processed_roles = {}
         for row_data in result['valid_rows']:
+            is_update = row_data.pop('is_update', False)
+            role_id = row_data.pop('role_id', None)
             permissions = row_data.pop('permissions', [])
             parent_name = row_data.pop('parent_name', None)
+
+            if is_update and role_id:
+                role = CustomRole.objects.filter(id=role_id).first()
+                if role:
+                    role.title = row_data['title']
+                    role.color = row_data['color']
+                    role.save()
+                    if permissions:
+                        role.permissions.set(permissions)
+                    processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
+                    updated_count += 1
+                    continue
 
             role = CustomRole(name=row_data['name'], title=row_data['title'], color=row_data['color'])
             role.save()
             if permissions:
                 role.permissions.set(permissions)
-            created_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
+            processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
             created_count += 1
 
         # Second pass: resolve parents
-        for name, info in created_roles.items():
+        for name, info in processed_roles.items():
             if info['parent_name']:
-                parent = CustomRole.objects.filter(name=info['parent_name']).first()
-                if parent:
+                parent = CustomRole.objects.filter(name__iexact=info['parent_name']).first()
+                if not parent:
+                    parent = CustomRole.objects.filter(title__iexact=info['parent_name']).first()
+                if parent and parent.id != info['role'].id:
                     info['role'].parent = parent
                     info['role'].save()
 
-        total_rows = created_count + len(result['errors'])
+        total_rows = created_count + updated_count + len(result['errors'])
         return Response({
             'success': True,
             'summary': {
                 'total_rows': total_rows,
                 'created': created_count,
+                'updated': updated_count,
                 'skipped': len(result['errors'])
             },
             'errors': result['errors']

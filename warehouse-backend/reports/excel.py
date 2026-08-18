@@ -20,9 +20,6 @@ from decimal import Decimal
 
 import openpyxl
 from openpyxl.cell import WriteOnlyCell
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.views import Pane
 from django.db import connection
 from django.db.models import Q
 from django.utils import timezone
@@ -35,134 +32,62 @@ SYNC_ROW_LIMIT = 10_000
 CHUNK_SIZE = 2000
 WORKER_ALIVE_WINDOW = 15  # ثانیه — نبض تازه‌تر از این یعنی worker زنده است
 
-# ─── استایل‌ها (هم‌رنگ پالت indigo/slate رابط کاربری) ───
-_HEADER_FILL = PatternFill('solid', fgColor='4F46E5')
-_HEADER_FONT = Font(bold=True, color='FFFFFF', size=11)
-_KEY_FONT = Font(italic=True, color='94A3B8', size=9)
-_TITLE_FONT = Font(bold=True, size=13, color='1E293B')
-_ZEBRA_FILL = PatternFill('solid', fgColor='F1F5F9')
-_THIN = Side(style='thin', color='CBD5E1')
-_HEADER_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
-_CENTER = Alignment(horizontal='center', vertical='center')
-
-_NUMBER_FORMATS = {
-    'number': '#,##0.###',
-    'date': 'yyyy/mm/dd',
-    'datetime': 'yyyy/mm/dd hh:mm',
-}
-
-_COL_WIDTHS = {
-    'boolean': 10,
-    'number': 14,
-    'date': 14,
-    'datetime': 19,
-    'choice': 16,
-    'text': 25,
-}
-
-
-def _jalali_now_str():
-    now = timezone.localtime()
-    try:
-        import jdatetime
-        return jdatetime.datetime.fromgregorian(datetime=now).strftime('%Y/%m/%d %H:%M')
-    except ImportError:
-        return now.strftime('%Y-%m-%d %H:%M')
-
-
-def _cell_value(v):
-    if v is None:
-        return ''
-    if isinstance(v, bool):
-        return 'بله' if v else 'خیر'
-    if isinstance(v, (int, float, Decimal)):
-        return v
-    if isinstance(v, _dt.datetime):
-        # Excel از datetime آگاه از timezone پشتیبانی نمی‌کند
-        if timezone.is_aware(v):
-            v = timezone.localtime(v).replace(tzinfo=None)
-        return v
-    if isinstance(v, _dt.date):
-        return v
-    if hasattr(v, 'isoformat'):
-        return v.isoformat()
-    return str(v)
-
-
-def _styled_cell(ws, value, number_format=None, fill=None):
-    c = WriteOnlyCell(ws, value=value)
-    if number_format and not isinstance(value, str):
-        c.number_format = number_format
-    if fill is not None:
-        c.fill = fill
-    return c
+from common.excel_utils import (
+    HEADER_FILL, HEADER_FONT, KEY_FONT, ZEBRA_FILL, CENTER, 
+    NUMBER_FORMATS, get_cell_value, styled_cell, set_column_widths, freeze_header_panes
+)
 
 
 def _write_workbook(ws_target, qs, columns, progress_cb=None, total=0,
                     report_name='گزارش', zebra=False):
     """
-    نوشتن شیت کامل: عنوان + دو ردیف سربرگ (برچسب فارسی/کلید سیستمی) + داده.
+    نوشتن شیت کامل: دو ردیف سربرگ (برچسب فارسی/کلید سیستمی) + داده.
     zebra فقط برای نتایج کوچک (هزینه WriteOnlyCell به‌ازای هر سلول).
     """
-    # عرض ستون‌ها و فریز — الزاماً قبل از append اولین ردیف؛ در write_only
-    # عناصر cols/sheetViews فقط قبل از sheetData نوشته می‌شوند و مقدار
-    # ws.freeze_panes بی‌صدا گم می‌شود (openpyxl 3.1.5) → Pane مستقیم.
-    for i, c in enumerate(columns, start=1):
-        ws_target.column_dimensions[get_column_letter(i)].width = (
-            _COL_WIDTHS.get(c.get('type'), 25)
-        )
-    try:
-        ws_target.sheet_view.pane = Pane(
-            topLeftCell='A4', ySplit=3, state='frozen', activePane='bottomLeft',
-        )
-    except Exception:
-        pass  # پشتیبانی write_only بین نسخه‌ها فرق دارد — حیاتی نیست
+    set_column_widths(ws_target, columns, is_write_only=True)
+    freeze_header_panes(ws_target, row=3, is_write_only=True)
 
-    # ردیف ۱: عنوان (ادغام سلول در write_only ممکن نیست — فقط سلول اول)
-    title = _styled_cell(ws_target, f'{report_name} — {_jalali_now_str()}')
-    title.font = _TITLE_FONT
-    ws_target.append([title])
-
-    # ردیف ۲: برچسب فارسی
+    # ردیف ۱: برچسب فارسی
     header_row = []
     for c in columns:
-        cell = _styled_cell(ws_target, c['label'])
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
-        cell.border = _HEADER_BORDER
-        cell.alignment = _CENTER
+        cell = styled_cell(ws_target, c['label'], is_write_only=True)
+        cell.font = HEADER_FONT
+        cell.fill = HEADER_FILL
+        cell.alignment = CENTER
         header_row.append(cell)
     ws_target.append(header_row)
 
-    # ردیف ۳: کلید سیستمی (برای import/دیباگ)
+    # ردیف ۲: کلید سیستمی (برای import/دیباگ)
     key_row = []
     for c in columns:
-        cell = _styled_cell(ws_target, c['key'])
-        cell.font = _KEY_FONT
-        cell.alignment = _CENTER
+        cell = styled_cell(ws_target, c['key'], is_write_only=True)
+        cell.font = KEY_FONT
+        cell.alignment = CENTER
         key_row.append(cell)
     ws_target.append(key_row)
 
     keys = [c['key'] for c in columns]
-    formats = [_NUMBER_FORMATS.get(c.get('type')) for c in columns]
+    formats = [NUMBER_FORMATS.get(c.get('type')) for c in columns]
     needs_cell = [f is not None for f in formats]
 
     written = 0
     for row in qs.iterator(chunk_size=CHUNK_SIZE):
-        fill = _ZEBRA_FILL if (zebra and written % 2 == 1) else None
+        fill = ZEBRA_FILL if (zebra and written % 2 == 1) else None
         out = []
         for j, k in enumerate(keys):
-            v = _cell_value(row.get(k))
+            v = get_cell_value(row.get(k))
             if fill is not None or needs_cell[j]:
-                out.append(_styled_cell(ws_target, v, number_format=formats[j], fill=fill))
+                out.append(styled_cell(ws_target, v, number_format=formats[j], fill=fill, is_write_only=True))
             else:
                 out.append(v)
         ws_target.append(out)
+
         written += 1
         if progress_cb and written % CHUNK_SIZE == 0:
             progress_cb(written, total)
     if progress_cb:
         progress_cb(written, total)
+
 
     # فیلتر روی محدوده داده (سربرگ فیلتر = ردیف کلیدها) — بعد از داده مجاز است
     last_col = get_column_letter(len(columns)) if columns else 'A'

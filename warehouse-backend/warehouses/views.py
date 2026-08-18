@@ -4,12 +4,22 @@ from rest_framework.response import Response
 from .models import Warehouse, SystemSetting
 from .serializers import WarehouseSerializer
 
+from django.db.models import Count, Q
 from common.mixins import DeleteImpactMixin
 
 class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = Warehouse.objects.all()
     serializer_class = WarehouseSerializer
     pagination_class = None
+
+    def get_queryset(self):
+        return Warehouse.objects.annotate(
+            annotated_total_quantity=Count('items'),
+            annotated_counted_quantity=Count(
+                'items',
+                filter=~Q(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش'])
+            )
+        )
 
     def get_permissions(self):
         from rest_framework.permissions import IsAuthenticated
@@ -56,8 +66,10 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def import_excel(self, request):
-        """Upload an Excel file and bulk-create warehouses."""
+        """Upload an Excel file and bulk-create warehouses with isolated row transactions."""
         from .excel_utils import parse_warehouses_excel
+        from django.db import transaction
+
         file = request.FILES.get('file')
         if not file:
             return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فایلی انتخاب نشده است.'}]}, status=400)
@@ -72,23 +84,36 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
 
         created_count = 0
-        for row_data in result['valid_rows']:
-            wh = Warehouse(**row_data)
-            if request.user and request.user.is_authenticated:
-                wh.created_by = request.user
-            wh.save()
-            created_count += 1
+        errors = list(result['errors'])
 
-        total_rows = created_count + len(result['errors'])
+        for row_item in result['valid_rows']:
+            row_num = row_item['row_num']
+            row_data = row_item['data']
+            try:
+                with transaction.atomic():
+                    wh = Warehouse(**row_data)
+                    if request.user and request.user.is_authenticated:
+                        wh.created_by = request.user
+                        wh.modified_by = request.user
+                    wh.save()
+                    created_count += 1
+            except Exception as e:
+                errors.append({
+                    'row': row_num,
+                    'field': 'database',
+                    'message': f'خطا در ذخیره‌سازی انبار: {str(e)}'
+                })
+
+        total_rows = created_count + len(errors)
         return Response({
-            'success': True,
+            'success': created_count > 0,
             'summary': {
                 'total_rows': total_rows,
                 'created': created_count,
-                'skipped': len(result['errors'])
+                'skipped': len(errors)
             },
-            'errors': result['errors']
-        })
+            'errors': errors
+        }, status=200 if (created_count > 0 or not errors) else 400)
 
 class SettingsViewSet(viewsets.ViewSet):
     def get_permissions(self):
@@ -101,51 +126,90 @@ class SettingsViewSet(viewsets.ViewSet):
             from .services import get_all_settings
             return Response(get_all_settings(None))
         elif request.method == 'POST':
-            # Needs superadmin or perm_sys_settings
-            if not request.user.has_perm('accounts.perm_sys_settings') and not request.user.is_superuser:
-                return Response({'error': 'Unauthorized'}, status=403)
+            if not (request.user.is_superuser or request.user.has_perm('accounts.perm_sys_settings')):
+                return Response({'error': 'تنها مدیر ارشد سیستم مجاز به تغییر تنظیمات سراسری است.'}, status=403)
+
             data = request.data
-            for key, value in data.items():
-                SystemSetting.objects.update_or_create(
-                    key=key, warehouse=None,
-                    defaults={'value': value}
-                )
+            if not isinstance(data, dict):
+                return Response({'error': 'فرمت داده ارسالی باید دیکشنری (JSON Object) باشد.'}, status=400)
+
+            from django.db import transaction
+            from .services import clear_setting_cache
+
+            with transaction.atomic():
+                for key, value in data.items():
+                    SystemSetting.objects.update_or_create(
+                        key=key, warehouse=None,
+                        defaults={'value': value}
+                    )
+                    clear_setting_cache(key, None)
+
             return Response({'status': 'success'})
 
     @action(detail=False, methods=['get', 'post', 'delete'], url_path='warehouse/(?P<warehouse_id>[^/.]+)')
     def warehouse_settings(self, request, warehouse_id=None):
+        from django.shortcuts import get_object_or_404
+        from django.db import transaction
+        from .models import Warehouse, SystemSetting
+        from .services import get_all_settings, clear_setting_cache
+
+        try:
+            wh_id_int = int(warehouse_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+
+        warehouse = get_object_or_404(Warehouse, id=wh_id_int)
+        is_super = request.user.is_superuser
+        is_assigned = request.user.assigned_warehouses.filter(id=wh_id_int).exists()
+
         if request.method == 'GET':
-            from .services import get_all_settings
+            if not is_super and not is_assigned:
+                return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+
             effective_global = get_all_settings(None)
-            
-            wh_settings = SystemSetting.objects.filter(warehouse_id=warehouse_id)
+            wh_settings = SystemSetting.objects.filter(warehouse_id=warehouse.id)
             wh_dict = {s.key: s.value for s in wh_settings}
-            
+
             result = {}
             for k, v in effective_global.items():
                 if k in wh_dict:
                     result[k] = {'value': wh_dict[k], 'is_override': True}
                 else:
                     result[k] = {'value': v, 'is_override': False}
-                    
+
             return Response(result)
-            
+
         elif request.method == 'POST':
-            if not request.user.has_perm('accounts.perm_wh_edit') and not request.user.is_superuser:
-                return Response({'error': 'Unauthorized'}, status=403)
+            if not is_super and (not request.user.has_perm('accounts.perm_wh_edit') or not is_assigned):
+                return Response({'error': 'شما مجوز ویرایش تنظیمات این انبار را ندارید.'}, status=403)
+
             data = request.data
-            for key, value in data.items():
-                SystemSetting.objects.update_or_create(
-                    key=key, warehouse_id=warehouse_id,
-                    defaults={'value': value}
-                )
+            if not isinstance(data, dict):
+                return Response({'error': 'فرمت داده ارسالی باید دیکشنری باشد.'}, status=400)
+
+            with transaction.atomic():
+                for key, value in data.items():
+                    SystemSetting.objects.update_or_create(
+                        key=key, warehouse_id=warehouse.id,
+                        defaults={'value': value}
+                    )
+                    clear_setting_cache(key, warehouse.id)
+
             return Response({'status': 'success'})
-            
+
         elif request.method == 'DELETE':
-            if not request.user.has_perm('accounts.perm_wh_edit') and not request.user.is_superuser:
-                return Response({'error': 'Unauthorized'}, status=403)
+            if not is_super and (not request.user.has_perm('accounts.perm_wh_edit') or not is_assigned):
+                return Response({'error': 'شما مجوز حذف تنظیمات این انبار را ندارید.'}, status=403)
+
             keys = request.data.get('keys', [])
-            SystemSetting.objects.filter(warehouse_id=warehouse_id, key__in=keys).delete()
+            if not isinstance(keys, list):
+                return Response({'error': 'کلیدهای حذف باید به صورت آرایه (List) ارسال شوند.'}, status=400)
+
+            with transaction.atomic():
+                SystemSetting.objects.filter(warehouse_id=warehouse.id, key__in=keys).delete()
+                for k in keys:
+                    clear_setting_cache(k, warehouse.id)
+
             return Response({'status': 'success'})
 
 class PublicConfigViewSet(viewsets.ViewSet):

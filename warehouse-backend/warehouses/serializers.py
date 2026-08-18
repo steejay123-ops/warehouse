@@ -11,10 +11,13 @@ class WarehouseSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_total_quantity(self, obj):
+        if hasattr(obj, 'annotated_total_quantity'):
+            return obj.annotated_total_quantity
         return obj.items.count()
 
     def get_counted_quantity(self, obj):
-        # We only count items that have actively been counted (and potentially approved)
+        if hasattr(obj, 'annotated_counted_quantity'):
+            return obj.annotated_counted_quantity
         return obj.items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
 
     def get_percent(self, obj):

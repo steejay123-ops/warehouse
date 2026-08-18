@@ -80,6 +80,8 @@ class CountTaskSerializer(serializers.ModelSerializer):
 
     def get_is_blind(self, obj):
         """آیا شمارش کور فعال است؟"""
+        if self.context and 'is_blind' in self.context:
+            return bool(self.context['is_blind'])
         from warehouses.services import get_setting
         wh_id = obj.item.warehouse_id if obj.item else None
         blind_mode = get_setting('blind_counting', wh_id)
@@ -87,14 +89,23 @@ class CountTaskSerializer(serializers.ModelSerializer):
 
     def get_item_details(self, obj):
         """اگر شمارش کور فعال باشد، inventory (موجودی) از پاسخ حذف شود"""
-        data = ItemSerializer(obj.item).data
-        from warehouses.services import get_setting
-        wh_id = obj.item.warehouse_id if obj.item else None
-        blind_mode = get_setting('blind_counting', wh_id)
-        if blind_mode == 'blind':
+        if not obj.item:
+            return None
+        data = ItemSerializer(obj.item, context=self.context).data
+        is_blind = False
+        if self.context and 'is_blind' in self.context:
+            is_blind = bool(self.context['is_blind'])
+        else:
+            from warehouses.services import get_setting
+            wh_id = obj.item.warehouse_id if obj.item else None
+            blind_mode = get_setting('blind_counting', wh_id)
+            is_blind = (blind_mode == 'blind')
+        if is_blind:
             data.pop('inventory', None)
             data.pop('bal4miv', None)
+            data.pop('balance', None)
         return data
+
 class DocTaskHistorySerializer(serializers.ModelSerializer):
     action_by_name = serializers.SerializerMethodField()
 
@@ -135,4 +146,45 @@ class DocTaskSerializer(serializers.ModelSerializer):
         return None
 
     def get_item_details(self, obj):
-        return ItemSerializer(obj.item).data
+        if not obj.item:
+            return None
+        return ItemSerializer(obj.item, context=self.context).data
+
+    def to_internal_value(self, data):
+        data = data.copy() if hasattr(data, 'copy') else dict(data)
+
+        # تبدیل امن تاریخ شمسی و مقادیر خالی به فرمت استاندارد
+        inv_date = data.get('invoice_date')
+        if inv_date is not None:
+            if inv_date == '' or inv_date == 'null':
+                data['invoice_date'] = None
+            elif isinstance(inv_date, str):
+                inv_date_str = inv_date.strip()
+                import re
+                jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
+                if jalali_match:
+                    y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
+                    if 1300 <= y <= 1500:
+                        try:
+                            import jdatetime
+                            g_date = jdatetime.date(y, m, d).togregorian()
+                            data['invoice_date'] = g_date.strftime('%Y-%m-%d')
+                        except Exception:
+                            pass
+                    elif 1900 <= y <= 2100:
+                        data['invoice_date'] = f"{y:04d}-{m:02d}-{d:02d}"
+
+        # تبدیل مقادیر خالی فیلدهای عددی و انتخابی به None
+        nullable_fields = [
+            'price_amount', 'similar_unit_price', 'total_value',
+            'invoice_page', 'page_row', 'currency', 'invoice_type',
+            'added_rti_no', 'inv_rti_number', 'doc_supplier', 'folder_address',
+            'worker_note', 'supervisor_note', 'manager_note'
+        ]
+        for f in nullable_fields:
+            if f in data and (data[f] == '' or data[f] == 'null'):
+                data[f] = None
+
+        return super().to_internal_value(data)
+
+

@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
@@ -17,6 +18,7 @@ from .models import CountTask, DocTask
 from django.db.models import Q
 from django.utils import timezone
 import openpyxl
+import uuid
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import PatternFill
 import json
@@ -221,12 +223,12 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess
-        from rest_framework.permissions import AllowAny
+        from rest_framework.permissions import AllowAny, IsAuthenticated
         
         if self.action in ['download_import_log', 'download_template']:
             permission_classes = [AllowAny()]
-        elif self.action in ['list', 'retrieve']:
-            permission_classes = [HasMenuAccess('view_wh_docs') | HasMenuAccess('view_sys_counter')]
+        elif self.action in ['list', 'retrieve', 'dashboard_stats']:
+            permission_classes = [IsAuthenticated()]
         elif self.action == 'bulk_assign':
             permission_classes = [HasMenuAccess('perm_rec_dispatch')]
         elif self.action in ['export_excel', 'export_excel_mt']: # I'll just secure export here in case it's added
@@ -235,7 +237,9 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             permission_classes = [HasMenuAccess('perm_rec_import')]
         elif self.action in ['reject', 'manager_reject']:
             permission_classes = [HasMenuAccess('perm_rec_recount')]
-        else: # create, update, partial_update, destroy, bulk_update, etc
+        elif self.action in ['update', 'partial_update']:
+            permission_classes = [HasMenuAccess('perm_wh_edit') | HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor')]
+        else: # create, destroy, bulk_update, etc
             permission_classes = [HasMenuAccess('perm_wh_edit')]
             
         return permission_classes
@@ -486,9 +490,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         manager_id = request.data.get('manager_assignee')
         
         # Document Phase Assignments
-        doc_assignee_id = request.data.get('doc_assignee') # Used to be string, now expected to be ID or null
-        doc_supervisor_id = request.data.get('doc_supervisor_assignee')
-        doc_manager_id = request.data.get('doc_manager_assignee')
+        doc_assignee_id = request.data.get('doc_assignee') or request.data.get('doc_assignee_id')
+        doc_supervisor_id = request.data.get('doc_supervisor_assignee') or request.data.get('doc_supervisor_id')
+        doc_manager_id = request.data.get('doc_manager_assignee') or request.data.get('doc_manager_id')
+
         
         field_status = request.data.get('field_status')
         doc_status = request.data.get('doc_status')
@@ -507,7 +512,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 }, status=200)
                 
         # هشدار برای ارسال مجدد کالایی که DocTask دارد
-        if doc_status == 'checking' and not force:
+        if doc_status in ['checking', 'processing'] and not force:
             from .models import DocTask
             existing_doc_tasks = DocTask.objects.filter(item__in=items).count()
             if existing_doc_tasks > 0:
@@ -567,13 +572,14 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if doc_status is not None:
             update_data['doc_status'] = doc_status
             
+        items_list = list(items)
         if update_data:
             update_data['updated_at'] = timezone.now()
             update_data['modified_by'] = request.user
             items.update(**update_data)
             
         from warehouses.services import get_setting
-        first_item = items.first()
+        first_item = items_list[0] if items_list else None
         wh_id = first_item.warehouse_id if first_item else None
         
         # Create CountTasks if it's a field dispatch
@@ -584,7 +590,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             req_supervisor = get_setting('require_supervisor_approval', wh_id)
             
             tasks_to_create = []
-            for item in items:
+            for item in items_list:
                 tasks_to_create.append(CountTask(
                     item=item,
                     counter=counter_user,
@@ -602,12 +608,50 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         # Create DocTasks if it's a document dispatch
         if doc_status == 'processing':
             from .models import DocTask
+            import re
+            from datetime import date as _dt_date
             
             # بررسی تنظیم تایید سرپرست اسناد
             req_doc_supervisor = get_setting('require_doc_supervisor_approval', wh_id)
             
             doc_tasks_to_create = []
-            for item in items:
+            for item in items_list:
+                # تبدیل امن مقادیر اولیه فیلدهای مالی کالا
+                p_amount = item.price_amount
+                s_price = item.similar_unit_price
+                t_value = item.total_value
+                curr = item.currency if item.currency in ['IRR', 'USD', 'EUR', 'OTHER'] else None
+                inv_type = item.invoice_type if item.invoice_type in ['formal', 'domestic', 'foreign', 'consignment'] else None
+                
+                # صفحه و ردیف فاکتور
+                p_row = int(str(item.page_row).strip()) if item.page_row and str(item.page_row).strip().isdigit() else None
+                inv_page = int(str(item.invoice_page).strip()) if item.invoice_page and str(item.invoice_page).strip().isdigit() else None
+                
+                # مهر و امضا
+                stamp_val = bool(item.stamp) if isinstance(item.stamp, bool) else (str(item.stamp).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
+                sign_val = bool(item.signature) if isinstance(item.signature, bool) else (str(item.signature).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
+                
+                # تاریخ فاکتور
+                inv_date = None
+                if item.invoice_date:
+                    inv_date_str = str(item.invoice_date).strip()
+                    jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
+                    if jalali_match:
+                        y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
+                        if 1300 <= y <= 1500:
+                            try:
+                                import jdatetime
+                                inv_date = jdatetime.date(y, m, d).togregorian()
+                            except Exception:
+                                pass
+                        elif 1900 <= y <= 2100:
+                            try:
+                                inv_date = _dt_date(y, m, d)
+                            except Exception:
+                                pass
+                    elif isinstance(item.invoice_date, _dt_date):
+                        inv_date = item.invoice_date
+
                 doc_tasks_to_create.append(DocTask(
                     item=item,
                     doc_worker=doc_worker_user,
@@ -615,14 +659,29 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     skip_supervisor=doc_skip_supervisor,
                     assigned_manager=doc_manager_user,
                     status='PENDING_DOC',
+                    price_amount=p_amount,
+                    similar_unit_price=s_price,
+                    total_value=t_value,
+                    currency=curr,
+                    invoice_type=inv_type,
+                    invoice_date=inv_date,
+                    inv_rti_number=item.inv_rti_number or None,
+                    added_rti_no=item.added_rti_no or None,
+                    page_row=p_row,
+                    invoice_page=inv_page,
+                    doc_supplier=item.doc_supplier or None,
+                    folder_address=item.folder_address or None,
+                    stamp=stamp_val,
+                    signature=sign_val,
                     created_by=request.user,
-                    modified_by=request.user
+                    modified_by=request.user,
+                    sync_id=uuid.uuid4()
                 ))
             if doc_tasks_to_create:
                 DocTask.objects.bulk_create(doc_tasks_to_create)
                 broadcast_doc_task_update()
             
-        return Response({'status': 'success', 'updated': items.count()})
+        return Response({'status': 'success', 'updated': len(items_list)})
 
     @action(detail=False, methods=['post'])
     def bulk_tag(self, request):
@@ -1400,6 +1459,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard_stats(self, request):
+        import jdatetime
         from datetime import timedelta
         from django.utils import timezone
         from django.db.models import Q
@@ -1409,18 +1469,19 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if project_id and project_id != 'ALL':
             items = items.filter(warehouse_id=project_id)
             
-        now = timezone.now()
+        now = timezone.localtime(timezone.now()) if timezone.is_aware(timezone.now()) else timezone.now()
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
         # Overall
         total_quantity = items.count()
-        printed_tags = items.filter(tag_status__in=['printed', 'reprint']).count()
+        total_counted = items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
+        printed_tags = items.filter(tag_status__in=['printed', 'reprint', 'چاپ شده', 'چاپ مجدد']).count()
+        docs_approved = items.filter(doc_status='done').count()
         conflicts = items.filter(Q(has_conflict=True) | Q(field_status='recount')).count()
         done = items.filter(field_status='done', doc_status='done').count()
         
         # Days stats (last 7 days)
         weekly_data = []
-        days_name = ['دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنجشنبه', 'جمعه', 'شنبه', 'یکشنبه']
         
         for i in range(6, -1, -1):
             d_start = today_start - timedelta(days=i)
@@ -1428,16 +1489,15 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             
             day_items = items.filter(updated_at__gte=d_start, updated_at__lt=d_end)
             
-            # Approximation for daily stats based on updated_at
             c_count = day_items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
-            c_docs = day_items.exclude(doc_status__in=['waiting', 'processing']).count()
-            # For MT26 feed, doc_status='done' and field_status='done'
+            c_docs = day_items.filter(doc_status='done').count()
             c_feed = day_items.filter(field_status='done', doc_status='done').count()
             
-            day_idx = d_start.weekday()
+            jdt = jdatetime.datetime.fromgregorian(datetime=d_start)
+            day_label = 'امروز' if i == 0 else ('دیروز' if i == 1 else jdt.strftime('%A'))
             
             weekly_data.append({
-                'day': 'امروز' if i == 0 else ('دیروز' if i == 1 else days_name[day_idx]),
+                'day': day_label,
                 'count': c_count,
                 'docs': c_docs,
                 'feed': c_feed
@@ -1455,9 +1515,12 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         return Response({
             'overall': {
                 'total': total_quantity,
+                'counted': total_counted,
                 'printed': printed_tags,
+                'docs_approved': docs_approved,
                 'conflicts': conflicts,
-                'done': done
+                'done': done,
+                'ready_to_feed': max(0, total_counted - done)
             },
             'today': today_stats,
             'yesterday': yesterday_stats,
@@ -1489,8 +1552,10 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             permission_classes = [HasMenuAccess('view_sys_counter')]
         elif self.action == 'bulk_approve':
             permission_classes = [HasMenuAccess('view_sys_supervisor')]
-        elif self.action in ['reject', 'manager_reject', 'bulk_manager_reject']:
-            permission_classes = [HasMenuAccess('perm_rec_recount')]
+        elif self.action in ['reject', 'bulk_reject']:
+            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review')]
+        elif self.action in ['manager_reject', 'bulk_manager_reject']:
+            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_manager_review')]
         elif self.action in ['bulk_manager_approve', 'bulk_cancel']:
             permission_classes = [HasMenuAccess('view_sys_manager_review')]
         else: # create, update, etc
@@ -1565,12 +1630,12 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 queryset = queryset.exclude(status='FINAL_APPROVED')
         else:
             # Fallback to permission checking if as_role is not provided
-            if user.is_superuser or user.has_perm('accounts.can_act_as_manager') or user.has_perm('inventory.can_act_as_manager'):
+            if user.is_superuser or user.has_perm('accounts.view_sys_manager_review') or user.has_perm('accounts.can_act_as_manager') or user.has_perm('inventory.can_act_as_manager'):
                 from django.db.models import Q
                 queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
-            elif user.has_perm('accounts.can_act_as_supervisor') or user.has_perm('inventory.can_act_as_supervisor'):
+            elif user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.can_act_as_supervisor') or user.has_perm('inventory.can_act_as_supervisor'):
                 queryset = queryset.filter(supervisor=user)
-            elif user.has_perm('accounts.can_act_as_counter') or user.has_perm('inventory.can_act_as_counter'):
+            elif user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.can_act_as_counter') or user.has_perm('inventory.can_act_as_counter'):
                 queryset = queryset.filter(counter=user)
             else:
                 queryset = CountTask.objects.none()
@@ -1614,7 +1679,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             valid_task_ids = list(tasks.values_list('id', flat=True))
             if not valid_task_ids:
                 broadcast_count_task_update()
-                return Response({'success': True, 'claimed_count': 0})
+                return Response({'success': False, 'claimed_count': 0, 'message': 'این کالا(ها) قبلاً توسط انبارگردان دیگری بر عهده گرفته شده است.'})
 
             from .models import Item
             item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
@@ -1656,7 +1721,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 note = updated_instance.manager_note
             elif new_status == 'SUPERVISOR_REJECTED':
                 note = updated_instance.supervisor_note
-            elif new_status == 'COUNTED':
+            elif new_status in ['COUNTED', 'INITIAL_COUNT']:
                 note = updated_instance.counter_note
                 
             CountTaskHistory.objects.create(
@@ -1672,6 +1737,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         user = request.user
         task_ids = request.data.get('task_ids', [])
         sync_ids = request.data.get('sync_ids', [])
+        warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
 
         # کلاینت آفلاین ممکن است فقط sync_id پایدار را داشته باشد
         if sync_ids:
@@ -1680,9 +1746,12 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             ))
 
         if task_ids:
-            tasks = CountTask.objects.filter(id__in=task_ids, counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+            tasks = CountTask.objects.filter(id__in=task_ids, counter=user, status__in=['PENDING_COUNT', 'INITIAL_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
         else:
-            tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+            tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'INITIAL_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
+
+        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
+            tasks = tasks.filter(item__warehouse_id=warehouse_id)
 
         first_task = tasks.first()
         if not first_task:
@@ -1701,14 +1770,27 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             return Response({'message': 'هیچ موردی برای ارسال یافت نشد.'})
             
         from warehouses.services import get_setting
-        req_sup_app = get_setting('require_supervisor_approval', first_task.item.warehouse_id)
+        wh_setting_cache = {}
+
+        def get_warehouse_req_sup(wh_id):
+            if wh_id not in wh_setting_cache:
+                wh_setting_cache[wh_id] = get_setting('require_supervisor_approval', wh_id)
+            return wh_setting_cache[wh_id]
         
         from .models import CountTaskHistory
         histories = []
         tasks_list = list(tasks)
+        counted_count = 0
+        manager_count = 0
         for task in tasks_list:
+            wh_id = task.item.warehouse_id if task.item else None
+            req_sup_app = get_warehouse_req_sup(wh_id)
             task_req_sup = req_sup_app and not task.skip_supervisor
             target_status = 'COUNTED' if task_req_sup else 'MANAGER_REVIEW'
+            if target_status == 'COUNTED':
+                counted_count += 1
+            else:
+                manager_count += 1
             histories.append(CountTaskHistory(
                 task=task,
                 action_by=user,
@@ -1726,7 +1808,12 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if histories:
             CountTaskHistory.objects.bulk_create(histories)
             
-        msg = f'{count} مورد برای سرپرست ارسال شد.' if target_status == 'COUNTED' else f'{count} مورد مستقیماً برای مدیر ارسال شد.'
+        if counted_count > 0 and manager_count > 0:
+            msg = f'{count} مورد ارسال شد ({counted_count} مورد به سرپرست و {manager_count} مورد مستقیم به مدیر).'
+        elif counted_count > 0:
+            msg = f'{count} مورد به سرپرست ارسال شد.'
+        else:
+            msg = f'{count} مورد مستقیماً به مدیر ارسال شد.'
         broadcast_count_task_update()
         return Response({'message': msg})
 
@@ -1850,19 +1937,6 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         
         from warehouses.services import get_setting
         
-        # بررسی سقف بازشماری (اصلاح ۵)
-        max_recounts = get_setting('max_recounts', task.item.warehouse_id)
-        if max_recounts is not None and max_recounts != -1:
-            from .models import CountTaskHistory
-            reject_count = CountTaskHistory.objects.filter(
-                task=task,
-                action_type__in=['MANAGER_REJECTED', 'SUPERVISOR_REJECTED']
-            ).count()
-            if reject_count >= int(max_recounts):
-                return Response({
-                    'error': f'سقف بازشماری ({max_recounts} بار) برای این کالا پر شده است.'
-                }, status=400)
-        
         # بسته به تنظیم سرپرست، تعیین مقصد
         req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
         
@@ -1894,19 +1968,104 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         return Response({'message': target_msg})
 
     @action(detail=False, methods=['post'])
+    def bulk_reject(self, request):
+        """رد گروهی توسط سرپرست و ارجاع به شمارشگر"""
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
+        
+        if not task_ids:
+            return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
+            
+        tasks = CountTask.objects.filter(id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED'])
+        
+        from .models import CountTaskHistory
+        histories = []
+        tasks_list = list(tasks)
+        for task in tasks_list:
+            task.supervisor_note = note
+            task.status = 'SUPERVISOR_REJECTED'
+            task.modified_by = user
+            task.updated_at = timezone.now()
+            histories.append(CountTaskHistory(
+                task=task,
+                action_by=user,
+                action_type='SUPERVISOR_REJECTED',
+                counted_balance=task.counted_balance,
+                note=note
+            ))
+            
+        if tasks_list:
+            CountTask.objects.bulk_update(tasks_list, ['status', 'supervisor_note', 'modified_by', 'updated_at'])
+        if histories:
+            CountTaskHistory.objects.bulk_create(histories)
+            
+        broadcast_count_task_update()
+        return Response({'message': f'{len(tasks_list)} مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
+
+    @action(detail=False, methods=['post'])
+    def bulk_manager_reject(self, request):
+        """رد گروهی توسط مدیر — ارجاع به سرپرست یا شمارشگر بر اساس تنظیمات انبار"""
+        user = request.user
+        task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
+        
+        if not note.strip():
+            return Response({'error': 'لطفاً علت بازشماری را بنویسید.'}, status=400)
+            
+        if not task_ids:
+            return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
+            
+        tasks = CountTask.objects.filter(id__in=task_ids, status='MANAGER_REVIEW').select_related('item')
+        
+        from warehouses.services import get_setting
+        from .models import CountTaskHistory
+        
+        histories = []
+        tasks_list = list(tasks)
+        for task in tasks_list:
+            req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
+            if req_supervisor and task.supervisor:
+                target_status = 'MANAGER_REJECTED'
+            else:
+                target_status = 'PENDING_COUNT'
+                
+            task.status = target_status
+            task.manager_note = note
+            task.counted_balance = None
+            task.modified_by = user
+            task.updated_at = timezone.now()
+            
+            histories.append(CountTaskHistory(
+                task=task,
+                action_by=user,
+                action_type='MANAGER_REJECTED',
+                counted_balance=None,
+                note=note
+            ))
+            
+        if tasks_list:
+            CountTask.objects.bulk_update(tasks_list, ['status', 'manager_note', 'counted_balance', 'modified_by', 'updated_at'])
+        if histories:
+            CountTaskHistory.objects.bulk_create(histories)
+            
+        broadcast_count_task_update()
+        return Response({'message': f'{len(tasks_list)} مورد با موفقیت رد شد و جهت بازشماری ارجاع داده شد.'})
+
+    @action(detail=False, methods=['post'])
     def bulk_cancel(self, request):
-        """لغو تخصیص گروهی — فقط رکوردهای PENDING_COUNT مجاز هستند."""
+        """لغو تخصیص گروهی — رکوردهای PENDING_COUNT و INITIAL_COUNT مجاز هستند."""
         task_ids = request.data.get('task_ids', [])
         if not task_ids:
             return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
 
         all_tasks = CountTask.objects.filter(id__in=task_ids)
-        eligible_tasks = all_tasks.filter(status='PENDING_COUNT')
+        eligible_tasks = all_tasks.filter(status__in=['PENDING_COUNT', 'INITIAL_COUNT'])
         ineligible_count = all_tasks.count() - eligible_tasks.count()
 
         if eligible_tasks.count() == 0:
             return Response(
-                {'error': 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» مجاز هستند.'},
+                {'error': 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» و «شمارش اولیه» مجاز هستند.'},
                 status=400
             )
 
@@ -1961,11 +2120,13 @@ class CountTaskViewSet(viewsets.ModelViewSet):
 
         STATUS_FA = {
             'PENDING_COUNT':      'در انتظار شمارش',
-            'COUNTED':            'شمارش شده',
+            'INITIAL_COUNT':      'آماده ارسال (پیش‌نویس)',
+            'COUNTED':            'شمارش شده (ارسال به سرپرست)',
             'SUPERVISOR_REVIEW':  'در بررسی سرپرست',
-            'SUPERVISOR_REJECTED':'رد شده توسط سرپرست',
+            'SUPERVISOR_APPROVED':'تایید سرپرست',
+            'SUPERVISOR_REJECTED':'رد شده توسط سرپرست (بازشماری)',
             'MANAGER_REVIEW':     'در بررسی مدیر',
-            'MANAGER_REJECTED':   'رد شده توسط مدیر',
+            'MANAGER_REJECTED':   'رد شده توسط مدیر (بازشماری)',
             'FINAL_APPROVED':     'تأیید نهایی',
         }
 
@@ -2037,6 +2198,16 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         else:
             selected_keys = all_keys
 
+        # بررسی وضعیت شمارش کور برای هر انبار جهت حفظ محرمانگی داده‌ها
+        from warehouses.services import get_setting
+        warehouse_blind_cache = {}
+
+        def check_is_blind(task):
+            wh_id = task.item.warehouse_id if task.item else None
+            if wh_id not in warehouse_blind_cache:
+                warehouse_blind_cache[wh_id] = (get_setting('blind_counting', wh_id) == 'blind')
+            return warehouse_blind_cache[wh_id]
+
         def get_cell(task, key):
             if key == 'warehouse_name':
                 if task.item and task.item.warehouse:
@@ -2063,9 +2234,18 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             elif key == 'counted_balance':
                 return task.counted_balance if task.counted_balance is not None else ''
             elif key == 'inventory':
-                return getattr(task.item, 'inventory', '') if task.item else ''
-            elif key == 'difference':
+                if check_is_blind(task):
+                    return ''
                 inv = getattr(task.item, 'inventory', None) if task.item else None
+                if inv is None and task.item:
+                    inv = getattr(task.item, 'balance', None) or getattr(task.item, 'bal4miv', '')
+                return inv if inv is not None else ''
+            elif key == 'difference':
+                if check_is_blind(task):
+                    return ''
+                inv = getattr(task.item, 'inventory', None) if task.item else None
+                if inv is None and task.item:
+                    inv = getattr(task.item, 'balance', None) or getattr(task.item, 'bal4miv', None)
                 cnt = task.counted_balance
                 if inv is not None and cnt is not None:
                     try:
@@ -2172,30 +2352,34 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename="count_tracking_export.xlsx"'
         return response
 
+def _create_doc_task_snapshot(task):
+    """ایجاد اسنپ‌شات از تمام مقادیر ۱۴ فیلد مالی و فیلدهای پویای تسک در لحظه عملیات"""
+    return {
+        'added_rti_no': task.added_rti_no,
+        'inv_rti_number': task.inv_rti_number,
+        'invoice_type': task.invoice_type,
+        'invoice_date': str(task.invoice_date) if task.invoice_date else None,
+        'invoice_page': task.invoice_page,
+        'page_row': task.page_row,
+        'doc_supplier': task.doc_supplier,
+        'total_value': str(task.total_value) if task.total_value is not None else None,
+        'price_amount': str(task.price_amount) if task.price_amount is not None else None,
+        'similar_unit_price': str(task.similar_unit_price) if task.similar_unit_price is not None else None,
+        'currency': task.currency,
+        'folder_address': task.folder_address,
+        'stamp': task.stamp,
+        'signature': task.signature,
+        'worker_note': task.worker_note,
+        'supervisor_note': task.supervisor_note,
+        'manager_note': task.manager_note,
+        'status': task.status,
+        'item_dynamic_data': task.item.dynamic_data if (task.item and getattr(task.item, 'dynamic_data', None)) else {}
+    }
+
+
 class DocTaskViewSet(viewsets.ModelViewSet):
     serializer_class = DocTaskSerializer
-
-    def get_permissions(self):
-        from accounts.permissions import HasMenuAccess
-        from rest_framework.permissions import IsAuthenticated
-        
-        # Similar permissions to counting but using doc permissions if they existed
-        # Actually for now, since we have the roles doc_worker, doc_supervisor, let's use the counting permissions for now, 
-        # or just allow IsAuthenticated and rely on  s_role filtering since roles are new.
-        if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks']:
-            permission_classes = [IsAuthenticated()]
-        elif self.action == 'bulk_submit':
-            permission_classes = [IsAuthenticated()]
-        elif self.action == 'bulk_approve':
-            permission_classes = [IsAuthenticated()]
-        elif self.action in ['reject', 'manager_reject', 'bulk_manager_reject']:
-            permission_classes = [IsAuthenticated()]
-        elif self.action in ['bulk_manager_approve', 'bulk_cancel']:
-            permission_classes = [IsAuthenticated()]
-        else:
-            permission_classes = [IsAuthenticated()]
-            
-        return permission_classes
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -2219,15 +2403,11 @@ class DocTaskViewSet(viewsets.ModelViewSet):
                 queryset = queryset.exclude(status='DOC_FINAL_APPROVED')
         else:
             # Fallback
-            if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists():
-                from django.db.models import Q
-                queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
-            elif user.groups.filter(name='doc_supervisor').exists():
-                queryset = queryset.filter(doc_supervisor=user)
-            elif user.groups.filter(name='doc_worker').exists():
-                queryset = queryset.filter(doc_worker=user)
+            from django.db.models import Q
+            if user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists() or user.has_perm('accounts.view_sys_manager_review'):
+                queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True) | Q(doc_worker=user) | Q(doc_supervisor=user))
             else:
-                queryset = DocTask.objects.none()
+                queryset = queryset.filter(Q(doc_worker=user) | Q(doc_supervisor=user) | Q(assigned_manager=user))
             
         return queryset
 
@@ -2255,35 +2435,88 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def claim_tasks(self, request):
         task_ids = request.data.get('task_ids', [])
+        sync_ids = request.data.get('sync_ids', [])
         as_role = request.data.get('as_role')
 
-        if not task_ids or not as_role:
+        if (not task_ids and not sync_ids) or not as_role:
             return Response({'error': 'لیست شناسه‌ها یا نقش ارسال نشده است.'}, status=400)
 
-        tasks = DocTask.objects.filter(id__in=task_ids)
+        from django.db.models import Q
+        q_filter = Q()
+        if task_ids:
+            q_filter |= Q(id__in=task_ids)
+        if sync_ids:
+            q_filter |= Q(sync_id__in=sync_ids)
+
+        tasks = DocTask.objects.filter(q_filter).select_related('item')
+        from .models import DocTaskHistory
 
         if as_role == 'doc_worker':
             tasks = tasks.filter(doc_worker__isnull=True, status='PENDING_DOC')
-            valid_task_ids = list(tasks.values_list('id', flat=True))
-            if not valid_task_ids:
+            valid_tasks = list(tasks)
+            if not valid_tasks:
                 return Response({'success': True, 'claimed_count': 0})
 
-            from .models import Item
-            item_ids = list(DocTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
+            valid_task_ids = [t.id for t in valid_tasks]
+            item_ids = [t.item_id for t in valid_tasks if t.item_id]
 
             # Update DocTasks
             updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_worker=request.user)
 
             # Update Item doc_assignee
             assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            from .models import Item
             Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name, updated_at=timezone.now())
+
+            # Log History
+            histories = [
+                DocTaskHistory(
+                    task=t,
+                    action_by=request.user,
+                    action_type='CLAIMED',
+                    note=f'بر عهده گرفته شد توسط کارشناس مالی ({assignee_name})',
+                    data_snapshot=_create_doc_task_snapshot(t)
+                ) for t in valid_tasks
+            ]
+            DocTaskHistory.objects.bulk_create(histories)
 
         elif as_role == 'doc_supervisor':
             tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
-            updated = tasks.update(doc_supervisor=request.user)
+            valid_tasks = list(tasks)
+            if not valid_tasks:
+                return Response({'success': True, 'claimed_count': 0})
+            valid_task_ids = [t.id for t in valid_tasks]
+            updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_supervisor=request.user)
+            supervisor_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            histories = [
+                DocTaskHistory(
+                    task=t,
+                    action_by=request.user,
+                    action_type='CLAIMED',
+                    note=f'بر عهده گرفته شد توسط سرپرست اسناد ({supervisor_name})',
+                    data_snapshot=_create_doc_task_snapshot(t)
+                ) for t in valid_tasks
+            ]
+            DocTaskHistory.objects.bulk_create(histories)
+
         elif as_role == 'manager':
             tasks = tasks.filter(assigned_manager__isnull=True, status='DOC_MANAGER_REVIEW')
-            updated = tasks.update(assigned_manager=request.user)
+            valid_tasks = list(tasks)
+            if not valid_tasks:
+                return Response({'success': True, 'claimed_count': 0})
+            valid_task_ids = [t.id for t in valid_tasks]
+            updated = DocTask.objects.filter(id__in=valid_task_ids).update(assigned_manager=request.user)
+            manager_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+            histories = [
+                DocTaskHistory(
+                    task=t,
+                    action_by=request.user,
+                    action_type='CLAIMED',
+                    note=f'بر عهده گرفته شد توسط مدیر ({manager_name})',
+                    data_snapshot=_create_doc_task_snapshot(t)
+                ) for t in valid_tasks
+            ]
+            DocTaskHistory.objects.bulk_create(histories)
         else:
             return Response({'error': 'نقش نامعتبر است.'}, status=400)
 
@@ -2315,40 +2548,63 @@ class DocTaskViewSet(viewsets.ModelViewSet):
                 task=updated_instance,
                 action_by=self.request.user,
                 action_type=new_status,
-                note=note
+                note=note,
+                data_snapshot=_create_doc_task_snapshot(updated_instance)
             )
 
     @action(detail=False, methods=['post'])
     def bulk_submit(self, request):
         user = request.user
         task_ids = request.data.get('task_ids', [])
+        sync_ids = request.data.get('sync_ids', [])
+        warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
         
-        if task_ids:
-            tasks = DocTask.objects.filter(id__in=task_ids, doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'])
+        from django.db.models import Q
+        if task_ids or sync_ids:
+            q_filter = Q()
+            if task_ids:
+                q_filter |= Q(id__in=task_ids)
+            if sync_ids:
+                q_filter |= Q(sync_id__in=sync_ids)
+            tasks = DocTask.objects.filter(q_filter, doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
         else:
-            tasks = DocTask.objects.filter(doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'])
+            tasks = DocTask.objects.filter(doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
+        
+        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
+            tasks = tasks.filter(item__warehouse_id=warehouse_id)
         
         first_task = tasks.first()
         if not first_task:
             return Response({'message': 'هیچ رکوردی برای ارجاع یافت نشد.'})
             
         from warehouses.services import get_setting
-        req_sup_app = get_setting('require_doc_supervisor_approval', first_task.item.warehouse_id)
-        
         from .models import DocTaskHistory
         histories = []
         tasks_list = list(tasks)
+        
+        # بررسی تنظیم تایید سرپرست به تفکیک انبار هر تسک
+        wh_settings_cache = {}
+        target_status_counts = {'DOC_PROCESSED': 0, 'DOC_MANAGER_REVIEW': 0}
+        
         for task in tasks_list:
+            wh_id = task.item.warehouse_id if task.item else None
+            if wh_id not in wh_settings_cache:
+                wh_settings_cache[wh_id] = get_setting('require_doc_supervisor_approval', wh_id)
+            req_sup_app = wh_settings_cache[wh_id]
+            
             task_req_sup = req_sup_app and not task.skip_supervisor
             target_status = 'DOC_PROCESSED' if task_req_sup else 'DOC_MANAGER_REVIEW'
+            task.status = target_status
+            task.modified_by = user
+            target_status_counts[target_status] += 1
+            
             histories.append(DocTaskHistory(
                 task=task,
                 action_by=user,
                 action_type=target_status,
-                note=task.worker_note
+                note=task.worker_note,
+                data_snapshot=_create_doc_task_snapshot(task)
             ))
-            task.status = target_status
-            task.modified_by = user
             
         count = len(tasks_list)
         if count > 0:
@@ -2357,7 +2613,13 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if histories:
             DocTaskHistory.objects.bulk_create(histories)
             
-        msg = f'{count} کالا جهت بررسی سرپرست ارسال شد.' if target_status == 'DOC_PROCESSED' else f'{count} کالا مستقیماً جهت بررسی مدیر ارسال شد.'
+        if target_status_counts['DOC_PROCESSED'] > 0 and target_status_counts['DOC_MANAGER_REVIEW'] > 0:
+            msg = f'{count} کالا ارسال شد ({target_status_counts["DOC_PROCESSED"]} مورد جهت بررسی سرپرست و {target_status_counts["DOC_MANAGER_REVIEW"]} مورد مستقیماً به مدیر).'
+        elif target_status_counts['DOC_PROCESSED'] > 0:
+            msg = f'{count} کالا جهت بررسی سرپرست ارسال شد.'
+        else:
+            msg = f'{count} کالا مستقیماً جهت بررسی مدیر ارسال شد.'
+            
         return Response({'message': msg})
 
     @action(detail=False, methods=['post'])
@@ -2367,7 +2629,10 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ کالایی انتخاب نشده است.'}, status=400)
             
-        tasks = DocTask.objects.filter(id__in=task_ids, doc_supervisor=user, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+        from django.db.models import Q
+        tasks = DocTask.objects.filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+        if not (user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists()):
+            tasks = tasks.filter(Q(doc_supervisor=user) | Q(doc_supervisor__isnull=True))
         
         note = request.data.get('note', '')
         
@@ -2375,17 +2640,20 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         histories = []
         for task in tasks:
             task.supervisor_note = note
+            task.status = 'DOC_MANAGER_REVIEW'
+            task.modified_by = user
+            if task.doc_supervisor_id is None:
+                task.doc_supervisor = user
             histories.append(DocTaskHistory(
                 task=task,
                 action_by=user,
                 action_type='DOC_MANAGER_REVIEW',
-                note=note
+                note=note,
+                data_snapshot=_create_doc_task_snapshot(task)
             ))
-            task.status = 'DOC_MANAGER_REVIEW'
-            task.modified_by = user
             
         if tasks:
-            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
+            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note', 'doc_supervisor'])
             DocTaskHistory.objects.bulk_create(histories)
             broadcast_doc_task_update()
             
@@ -2405,14 +2673,15 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         histories = []
         for task in tasks:
             task.supervisor_note = note
+            task.status = 'DOC_SUPERVISOR_REJECTED'
+            task.modified_by = request.user
             histories.append(DocTaskHistory(
                 task=task,
                 action_by=request.user,
                 action_type='DOC_SUPERVISOR_REJECTED',
-                note=note
+                note=note,
+                data_snapshot=_create_doc_task_snapshot(task)
             ))
-            task.status = 'DOC_SUPERVISOR_REJECTED'
-            task.modified_by = request.user
             
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
@@ -2435,14 +2704,15 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         histories = []
         for task in tasks:
             task.manager_note = note
+            task.status = 'DOC_MANAGER_REJECTED'
+            task.modified_by = request.user
             histories.append(DocTaskHistory(
                 task=task,
                 action_by=request.user,
                 action_type='DOC_MANAGER_REJECTED',
-                note=note
+                note=note,
+                data_snapshot=_create_doc_task_snapshot(task)
             ))
-            task.status = 'DOC_MANAGER_REJECTED'
-            task.modified_by = request.user
             
         if tasks:
             DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'manager_note'])
@@ -2454,30 +2724,70 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def bulk_manager_approve(self, request):
         task_ids = request.data.get('task_ids', [])
+        note = request.data.get('note', '')
         if not task_ids:
             return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
             
-        tasks = DocTask.objects.filter(id__in=task_ids, status='DOC_MANAGER_REVIEW')
+        tasks_list = list(DocTask.objects.filter(id__in=task_ids, status='DOC_MANAGER_REVIEW').select_related('item'))
+        if not tasks_list:
+            return Response({'message': 'هیچ رکوردی در انتظار تایید مدیر یافت نشد.'})
         
         from .models import DocTaskHistory, Item
+        from django.db import transaction
+        
         histories = []
-        item_ids_to_update = []
-        for task in tasks:
-            histories.append(DocTaskHistory(
-                task=task,
-                action_by=request.user,
-                action_type='DOC_FINAL_APPROVED',
-                note=task.manager_note
-            ))
-            task.status = 'DOC_FINAL_APPROVED'
-            task.modified_by = request.user
-            item_ids_to_update.append(task.item_id)
-            
-        if tasks:
-            DocTask.objects.bulk_update(tasks, ['status', 'modified_by'])
-            DocTaskHistory.objects.bulk_create(histories)
-            Item.objects.filter(id__in=item_ids_to_update).update(doc_status='approved', updated_at=timezone.now())
-            broadcast_doc_task_update()
+        items_to_update = []
+        now = timezone.now()
+        
+        with transaction.atomic():
+            for task in tasks_list:
+                if note:
+                    task.manager_note = note
+                task.status = 'DOC_FINAL_APPROVED'
+                task.modified_by = request.user
+                histories.append(DocTaskHistory(
+                    task=task,
+                    action_by=request.user,
+                    action_type='DOC_FINAL_APPROVED',
+                    note=task.manager_note,
+                    data_snapshot=_create_doc_task_snapshot(task)
+                ))
+                
+                # انتقال و همگام‌سازی فیلدهای مالی به رکورد کالا (Item)
+                item = task.item
+                if item:
+                    item.doc_status = 'approved'
+                    item.price_amount = task.price_amount
+                    item.total_value = task.total_value
+                    item.similar_unit_price = task.similar_unit_price
+                    item.currency = task.currency
+                    item.invoice_type = task.invoice_type
+                    item.invoice_date = str(task.invoice_date) if task.invoice_date else None
+                    item.inv_rti_number = task.inv_rti_number
+                    item.added_rti_no = task.added_rti_no
+                    item.page_row = str(task.page_row) if task.page_row is not None else None
+                    item.invoice_page = str(task.invoice_page) if task.invoice_page is not None else None
+                    item.doc_supplier = task.doc_supplier
+                    item.folder_address = task.folder_address
+                    if task.stamp is not None:
+                        item.stamp = 'دارد' if task.stamp else 'ندارد'
+                    if task.signature is not None:
+                        item.signature = 'دارد' if task.signature else 'ندارد'
+                    item.modified_by = request.user
+                    item.updated_at = now
+                    items_to_update.append(item)
+                
+            if tasks_list:
+                DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'manager_note'])
+                DocTaskHistory.objects.bulk_create(histories)
+                if items_to_update:
+                    Item.objects.bulk_update(items_to_update, [
+                        'doc_status', 'price_amount', 'total_value', 'similar_unit_price',
+                        'currency', 'invoice_type', 'invoice_date', 'inv_rti_number',
+                        'added_rti_no', 'page_row', 'invoice_page', 'doc_supplier',
+                        'folder_address', 'stamp', 'signature', 'modified_by', 'updated_at'
+                    ])
+                broadcast_doc_task_update()
             
         return Response({'message': f'{len(histories)} رکورد نهایی شد.'})
         
@@ -2496,5 +2806,440 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         
         broadcast_doc_task_update()
         return Response({'message': f'{deleted_count} وظیفه ارجاع اسناد با موفقیت لغو شد.'})
+
+    @action(detail=False, methods=['get'], url_path='download_template')
+    def download_template(self, request):
+        """تولید فایل اکسل نمونه آزمایشی برای کارتابل مالی متناسب با فیلدهای قابل ویرایش"""
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from openpyxl.worksheet.datavalidation import DataValidation
+        from django.http import HttpResponse
+        from warehouses.services import get_setting
+
+        warehouse_id = request.query_params.get('warehouse_id')
+        if warehouse_id and str(warehouse_id) in ['ALL', '-1', 'null', 'undefined']:
+            warehouse_id = None
+        num_wh_id = int(warehouse_id) if warehouse_id and str(warehouse_id).isdigit() else None
+
+        # دریافت تنظیمات فیلدهای کارتابل مالی
+        saved_perms = get_setting('field_permissions_doc', num_wh_id) or {}
+        if isinstance(saved_perms, str):
+            import json
+            try:
+                saved_perms = json.loads(saved_perms)
+            except Exception:
+                saved_perms = {}
+
+        # لیست فیلدهای استاندارد مالی
+        STANDARD_DOC_FIELDS = [
+            {'key': 'price_amount',       'default_label': 'قیمت واحد',        'type': 'number',   'sample1': '2500000',               'sample2': '1850000'},
+            {'key': 'similar_unit_price', 'default_label': 'قیمت کالای مشابه', 'type': 'number',   'sample1': '2400000',               'sample2': '1800000'},
+            {'key': 'total_value',        'default_label': 'ارزش کل',          'type': 'number',   'sample1': '25000000',              'sample2': '18500000'},
+            {'key': 'currency',           'default_label': 'ارز',              'type': 'currency', 'sample1': 'ریال',                  'sample2': 'دلار'},
+            {'key': 'invoice_type',       'default_label': 'نوع فاکتور',        'type': 'inv_type', 'sample1': 'رسمی/مالیاتی',          'sample2': 'خریدهای داخلی'},
+            {'key': 'invoice_date',       'default_label': 'تاریخ فاکتور',     'type': 'date',     'sample1': '1405/05/25 07:10',      'sample2': '1405/06/01 10:30'},
+            {'key': 'inv_rti_number',     'default_label': 'شماره RTI فاکتور', 'type': 'text',     'sample1': 'RTI-1405-001',          'sample2': 'RTI-1405-002'},
+            {'key': 'added_rti_no',       'default_label': 'شماره RTI افزوده‌شده', 'type': 'text', 'sample1': 'RTI-ADD-99',           'sample2': 'RTI-ADD-100'},
+            {'key': 'invoice_page',       'default_label': 'صفحه فاکتور',      'type': 'number',   'sample1': '1',                     'sample2': '2'},
+            {'key': 'page_row',           'default_label': 'ردیف فاکتور',      'type': 'number',   'sample1': '1',                     'sample2': '3'},
+            {'key': 'doc_supplier',       'default_label': 'تأمین‌کننده',      'type': 'text',     'sample1': 'شرکت تأمین تجهیز پارس', 'sample2': 'شرکت مهندسی پویا'},
+            {'key': 'folder_address',     'default_label': 'مسیر پوشه اسناد',  'type': 'text',     'sample1': 'Z:/Docs/Archive/1405',  'sample2': 'Z:/Docs/Archive/1405'},
+            {'key': 'stamp',              'default_label': 'مهر',              'type': 'boolean',  'sample1': 'بله',                   'sample2': 'خیر'},
+            {'key': 'signature',          'default_label': 'امضا',             'type': 'boolean',  'sample1': 'بله',                   'sample2': 'بله'},
+            {'key': 'worker_note',        'default_label': 'یادداشت کارشناس',  'type': 'text',     'sample1': 'مدارک مالی مطابقت دارد', 'sample2': 'فاکتور ضمیمه شد'},
+        ]
+
+        # همیشه ستون شناساگر کد یکتا در ابتدا قرار می‌گیرد
+        columns = [
+            {'key': 'fa_unic_code', 'label': 'کد یکتا', 'type': 'text', 'sample1': 'FA-10001', 'sample2': 'FA-10002'}
+        ]
+
+        for f in STANDARD_DOC_FIELDS:
+            cfg = saved_perms.get(f['key'], {}) if isinstance(saved_perms, dict) else {}
+            is_editable = cfg.get('editable', True)
+            is_visible = cfg.get('visible', True)
+            if is_visible and is_editable:
+                label = (cfg.get('custom_label') or '').strip() or f['default_label']
+                columns.append({
+                    'key': f['key'],
+                    'label': label,
+                    'type': f['type'],
+                    'sample1': f['sample1'],
+                    'sample2': f['sample2'],
+                })
+
+        # افزودن فیلدهای داینامیک فعال و قابل ویرایش انبار
+        if num_wh_id:
+            from .models import ItemFieldDefinition
+            dyn_defs = ItemFieldDefinition.objects.filter(warehouse_id=num_wh_id, is_active=True)
+            for d in dyn_defs:
+                dyn_key = f"dyn_{d.name}"
+                cfg = saved_perms.get(dyn_key, {}) if isinstance(saved_perms, dict) else {}
+                is_editable = cfg.get('editable', True)
+                is_visible = cfg.get('visible', True)
+                if is_visible and is_editable:
+                    label = (cfg.get('custom_label') or '').strip() or d.label or d.name
+                    dtype = d.field_type
+                    if dtype == 'number':
+                        s1, s2 = '100', '250'
+                    elif dtype == 'boolean':
+                        s1, s2 = 'بله', 'خیر'
+                    elif dtype == 'date':
+                        s1, s2 = '1405/05/25', '1405/06/01'
+                    else:
+                        s1, s2 = 'مقدار نمونه ۱', 'مقدار نمونه ۲'
+                    columns.append({
+                        'key': dyn_key,
+                        'label': label,
+                        'type': 'boolean' if dtype == 'boolean' else ('number' if dtype == 'number' else ('date' if dtype == 'date' else 'text')),
+                        'sample1': s1,
+                        'sample2': s2,
+                    })
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'قالب اسناد مالی'
+        ws.sheet_view.rightToLeft = True
+
+        header_font = Font(name='Tahoma', bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        sample_font = Font(name='Tahoma', size=10)
+        center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'), right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'), bottom=Side(style='thin', color='E2E8F0')
+        )
+        fill_row1 = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
+        fill_row2 = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+
+        headers = [c['label'] for c in columns]
+        ws.append(headers)
+
+        for col_idx, cell in enumerate(ws[1], 1):
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_alignment
+            cell.border = thin_border
+
+        row1_data = [c['sample1'] for c in columns]
+        row2_data = [c['sample2'] for c in columns]
+        ws.append(row1_data)
+        ws.append(row2_data)
+
+        for r_idx, (r_data, r_fill) in enumerate([(row1_data, fill_row1), (row2_data, fill_row2)], start=2):
+            for c_idx, val in enumerate(r_data, 1):
+                cell = ws.cell(row=r_idx, column=c_idx)
+                cell.font = sample_font
+                cell.fill = r_fill
+                cell.alignment = center_alignment
+                cell.border = thin_border
+
+        # اعمال کشوها با DataValidation
+        bool_dv = DataValidation(type="list", formula1='"بله,خیر"', allow_blank=True)
+        inv_dv = DataValidation(type="list", formula1='"رسمی/مالیاتی,خریدهای داخلی,خریدهای خارجی,امانی"', allow_blank=True)
+        cur_dv = DataValidation(type="list", formula1='"ریال,دلار,یورو,سایر"', allow_blank=True)
+
+        ws.add_data_validation(bool_dv)
+        ws.add_data_validation(inv_dv)
+        ws.add_data_validation(cur_dv)
+
+        for col_idx, col in enumerate(columns, 1):
+            col_letter = get_column_letter(col_idx)
+            if col['type'] == 'boolean':
+                bool_dv.add(f"{col_letter}2:{col_letter}500")
+            elif col['type'] == 'inv_type':
+                inv_dv.add(f"{col_letter}2:{col_letter}500")
+            elif col['type'] == 'currency':
+                cur_dv.add(f"{col_letter}2:{col_letter}500")
+
+            max_len = max(len(str(col['label'])), len(str(col.get('sample1', ''))), len(str(col.get('sample2', ''))))
+            ws.column_dimensions[col_letter].width = max(max_len + 6, 14)
+
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="Customs_Doc_Template.xlsx"'
+        wb.save(response)
+        return response
+
+    @action(detail=False, methods=['get'], url_path='get_export_columns')
+    def get_export_columns(self, request):
+        """لیست ستون‌های مجاز برای خروجی اکسل کارتابل مالی و اسناد"""
+        columns = [
+            {'key': 'warehouse_name',        'label': 'نام انبار'},
+            {'key': 'fa_unic_code',          'label': 'کد یکتا'},
+            {'key': 'description',           'label': 'شرح کالا'},
+            {'key': 'po',                    'label': 'شماره PO'},
+            {'key': 'new_location',          'label': 'لوکیشن'},
+            {'key': 'status',                'label': 'وضعیت'},
+            {'key': 'doc_worker_name',       'label': 'کارشناس مالی'},
+            {'key': 'doc_supervisor_name',   'label': 'سرپرست'},
+            {'key': 'assigned_manager_name', 'label': 'مدیر'},
+            {'key': 'inv_rti_number',        'label': 'شماره RTI فاکتور'},
+            {'key': 'added_rti_no',          'label': 'شماره RTI افزوده‌شده'},
+            {'key': 'invoice_type',          'label': 'نوع فاکتور'},
+            {'key': 'invoice_date',          'label': 'تاریخ فاکتور'},
+            {'key': 'invoice_page',          'label': 'صفحه فاکتور'},
+            {'key': 'page_row',              'label': 'ردیف فاکتور'},
+            {'key': 'doc_supplier',          'label': 'تأمین‌کننده'},
+            {'key': 'price_amount',          'label': 'قیمت واحد'},
+            {'key': 'similar_unit_price',    'label': 'قیمت کالای مشابه'},
+            {'key': 'total_value',           'label': 'ارزش کل'},
+            {'key': 'currency',              'label': 'ارز'},
+            {'key': 'folder_address',        'label': 'مسیر پوشه اسناد'},
+            {'key': 'stamp',                 'label': 'مهر'},
+            {'key': 'signature',             'label': 'امضا'},
+            {'key': 'worker_note',           'label': 'یادداشت کارشناس'},
+            {'key': 'supervisor_note',       'label': 'یادداشت سرپرست'},
+            {'key': 'manager_note',          'label': 'یادداشت مدیر'},
+            {'key': 'created_at',            'label': 'تاریخ ایجاد'},
+            {'key': 'updated_at',            'label': 'تاریخ بروزرسانی'},
+        ]
+        return Response(columns)
+
+    @action(detail=False, methods=['post'], url_path='export_excel')
+    def export_excel(self, request):
+        """خروجی اکسل صفحه کارتابل مالی با تاریخ شمسی و وضعیت فارسی"""
+        import openpyxl
+        from django.http import HttpResponse
+
+        STATUS_FA = {
+            'PENDING_DOC':             'در انتظار بررسی',
+            'DOC_PROCESSED':           'ارسال‌شده به سرپرست',
+            'DOC_SUPERVISOR_REJECTED': 'رد سرپرست',
+            'DOC_MANAGER_REVIEW':      'در بررسی مدیر',
+            'DOC_MANAGER_REJECTED':    'رد مدیر',
+            'DOC_FINAL_APPROVED':      'تأیید نهایی',
+        }
+
+        INVOICE_TYPE_FA = {
+            'formal':      'رسمی/مالیاتی',
+            'domestic':    'خریدهای داخلی',
+            'foreign':     'خریدهای خارجی',
+            'consignment': 'امانی',
+        }
+
+        CURRENCY_FA = {
+            'IRR':   'ریال',
+            'USD':   'دلار',
+            'EUR':   'یورو',
+            'OTHER': 'سایر',
+        }
+
+        def to_jalali(dt):
+            if not dt:
+                return ''
+            try:
+                import jdatetime
+                from django.utils import timezone
+                if timezone.is_aware(dt):
+                    dt = timezone.localtime(dt)
+                jdt = jdatetime.datetime.fromgregorian(datetime=dt)
+                return jdt.strftime('%Y/%m/%d %H:%M')
+            except Exception:
+                return str(dt)
+
+        data_scope    = request.data.get('data_scope', 'all')
+        columns_scope = request.data.get('columns_scope', 'all_db')
+        columns_list  = request.data.get('columns_list', [])
+
+        from django.http import QueryDict
+        original_query_params = request._request.GET
+        try:
+            q = QueryDict(mutable=True)
+            for k, v in request.data.items():
+                if isinstance(v, list):
+                    q.setlist(k, [str(x) for x in v])
+                elif v is not None:
+                    q[k] = str(v)
+            request._request.GET = q
+
+            if data_scope == 'selected':
+                selected_ids = request.data.get('selected_ids', [])
+                queryset = self.get_queryset().filter(id__in=selected_ids)
+            else:
+                queryset = self.get_queryset()
+        finally:
+            request._request.GET = original_query_params
+
+        ALL_COLUMNS = [
+            {'key': 'warehouse_name',        'label': 'نام انبار'},
+            {'key': 'fa_unic_code',          'label': 'کد یکتا'},
+            {'key': 'description',           'label': 'شرح کالا'},
+            {'key': 'po',                    'label': 'شماره PO'},
+            {'key': 'new_location',          'label': 'لوکیشن'},
+            {'key': 'status',                'label': 'وضعیت'},
+            {'key': 'doc_worker_name',       'label': 'کارشناس مالی'},
+            {'key': 'doc_supervisor_name',   'label': 'سرپرست'},
+            {'key': 'assigned_manager_name', 'label': 'مدیر'},
+            {'key': 'inv_rti_number',        'label': 'شماره RTI فاکتور'},
+            {'key': 'added_rti_no',          'label': 'شماره RTI افزوده‌شده'},
+            {'key': 'invoice_type',          'label': 'نوع فاکتور'},
+            {'key': 'invoice_date',          'label': 'تاریخ فاکتور'},
+            {'key': 'invoice_page',          'label': 'صفحه فاکتور'},
+            {'key': 'page_row',              'label': 'ردیف فاکتور'},
+            {'key': 'doc_supplier',          'label': 'تأمین‌کننده'},
+            {'key': 'price_amount',          'label': 'قیمت واحد'},
+            {'key': 'similar_unit_price',    'label': 'قیمت کالای مشابه'},
+            {'key': 'total_value',           'label': 'ارزش کل'},
+            {'key': 'currency',              'label': 'ارز'},
+            {'key': 'folder_address',        'label': 'مسیر پوشه اسناد'},
+            {'key': 'stamp',                 'label': 'مهر'},
+            {'key': 'signature',             'label': 'امضا'},
+            {'key': 'worker_note',           'label': 'یادداشت کارشناس'},
+            {'key': 'supervisor_note',       'label': 'یادداشت سرپرست'},
+            {'key': 'manager_note',          'label': 'یادداشت مدیر'},
+            {'key': 'created_at',            'label': 'تاریخ ایجاد'},
+            {'key': 'updated_at',            'label': 'تاریخ بروزرسانی'},
+        ]
+        all_keys = [c['key'] for c in ALL_COLUMNS]
+        key_to_label = {c['key']: c['label'] for c in ALL_COLUMNS}
+
+        if columns_scope in ('visible', 'custom') and columns_list:
+            selected_keys = [k for k in columns_list if k in all_keys]
+            if not selected_keys:
+                selected_keys = all_keys
+        else:
+            selected_keys = all_keys
+
+        def get_cell(task, key):
+            if key == 'warehouse_name':
+                if task.item and task.item.warehouse:
+                    return getattr(task.item.warehouse, 'project_name', None) or task.item.warehouse.name or ''
+                return ''
+            elif key == 'fa_unic_code':
+                return getattr(task.item, 'fa_unic_code', '') if task.item else ''
+            elif key == 'description':
+                return getattr(task.item, 'description', '') if task.item else ''
+            elif key == 'po':
+                return getattr(task.item, 'po', '') if task.item else ''
+            elif key == 'new_location':
+                return getattr(task.item, 'new_location', '') if task.item else ''
+            elif key == 'status':
+                return STATUS_FA.get(task.status, task.status)
+            elif key == 'doc_worker_name':
+                if task.doc_worker:
+                    return f"{task.doc_worker.first_name} {task.doc_worker.last_name}".strip() or task.doc_worker.username
+                return ''
+            elif key == 'doc_supervisor_name':
+                if task.doc_supervisor:
+                    return f"{task.doc_supervisor.first_name} {task.doc_supervisor.last_name}".strip() or task.doc_supervisor.username
+                return ''
+            elif key == 'assigned_manager_name':
+                if task.assigned_manager:
+                    return f"{task.assigned_manager.first_name} {task.assigned_manager.last_name}".strip() or task.assigned_manager.username
+                return ''
+            elif key == 'inv_rti_number':
+                return task.inv_rti_number or ''
+            elif key == 'added_rti_no':
+                return task.added_rti_no or ''
+            elif key == 'invoice_type':
+                return INVOICE_TYPE_FA.get(task.invoice_type, task.invoice_type or '')
+            elif key == 'invoice_date':
+                return task.invoice_date or ''
+            elif key == 'invoice_page':
+                return task.invoice_page if task.invoice_page is not None else ''
+            elif key == 'page_row':
+                return task.page_row if task.page_row is not None else ''
+            elif key == 'doc_supplier':
+                return task.doc_supplier or ''
+            elif key == 'price_amount':
+                return task.price_amount or ''
+            elif key == 'similar_unit_price':
+                return task.similar_unit_price or ''
+            elif key == 'total_value':
+                return task.total_value or ''
+            elif key == 'currency':
+                return CURRENCY_FA.get(task.currency, task.currency or '')
+            elif key == 'folder_address':
+                return task.folder_address or ''
+            elif key == 'stamp':
+                return 'بله' if task.stamp else 'خیر'
+            elif key == 'signature':
+                return 'بله' if task.signature else 'خیر'
+            elif key == 'worker_note':
+                return task.worker_note or ''
+            elif key == 'supervisor_note':
+                return task.supervisor_note or ''
+            elif key == 'manager_note':
+                return task.manager_note or ''
+            elif key == 'created_at':
+                return to_jalali(task.created_at)
+            elif key == 'updated_at':
+                return to_jalali(task.updated_at)
+            return ''
+
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'کارتابل مالی'
+        ws.sheet_view.rightToLeft = True
+
+        header_font = Font(name='Tahoma', bold=True, color='FFFFFF', size=11)
+        header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid') # سرمه‌ای دودی مدرن
+        cell_font = Font(name='Tahoma', size=10)
+
+        fill_even = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
+        fill_odd = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
+
+        center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'), right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'), bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        headers = [key_to_label[k] for k in selected_keys]
+        ws.append(headers)
+
+        for col_idx, cell in enumerate(ws[1], 1):
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_alignment
+            cell.border = thin_border
+
+        ws.freeze_panes = 'A2'
+        col_widths = {i: len(headers[i]) + 6 for i in range(len(headers))}
+
+        row_idx = 2
+        for task in queryset.select_related('item', 'item__warehouse', 'doc_worker', 'doc_supervisor', 'assigned_manager').iterator():
+            row_data = [str(get_cell(task, k)) for k in selected_keys]
+            ws.append(row_data)
+
+            current_fill = fill_even if row_idx % 2 == 0 else fill_odd
+
+            for col_idx, val in enumerate(row_data):
+                cell = ws.cell(row=row_idx, column=col_idx + 1)
+                cell.font = cell_font
+                cell.fill = current_fill
+                cell.alignment = center_alignment
+                cell.border = thin_border
+
+                lines = val.split('\n')
+                max_line_len = max([len(line) for line in lines]) if lines else 0
+                if max_line_len > col_widths.get(col_idx, 10):
+                    col_widths[col_idx] = min(max_line_len + 4, 60)
+
+            row_idx += 1
+
+        for col_idx, width in col_widths.items():
+            ws.column_dimensions[get_column_letter(col_idx + 1)].width = width
+
+        if row_idx > 2:
+            last_col_letter = get_column_letter(len(selected_keys))
+            ws.auto_filter.ref = f"A1:{last_col_letter}{row_idx - 1}"
+
+        from io import BytesIO
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        response = HttpResponse(
+            buf.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="customs_cartable_export.xlsx"'
+        return response
+
 
 

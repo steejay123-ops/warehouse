@@ -32,7 +32,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'username', 'first_name', 'last_name', 'email', 
             'national_code', 'phone_number', 'operational_zone', 
-            'supervisor', 'is_active', 'date_joined', 'last_login',
+            'supervisor', 'company', 'address', 'avatar', 'blood_type', 'emergency_contact', 'is_active', 'date_joined', 'last_login',
             'updated_at', 'created_by', 'modified_by',
             'groups', 'user_permissions', 'assigned_warehouses', 'is_superuser',
             'requires_password_change', 'ui_preferences', 'roles'
@@ -41,6 +41,7 @@ class UserSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
+        ret['avatar'] = instance.avatar.url if instance.avatar else None
         # Build rich role objects from CustomRole
         role_data = []
         for group in instance.groups.all():
@@ -182,6 +183,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'username': user.username,
             'first_name': user.first_name,
             'last_name': user.last_name,
+            'avatar': user.avatar.url if user.avatar else None,
             'avatar_letter': user.first_name[0] if user.first_name else 'U',
             'roles': role_names,
             'role_titles': role_titles,

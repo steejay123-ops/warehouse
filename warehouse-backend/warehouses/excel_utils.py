@@ -216,17 +216,23 @@ def parse_warehouses_excel(file):
             errors.extend(row_errors)
         else:
             valid_rows.append({
-                'code': code or None,
-                'name': name,
-                'project_name': project_name or None,
-                'type': wh_type or None,
-                'location': location or None,
-                'phone_number': phone_number or None,
-                'capacity': capacity,
-                'operator_company': operator_company or None,
-                'color': color,
-                'description': description or None,
+                'row_num': row_num,
+                'data': {
+                    'code': code or None,
+                    'name': name,
+                    'project_name': project_name or None,
+                    'type': wh_type or None,
+                    'location': location or None,
+                    'phone_number': phone_number or None,
+                    'capacity': capacity,
+                    'operator_company': operator_company or None,
+                    'color': color,
+                    'description': description or None,
+                }
             })
 
     wb.close()
-    return {'valid_rows': valid_rows, 'errors': errors}
+    return {
+        'valid_rows': valid_rows,
+        'errors': errors
+    }

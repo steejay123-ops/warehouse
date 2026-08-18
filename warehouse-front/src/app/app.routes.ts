@@ -11,7 +11,6 @@ import { Users } from './components/users/users';
 import { Settings } from './components/settings/settings';
 import { Audit } from './components/audit/audit';
 import { Feeding } from './components/feeding/feeding';
-import { Field } from './components/field/field';
 import { Placeholders } from './components/placeholders/placeholders';
 import { Customs } from './components/customs/customs';
 import { ChangePassword } from './components/change-password/change-password';
@@ -21,10 +20,13 @@ import { SupervisorDashboard } from './components/supervisor/supervisor-dashboar
 import { ManagerReview } from './components/manager-review/manager-review';
 import { CountTracking } from './components/count-tracking/count-tracking';
 import { Reports } from './components/reports/reports';
+import { VerifyCard } from './components/verify-card/verify-card';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
 export const routes: Routes = [
   { path: 'login', component: Login },
+  { path: 'verify-card/:code', component: VerifyCard },
+  { path: 'verify-card', component: VerifyCard },
   { path: 'change-password', component: ChangePassword, canActivate: [AuthGuard] },
   {
     path: '',
@@ -50,7 +52,7 @@ export const routes: Routes = [
       { path: 'wh-settings', component: WhSettings },
       { path: 'audit', component: Audit },
       { path: 'feeding', component: Feeding },
-      { path: 'field', component: Field },
+      { path: 'field', redirectTo: 'counter', pathMatch: 'full' },
       { path: 'placeholders', component: Placeholders },
       
       { path: 'counter', component: CounterDashboard, data: { reuse: true } },

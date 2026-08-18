@@ -16,6 +16,10 @@
 .progress-bar{transition:width 1.2s cubic-bezier(.4,0,.2,1)}
 .toast{animation:slideIn .3s ease,fadeOut .3s ease 3.7s forwards}
 @keyframes slideIn{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideInRight{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideInLeft{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideInUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes slideInDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes fadeOut{from{opacity:1}to{opacity:0}}
 .pulse-dot{animation:pulseDot 2s infinite}
 @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
@@ -46,8 +50,62 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
         background-color: transparent;
     }
 }
-
 .status-updated-flash {
     animation: flash-status 3s ease-in-out forwards;
     border-radius: 0.375rem;
+}
+
+/* ==========================================================================
+   GLOBAL PRINT STYLES FOR ID CARDS & SYSTEM
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Completely hide all application UI, navigation, headers, tabs, and toast popups */
+  app-layout header,
+  app-layout aside,
+  app-layout nav,
+  app-users > div > div:first-child,
+  app-users nav,
+  .toast-container,
+  .toast,
+  .no-print,
+  button,
+  .modal-backdrop {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* Force display ONLY of the isolated print container */
+  #id-cards-print-sheet {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    z-index: 99999 !important;
+  }
+
+  #id-cards-print-sheet * {
+    visibility: visible !important;
+  }
 }

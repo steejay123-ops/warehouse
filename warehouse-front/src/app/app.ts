@@ -1,11 +1,11 @@
 import { Component, signal, effect, inject, ApplicationRef } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import { ToastContainerComponent } from './shared/components/toast/toast.component';
 import { ConfirmDialogComponent, ConfirmDialogService } from './shared/components/confirm-dialog/confirm-dialog.component';
 import { AuthService } from './core/auth/auth.service';
 import { WebSocketService } from './core/http/websocket.service';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
-import { interval, concat } from 'rxjs';
+import { interval, concat, fromEvent } from 'rxjs';
 import { first, filter } from 'rxjs/operators';
 
 @Component({
@@ -16,6 +16,7 @@ import { first, filter } from 'rxjs/operators';
 })
 export class App {
   protected readonly title = signal('warehouse-app');
+  private router = inject(Router);
   private auth = inject(AuthService);
   private ws = inject(WebSocketService);
   private swUpdate = inject(SwUpdate);
@@ -23,6 +24,17 @@ export class App {
   private appRef = inject(ApplicationRef);
 
   constructor() {
+    // پشتیبانی از لینک‌های دارای هش استعلام
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hash = window.location.hash;
+      const match = hash.match(/#\/?verify-card(?:\/([^/?#]+))?/);
+      if (match) {
+        const code = match[1];
+        const targetUrl = code ? `/verify-card/${code}` : '/verify-card';
+        this.router.navigateByUrl(targetUrl);
+      }
+    }
+
     effect(() => {
       if (this.auth.isLoggedIn()) {
         this.ws.connect();
@@ -66,5 +78,16 @@ export class App {
         console.error('Failed to check for updates', err);
       }
     });
+
+    // Check for updates when the browser comes online
+    if (typeof window !== 'undefined') {
+      fromEvent(window, 'online').subscribe(async () => {
+        try {
+          await this.swUpdate.checkForUpdate();
+        } catch (err) {
+          console.error('Failed to check for updates on online event', err);
+        }
+      });
+    }
   }
 }

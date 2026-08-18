@@ -81,9 +81,9 @@ export class Dispatch implements OnInit {
   availableExportColumns: {key: string, label: string}[] = [];
 
   getRowClass = (row: any) => {
-    if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-foreground';
-    if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-foreground';
-    if (row.fieldStatus === 'counting') return 'bg-blue-100 hover:bg-blue-200 text-foreground';
+    if (row.has_conflict) return 'bg-orange-100 hover:bg-orange-200 text-slate-800';
+    if (row.fieldStatus === 'done') return 'bg-emerald-100 hover:bg-emerald-200 text-slate-800';
+    if (row.fieldStatus === 'counting') return 'bg-blue-100 hover:bg-blue-200 text-slate-800';
     return '';
   };
 

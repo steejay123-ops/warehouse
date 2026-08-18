@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
-import { Subscription, filter } from 'rxjs';
+import { Subscription, Subject, filter } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { CountTaskApiService } from '../../core/api/count-task-api.service';
 import { CountTask } from '../../core/models/count-task.model';
 import { ToastService } from '../../services/toast.service';
@@ -13,6 +14,7 @@ import { DataTableComponent, TableColumnDirective, SortState } from '../../share
 import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
 import { WebSocketService } from '../../core/http/websocket.service';
+import { OfflineSyncService } from '../../core/services/offline-sync.service';
 
 @Component({
   selector: 'app-count-tracking',
@@ -37,9 +39,13 @@ export class CountTracking implements OnInit, OnDestroy {
   // ─── فیلتر مغایرت ───
   showOnlyDiscrepancies = false;
 
-  // ─── WebSocket ───
+  // ─── WebSocket & SWR ───
   private wsSub?: Subscription;
   private routerSub?: Subscription;
+  private swrSub?: Subscription;
+  private wsTaskUpdateSubject = new Subject<any>();
+  private wsDebounceSub?: Subscription;
+  private offlineSync = OfflineSyncService.getInstance();
 
   // ── متغیرهای جدول و صفحه‌بندی ──
   updatedTaskIds = new Set<number>();
@@ -75,7 +81,8 @@ export class CountTracking implements OnInit, OnDestroy {
   supervisorOptions: {label: string, value: string}[] = [];
   managerOptions: {label: string, value: string}[] = [];
   statusOptions: {label: string, value: string}[] = [
-    { label: 'در حال شمارش', value: 'PENDING_COUNT' },
+    { label: 'در انتظار شمارش', value: 'PENDING_COUNT' },
+    { label: 'شمارش اولیه (ثبت موقت)', value: 'INITIAL_COUNT' },
     { label: 'در کارتابل سرپرست', value: 'COUNTED' },
     { label: 'در کارتابل مدیر', value: 'MANAGER_REVIEW' },
     { label: 'مغایرت - ارجاع به انبارگردان', value: 'SUPERVISOR_REJECTED' },
@@ -115,11 +122,48 @@ export class CountTracking implements OnInit, OnDestroy {
     this.countTaskApi.getExportColumns().subscribe(cols => {
       this.availableExportColumns = cols;
     });
-    // ─── WebSocket: باز کردن اتصال و دریافت خودکار تغییرات ───
+
+    // ─── Debounce برای رویدادهای عمومی وب‌سوکت (جلوگیری از درخواست رگباری) ───
+    this.wsDebounceSub = this.wsTaskUpdateSubject.pipe(
+      debounceTime(600)
+    ).subscribe(() => {
+      this.loadTasks(false, true);
+    });
+
+    // ─── WebSocket: دریافت خودکار تغییرات با به‌روزرسانی نقطه‌ای In-Place ───
     this.wsService.connect();
     this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
       if (data.type === 'count_task_update' || data.event === 'count_task_update') {
-        this.loadTasks(false);
+        if (data.task && data.task.id) {
+          this.updateTaskInPlace(data.task);
+        } else if (data.task_id) {
+          this.countTaskApi.getById(String(data.task_id)).subscribe({
+            next: (t) => { if (t) this.updateTaskInPlace(t); },
+            error: () => this.wsTaskUpdateSubject.next(data)
+          });
+        } else {
+          this.wsTaskUpdateSubject.next(data);
+        }
+      }
+    });
+
+    // ─── SWR Live Revalidation: دریافت داده‌های جدیدتر سرور در پس‌زمینه با تطبیق دقیق ───
+    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url, data }) => {
+      const isTrackingEndpoint = url.includes('/api/inventory/count-tasks/') &&
+        (url.includes('as_role=tracking') || (!url.includes('as_role=supervisor') && !url.includes('as_role=counter') && !url.includes('as_role=manager')));
+      
+      if (isTrackingEndpoint && data) {
+        const freshList = Array.isArray(data) ? data : data.results || [];
+        if (freshList.length > 0) {
+          const processed = this.preprocessTasks(freshList);
+          this.trackUpdates(this.tasks, processed);
+          this.tasks = processed;
+          this.computeStats();
+          this.buildFilterOptions();
+          this.applyFilters();
+          this.cdr.detectChanges();
+          console.log('[CountTracking] ⚡ داده‌های پیگیری با استعلام پس‌زمینه SWR به‌روزرسانی شد.');
+        }
       }
     });
   }
@@ -127,6 +171,52 @@ export class CountTracking implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.wsSub?.unsubscribe();
     this.routerSub?.unsubscribe();
+    this.swrSub?.unsubscribe();
+    this.wsDebounceSub?.unsubscribe();
+    this.wsTaskUpdateSubject.complete();
+    if (this.flashTimeout) clearTimeout(this.flashTimeout);
+  }
+
+  /** پیش‌پردازش و محاسبه یکباره فیلدهای سنگین یک تسک */
+  preprocessTask(t: any): any {
+    t._computed_manager_name = this.getManagerName(t);
+    t._computed_counter_dur = this.getStageDuration(t, 'counter');
+    t._computed_supervisor_dur = this.getStageDuration(t, 'supervisor');
+    t._computed_manager_dur = this.getStageDuration(t, 'manager');
+    const counted = parseFloat(t.counted_balance);
+    const rawSystem = t.item_details?.bal4miv !== undefined && t.item_details?.bal4miv !== null 
+      ? t.item_details?.bal4miv 
+      : t.item_details?.inventory;
+    const system = (rawSystem !== undefined && rawSystem !== null) ? parseFloat(rawSystem) : NaN;
+    t._discrepancy = (!isNaN(counted) && !isNaN(system)) ? (counted - system) : null;
+    return t;
+  }
+
+  /** پیش‌پردازش آرایه تسک‌ها */
+  preprocessTasks(raw: any[]): any[] {
+    return raw.map((t: any) => this.preprocessTask(t));
+  }
+
+  /** به‌روزرسانی موضعی یک تسک در آرایه جاری بدون ریفرش کل جدول و بدون تغییر صفحه */
+  updateTaskInPlace(taskData: any) {
+    if (!taskData || !taskData.id) return;
+    const idx = this.tasks.findIndex((t: any) => t.id === taskData.id);
+    if (idx !== -1) {
+      const merged = { ...this.tasks[idx], ...taskData };
+      this.tasks[idx] = this.preprocessTask(merged);
+      this.updatedTaskIds.add(taskData.id);
+      if (this.flashTimeout) clearTimeout(this.flashTimeout);
+      this.flashTimeout = setTimeout(() => {
+        this.updatedTaskIds.clear();
+        this.cdr.detectChanges();
+      }, 4000);
+      this.computeStats();
+      this.buildFilterOptions();
+      this.applyFilters();
+      this.cdr.detectChanges();
+    } else {
+      this.wsTaskUpdateSubject.next(taskData);
+    }
   }
 
   /** خواندن وضعیت از پارامترهای آدرس مرورگر */
@@ -149,8 +239,10 @@ export class CountTracking implements OnInit, OnDestroy {
     });
   }
 
-  loadTasks(showLoading = true) {
-    this.selectedTaskIds = new Set();
+  loadTasks(showLoading = true, preserveState = false) {
+    if (!preserveState) {
+      this.selectedTaskIds = new Set();
+    }
     if (showLoading) {
       this.isLoading = true;
     }
@@ -163,27 +255,19 @@ export class CountTracking implements OnInit, OnDestroy {
     this.countTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const raw = Array.isArray(res) ? res : (res.results || []);
-        
-        this.trackUpdates(this.tasks || [], raw);
-
-        // ── Pre-compute: محاسبه یکباره مقادیر سنگین ──
-        this.tasks = raw.map((t: any) => {
-          t._computed_manager_name = this.getManagerName(t);
-          t._computed_counter_dur = this.getStageDuration(t, 'counter');
-          t._computed_supervisor_dur = this.getStageDuration(t, 'supervisor');
-          t._computed_manager_dur = this.getStageDuration(t, 'manager');
-          // ── محاسبه مغایرت ──
-          const counted = parseFloat(t.counted_balance);
-          const system = parseFloat(t.item_details?.inventory);
-          t._discrepancy = (!isNaN(counted) && !isNaN(system)) ? (counted - system) : null;
-          return t;
-        });
+        const processed = this.preprocessTasks(raw);
+        this.trackUpdates(this.tasks || [], processed);
+        this.tasks = processed;
         this.computeStats();
         this.buildFilterOptions();
-        this.currentPage = 1;
+        if (!preserveState) {
+          this.currentPage = 1;
+        } else {
+          const validIds = new Set(this.tasks.map((t: any) => t.id));
+          this.selectedTaskIds = new Set(Array.from(this.selectedTaskIds).filter(id => validIds.has(id)));
+        }
         this.applyFilters();
         this.isLoading = false;
-        
         this.cdr.detectChanges();
       },
       error: () => {
@@ -388,7 +472,7 @@ export class CountTracking implements OnInit, OnDestroy {
   async bulkApproveGreenTasks() {
     // تسک‌هایی که وضعیتشان MANAGER_REVIEW بوده و مغایرت ندارند
     const greenTasks = this.filteredTasks.filter(t =>
-      t.status === 'MANAGER_REVIEW' && t._discrepancy !== null && t._discrepancy === 0
+      t.status === 'MANAGER_REVIEW' && t._discrepancy !== null && Math.abs(t._discrepancy) < 0.0001
     );
 
     if (greenTasks.length === 0) {
@@ -406,13 +490,32 @@ export class CountTracking implements OnInit, OnDestroy {
 
     if (confirmed) {
       const ids = greenTasks.map((t: any) => t.id);
+      
+      // اعمال به‌روزرسانی خوش‌بینانه (Optimistic Update)
+      for (const t of this.tasks) {
+        if (ids.includes(t.id)) {
+          t.status = 'FINAL_APPROVED';
+          t._offlinePending = true;
+          this.updatedTaskIds.add(t.id);
+        }
+      }
+      this.computeStats();
+      this.applyFilters();
+      this.cdr.detectChanges();
+
       this.countTaskApi.bulkManagerApprove(ids).subscribe({
-        next: (res) => {
-          this.toast.show('success', res.message || `${ids.length} تسک تأیید نهایی شد.`);
-          this.loadTasks();
+        next: (res: any) => {
+          const isOffline = res?._offlinePending || !navigator.onLine;
+          if (isOffline) {
+            this.toast.show('info', `تأیید نهایی ${ids.length} تسک در صف ارسال آفلاین قرار گرفت.`);
+          } else {
+            this.toast.show('success', res?.message || `${ids.length} تسک تأیید نهایی شد.`);
+          }
+          this.loadTasks(false, true);
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در تأیید گروهی');
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در تأیید گروهی');
+          this.loadTasks(false, true);
         }
       });
     }
@@ -479,14 +582,14 @@ export class CountTracking implements OnInit, OnDestroy {
       return;
     }
 
-    // فیلتر رکوردهای مجاز (فقط PENDING_COUNT)
-    const allowedStatuses = ['PENDING_COUNT'];
+    // فیلتر رکوردهای مجاز (PENDING_COUNT و INITIAL_COUNT)
+    const allowedStatuses = ['PENDING_COUNT', 'INITIAL_COUNT'];
     const selectedTasks = this.filteredTasks.filter(t => this.selectedTaskIds.has(t.id));
     const eligibleIds = selectedTasks.filter(t => allowedStatuses.includes(t.status)).map(t => t.id);
     const ineligibleCount = selectedTasks.length - eligibleIds.length;
 
     if (eligibleIds.length === 0) {
-      this.toast.show('warning', 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» مجاز هستند.');
+      this.toast.show('warning', 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» و «شمارش اولیه» مجاز هستند.');
       return;
     }
 
@@ -504,22 +607,42 @@ export class CountTracking implements OnInit, OnDestroy {
     });
 
     if (confirmed) {
+      // اعمال به‌روزرسانی خوش‌بینانه (Optimistic Update)
+      for (const t of this.tasks) {
+        if (eligibleIds.includes(t.id)) {
+          t.status = 'PENDING_COUNT';
+          t.counter = null;
+          t.counter_name = null;
+          t._offlinePending = true;
+          this.updatedTaskIds.add(t.id);
+        }
+      }
+      this.selectedTaskIds.clear();
+      this.computeStats();
+      this.applyFilters();
+      this.cdr.detectChanges();
+
       this.countTaskApi.bulkCancel(eligibleIds).subscribe({
-        next: (res) => {
-          this.toast.show('success', res.message);
-          this.selectedTaskIds = new Set();
-          this.loadTasks();
+        next: (res: any) => {
+          const isOffline = res?._offlinePending || !navigator.onLine;
+          if (isOffline) {
+            this.toast.show('info', `لغو تخصیص ${eligibleIds.length} رکورد در صف ارسال آفلاین قرار گرفت.`);
+          } else {
+            this.toast.show('success', res?.message || `${eligibleIds.length} رکورد لغو تخصیص شد.`);
+          }
+          this.loadTasks(false, true);
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در لغو تخصیص');
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در لغو تخصیص');
+          this.loadTasks(false, true);
         }
       });
     }
   }
 
   async cancelSingleAllocation(task: any) {
-    if (task.status !== 'PENDING_COUNT') {
-      this.toast.show('warning', 'فقط رکوردهای «در انتظار شمارش» قابل لغو تخصیص هستند.');
+    if (task.status !== 'PENDING_COUNT' && task.status !== 'INITIAL_COUNT') {
+      this.toast.show('warning', 'فقط رکوردهای «در انتظار شمارش» و «شمارش اولیه» قابل لغو تخصیص هستند.');
       return;
     }
 
@@ -532,15 +655,30 @@ export class CountTracking implements OnInit, OnDestroy {
     });
 
     if (confirmed) {
+      // اعمال به‌روزرسانی خوش‌بینانه (Optimistic Update)
+      task.status = 'PENDING_COUNT';
+      task.counter = null;
+      task.counter_name = null;
+      task._offlinePending = true;
+      this.updatedTaskIds.add(task.id);
+      this.selectedTaskIds.delete(task.id);
+      this.computeStats();
+      this.applyFilters();
+      this.cdr.detectChanges();
+
       this.countTaskApi.bulkCancel([task.id]).subscribe({
-        next: (res) => {
-          this.toast.show('success', 'تخصیص با موفقیت لغو شد');
-          // If the task was selected, remove it from selection
-          this.selectedTaskIds.delete(task.id);
-          this.loadTasks();
+        next: (res: any) => {
+          const isOffline = res?._offlinePending || !navigator.onLine;
+          if (isOffline) {
+            this.toast.show('info', 'لغو تخصیص در صف ارسال آفلاین قرار گرفت.');
+          } else {
+            this.toast.show('success', res?.message || 'تخصیص با موفقیت لغو شد');
+          }
+          this.loadTasks(false, true);
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در لغو تخصیص');
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در لغو تخصیص');
+          this.loadTasks(false, true);
         }
       });
     }
@@ -548,7 +686,8 @@ export class CountTracking implements OnInit, OnDestroy {
 
   getStatusName(status: string): string {
     const statusMap: Record<string, string> = {
-      'PENDING_COUNT': 'در حال شمارش',
+      'PENDING_COUNT': 'در انتظار شمارش',
+      'INITIAL_COUNT': 'شمارش اولیه (ثبت موقت)',
       'COUNTED': 'در کارتابل سرپرست',
       'MANAGER_REVIEW': 'در کارتابل مدیر',
       'SUPERVISOR_REJECTED': 'مغایرت - ارجاع به انبارگردان',
@@ -560,21 +699,22 @@ export class CountTracking implements OnInit, OnDestroy {
 
   getStatusClass(status: string): string {
     const classMap: Record<string, string> = {
-      'PENDING_COUNT': 'bg-blue-100 text-blue-700 border-blue-200',
+      'PENDING_COUNT': 'bg-slate-100 text-slate-700 border-slate-200',
+      'INITIAL_COUNT': 'bg-indigo-100 text-indigo-700 border-indigo-200',
       'COUNTED': 'bg-amber-100 text-amber-700 border-amber-200',
       'MANAGER_REVIEW': 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
       'SUPERVISOR_REJECTED': 'bg-rose-100 text-rose-700 border-rose-200',
       'MANAGER_REJECTED': 'bg-rose-100 text-rose-700 border-rose-200',
       'FINAL_APPROVED': 'bg-emerald-100 text-emerald-700 border-emerald-200'
     };
-    return 'px-2 py-0.5 rounded-full text-[10px] font-bold border ' + (classMap[status] || 'bg-surface text-foreground');
+    return 'px-2 py-0.5 rounded-full text-[10px] font-bold border ' + (classMap[status] || 'bg-slate-50 text-slate-800');
   }
 
   getBalanceColorClass(row: any): string {
     const counted = parseFloat(row.counted_balance);
     const system = parseFloat(row.item_details?.inventory);
     
-    if (isNaN(counted) || isNaN(system)) return 'text-foreground'; // پیش‌فرض
+    if (isNaN(counted) || isNaN(system)) return 'text-slate-800'; // پیش‌فرض
     
     if (counted === system) return 'text-emerald-600'; // بدون مغایرت (سبز)
     
@@ -616,7 +756,7 @@ export class CountTracking implements OnInit, OnDestroy {
 
   getStageDuration(task: CountTask, stage: 'counter' | 'supervisor' | 'manager'): string | null {
     if (!task.history || task.history.length === 0) {
-      if (stage === 'counter' && task.created_at && task.status === 'PENDING_COUNT') {
+      if (stage === 'counter' && task.created_at && (task.status === 'PENDING_COUNT' || task.status === 'INITIAL_COUNT')) {
          return this.formatDuration(new Date().getTime() - new Date(task.created_at).getTime());
       }
       return null;
@@ -635,7 +775,7 @@ export class CountTracking implements OnInit, OnDestroy {
       const counted = findDate('COUNTED');
       const start = findDate('SUPERVISOR_REJECTED') || taskCreated;
       if (counted && counted > start) return this.formatDuration(counted - start);
-      if (task.status === 'PENDING_COUNT' || task.status === 'SUPERVISOR_REJECTED') return this.formatDuration(now - start);
+      if (task.status === 'PENDING_COUNT' || task.status === 'INITIAL_COUNT' || task.status === 'SUPERVISOR_REJECTED') return this.formatDuration(now - start);
       return null;
     }
 

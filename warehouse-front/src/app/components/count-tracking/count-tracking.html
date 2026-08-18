@@ -1,10 +1,10 @@
-<div class="h-full flex flex-col bg-surface">
+<div class="h-full flex flex-col bg-slate-50">
   <!-- Header -->
-  <div class="bg-background border-b px-6 py-4 flex-none">
+  <div class="bg-white border-b px-6 py-4 flex-none">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div>
-          <h1 class="text-xl font-bold text-foreground">پیگیری وضعیت شمارش</h1>
+          <h1 class="text-xl font-bold text-slate-800">پیگیری وضعیت شمارش</h1>
           <p class="text-sm text-slate-500 mt-1">مانیتورینگ و پیگیری لحظه‌ای پیشرفت تیم‌های انبارگردانی</p>
         </div>
       </div>
@@ -30,14 +30,14 @@
         </div>
 
         <button (click)="toggleDiscrepancyFilter()"
-                [class]="showOnlyDiscrepancies ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-surface text-slate-600 border border-border hover:bg-surface'"
+                [class]="showOnlyDiscrepancies ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-50'"
                 class="px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
           {{ showOnlyDiscrepancies ? 'نمایش همه' : 'فقط دارای مغایرت' }}
         </button>
 
         <button (click)="toggleCompleted()" 
-                [class]="showCompleted ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-surface text-slate-600 border border-border hover:bg-surface'"
+                [class]="showCompleted ? 'bg-indigo-50 text-indigo-600 border border-indigo-200' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-50'"
                 class="px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
           <svg *ngIf="showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           <svg *ngIf="!showCompleted" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>
@@ -61,10 +61,10 @@
 
     <!-- Mini Dashboard -->
     <div class="flex items-center gap-3 mt-3">
-      <div class="flex items-center gap-2 bg-surface border border-border rounded-lg px-3 py-1.5">
+      <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-500"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
         <span class="text-[10px] font-bold text-slate-500">کل:</span>
-        <span class="text-xs font-black text-foreground">{{ statTotal }}</span>
+        <span class="text-xs font-black text-slate-800">{{ statTotal }}</span>
       </div>
       <div class="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-blue-500"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
@@ -86,7 +86,7 @@
 
   <!-- Content -->
   <div class="flex-1 p-6 overflow-hidden">
-    <div class="bg-background rounded-xl shadow-sm border border-border h-full flex flex-col overflow-hidden">
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
       
       <!-- Data Table -->
       <app-data-table
@@ -123,7 +123,7 @@
         </div>
 
         <ng-template appTableCol="warehouse_name" label="انبار" filterType="checkbox_text" [filterOptions]="warehouseOptions" let-row="row">
-          <span class="text-[11px] font-black text-foreground bg-surface border border-border px-2 py-1 rounded-lg">
+          <span class="text-[11px] font-black text-slate-800 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg">
             {{ row.item_details?.warehouse_name || '-' }}
           </span>
         </ng-template>
@@ -135,14 +135,14 @@
         </ng-template>
 
         <ng-template appTableCol="description" label="شرح کالا" let-row="row">
-          <div class="text-foreground font-bold text-[12px] max-w-[200px] truncate" [title]="row.item_details?.description || ''">
+          <div class="text-slate-800 font-bold text-[12px] max-w-[200px] truncate" [title]="row.item_details?.description || ''">
             {{ row.item_details?.description || '-' }}
           </div>
         </ng-template>
 
         <ng-template appTableCol="counter" label="انبارگردان" filterType="checkbox_text" [filterOptions]="counterOptions" let-row="row">
           <div class="flex flex-col" [title]="row.counter_note || 'بدون یادداشت'">
-            <span class="text-[11px] font-black text-foreground border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.counter_name || 'نامشخص' }}</span>
+            <span class="text-[11px] font-black text-slate-800 border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.counter_name || 'نامشخص' }}</span>
             <span *ngIf="row._computed_counter_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               {{ row._computed_counter_dur }}
@@ -152,18 +152,18 @@
 
         <ng-template appTableCol="supervisor" label="سرپرست" filterType="checkbox_text" [filterOptions]="supervisorOptions" let-row="row">
           <div class="flex flex-col" *ngIf="row.supervisor_name" [title]="row.supervisor_note || 'بدون یادداشت'">
-            <span class="text-[11px] font-black text-foreground border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.supervisor_name }}</span>
+            <span class="text-[11px] font-black text-slate-800 border-b border-dashed border-slate-300 pb-0.5 w-max">{{ row.supervisor_name }}</span>
             <span *ngIf="row._computed_supervisor_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
               {{ row._computed_supervisor_dur }}
             </span>
           </div>
-          <span *ngIf="!row.supervisor_name" class="text-[10px] font-bold text-slate-400 bg-surface px-2 py-0.5 rounded-md inline-block">ندارد</span>
+          <span *ngIf="!row.supervisor_name" class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md inline-block">ندارد</span>
         </ng-template>
 
         <ng-template appTableCol="manager" label="مدیریت" filterType="checkbox_text" [filterOptions]="managerOptions" let-row="row">
           <div class="flex flex-col" [title]="row.manager_note || 'بدون یادداشت'">
-            <span class="text-[11px] font-black border-b border-dashed pb-0.5 w-max" [ngClass]="row._computed_manager_name !== 'استخر مشترک' ? 'text-indigo-700 border-indigo-200' : 'text-foreground border-slate-300'">
+            <span class="text-[11px] font-black border-b border-dashed pb-0.5 w-max" [ngClass]="row._computed_manager_name !== 'استخر مشترک' ? 'text-indigo-700 border-indigo-200' : 'text-slate-800 border-slate-300'">
               {{ row._computed_manager_name }}
             </span>
             <span *ngIf="row._computed_manager_dur" class="text-[9px] text-slate-500 font-bold mt-1 flex items-center gap-1">
@@ -175,18 +175,24 @@
         </ng-template>
 
         <ng-template appTableCol="status" label="وضعیت فعلی" filterType="checkbox_text" [filterOptions]="statusOptions" let-row="row">
-          <div *ngIf="row.status === 'FINAL_APPROVED'" class="flex flex-col gap-1 items-start" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
-            <span class="px-2 py-1 rounded-md text-[10px] font-black border bg-emerald-100 text-emerald-700 border-emerald-200">
-              تایید: {{ row._computed_manager_name }}
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <div *ngIf="row.status === 'FINAL_APPROVED'" class="flex flex-col gap-1 items-start" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
+              <span class="px-2 py-1 rounded-md text-[10px] font-black border bg-emerald-100 text-emerald-700 border-emerald-200">
+                تایید: {{ row._computed_manager_name }}
+              </span>
+              <span *ngIf="row._computed_manager_dur" class="text-[9px] text-slate-500 font-bold flex items-center gap-1">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                {{ row._computed_manager_dur }}
+              </span>
+            </div>
+            <span *ngIf="row.status !== 'FINAL_APPROVED'" [class]="getStatusClass(row.status)" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
+              {{ getStatusName(row.status) }}
             </span>
-            <span *ngIf="row._computed_manager_dur" class="text-[9px] text-slate-500 font-bold flex items-center gap-1">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="text-slate-400"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              {{ row._computed_manager_dur }}
+            <span *ngIf="row._offlinePending" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="در صف همگام‌سازی آفلاین">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              صف
             </span>
           </div>
-          <span *ngIf="row.status !== 'FINAL_APPROVED'" [class]="getStatusClass(row.status)" [class.status-updated-flash]="updatedTaskIds.has(row.id)">
-            {{ getStatusName(row.status) }}
-          </span>
         </ng-template>
 
         <ng-template appTableCol="counted_balance" label="تعداد شمارش" filterType="range" let-row="row">
@@ -208,20 +214,20 @@
 
         <ng-template appTableCol="created_at" label="تاریخ ایجاد" filterType="date_range" let-row="row">
           <div class="flex flex-col gap-0.5 text-right">
-            <span class="text-[10px] font-bold text-foreground">{{ row.created_at | persianDate:'short' }}</span>
+            <span class="text-[10px] font-bold text-slate-800">{{ row.created_at | persianDate:'short' }}</span>
             <span class="text-[9px] font-mono text-slate-500" dir="ltr">{{ row.created_at | date:'HH:mm' }}</span>
           </div>
         </ng-template>
 
         <ng-template appTableCol="updated_at" label="آخرین تغییر" filterType="date_range" let-row="row">
           <div class="flex flex-col gap-0.5 text-right">
-            <span class="text-[10px] font-bold text-foreground">{{ row.updated_at | persianDate:'short' }}</span>
+            <span class="text-[10px] font-bold text-slate-800">{{ row.updated_at | persianDate:'short' }}</span>
             <span class="text-[9px] font-mono text-slate-500" dir="ltr">{{ row.updated_at | date:'HH:mm' }}</span>
           </div>
         </ng-template>
 
         <ng-template appTableCol="actions" label="" [sortable]="false" [filterable]="false" let-row="row">
-          <button *ngIf="row.status === 'PENDING_COUNT'" (click)="cancelSingleAllocation(row)" class="text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition-colors border border-transparent hover:border-rose-100 flex items-center gap-1" title="لغو تخصیص این کالا">
+          <button *ngIf="row.status === 'PENDING_COUNT' || row.status === 'INITIAL_COUNT'" (click)="cancelSingleAllocation(row)" class="text-rose-500 hover:bg-rose-50 p-1 rounded-lg transition-colors border border-transparent hover:border-rose-100 flex items-center gap-1" title="لغو تخصیص این کالا">
             <i class="feather-x-circle text-base"></i>
             <span class="text-[10px] font-bold">لغو</span>
           </button>
@@ -234,14 +240,14 @@
   <!-- Export Modal -->
   <div *ngIf="isExportModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center" dir="rtl">
     <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" (click)="closeExportModal()"></div>
-    <div class="relative bg-background rounded-2xl shadow-2xl border border-border w-[90%] max-w-md overflow-hidden">
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-[90%] max-w-md overflow-hidden">
       <!-- Modal Header -->
-      <div class="flex items-center justify-between px-5 py-4 border-b border-border">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200">
         <div class="flex items-center gap-2">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-600"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-          <h3 class="text-sm font-black text-foreground">خروجی اکسل پیگیری شمارش</h3>
+          <h3 class="text-sm font-black text-slate-800">خروجی اکسل پیگیری شمارش</h3>
         </div>
-        <button (click)="closeExportModal()" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-surface rounded-lg">
+        <button (click)="closeExportModal()" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -256,20 +262,20 @@
             <label class="flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors"
                    [class.border-emerald-400]="exportDataScope === 'all'"
                    [class.bg-emerald-50]="exportDataScope === 'all'"
-                   [class.border-border]="exportDataScope !== 'all'">
+                   [class.border-slate-200]="exportDataScope !== 'all'">
               <input type="radio" name="dataScope" value="all" [(ngModel)]="exportDataScope"
                      (change)="onExportDataScopeChange('all')" class="accent-emerald-600">
-              <span class="text-xs font-bold text-foreground">همه داده‌ها</span>
+              <span class="text-xs font-bold text-slate-800">همه داده‌ها</span>
             </label>
             <label class="flex items-center gap-2 flex-1 p-3 rounded-xl border cursor-pointer transition-colors"
                    [class.border-emerald-400]="exportDataScope === 'selected'"
                    [class.bg-emerald-50]="exportDataScope === 'selected'"
-                   [class.border-border]="exportDataScope !== 'selected'"
+                   [class.border-slate-200]="exportDataScope !== 'selected'"
                    [class.opacity-40]="selectedTaskIds.size === 0"
                    [class.pointer-events-none]="selectedTaskIds.size === 0">
               <input type="radio" name="dataScope" value="selected" [(ngModel)]="exportDataScope"
                      (change)="onExportDataScopeChange('selected')" class="accent-emerald-600">
-              <span class="text-xs font-bold text-foreground">ردیف‌های انتخاب شده ({{ selectedTaskIds.size }})</span>
+              <span class="text-xs font-bold text-slate-800">ردیف‌های انتخاب شده ({{ selectedTaskIds.size }})</span>
             </label>
           </div>
         </div>
@@ -282,7 +288,7 @@
                    [class.border-emerald-400]="exportColumnScope === 'all_db'"
                    [class.bg-emerald-50]="exportColumnScope === 'all_db'"
                    [class.text-emerald-700]="exportColumnScope === 'all_db'"
-                   [class.border-border]="exportColumnScope !== 'all_db'"
+                   [class.border-slate-200]="exportColumnScope !== 'all_db'"
                    [class.text-slate-600]="exportColumnScope !== 'all_db'">
               <input type="radio" name="colScope" value="all_db" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
               همه ستون‌ها
@@ -291,7 +297,7 @@
                    [class.border-emerald-400]="exportColumnScope === 'visible'"
                    [class.bg-emerald-50]="exportColumnScope === 'visible'"
                    [class.text-emerald-700]="exportColumnScope === 'visible'"
-                   [class.border-border]="exportColumnScope !== 'visible'"
+                   [class.border-slate-200]="exportColumnScope !== 'visible'"
                    [class.text-slate-600]="exportColumnScope !== 'visible'">
               <input type="radio" name="colScope" value="visible" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
               ستون‌های نمایان
@@ -300,7 +306,7 @@
                    [class.border-emerald-400]="exportColumnScope === 'custom'"
                    [class.bg-emerald-50]="exportColumnScope === 'custom'"
                    [class.text-emerald-700]="exportColumnScope === 'custom'"
-                   [class.border-border]="exportColumnScope !== 'custom'"
+                   [class.border-slate-200]="exportColumnScope !== 'custom'"
                    [class.text-slate-600]="exportColumnScope !== 'custom'">
               <input type="radio" name="colScope" value="custom" [(ngModel)]="exportColumnScope" class="accent-emerald-600">
               انتخاب دستی
@@ -309,14 +315,14 @@
         </div>
 
         <!-- Custom Column Selection -->
-        <div *ngIf="exportColumnScope === 'custom'" class="border border-border rounded-xl p-3 max-h-44 overflow-y-auto">
+        <div *ngIf="exportColumnScope === 'custom'" class="border border-slate-200 rounded-xl p-3 max-h-44 overflow-y-auto">
           <p class="text-[10px] font-black text-slate-400 mb-2">ستون‌هایی که می‌خواهید در خروجی باشند:</p>
           <div class="grid grid-cols-2 gap-1">
-            <label *ngFor="let col of availableExportColumns" class="flex items-center gap-2 p-1.5 hover:bg-surface rounded cursor-pointer">
+            <label *ngFor="let col of availableExportColumns" class="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer">
               <input type="checkbox" [checked]="selectedExportColumns.has(col.key)"
                      (change)="toggleExportColumn(col.key)"
                      class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
-              <span class="text-[11px] font-bold text-foreground">{{ col.label }}</span>
+              <span class="text-[11px] font-bold text-slate-800">{{ col.label }}</span>
             </label>
           </div>
         </div>
@@ -324,7 +330,7 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="px-5 py-4 bg-surface border-t border-border flex gap-2">
+      <div class="px-5 py-4 bg-slate-50 border-t border-slate-200 flex gap-2">
         <button (click)="executeExport()" [disabled]="isExporting"
                 class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center justify-center gap-2">
           <svg *ngIf="!isExporting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -332,7 +338,7 @@
           {{ isExporting ? 'در حال دانلود...' : 'دانلود اکسل' }}
         </button>
         <button (click)="closeExportModal()" [disabled]="isExporting"
-                class="px-4 py-2.5 bg-background border border-border text-foreground text-xs font-bold rounded-xl hover:bg-surface transition-colors">
+                class="px-4 py-2.5 bg-white border border-slate-200 text-slate-800 text-xs font-bold rounded-xl hover:bg-slate-50 transition-colors">
           لغو
         </button>
       </div>

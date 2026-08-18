@@ -1,142 +1,48 @@
 <div dir="rtl" align="right">
 
-# یکپارچه‌سازی و رفع باگ دکمه‌های بروزرسانی (Refresh)
+# برنامه اجرایی جامع سامانه (Master Implementation Plan)
 
-این طرح بر اساس توافق انجام شده مبنی بر قرارگیری تمامی دکمه‌های بروزرسانی در **سمت چپ هدر** و داشتن افکت بارگذاری (Loading) تدوین شده است.
-
-## مشکلات یافت شده
-پس از بررسی کدهای TypeScript فایل‌هایی مانند `projects.ts` و `users.ts`، متوجه شدم متدهای بارگذاری (مانند `loadWarehouses` و `loadData`) متغیر وضعیت `isLoading` را در ابتدا به `true` و در انتها به `false` تنظیم نمی‌کنند. در نتیجه، اگرچه دیتا از سرور خوانده می‌شود، اما دکمه رفرش هیچ انیمیشن چرخشی (Spinner) یا بازخورد بصری را به کاربر نشان نمی‌دهد.
-
-در برخی صفحات دیگر مثل `dashboard.ts` یا `reports.ts` نیز نیاز است منطق Loading برای دکمه رفرش بهینه‌سازی شود. همچنین، جایگاه دکمه رفرش در تمامی تب‌ها در حال حاضر یکسان نیست.
-
-## تغییرات پیشنهادی
-
-### ۱. اصلاح جایگاه دکمه بروزرسانی (HTML)
-دکمه بروزرسانی در فایل‌های زیر از کنار عنوان صفحه (سمت راست) به همراه سایر دکمه‌های عملیاتی (اکشن‌ها) به **سمت چپ هدر** منتقل خواهد شد:
-- `projects.html`
-- `users.html`
-- `dispatch.html`
-- `count-tracking.html`
-- `reports.html`
-- `customs.html`
-*(فایل `dashboard.html` در حال حاضر دکمه را در سمت چپ دارد).*
-
-### ۲. افزودن منطق وضعیت بارگذاری (TypeScript)
-به تمام کامپوننت‌های زیر متغیر `isRefreshing = false` (یا مقداردهی صحیح `isLoading`) اضافه می‌شود تا در هنگام فراخوانی API وضعیت آن `true` شده و در `next` یا `error` دوباره `false` شود:
-- `projects.ts`
-- `users.ts`
-- `dashboard.ts`
-- `count-tracking.ts`
-- `customs.ts`
-- `reports.ts` (و در صورت نیاز، `report-store.ts`)
-
-### ۳. افزودن افکت چرخشی (Spinner) به دکمه‌ها (HTML)
-در فایل‌های نام‌برده، کد دکمه بروزرسانی مطابق با الگوی زیر اصلاح خواهد شد تا در صورت `isRefreshing === true`، چرخ‌دنده لودینگ نمایش داده شود و دکمه غیرفعال گردد:
-
-```html
-<button type="button" [disabled]="isRefreshing" (click)="loadData()" class="..." title="بروزرسانی">
-  <svg *ngIf="!isRefreshing" ...></svg>
-  <span *ngIf="isRefreshing" class="animate-spin ..."></span>
-</button>
-```
-
-> [!NOTE]
-> با اعمال این طرح، در تمامی تب‌ها، دکمه رفرش در یک جایگاه ثابت (سمت چپ) قرار می‌گیرد و با کلیک روی آن کاربر کاملاً متوجه انجام عملیات دریافت داده خواهد شد.
-
-## User Review Required
-آیا با این تغییرات سراسری برای اصلاح و یکپارچه‌سازی دکمه‌های رفرش موافق هستید؟ لطفاً **تایید** کنید تا فرآیند پیاده‌سازی آغاز شود.
-
-
-# مکانیزم مدیریت حذف موجودیت‌ها (Entity Deletion) - نسخه فازبندی شده
-
-جهت پیشگیری از هرگونه تداخل و تضمین اجرای دقیق و بدون نقص، طرح قبلی به **۴ فاز اجرایی مجزا** تفکیک شد.
-
-## فاز اول: پیاده‌سازی سیستم تحلیلگر اثرات در بک‌اند
-ایجاد `DeleteImpactMixin` با استفاده از `Collector` برای برگرداندن تعداد رکوردهای درگیر در حذف آبشاری.
-
-## فاز دوم: ایمن‌سازی متدهای حذف فیزیکی
-قرار دادن عملیات `DELETE` درون بلاک `try-except` جهت شکار خطاهای `ProtectedError` و بازگرداندن پیغام خطای خوانا (400).
-
-## فاز سوم: توسعه کامپوننت هوشمند فرانت‌اند (`app-smart-delete-modal`)
-طراحی مدالی با دو گزینه Soft-Delete و Hard Delete، به همراه قفل زمانی ۳ ثانیه‌ای و تاییدیه متنی مضاعف (تایپ کلمه تایید).
-
-## فاز چهارم: جایگزینی در صفحات و تست یکپارچگی
-جایگزین کردن دیالوگ‌های حذف قدیمی با کامپوننت جدید در صفحات کاربران، انبارها و کالاها و تست نهایی.
-
-## User Review Required
-طرح فازبندی شد. آیا با این نسخه موافق هستید؟ لطفاً در صورت تایید فرمان **شروع** یا **تایید** را صادر نمایید.
-
-
-# پیاده‌سازی سیستم مدیریت تم (Theme Management System)
-
-این طرح برای پیاده‌سازی یک سیستم مدیریت تم پویا (Dynamic Theming) با پشتیبانی از ۵ تم مختلف (روشن، تاریک، صنعتی، سازمانی و کنتراست بالا) در برنامه Angular با استفاده از TailwindCSS طراحی شده است.
-
-## User Review Required
-
-> [!WARNING]
-> اجرای این طرح نیازمند جایگزینی کلاس‌های رنگی ثابت Tailwind (مثل `bg-white` و `text-gray-800`) با کلاس‌های سفارشی (مثل `bg-background` و `text-foreground`) در کل برنامه است.
-
-> [!IMPORTANT]
-> برای این کار، فایل `tailwind.config.js` باید تغییر کند تا رنگ‌های جدید به آن شناسانده شوند.
-
-## Open Questions
-
-> [!NOTE]
-> ۱. آیا تمایل دارید سیستم تشخیص خودکار تم سیستم کاربر (System Preference) را به عنوان پیش‌فرض قرار دهیم؟
-> ۲. دکمه تغییر تم را ترجیح می‌دهید در کدام بخش قرار دهیم؟ (در منوی کناری، نوار بالایی یا در صفحه تنظیمات کاربر؟)
-
-## Proposed Changes
-
----
-
-### پیکربندی Tailwind و CSS پایه (Core CSS & Tailwind Config)
-
-#### [MODIFY] [styles.css](file:///e:/warehouse%20project/warehouse-front/src/styles.css)
-- تعریف متغیرهای CSS (CSS Variables) برای رنگ‌های پایه در `:root` برای تم روشن.
-- اضافه کردن انتخابگرهای `[data-theme="dark"]`, `[data-theme="industrial"]`, `[data-theme="corporate"]` و `[data-theme="high-contrast"]` با رنگ‌های اختصاصی.
-
-#### [MODIFY] `tailwind.config.js`
-- افزونه `extend.colors` برای اتصال کلاس‌های Tailwind به متغیرهای CSS (مثلاً `primary: "var(--color-primary)"`).
-
----
-
-### سرویس و کامپوننت‌های Angular
-
-#### [NEW] `src/app/core/services/theme.service.ts`
-- ایجاد سرویسی برای مدیریت حالت تم.
-- خواندن و نوشتن تم انتخابی در `localStorage` برای ماندگاری (Persistence).
-- تغییر ویژگی `data-theme` روی تگ `document.body`.
-
-#### [NEW] `src/app/components/layout/theme-switcher/theme-switcher.component.ts`
-- یک کامپوننت UI (دراپ‌داون یا دکمه) برای انتخاب بین ۵ تم موجود.
-
-#### [MODIFY] [layout.ts](file:///e:/warehouse%20project/warehouse-front/src/app/components/layout/layout.ts)
-- اضافه کردن `ThemeSwitcherComponent` به نوار منوی اصلی برنامه.
-- اعمال تغییرات کلاس‌های CSS برای پشتیبانی از تم‌های داینامیک.
-
----
-
-### اصلاح کلاس‌های کامپوننت‌ها (UI Refactoring)
-
-#### [MODIFY] `src/app/components/**/*.ts` (همه کامپوننت‌های دارای ظاهر)
-- جایگزینی کلاس‌هایی مانند `bg-white`, `bg-slate-900` با `bg-background` یا `bg-surface`.
-- جایگزینی کلاس‌هایی مانند `text-slate-800`, `text-white` با `text-foreground` یا `text-primary`.
-- جایگزینی کلاس‌های `border-*` با کلاس‌های مدیریت شده توسط تم.
-
-## Verification Plan
-
-### Automated Tests
-- بررسی اجرای موفق `npm run start` و عدم وجود خطای کامپایل در Angular و Tailwind.
-
-### Manual Verification
-۱. باز کردن برنامه در مرورگر.
-۲. تغییر تم از طریق دکمه Theme Switcher و بررسی اعمال آنی رنگ‌ها.
-۳. بررسی خوانایی و زیبایی عناصر اصلی (جداول، کارت‌ها، سایدبار) در هر ۵ تم.
-۴. رفرش کردن صفحه و اطمینان از باقی ماندن تم انتخابی.
-
+- [برنامه اجرایی اصلاح و بازطراحی جامع داشبورد مانیتورینگ انبار](Dashboard_Comprehensive_Fixes/implementation_plan_dashboard_fixes.md)
+- [طرح اجرایی جامع اصلاح و ارتقای صفحه کاربران و نقش‌ها](Users_And_Roles_Fixes/implementation_plan_users_and_roles_fixes.md)
+- [طرح پیاده‌سازی سیستم تصویر پرسنلی و آواتار هوشمند کاربران](User_Avatar_Cropper/implementation_plan_user_avatar.md)
+- [طرح جامع رفع باگ‌های سیستم تصویر پرسنلی و وب‌کم](Avatar_Camera_And_Cropper_Fixes/implementation_plan_avatar_camera_and_cropper_fixes.md)
+- [طرح جامع بهینه‌سازی و ارتقای سرعت سیستم (Performance Optimization)](Performance_Optimization/implementation_plan_performance_optimization.md)
+- [طرح بازطراحی مینیمال و ارتقای UI فرم ویرایش تصویر پرسنلی](Avatar_Cropper_UI_Refinement/implementation_plan_avatar_cropper_ui_refinement.md)
+- [طرح مینیمال‌سازی نهایی و دکمه شناور چرخش در فرم ویرایش تصویر پرسنلی](Avatar_Cropper_Minimal_Floating_UI/implementation_plan_avatar_cropper_minimal_floating_ui.md)
+- [طرح جامع بازطراحی و ارتقای کارت پرسنلی و گیت‌پاس انبار](Personnel_ID_Cards_Redesign/implementation_plan_personnel_id_cards_redesign.md)
+- [طرح جامع توسعه سفارشی‌سازی پیشرفته و خروجی دیجیتال کارت پرسنلی](Personnel_ID_Cards_Advanced_Customization/implementation_plan_personnel_id_cards_advanced_customization.md)
+- [طرح جامع اصلاح موتور پرینت، افزودن فیلدهای هویتی به کاربر و پریست‌های چیدمان](Personnel_ID_Cards_Presets_And_Print_Fix/implementation_plan_personnel_id_cards_presets_and_print_fix.md)
+- [طرح جامع بازنگری و اصلاحات نهایی کارت پرسنلی](Personnel_ID_Cards_Refinement_V2/implementation_plan_personnel_id_cards_refinement_v2.md)
+- [طرح جامع رفع کامل ایرادات تب صدور کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Comprehensive_Fixes/implementation_plan_personnel_id_cards_comprehensive_fixes.md)
+- [طرح پیاده‌سازی قانون فازبندی و تفکیک تسک‌ها](Granular_Task_Rule/implementation_plan_granular_task.md)
+- [طرح اجرایی انطباق ۱۰۰٪ چاپ و پیش‌نمایش کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Print_Preview_Sync/implementation_plan_personnel_id_cards_print_preview_sync.md)
+- [طرح اجرایی انطباق ۱۰۰٪ خروجی تصویر دیجیتال (Canvas) با پیش‌نمایش زنده](Personnel_ID_Cards_Canvas_Pixel_Perfect_Sync/implementation_plan_personnel_id_cards_canvas_pixel_perfect_sync.md)
+- [طرح اجرایی اختصاص فضای ویژه و بزرگتر برای QR Code دوبعدی](Personnel_ID_Cards_Larger_QRCode_Space/implementation_plan_personnel_id_cards_larger_qrcode_space.md)
+- [طرح جامع بازطراحی QR Code بزرگ، سامانه استعلام اصالت کارت و تطبیق ۱۰۰٪ پیش‌نمایش با خروجی تصویر](Personnel_ID_Cards_Verification_And_Enlarged_QR/implementation_plan_personnel_id_cards_verification_and_enlarged_qr.md)
+- [طرح جامع اصلاح و ارتقای صفحه مدیریت انبارها (Warehouse Management Comprehensive Fixes)](Warehouse_Management_Comprehensive_Fixes/implementation_plan_Warehouse_Management_Comprehensive_Fixes.md)
+- [طرح جامع سفارشی‌سازی فیلدهای کارتابل انبارگردان (Field Permissions Customization for Warehouse Counter)](Field_Permissions_Customization/implementation_plan_field_permissions.md)
+- [طرح جامع سفارشی‌سازی فیلدهای کارتابل مالی (Field Permissions Customization for Customs/Financial Cartable)](Customs_Field_Permissions/implementation_plan_customs_field_permissions.md)
+- [طرح جامع پیاده‌سازی دکمه‌های ناوبری قبل و بعد در هدر (Header Navigation Pill)](Header_Navigation_Buttons/implementation_plan_header_navigation.md)
+- [طرح جامع بررسی و پیاده‌سازی کلیدهای میانبر کیبورد (Keyboard Shortcuts Audit & Plan)](Keyboard_Shortcuts_Audit/implementation_plan_keyboard_shortcuts_audit.md)
+- [طرح جامع اصلاح و بهینه‌سازی کارتابل مالی و مدارک (Customs Cartable Comprehensive Fixes)](Customs_Comprehensive_Fixes/implementation_plan_customs_comprehensive_fixes.md)
+- [طرح جامع پیاده‌سازی وضعیت شمارش اولیه در فرآیند انبارگردانی (Initial Count Workflow)](Initial_Count_Workflow/implementation_plan_initial_count.md)
+- [طرح بازآرایی فیلترهای داشبورد انبارگردان و پیش‌فرض دست‌نخورده (Counter Dashboard Pending Default)](Counter_Dashboard_Pending_Default/implementation_plan_pending_default.md)
+- [طرح تغییر مرتب‌سازی پیش‌فرض داشبورد انبارگردان به آخرین زمان تغییر (Counter Dashboard Default Sort Updated At)](Counter_Dashboard_Sort_Updated_At/implementation_plan_sort_updated_at.md)
+- [طرح جامع بازبینی و رفع ایرادات کارتابل انبارگردان (Counter Dashboard Audit & Fixes)](Counter_Dashboard_Audit_And_Fixes/implementation_plan_counter_dashboard_fixes.md)
+- [طرح جامع تفکیک تب مغایرت و بازشماری و چرخه هوشمند بازگرداندن کالا (Counter Discrepancy & Revert Workflow)](Counter_Discrepancy_And_Revert_Workflow/implementation_plan_revert_workflow.md)
+- [طرح کپی خودکار متن اعلان‌ها با کلیک و بازخورد بصری (Toast Click-to-Copy)](Toast_Click_To_Copy/implementation_plan_toast_click_to_copy.md)
+- [طرح جامع چرخه بک‌اند کارتابل مالی و پیاده‌سازی آزمون‌های ۱۵گانه (Financial Cartable Backend Cycle)](Financial_Cartable_Backend_Cycle/implementation_plan_financial_cartable_backend_cycle.md)
+- [طرح جامع معماری کش آفلاین-اول با الگوی SWR و بروزرسانی بلادرنگ](Offline_First_SWR_Caching/implementation_plan_offline_first_swr_caching.md)
+- [طرح جامع بازبینی و مقاوم‌سازی وب‌سوکت و دوربین اسکنر](Camera_Scanner_and_WebSocket_Enhancement/implementation_plan_camera_ws.md)
+- [طرح جامع رفع مشکل صفحه سیاه دوربین و ارتقای تطبیق اسکنر](Scanner_Camera_Fixes/implementation_plan_scanner_camera_fixes.md)
+- [طرح جامع احیا و بازنشانی استاندارد دوربین اسکنر بارکد بر پایه گیت](Camera_Scanner_Restoration/implementation_plan_camera_scanner_restoration.md)
+- [طرح بهینه‌سازی حداکثری سرعت و قدرت تشخیص اسکنر دوربین](Camera_Scanner_Speed_And_Detection_Optimization/implementation_plan_scanner_speed.md)
+- [طرح جامع بازنشانی کدهای اسکنر به نسخه اصلی با رزولوشن بالای گیت‌هاب](Scanner_GitHub_Resolution_Reset/implementation_plan_scanner_github_resolution_reset.md)
+- [طرح اجرایی ارتقای موتور اسکنر دوربین به سطح عملکرد اسکنر بومی گوشی (2D Scanner Engine)](Scanner_2D_Camera_Performance_Engine/implementation_plan_scanner_2d_camera_performance_engine.md)
+- [طرح جامع پیاده‌سازی اسکنر هوشمند چندردیفه و به‌روزرسانی دسته‌ای کارتابل مالی](Financial_Scanner_MultiRow_Update/implementation_plan_financial_scanner_multirow_update.md)
+- [طرح جامع اصلاح به‌روزرسانی‌های زنده، وب‌سوکت و عملیات آفلاین در رهگیری شمارش](CountTracking_Live_Offline_Fixes/implementation_plan_count_tracking_live_offline_fixes.md)
+- [طرح جامع ارتقای اسکریپت و داشبورد تاریخچه چت‌ها (Chat History Enhancements)](Chat_History_Enhancements/implementation_plan_chat_history_enhancements.md)
+- [طرح جامع اصلاح به‌روزرسانی‌های زنده، وب‌سوکت و عملیات آفلاین در کارتابل‌های سرپرست و مدیر](Supervisor_Manager_Live_Offline_Fixes/implementation_plan_supervisor_manager_live_offline_fixes.md)
+- [طرح جامع به‌روزرسانی نقطه‌ای هوشمند وب‌سوکت در کارتابل انبارگردان (Counter Dashboard In-Place Live Updates)](Counter_Dashboard_Live_InPlace_Update/implementation_plan_counter_dashboard_live_inplace_update.md)
 </div>
 
-
-# پیاده‌سازی مکانیزم اطلاع‌رسانی بروزرسانی PWA
-
-رجوع شود به e:\warehouse project\Documents\PWA_Update\implementation_plan_PWA_Update.md

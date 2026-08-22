@@ -38,7 +38,28 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:4200/)",
       "Bash(curl -s -w \"\\\\nHTTP_CODE:%{http_code}\" http://127.0.0.1:4200/api/)",
       "Bash(python -c \"from reports.engine import ReportEngine; from reports.registry import get_registry, JOINS; print\\('OK — joins:', list\\(JOINS.keys\\(\\)\\)\\)\")",
-      "Bash(python -m py_compile reports/engine.py reports/registry.py reports/views.py)"
+      "Bash(python -m py_compile reports/engine.py reports/registry.py reports/views.py)",
+      "Bash(find . -maxdepth 3 -type d -not -path '*/\\\\.git*' -not -path '*/node_modules*' -not -path '*/__pycache__*' -not -path '*/venv*' -not -path '*/.angular*' -not -path '*/dist*')",
+      "Bash(grep \"/$\")",
+      "Bash(python -c \"import os; print\\('\\\\n'.join\\([d for d in os.listdir\\('warehouse-backend'\\) if os.path.isdir\\(os.path.join\\('warehouse-backend', d\\)\\) and not d.startswith\\('.'\\) and d != '__pycache__']\\)\\)\")",
+      "Bash(python -c \"import os; print\\('\\\\n'.join\\([d for d in os.listdir\\('warehouse-front/src/app'\\) if os.path.isdir\\(os.path.join\\('warehouse-front/src/app', d\\)\\) and not d.startswith\\('.'\\)]\\)\\)\")",
+      "Bash(npm run *)",
+      "Bash(sed -i 's/max-w-2xl/max-w-7xl/g' warehouse-front/src/app/components/customs/customs.html)",
+      "Bash(./venv/Scripts/python manage.py shell)",
+      "Bash(python manage.py shell -c \"from warehouses.models import Warehouse; from django.db.models import Count, Q; print\\(Warehouse.objects.annotate\\(annotated_total_quantity=Count\\('items'\\), annotated_counted_quantity=Count\\('items', filter=~Q\\(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش']\\)\\)\\).query\\)\")",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c \"from warehouses.models import Warehouse; from django.db.models import Count, Q; print\\(Warehouse.objects.annotate\\(annotated_total_quantity=Count\\('items'\\), annotated_counted_quantity=Count\\('items', filter=~Q\\(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش']\\)\\)\\).query\\)\")",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c \"from warehouses.models import Warehouse; from django.db.models import Count, Q; print\\(Warehouse.objects.annotate\\(annotated_total_quantity=Count\\('items'\\), annotated_counted_quantity=Count\\('items', filter=~Q\\(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش']\\)\\)\\).query.__str__\\(\\).encode\\('utf-8'\\)\\)\")",
+      "Bash(cd .. && cat warehouse-front/src/app/components/projects/projects.ts)",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c \"from warehouses.models import Warehouse; from django.db.models import Count, Q; print\\(len\\(Warehouse.objects.annotate\\(annotated_total_quantity=Count\\('items'\\), annotated_counted_quantity=Count\\('items', filter=~Q\\(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش']\\)\\)\\)\\)\\)\")",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c \"from warehouses.models import Warehouse; print\\(len\\(Warehouse.objects.all\\(\\)\\)\\)\")",
+      "Bash(cd .. && cat warehouse-front/src/app/components/projects/projects.ts | grep -A 20 filteredProjects)",
+      "Bash(./venv/Scripts/python.exe manage.py test warehouses.tests)",
+      "Bash(sqlite3 \"warehouse-backend/db.sqlite3\" \"SELECT count\\(*\\) FROM warehouses_warehouse;\")",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c ' *)",
+      "Bash(xargs grep -i \"\\\\.delete\")",
+      "Bash(warehouse-backend/venv/Scripts/python -c ' *)",
+      "Bash(venv/Scripts/python -c ' *)",
+      "Bash(rm -f warehouse-backend/test_script.py warehouse-backend/test_wh.py warehouse-backend/test_api.py)"
     ]
   }
 }

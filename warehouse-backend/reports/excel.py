@@ -20,6 +20,7 @@ from decimal import Decimal
 
 import openpyxl
 from openpyxl.cell import WriteOnlyCell
+from openpyxl.utils import get_column_letter
 from django.db import connection
 from django.db.models import Q
 from django.utils import timezone
@@ -33,21 +34,28 @@ CHUNK_SIZE = 2000
 WORKER_ALIVE_WINDOW = 15  # ثانیه — نبض تازه‌تر از این یعنی worker زنده است
 
 from common.excel_utils import (
-    HEADER_FILL, HEADER_FONT, KEY_FONT, ZEBRA_FILL, CENTER, 
-    NUMBER_FORMATS, get_cell_value, styled_cell, set_column_widths, freeze_header_panes
+    HEADER_FILL, HEADER_FONT, KEY_FONT, TITLE_FONT, ZEBRA_FILL, CENTER, 
+    NUMBER_FORMATS, get_cell_value, styled_cell, set_column_widths, freeze_header_panes,
+    jalali_now_str
 )
 
 
 def _write_workbook(ws_target, qs, columns, progress_cb=None, total=0,
                     report_name='گزارش', zebra=False):
     """
-    نوشتن شیت کامل: دو ردیف سربرگ (برچسب فارسی/کلید سیستمی) + داده.
+    نوشتن شیت کامل: ردیف ۱ عنوان گزارش، ردیف ۲ برچسب فارسی، ردیف ۳ کلید سیستمی + داده.
     zebra فقط برای نتایج کوچک (هزینه WriteOnlyCell به‌ازای هر سلول).
     """
     set_column_widths(ws_target, columns, is_write_only=True)
-    freeze_header_panes(ws_target, row=3, is_write_only=True)
+    freeze_header_panes(ws_target, row=4, is_write_only=True)
 
-    # ردیف ۱: برچسب فارسی
+    # ردیف ۱: عنوان گزارش + زمان
+    title_text = f"{report_name} — {jalali_now_str()}"
+    title_cell = styled_cell(ws_target, title_text, is_write_only=True)
+    title_cell.font = TITLE_FONT
+    ws_target.append([title_cell])
+
+    # ردیف ۲: برچسب فارسی
     header_row = []
     for c in columns:
         cell = styled_cell(ws_target, c['label'], is_write_only=True)
@@ -57,7 +65,7 @@ def _write_workbook(ws_target, qs, columns, progress_cb=None, total=0,
         header_row.append(cell)
     ws_target.append(header_row)
 
-    # ردیف ۲: کلید سیستمی (برای import/دیباگ)
+    # ردیف ۳: کلید سیستمی (برای import/دیباگ)
     key_row = []
     for c in columns:
         cell = styled_cell(ws_target, c['key'], is_write_only=True)
@@ -66,7 +74,7 @@ def _write_workbook(ws_target, qs, columns, progress_cb=None, total=0,
         key_row.append(cell)
     ws_target.append(key_row)
 
-    keys = [c['key'] for c in columns]
+    keys = [c.get('source') or c['key'] for c in columns]
     formats = [NUMBER_FORMATS.get(c.get('type')) for c in columns]
     needs_cell = [f is not None for f in formats]
 
@@ -150,35 +158,44 @@ def _run_export_job(job_pk, user_pk):
 
     try:
         job = ReportExportJob.objects.get(pk=job_pk)
-        ReportExportJob.objects.filter(pk=job_pk).update(
-            status='running', heartbeat_at=timezone.now(),
-        )
-
         user = CustomUser.objects.get(pk=user_pk)
-        engine = ReportEngine(user, job.spec)
-        qs, columns, total = engine.export_queryset()
+        eng = ReportEngine(user, job.spec)
+        qs, columns, total = eng.export_queryset()
+
+        job.total_rows = total
+        job.status = 'running'
+        job.progress = 0
+        job.heartbeat_at = timezone.now()
+        job.save(update_fields=['total_rows', 'status', 'progress', 'heartbeat_at'])
+
+        last_hb = [timezone.now()]
+
+        def on_progress(done, tot):
+            pct = int(done / tot * 100) if tot else 0
+            now = timezone.now()
+            # ثبت نبض در DB هر ۵ ثانیه
+            if (now - last_hb[0]).total_seconds() >= 5:
+                last_hb[0] = now
+                ReportExportJob.objects.filter(pk=job_pk).update(
+                    progress=pct, heartbeat_at=now,
+                )
+
+        wb, ws = _make_workbook()
+        _write_workbook(
+            ws, qs, columns, report_name=job.report_name,
+            total=total, progress_cb=on_progress, zebra=True,
+        )
 
         exports_dir = ReportExportJob.exports_dir()
         fname = f'report_{job_pk}_{uuid.uuid4().hex[:8]}.xlsx'
         fpath = exports_dir / fname
-
-        def progress_cb(written, _total):
-            pct = min(99, int(written * 100 / max(1, total)))
-            # heartbeat هر CHUNK_SIZE ردیف — نشان زنده بودن پردازش‌های طولانی
-            ReportExportJob.objects.filter(pk=job_pk).update(
-                progress=pct, total_rows=total, heartbeat_at=timezone.now(),
-            )
-
-        wb, ws = _make_workbook()
-        _write_workbook(
-            ws, qs, columns, progress_cb=progress_cb, total=total,
-            report_name=job.report_name, zebra=(total <= SYNC_ROW_LIMIT),
-        )
         wb.save(str(fpath))
 
         ReportExportJob.objects.filter(pk=job_pk).update(
-            status='done', progress=100,
+            status='done',
+            progress=100,
             file_path=f'report_exports/{fname}',
+            heartbeat_at=timezone.now(),
             finished_at=timezone.now(),
         )
     except ReportError as e:
@@ -207,6 +224,20 @@ def cleanup_old_jobs(max_age_hours=24):
             except OSError:
                 pass
     old.delete()
+
+    # اسکن فایل‌های یتیم روی دیسک که رکوردی ندارند یا بیش از ۲۴ ساعت قدمت دارند
+    try:
+        exports_dir = ReportExportJob.exports_dir()
+        if exports_dir.exists():
+            for f in exports_dir.glob('report_*.xlsx'):
+                try:
+                    mtime = timezone.datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                    if mtime < cutoff:
+                        f.unlink()
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
     # running بدون نبض تازه (بیش از ۱ ساعت) → مرده؛ نبض ملاک است نه زمان شروع
     stale_cutoff = timezone.now() - timezone.timedelta(hours=1)

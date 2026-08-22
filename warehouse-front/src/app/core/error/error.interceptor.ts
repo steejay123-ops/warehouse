@@ -43,7 +43,7 @@ export const errorInterceptor: HttpInterceptorFn = (
       }
       
       // لاگین خودش 429 را هندل می‌کند
-      if (error.status === 429 && req.url.includes('/auth/login')) {
+      if (error.status === 429 && req.url.includes('/auth/login') && !req.url.includes('login-logs')) {
         return throwError(() => error);
       }
 

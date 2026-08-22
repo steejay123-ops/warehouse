@@ -3,6 +3,7 @@ import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, Subject, from, map, switchMap, of, takeUntil, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
+import { SKIP_GLOBAL_ERROR_TOAST } from '../error/error.interceptor';
 import {
   EntityFieldsResponse,
   ExportOutcome,
@@ -25,7 +26,7 @@ export class ReportApiService {
 
   /** کانتکست تازه برای هر درخواست (HttpContext قابل اشتراک نیست) */
   private ctx(): HttpContext {
-    return new HttpContext().set(SKIP_OFFLINE, true);
+    return new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true);
   }
 
   getEntities(): Observable<ReportEntity[]> {
@@ -51,11 +52,12 @@ export class ReportApiService {
    * - 202 با JSON → job پس‌زمینه ساخته شده (باید poll شود)
    */
   export(spec: ReportSpec): Observable<ExportOutcome> {
+    const exportCtx = this.ctx().set(SKIP_GLOBAL_ERROR_TOAST, true);
     return this.http
       .post(`${this.base}export/`, spec, {
         responseType: 'blob',
         observe: 'response',
-        context: this.ctx(),
+        context: exportCtx,
       })
       .pipe(
         switchMap((res) => {

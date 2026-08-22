@@ -36,19 +36,83 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             
         return permission_classes
 
+    def perform_create(self, serializer):
+        from accounts.audit_utils import log_audit_event
+        instance = serializer.save()
+        log_audit_event(
+            module='warehouses',
+            action='CREATE',
+            target_model='Warehouse',
+            target_object_id=instance.id,
+            target_repr=f"انبار: {instance.name}",
+            severity='info',
+            warehouse=instance,
+            after_state={'id': instance.id, 'name': instance.name, 'code': instance.code, 'is_active': instance.is_active}
+        )
+
     def perform_update(self, serializer):
+        from accounts.audit_utils import log_audit_event, calculate_model_diff
+        instance = self.get_object()
+        before_state = {'name': instance.name, 'code': instance.code, 'is_active': instance.is_active, 'location': instance.location}
+        
         if 'is_active' in self.request.data:
             if not self.request.user.has_perm('accounts.perm_wh_freeze') and not self.request.user.is_superuser:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("شما مجوز فریز/فعال‌سازی انبار را ندارید.")
-        serializer.save()
+        updated_instance = serializer.save()
+        after_state = {'name': updated_instance.name, 'code': updated_instance.code, 'is_active': updated_instance.is_active, 'location': updated_instance.location}
+        
+        diff_b, diff_a = calculate_model_diff(before_state, after_state)
+        is_freeze_change = before_state.get('is_active') != after_state.get('is_active')
+        
+        log_audit_event(
+            module='warehouses',
+            action='UPDATE',
+            target_model='Warehouse',
+            target_object_id=updated_instance.id,
+            target_repr=f"انبار: {updated_instance.name}",
+            severity='critical' if is_freeze_change else 'warning',
+            warehouse=updated_instance,
+            before_state=diff_b,
+            after_state=diff_a,
+            details={'freeze_toggled': is_freeze_change}
+        )
+
+    def perform_destroy(self, instance):
+        from accounts.audit_utils import log_audit_event
+        log_audit_event(
+            module='warehouses',
+            action='DELETE',
+            target_model='Warehouse',
+            target_object_id=instance.id,
+            target_repr=f"حذف انبار: {instance.name}",
+            severity='critical',
+            warehouse=instance,
+            before_state={'id': instance.id, 'name': instance.name, 'code': instance.code}
+        )
+        super().perform_destroy(instance)
 
     @action(detail=True, methods=['patch'])
     def toggle_archive(self, request, pk=None):
+        from accounts.audit_utils import log_audit_event
         warehouse = self.get_object()
+        old_status = warehouse.is_active
         warehouse.is_active = not warehouse.is_active
         warehouse.save()
+        log_audit_event(
+            module='warehouses',
+            action='UPDATE',
+            target_model='Warehouse',
+            target_object_id=warehouse.id,
+            target_repr=f"{'فریز' if not warehouse.is_active else 'فعال‌سازی'} انبار: {warehouse.name}",
+            severity='critical',
+            warehouse=warehouse,
+            before_state={'is_active': old_status},
+            after_state={'is_active': warehouse.is_active},
+            details={'action': 'toggle_archive'}
+        )
         return Response(self.get_serializer(warehouse).data)
+
 
     # ── Excel Import/Export Actions ──────────────────────────────────
     @action(detail=False, methods=['get'])

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "cli-v1",
+  "snapshotId": "snap_d99fd7e2cb276fd4",
+  "testId": "f0ae5ba6-d71f-4470-97a8-64e0814d9561",
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "codeVersion": "v1",
+  "runIdIfAvailable": "a0d33e2b-314d-4351-aab3-ea0bc72c0f80",
+  "targetUrl": "https://app.farsalish.ir",
+  "failedStepIndex": 5,
+  "failureKind": null,
+  "capturedAt": "2026-08-16T02:31:15.920Z",
+  "fetchedAt": "2026-08-16T02:31:33.989Z"
+}

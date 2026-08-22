@@ -1,36 +1,92 @@
 <div dir="rtl" align="right">
 
-# گزارش جامع پایان عملیات (Master Walkthrough Log)
+# گزارش جامع Master پایان عملیات و راستی‌آزمایی (Walkthrough) — بازنگری و اصلاحات گزارش‌ساز پویا
 
-- [گزارش انجام کار اصلاح و بازطراحی جامع داشبورد مانیتورینگ انبار](Dashboard_Comprehensive_Fixes/walkthrough_dashboard_fixes.md)
-- [گزارش جامع اصلاح و هوشمندسازی کاربران و نقش‌ها و سیستم اکسل](Users_And_Roles_Fixes/walkthrough_users_and_roles_fixes.md)
-- [گزارش جامع سیستم تصویر پرسنلی و آواتار هوشمند کاربران](User_Avatar_Cropper/walkthrough_user_avatar.md)
-- [گزارش جامع رفع ۳ باگ سیستم تصویر پرسنلی و وب‌کم](Avatar_Camera_And_Cropper_Fixes/walkthrough_avatar_camera_and_cropper_fixes.md)
-- [گزارش جامع بهینه‌سازی و ارتقای سرعت سیستم (Performance Optimization)](Performance_Optimization/walkthrough_performance_optimization.md)
-- [گزارش جامع بازطراحی مینیمال و ارتقای UI فرم ویرایش تصویر پرسنلی](Avatar_Cropper_UI_Refinement/walkthrough_avatar_cropper_ui_refinement.md)
-- [گزارش جامع مینیمال‌سازی نهایی و دکمه شناور چرخش تصویر](Avatar_Cropper_Minimal_Floating_UI/walkthrough_avatar_cropper_minimal_floating_ui.md)
-- [گزارش جامع بازطراحی و ارتقای کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Redesign/walkthrough_personnel_id_cards_redesign.md)
-- [گزارش جامع سفارشی‌سازی پیشرفته و خروجی دیجیتال کارت پرسنلی](Personnel_ID_Cards_Advanced_Customization/walkthrough_personnel_id_cards_advanced_customization.md)
-- [گزارش جامع اصلاح موتور پرینت، فیلدهای هویتی کاربر و پریست‌های چیدمان](Personnel_ID_Cards_Presets_And_Print_Fix/walkthrough_personnel_id_cards_presets_and_print_fix.md)
-- [گزارش جامع بازنگری و اصلاحات نهایی کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Refinement_V2/walkthrough_personnel_id_cards_refinement_v2.md)
-- [گزارش جامع رفع کامل ایرادات تب صدور کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Comprehensive_Fixes/walkthrough_personnel_id_cards_comprehensive_fixes.md)
-- [گزارش جامع انطباق ۱۰۰٪ چاپ و پیش‌نمایش کارت پرسنلی و گیت‌پاس](Personnel_ID_Cards_Print_Preview_Sync/walkthrough_personnel_id_cards_print_preview_sync.md)
-- [گزارش جامع انطباق ۱۰۰٪ خروجی تصویر دیجیتال (Canvas) با پیش‌نمایش زنده](Personnel_ID_Cards_Canvas_Pixel_Perfect_Sync/walkthrough_personnel_id_cards_canvas_pixel_perfect_sync.md)
-- [گزارش جامع اختصاص فضای ویژه و بزرگتر برای QR Code](Personnel_ID_Cards_Larger_QRCode_Space/walkthrough_personnel_id_cards_larger_qrcode_space.md)
-- [گزارش جامع بازطراحی QR Code بزرگ، سامانه استعلام اصالت کارت و تطبیق ۱۰۰٪ پیش‌نمایش با خروجی تصویر](Personnel_ID_Cards_Verification_And_Enlarged_QR/walkthrough_personnel_id_cards_verification_and_enlarged_qr.md)
-- [گزارش جامع اصلاح و ارتقای صفحه مدیریت انبارها (Warehouse Management Comprehensive Fixes)](Warehouse_Management_Comprehensive_Fixes/walkthrough_Warehouse_Management_Comprehensive_Fixes.md)
-- [گزارش جامع پیاده‌سازی دکمه‌های ناوبری قبل و بعد در هدر (Header Navigation Pill)](Header_Navigation_Buttons/walkthrough_header_navigation.md)
-- [گزارش جامع پیاده‌سازی و استخراج عناوین دقیق چت‌ها و چیدمان عمودی زمانی](Chat_History_Dashboard/walkthrough_chat_history_dashboard.md)
-- [گزارش جامع بازبینی، اصلاح و ارتقای کارتابل انبارگردان (Counter Dashboard Audit & Fixes)](Counter_Dashboard_Audit_And_Fixes/walkthrough_counter_dashboard_fixes.md)
-- [گزارش جامع بازبینی و مقاوم‌سازی وب‌سوکت و دوربین اسکنر](Camera_Scanner_and_WebSocket_Enhancement/walkthrough_camera_ws.md)
-- [گزارش جامع رفع مشکل صفحه سیاه دوربین و ارتقای تطبیق اسکنر](Scanner_Camera_Fixes/walkthrough_scanner_camera_fixes.md)
-- [گزارش جامع احیا و بازنشانی استاندارد دوربین اسکنر بارکد بر پایه گیت](Camera_Scanner_Restoration/walkthrough_camera_scanner_restoration.md)
-- [گزارش جامع بهینه‌سازی سرعت و حساسیت اسکنر دوربین بارکد](Camera_Scanner_Speed_And_Detection_Optimization/walkthrough_scanner_speed.md)
-- [گزارش جامع اصلاح به‌روزرسانی‌های زنده، وب‌سوکت و عملیات آفلاین در رهگیری شمارش](CountTracking_Live_Offline_Fixes/walkthrough_count_tracking_live_offline_fixes.md)
-- [گزارش جامع ارتقای اسکریپت و داشبورد تاریخچه چت‌ها (Chat History Enhancements)](Chat_History_Enhancements/walkthrough_chat_history_enhancements.md)
-- [گزارش جامع اصلاح به‌روزرسانی‌های زنده، وب‌سوکت و عملیات آفلاین در کارتابل‌های سرپرست و مدیر (Supervisor & Manager Real-time & Offline Hardening)](Supervisor_Manager_Live_Offline_Fixes/walkthrough_supervisor_manager_live_offline_fixes.md)
+عملیات اجرای مو به مو و فازبندی‌شده طرح اصلاحات جامع گزارش‌ساز پویا بر اساس ۵ فاز تدوین‌شده با موفقیت ۱۰۰٪ و با تأیید ایجنت‌های نگهبان در تمام فازها به پایان رسید.
+
+---
+
+## ۱. خلاصه اقدامات انجام‌شده در هر ۵ فاز
+
+### 🔹 فاز ۱: اصلاح موتور کوئری و نگاشت داده‌های JOIN در بکند
+- **نگاشت کلیدهای خروجی (`source_to_key`)**: در [`engine.py`](file:///e:/warehouse%20project/warehouse-backend/reports/engine.py)، تبدیل کلیدهای دیتابیسی (مانند `count_tasks_fr__status`) به کلیدهای کلاینت (`count_tasks.status`) در متد `_jsonable` و `run()` پیاده‌سازی شد.
+- **انوتیشن‌های داینامیک در JOIN**: در [`registry.py`](file:///e:/warehouse%20project/warehouse-backend/reports/registry.py)، توابع محاسباتی `_person_name_annotation`، `_dynamic_item_fields` و `assigned_warehouses_count` به پارامتر `base_prefix` مجهز شدند تا فیلدهای محاسباتی جداول پیوندی (مانند نام شمارشگر و سرپرست) بدون خطای `FieldError` در کوئری ساخته شوند.
+- **تطابق `ORDER BY` و `DISTINCT` با PostgreSQL**: در [`engine.py`](file:///e:/warehouse%20project/warehouse-backend/reports/engine.py)، تمام فیلدهای موجود در `order_by` به صورت خودکار به لیست `SELECT / values` الحاق شدند تا خطای استاندارد PostgreSQL رخ ندهد.
+- **ایمن‌سازی شرط انبار در `FilteredRelation`**: مسیرهای انباری که از طریق مدل پایه هستند از شرط `ON` در `FilteredRelation` مستثنی شدند تا از خطای `missing FROM-clause entry` جلوگیری شود.
+- **🛡️ نتیجه ایجنت نگهبان فاز ۱**: تایید کامل با پاس شدن تست‌های مربوط به `JoinQueryTests`.
+
+---
+
+### 🔹 فاز ۲: پایداری خروجی‌های PDF، Excel و Worker پس‌زمینه
+- **استخراج صحیح داده‌های ستون‌های پیوندی در PDF و Excel**: در [`pdf.py`](file:///e:/warehouse%20project/warehouse-backend/reports/pdf.py) و [`excel.py`](file:///e:/warehouse%20project/warehouse-backend/reports/excel.py)، سلول‌ها بر اساس `c.get('source') or c['key']` از ردیف‌های بازگشتی خوانده می‌شوند.
+- **رفع خطای ReportLab در گزارش‌های با ۰ ردیف**: در [`pdf.py`](file:///e:/warehouse%20project/warehouse-backend/reports/pdf.py)، در صورت خالی بودن داده‌ها، استایل `ROWBACKGROUNDS` به صورت مشروط اعمال شده و یک سطر ادغام‌شده با پس‌زمینه ملایم و پیام خوانای «هیچ داده‌ای برای این گزارش یافت نشد.» تولید می‌شود.
+- **کنترل تسک‌های مسموم (Poison Pill)**: فیلد `attempts` به مدل `ReportExportJob` در [`models.py`](file:///e:/warehouse%20project/warehouse-backend/reports/models.py) افزوده شد و مایگریشن `0003_reportexportjob_attempts.py` اعمال گردید. در [`run_export_worker.py`](file:///e:/warehouse%20project/warehouse-backend/reports/management/commands/run_export_worker.py)، در صورت `attempts >= 3` وضعیت تسک به `failed` با پیام خطای مشخص تغییر می‌کند.
+- **پاکسازی فایل‌های یتیم روی دیسک**: در [`excel.py`](file:///e:/warehouse%20project/warehouse-backend/reports/excel.py)، متد `cleanup_old_jobs` فایل‌های اکسل بدون رکورد و قدیمی‌تر از ۲۴ ساعت روی دیسک را اسکن و حذف می‌کند.
+- **🛡️ نتیجه ایجنت نگهبان فاز ۲**: تایید کامل با قبولی تست‌های خروجی با ۰ ردیف، فایل‌های پیوندی و تسک‌های مسموم.
+
+---
+
+### 🔹 فاز ۳: حل مسابقه‌های زمانی و مدیریت وضعیت در Store فرانت‌اند
+- **نرمال‌سازی نقطه در Aliasها**: در [`report-store.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/report-store.ts)، در محاسبه `aggAliases` تمام کاراکترهای نقطه (`.`) به خط تیره (`_`) تبدیل شدند.
+- **حل مسابقه زمانی لود قالب‌های دارای JOIN**: در [`reports.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/reports.ts) و [`report-store.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/report-store.ts)، لود فیلدهای مقصد JOIN از طریق ارسال Callback به `applyTemplate` پس از اتمام درخواست دریافت فیلدها (`getFields`) انجام شد.
+- **🛡️ نتیجه ایجنت نگهبان فاز ۳**: تایید کامل با تضمین لود بدون خطای قالب‌ها.
+
+---
+
+### 🔹 فاز ۴: اصلاح کنترل‌های ورودی فیلترها و تجربه کاربری
+- **تایپ کلمات با ویرگول در اپراتور `in`**: در [`filter-value.component.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/filter-value.component.ts)، مدیریت رشته ورودی به یک متغیر محلی (`rawListText`) منتقل شد تا تایپ مداوم ویرگول و فاصله بدون پرش انجام شود.
+- **نمایش تاریخ شمسی در اینپوت تقویم**: متد `formatDateLabel` اضافه شد تا در عین ذخیره و ارسال تاریخ میلادی ایزو (`YYYY-MM-DD`) به بکند، متن داخل اینپوت به صورت فرمت استاندارد فارسی (`۱۴۰۳/۰۵/۱۵`) به کاربر نشان داده شود.
+- **مهار خطاهای مداوم Polling**: در [`export-progress.component.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/export-progress.component.ts)، در صورت وقوع ۳ خطای متوالی یا خطای ۴۰۴، اشتراک اینتروال متوقف و پیام خطای مناسب نمایش داده می‌شود.
+- **🛡️ نتیجه ایجنت نگهبان فاز ۴**: تایید کامل با رفع ارورهای تایپ اسکریپت و موفقیت در بیلد فرانت‌اند.
+
+---
+
+### 🔹 فاز ۵: تست‌های جامع خودکار و اعتبارسنجی نهایی
+- **آزمون‌های خودکار بکند**: اجرای ۵۱ تست واحد و یکپارچگی در ماژول گزارش‌ساز با موفقیت ۱۰۰٪ (`OK - 51 tests in 13.006s`).
+- **کامپایل کامل فرانت‌اند**: اجرای `npm run build` در `warehouse-front` و موفقیت بیلد با صفر ارور.
+- **🛡️ نتیجه ایجنت نگهبان فاز ۵**: سلامت کامل تمام بخش‌ها تایید شد.
+
+---
+
+## ۲. گزارش نتایج آزمون‌های خودکار (Verification Results)
+
+```text
+Creating test database for alias 'default'...
+Found 51 test(s).
+System check identified no issues (0 silenced).
+...................................................
+----------------------------------------------------------------------
+Ran 51 tests in 13.006s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+```text
+> warehouse-app@0.0.0 build
+> ng build && node tools/patch-ngsw-530.js
+
+Application bundle generation complete. [45.122 seconds]
+[patch-ngsw-530] ✔ ngsw-worker.js وصله شد: جلوگیری از غیرفعال شدن کش در هنگام قطعی کلودفلر (کدهای 5xx).
+```
+
+---
+
+## ۳. فایل‌های ایجاد و ویرایش‌شده
+
+| ردیف | فایل | نوع تغییر | توضیحات |
+| :--- | :--- | :--- | :--- |
+| ۱ | [`reports/engine.py`](file:///e:/warehouse%20project/warehouse-backend/reports/engine.py) | ویرایش | نگاشت کلیدها، انوتیشن داینامیک JOIN، اصلاح DISTINCT و FilteredRelation |
+| ۲ | [`reports/registry.py`](file:///e:/warehouse%20project/warehouse-backend/reports/registry.py) | ویرایش | پشتیبانی از `base_prefix` در فیلدهای محاسباتی و انوتیشن‌های پویا |
+| ۳ | [`reports/pdf.py`](file:///e:/warehouse%20project/warehouse-backend/reports/pdf.py) | ویرایش | استخراج سلول‌ها با `source_key` و مدیریت گزارش‌های با ۰ ردیف |
+| ۴ | [`reports/excel.py`](file:///e:/warehouse%20project/warehouse-backend/reports/excel.py) | ویرایش | استخراج سلول‌ها با `source_key` و پاکسازی فایل‌های یتیم دیسک |
+| ۵ | [`reports/models.py`](file:///e:/warehouse%20project/warehouse-backend/reports/models.py) | ویرایش | افزودن فیلد `attempts` به `ReportExportJob` |
+| ۶ | [`reports/migrations/0003_reportexportjob_attempts.py`](file:///e:/warehouse%20project/warehouse-backend/reports/migrations/0003_reportexportjob_attempts.py) | جدید | مایگریشن جدید جنگو برای فیلد `attempts` |
+| ۷ | [`reports/management/commands/run_export_worker.py`](file:///e:/warehouse%20project/warehouse-backend/reports/management/commands/run_export_worker.py) | ویرایش | مدیریت تسک‌های یتیم و توقف تسک‌های مسموم بعد از ۳ بار تلاش |
+| ۸ | [`reports/tests.py`](file:///e:/warehouse%20project/warehouse-backend/reports/tests.py) | ویرایش | افزودن ۷ تست جدید شامل JOIN، فیلدهای محاسباتی، PDF خالی و تسک مسموم |
+| ۹ | [`warehouse-front/src/app/components/reports/report-store.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/report-store.ts) | ویرایش | نرمال‌سازی Aliasها و افزودن Callback به `loadFields` |
+| ۱۰ | [`warehouse-front/src/app/components/reports/reports.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/reports.ts) | ویرایش | حل مسابقه زمانی لود قالب‌های دارای JOIN |
+| ۱۱ | [`warehouse-front/src/app/components/reports/filter-value.component.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/filter-value.component.ts) | ویرایش | رفع باگ تایپ ویرگول در اپراتور in و نمایش خوانای تاریخ شمسی |
+| ۱۲ | [`warehouse-front/src/app/components/reports/export-progress.component.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/reports/export-progress.component.ts) | ویرایش | توقف polling در شرایط اضطراری و خطاهای متوالی |
+
 </div>
-
-
-
-

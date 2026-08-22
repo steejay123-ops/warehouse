@@ -13,7 +13,6 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   'counter': ['view_sys_counter'],
   'supervisor': ['view_sys_supervisor'],
   'manager-review': ['view_sys_manager_review'],
-  'export': ['view_sys_export'],
   'recounts': ['view_sys_recounts'],
   'settings': ['view_sys_settings'],
   'docs': ['view_wh_docs'],
@@ -24,7 +23,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   'feed_approvals': ['view_wh_feed_approvals'],
   'labels': ['view_wh_labels'],
   'label-designer': ['view_wh_label_designer'],
-  'audit': ['view_wh_audit']
+  'audit': ['view_wh_audit', 'perm_sys_logs']
 };
 
 export const AuthGuard: CanActivateFn = (route, state) => {

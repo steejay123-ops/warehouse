@@ -62,4 +62,12 @@ export class CountTaskApiService {
   exportExcel(payload: any): Observable<Blob> {
     return this.api.downloadPost(`${this.endpoint}/export_excel`, payload);
   }
+
+  downloadTemplate(warehouseId?: number | string | null): Observable<Blob> {
+    const params: any = {};
+    if (warehouseId && String(warehouseId) !== 'ALL' && String(warehouseId) !== '-1') {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.download('inventory/items/download_template/', params);
+  }
 }

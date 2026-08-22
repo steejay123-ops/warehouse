@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 6,
+    "summary": "Step 6 'Expected manager review not to show the empty-state; TS-ITEM-003 should be present for review.' failed. Error: TEST BLOCKED\n\nThe test could not be run — the required item TS-ITEM-003 is not present in the manager review, so verification cannot be completed.\n\nObservations:\n- The manager review page displays the empty-state message: 'موردی برای بررسی وجود ندارد.' (no items to review).\n- A search for 'TS-ITEM-003' returned no results on the page.\n- The manager-review UI is reachable and working, but the prerequisite test data (TS-ITEM-003 dispatched to manager review) is absent.",
+    "path": "steps/06-snapshot.html"
+  }
+]

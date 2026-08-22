@@ -15,6 +15,11 @@
 - **File Editing:** Use exact line matching (`replace_file_content`)—NOT fuzzy matching—for files with repetitive structures (e.g., Angular HTML, large `.ts` files) to prevent corruption.
 - **Preserve Unrelated Code:** NEVER remove, rewrite, or refactor unrelated working functions, comments, or imports. Keep edits strictly focused on the requested scope.
 - **Database Migrations:** NEVER edit or delete existing applied Django migration files. Always create and apply new forward migrations via `makemigrations`.
+- **Cartable Mutations & Concurrency:** ALWAYS wrap status transitions, task claims, and bulk operations in `transaction.atomic()` with `select_for_update()` to prevent race conditions.
+- **Excel & Export Standards:** Exports MUST follow the 2-row header architecture (Row 1: Persian display titles, Row 2: Database field keys in light slate font), with `freeze_panes = 'A3'`, and all timestamps converted to Shamsi (`YYYY/MM/DD HH:MM:SS`) via server localtime.
+- **Graceful Offline Degradation:** In offline or Lie-Fi states, NEVER throw blocking red error toasts for read/stats endpoints. Use `SKIP_GLOBAL_ERROR_TOAST: true` and preserve local pending records (`_offlinePending`).
+- **Real-Time WebSocket Integrity:** Live WebSocket handlers MUST update records in-place without full page reloads, and ALWAYS verify `warehouse_id` before patching.
+- **Sensitive RBAC Protection:** The 6 sensitive permissions (rollback, backup, hard-delete, purge-logs, freeze, factory-reset) MUST remain Superuser-only, excluded from 'Select All', and require explicit confirmation.
 
 ### 4. Chat Interactions
 - **Investigatory Override (The "?" Rule):** If the user's prompt contains a question mark ("؟" or "?"), you MUST assume the request is purely investigatory. Do NOT enter Planning Mode, do NOT write any code, and do NOT make any changes. Your ONLY action should be to provide a clear, concise explanation or answer to the question.

@@ -1,0 +1,5 @@
+{
+  "rootCauseHypothesis": "TEST BLOCKED\n\nThe test could not be run — the application server appears to be unavailable, preventing login and access to the dashboard.\n\nObservations:\n- The login page displays 'در حال ارتباط با سرور...' and the header shows 'سرور در دسترس نیست'.\n- No dashboard, cartable, or item list appeared after attempting to log in.\n- Only username/password inputs and a password-toggle are interactive; the item TS-ITEM-001 cannot be reached.",
+  "recommendedFixTarget": null,
+  "evidence": []
+}

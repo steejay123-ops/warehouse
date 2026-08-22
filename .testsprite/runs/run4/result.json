@@ -1,0 +1,20 @@
+{
+  "testId": "f0ae5ba6-d71f-4470-97a8-64e0814d9561",
+  "status": "blocked",
+  "startedAt": "2026-08-16T02:09:32.092Z",
+  "finishedAt": "2026-08-16T02:15:25.985Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786846525720607//tmp/7c9f7c6d-c7be-4999-ae70-9810afb41aa3/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_21e677603c3a1edd",
+  "runIdIfAvailable": "4b5277da-6320-475c-ae6e-99c7a5dad6c6",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 12,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe submission could not be completed — the UI indicates the server is unavailable and submission controls are disabled.\n\nObservations:\n- An orange banner stating the server is not available is visible at the top of the page.\n- The submit-related buttons in the item detail (the send/submit controls) are disabled and not actionable.\n- No success toast or confirmation text (e.g., 'با موفقیت' or similar) appeared after attempting to submit.",
+  "apiOutput": null,
+  "trace": null
+}

@@ -1,0 +1,41 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Manager Review — Bulk reject items back to supervisor",
+  "description": "Manager logs in with test_manager, selects TS-ITEM-002 in manager review, opens rejection modal, and rejects it back to supervisor.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_manager into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Locate the item TS-ITEM-002 in the manager review list and select its checkbox"
+    },
+    {
+      "type": "action",
+      "description": "Click the reject button labelled رد موارد انتخابی به سرپرست to open the rejection modal"
+    },
+    {
+      "type": "action",
+      "description": "Enter مغایرت بحرانی در شمارش کالا، توسط سرپرست بازبینی شود into the rejection reason textarea"
+    },
+    {
+      "type": "action",
+      "description": "Click the confirm rejection button in the modal"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item TS-ITEM-002 is rejected and no longer pending in manager review"
+    }
+  ]
+}

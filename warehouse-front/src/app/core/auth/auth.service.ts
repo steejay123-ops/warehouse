@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpClient, HttpContext } from '@angular/common/http';
-import { Observable, of, throwError, tap, catchError, map } from 'rxjs';
+import { Observable, of, from, throwError, tap, catchError, map, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
 import {
@@ -10,6 +10,7 @@ import {
   LoginResponse,
   AuthUserProfile,
 } from '../models/api-response.model';
+import { detectClientDeviceModel } from '../utils/device-detector';
 
 const TOKEN_KEY = 'wh_access_token';
 const REFRESH_KEY = 'wh_refresh_token';
@@ -96,24 +97,66 @@ export class AuthService {
   constructor(private router: Router, private http: HttpClient) {}
 
   /** لاگین — mock یا API واقعی */
-  login(username: string, password: string): Observable<LoginResponse> {
+  login(username: string, password: string, deviceModel?: string): Observable<LoginResponse> {
     this._isLoading.set(true);
 
     if (environment.useMockData) {
       return this.mockLogin(username, password);
     }
 
-    return this.http
-      .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, { username, password }, {
-        context: new HttpContext().set(SKIP_OFFLINE, true),
-      })
-      .pipe(
-        tap((response) => this.handleLoginSuccess(response)),
-        catchError((err) => {
-          this._isLoading.set(false);
-          return throwError(() => err);
+    const doLogin = (detectedModel?: string) => {
+      const payload: any = { username, password };
+      const finalModel = deviceModel || detectedModel;
+      if (finalModel) {
+        payload.device_model = finalModel;
+      }
+
+      return this.http
+        .post<LoginResponse>(`${environment.apiUrl}/auth/login/`, payload, {
+          context: new HttpContext().set(SKIP_OFFLINE, true),
         })
+        .pipe(
+          tap((response) => this.handleLoginSuccess(response)),
+          catchError((err) => {
+            this._isLoading.set(false);
+            return throwError(() => err);
+          })
+        );
+    };
+
+    if (!deviceModel) {
+      return from(detectClientDeviceModel()).pipe(
+        switchMap((detected: string) => doLogin(detected))
       );
+    }
+
+    return doLogin(deviceModel);
+  }
+
+  /** ثبت حضور فعال روزانه کاربر (یک‌بار در هر روز تقویمی) */
+  sendDailyHeartbeat(): void {
+    if (environment.useMockData || !this.isLoggedIn()) return;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const lastHeartbeat = this.getItem('last_daily_heartbeat');
+    if (lastHeartbeat === todayStr) return;
+
+    detectClientDeviceModel().then((deviceModel) => {
+      const body = deviceModel ? { device_model: deviceModel } : {};
+      this.http
+        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, body)
+        .pipe(catchError(() => of(null)))
+        .subscribe(() => {
+          this.setItem('last_daily_heartbeat', todayStr);
+        });
+    }).catch(() => {
+      this.http
+        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, {})
+        .pipe(catchError(() => of(null)))
+        .subscribe(() => {
+          this.setItem('last_daily_heartbeat', todayStr);
+        });
+    });
   }
 
   /** لاگ‌اوت */

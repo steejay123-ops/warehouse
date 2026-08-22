@@ -1,9 +1,10 @@
-import { Component, OnInit, ChangeDetectorRef, effect } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, effect, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../services/settings';
 import { ToastService, ConfirmDialogService } from '../../shared';
 import { AuthStore } from '../../core/stores/auth.store';
+import { AuthService } from '../../core/auth/auth.service';
 import { LabelDesigner } from '../label-designer/label-designer';
 import { DynamicFields } from '../dynamic-fields/dynamic-fields';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -14,6 +15,7 @@ import {
   mergeDocFieldPermissions 
 } from '../../core/models/field-config.model';
 import { DynamicFieldApiService } from '../../core/api/dynamic-field-api.service';
+import { BackupApiService, DatabaseBackup, BackupVerifyResult } from '../../core/api/backup-api.service';
 
 @Component({
   selector: 'app-wh-settings',
@@ -25,7 +27,7 @@ export class WhSettings implements OnInit {
   isLoading = true;
   settings: any = null;
   warehouseId: number | null = null;
-  activeTab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields' = 'operations';
+  activeTab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields' | 'db_backup' = 'operations';
 
   // ── Counter Field Permissions State ────────────────────────────────────────
   fieldConfigs: FieldPermissionConfig[] = [];
@@ -43,11 +45,37 @@ export class WhSettings implements OnInit {
   // ── Barcode Scanner Delimiters State ─────────────────────────────────────────
   scannerPreset: 'default' | 'control' | 'hybrid' | 'excel' | 'custom' = 'default';
 
+  // ── Database Backup & Restore State ─────────────────────────────────────────
+  backupsList: DatabaseBackup[] = [];
+  isLoadingBackups = false;
+  isCreatingBackup = false;
+  newBackupDescription = '';
+  isRestoreModalOpen = false;
+  selectedBackupForRestore: DatabaseBackup | null = null;
+  restoreConfirmInput = '';
+  isRestoringDatabase = false;
+  isVerifyingBackup = false;
+  verifyResult: BackupVerifyResult | null = null;
+  isSuperuser = computed(() => !!(this.auth.user()?.is_superuser || this.auth.user()?.permissions?.includes('perm_sys_backup_restore') || this.auth.user()?.roles?.includes('admin') || this.auth.user()?.department === 'admin'));
+  canManageBackups = computed(() => !!(
+    this.auth.user()?.is_superuser ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_manage') ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_restore') ||
+    this.auth.user()?.roles?.includes('admin') ||
+    this.auth.user()?.department === 'admin'
+  ));
+  canRestoreDatabase = computed(() => !!(
+    this.auth.user()?.is_superuser ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_restore')
+  ));
+
   constructor(
     private settingsService: SettingsService,
     private dynamicFieldApi: DynamicFieldApiService,
+    private backupApi: BackupApiService,
     private toast: ToastService,
     public authStore: AuthStore,
+    public auth: AuthService,
     private confirm: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
@@ -73,8 +101,11 @@ export class WhSettings implements OnInit {
     this.route.queryParams.subscribe(params => {
       if (params['tab']) {
         const tab = params['tab'] as typeof this.activeTab;
-        if (['operations', 'label', 'dynamic', 'counter_fields', 'doc_fields'].includes(tab)) {
+        if (['operations', 'label', 'dynamic', 'counter_fields', 'doc_fields', 'db_backup'].includes(tab)) {
           this.activeTab = tab;
+          if (tab === 'db_backup') {
+            this.loadBackups();
+          }
           this.cdr.detectChanges();
         }
       }
@@ -88,8 +119,11 @@ export class WhSettings implements OnInit {
     }
   }
 
-  setTab(tab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields') {
+  setTab(tab: 'operations' | 'label' | 'dynamic' | 'counter_fields' | 'doc_fields' | 'db_backup') {
     this.activeTab = tab;
+    if (tab === 'db_backup') {
+      this.loadBackups();
+    }
     this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
     this.cdr.detectChanges();
   }
@@ -324,8 +358,16 @@ export class WhSettings implements OnInit {
       'require_supervisor_approval',
       'require_doc_supervisor_approval',
       'blind_counting',
+      'counter_can_view_history',
+      'counter_can_view_previous_notes',
+      'financial_can_view_history',
+      'financial_can_view_previous_notes',
+      'scanner_camera_preset',
+      'scanner_custom_resolution',
+      'scanner_custom_interval_ms',
+      'scanner_custom_roi_size',
+      'scanner_custom_try_harder',
       'default_conflict_strategy',
-      'default_tag_status',
       'offline_sync_interval_minutes',
       'offline_cache_ttl_minutes'
     ];
@@ -347,8 +389,16 @@ export class WhSettings implements OnInit {
         'require_supervisor_approval',
         'require_doc_supervisor_approval',
         'blind_counting',
+        'counter_can_view_history',
+        'counter_can_view_previous_notes',
+        'financial_can_view_history',
+        'financial_can_view_previous_notes',
+        'scanner_camera_preset',
+        'scanner_custom_resolution',
+        'scanner_custom_interval_ms',
+        'scanner_custom_roi_size',
+        'scanner_custom_try_harder',
         'default_conflict_strategy',
-        'default_tag_status',
         'offline_sync_interval_minutes',
         'offline_cache_ttl_minutes'
       ];
@@ -385,6 +435,126 @@ export class WhSettings implements OnInit {
           this.isLoading = false;
         }
       });
+    }
+  }
+
+  // ─── Database Backup & Restore Methods ─────────────────────────────────────
+
+  loadBackups() {
+    this.isLoadingBackups = true;
+    this.backupApi.getBackups().subscribe({
+      next: (res) => {
+        this.backupsList = res;
+        this.isLoadingBackups = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isLoadingBackups = false;
+        const msg = err.error?.detail || 'خطا در دریافت لیست نسخه‌های پشتیبان';
+        this.toast.show('error', msg);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  createBackup() {
+    this.isCreatingBackup = true;
+    this.backupApi.createBackup(this.newBackupDescription.trim() || undefined).subscribe({
+      next: (res) => {
+        this.isCreatingBackup = false;
+        this.newBackupDescription = '';
+        this.toast.show('success', `نسخه پشتیبان ${res.backup.filename} با موفقیت ایجاد شد.`);
+        this.loadBackups();
+      },
+      error: (err) => {
+        this.isCreatingBackup = false;
+        const msg = err.error?.error || err.error?.detail || 'خطا در ایجاد فایل پشتیبان';
+        this.toast.show('error', msg);
+      }
+    });
+  }
+
+  verifyBackup(backup: DatabaseBackup) {
+    this.isVerifyingBackup = true;
+    this.verifyResult = null;
+    this.backupApi.verifyBackup(backup.filename).subscribe({
+      next: (res) => {
+        this.isVerifyingBackup = false;
+        this.verifyResult = res;
+        if (res.is_valid) {
+          this.toast.show('success', `یکپارچگی و سلامت فایل ${backup.filename} با موفقیت تایید شد.`);
+        } else {
+          this.toast.show('error', `خطای سلامت فایل: ${res.error}`);
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isVerifyingBackup = false;
+        const msg = err.error?.error || 'خطا در بررسی فایل پشتیبان';
+        this.toast.show('error', msg);
+      }
+    });
+  }
+
+  openRestoreModal(backup: DatabaseBackup) {
+    this.selectedBackupForRestore = backup;
+    this.restoreConfirmInput = '';
+    this.isRestoreModalOpen = true;
+  }
+
+  closeRestoreModal() {
+    this.isRestoreModalOpen = false;
+    this.selectedBackupForRestore = null;
+    this.restoreConfirmInput = '';
+    this.isRestoringDatabase = false;
+  }
+
+  executeRestore() {
+    if (!this.selectedBackupForRestore) return;
+    if (this.restoreConfirmInput.trim() !== 'RESTORE_DATABASE_CONFIRM') {
+      this.toast.show('error', 'لطفاً عبارت تاییدیه امنیتی RESTORE_DATABASE_CONFIRM را به صورت دقیق تایپ نمایید.');
+      return;
+    }
+
+    this.isRestoringDatabase = true;
+    this.backupApi.restoreBackup(this.selectedBackupForRestore.filename, this.restoreConfirmInput.trim()).subscribe({
+      next: (res) => {
+        this.isRestoringDatabase = false;
+        this.toast.show('success', res.message || 'پایگاه داده با موفقیت بازیابی شد.');
+        this.closeRestoreModal();
+        this.loadBackups();
+      },
+      error: (err) => {
+        this.isRestoringDatabase = false;
+        const msg = err.error?.error || err.error?.detail || 'خطا در بازیابی پایگاه‌داده';
+        this.toast.show('error', msg);
+      }
+    });
+  }
+
+  downloadBackup(backup: DatabaseBackup) {
+    const url = this.backupApi.downloadBackupUrl(backup.filename);
+    window.open(url, '_blank');
+  }
+
+  formatFileSize(bytes: number): string {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  formatDateTime(iso: string): string {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      const datePart = d.toLocaleDateString('fa-IR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      const timePart = d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return `${datePart} ${timePart}`;
+    } catch {
+      return iso;
     }
   }
 }

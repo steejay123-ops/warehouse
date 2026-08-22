@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -60,9 +60,14 @@ export class Users implements OnInit, OnDestroy {
   };
 
   systemPermissions: Permission[] = [];
-  systemPermissionGroups: { key: string, title: string, items: Permission[] }[] = [];
+  systemPermissionGroups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [];
   permSearchQuery = '';
   isLoading = false;
+
+  // Sensitive Permissions Guard Modal
+  pendingSensitivePerm: Permission | null = null;
+  isSensitiveWarningModalOpen = false;
+  isSuperuser = computed(() => !!(this.auth.user()?.is_superuser || this.auth.user()?.roles?.includes('admin') || this.auth.user()?.department === 'admin'));
 
   // Excel Import/Export
   isExcelModalOpen = false;
@@ -113,33 +118,42 @@ export class Users implements OnInit, OnDestroy {
     this.accountsService.getPermissions().subscribe(res => {
       this.systemPermissions = res;
       
-      const mainMenuPerms = res.filter((p: any) => p.codename.startsWith('view_sys_'));
-      const warehouseMenuPerms = res.filter((p: any) => p.codename.startsWith('view_wh_'));
-      const workflowPerms = res.filter((p: any) => p.codename.startsWith('can_act_as_'));
-      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_') && !p.codename.startsWith('can_act_as_'));
+      const sensitivePerms = res.filter((p: any) => p.is_sensitive);
+      const mainMenuPerms = res.filter((p: any) => p.codename.startsWith('view_sys_') && !p.is_sensitive);
+      const warehouseMenuPerms = res.filter((p: any) => p.codename.startsWith('view_wh_') && !p.is_sensitive);
+      const workflowPerms = res.filter((p: any) => p.codename.startsWith('can_act_as_') && !p.is_sensitive);
+      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_') && !p.codename.startsWith('can_act_as_') && !p.is_sensitive);
 
-      this.systemPermissionGroups = [
+      const groups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [
         {
           key: 'MAIN_MENU',
-          title: 'دسترسی‌های منوی اصلی',
+          title: 'منوی اصلی',
           items: mainMenuPerms
         },
         {
           key: 'WH_MENU',
-          title: 'دسترسی‌های منوی انبار',
+          title: 'منوی انبار',
           items: warehouseMenuPerms
         },
         {
           key: 'WORKFLOW',
-          title: 'دسترسی‌های فرآیندی و کارتابل‌ها',
+          title: 'فرآیندی و کارتابل‌ها',
           items: workflowPerms
         },
         {
           key: 'BACKEND',
-          title: 'سایر دسترسی‌های عملیاتی',
+          title: 'سایر',
           items: backendPerms
+        },
+        {
+          key: 'SENSITIVE',
+          title: 'حساس و بحرانی 🛡️',
+          items: sensitivePerms,
+          is_sensitive_group: true
         }
       ];
+
+      this.systemPermissionGroups = groups;
     });
 
     this.accountsService.getRoles().subscribe(res => {
@@ -565,25 +579,75 @@ export class Users implements OnInit, OnDestroy {
     })).filter(group => group.items.length > 0);
   }
 
-  toggleRolePermission(permId: number, event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    if (checked) {
-      if (!this.roleForm.permissions.includes(permId)) this.roleForm.permissions.push(permId);
+  toggleRolePermission(perm: Permission, event: Event) {
+    const target = event.target as HTMLInputElement;
+    const isCurrentlyChecked = this.roleForm.permissions.includes(perm.id);
+
+    if (perm.is_sensitive) {
+      if (!this.isSuperuser()) {
+        event.preventDefault();
+        target.checked = isCurrentlyChecked;
+        this.toast.show('error', 'تخصیص یا تغییر دسترسی‌های حساس و بحرانی صرفاً در انحصار مدیر ارشد سامانه (Superuser) می‌باشد.');
+        return;
+      }
+
+      if (!isCurrentlyChecked) {
+        // User clicked to check a sensitive permission -> prevent instant check & open warning modal
+        event.preventDefault();
+        target.checked = false;
+        this.pendingSensitivePerm = perm;
+        this.isSensitiveWarningModalOpen = true;
+      } else {
+        // Uncheck directly
+        this.roleForm.permissions = this.roleForm.permissions.filter((id: number) => id !== perm.id);
+      }
     } else {
-      this.roleForm.permissions = this.roleForm.permissions.filter((id: number) => id !== permId);
+      if (target.checked) {
+        if (!this.roleForm.permissions.includes(perm.id)) this.roleForm.permissions.push(perm.id);
+      } else {
+        this.roleForm.permissions = this.roleForm.permissions.filter((id: number) => id !== perm.id);
+      }
     }
   }
 
+  confirmSensitivePermission() {
+    if (this.pendingSensitivePerm) {
+      if (!this.roleForm.permissions.includes(this.pendingSensitivePerm.id)) {
+        this.roleForm.permissions.push(this.pendingSensitivePerm.id);
+      }
+      this.toast.show('warning', `دسترسی حساس «${this.pendingSensitivePerm.name}» به این نقش اضافه شد.`);
+    }
+    this.isSensitiveWarningModalOpen = false;
+    this.pendingSensitivePerm = null;
+    this.cdr.detectChanges();
+  }
+
+  cancelSensitivePermission() {
+    this.isSensitiveWarningModalOpen = false;
+    this.pendingSensitivePerm = null;
+    this.cdr.detectChanges();
+  }
+
   toggleAllPermissions() {
-    const allPerms = this.systemPermissions.map(p => p.id);
-    if (this.roleForm.permissions.length === allPerms.length) {
-      this.roleForm.permissions = [];
+    // Only toggle normal/non-sensitive permissions. Sensitive permissions are NEVER selected by toggleAll.
+    const normalPermIds = this.systemPermissions.filter(p => !p.is_sensitive).map(p => p.id);
+    const hasAllNormal = normalPermIds.every(id => this.roleForm.permissions.includes(id));
+    
+    if (hasAllNormal) {
+      this.roleForm.permissions = this.roleForm.permissions.filter(id => !normalPermIds.includes(id));
+      this.toast.show('info', 'کلیه دسترسی‌های عمومی لغو شدند.');
     } else {
-      this.roleForm.permissions = [...allPerms];
+      const newPerms = new Set([...this.roleForm.permissions, ...normalPermIds]);
+      this.roleForm.permissions = Array.from(newPerms);
+      this.toast.show('info', 'کلیه دسترسی‌های عمومی انتخاب شدند (دسترسی‌های حساس مستثنی هستند).');
     }
   }
 
   toggleGroupPermissions(groupKey: string) {
+    if (groupKey === 'SENSITIVE') {
+      this.toast.show('warning', 'دسترسی‌های حساس و بحرانی قابلیت انتخاب گروهی ندارند و صرفاً باید به صورت دستی و تک‌به‌تک اعطا شوند.');
+      return;
+    }
     const group = this.systemPermissionGroups.find(g => g.key === groupKey);
     if (!group) return;
     
@@ -662,33 +726,6 @@ export class Users implements OnInit, OnDestroy {
     this.isDeleting = false;
     this.deleteErrorMessage = '';
     this.cdr.detectChanges();
-  }
-
-  handleSoftDelete() {
-    if (!this.entityToDelete) return;
-    this.isDeleting = true;
-    this.deleteErrorMessage = '';
-    
-    if (this.deleteType === 'user') {
-        this.accountsService.toggleUserStatus(this.entityToDelete.id).subscribe({
-            next: (res) => {
-                const u = this.state.appState.users.find((x: any) => x.id === this.entityToDelete.id);
-                if (u) u.is_active = res.is_active;
-                this.toast.show('warning', `حساب کاربری مسدود و دسترسی وی قطع شد.`);
-                this.isDeleteModalOpen = false;
-                this.entityToDelete = null;
-                this.isDeleting = false;
-                this.cdr.detectChanges();
-            },
-            error: (err) => {
-                this.deleteErrorMessage = err.error?.error || err.error?.detail || 'خطا در تعلیق حساب کاربری';
-                this.isDeleting = false;
-            }
-        });
-    } else {
-        this.deleteErrorMessage = 'امکان غیرفعال‌سازی نقش وجود ندارد. لطفاً حذف فیزیکی را انتخاب کنید.';
-        this.isDeleting = false;
-    }
   }
 
   handleHardDelete() {

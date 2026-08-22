@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 5,
+    "summary": "Step 5 'Expected the username input to be filled with 'test_counter' so the test could proceed to submission.' failed. Error: TEST BLOCKED\n\nThe test could not be run — the application cannot be reached and the login submit action is not available.\n\nObservations:\n- The login page displays a server connectivity/unavailable message (e.g., 'در حال ارتباط با سرور...' / 'سرور در دسترس نیست').\n- The username is filled as 'test_counter' and the password field appears filled, but no login/submit button is present or clickable.\n- Without a working login (backend unreachable), it is not possible to open item TS-ITEM-001 or perform the 'ثبت و ارسال به سرپرست' submission.",
+    "path": "steps/05-snapshot.html"
+  }
+]

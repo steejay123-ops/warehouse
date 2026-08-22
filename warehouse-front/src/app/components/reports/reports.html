@@ -1,16 +1,29 @@
 <div class="p-4 space-y-3">
 
-  <!-- ═══ سربرگ صفحه ═══ -->
-  <div class="flex items-center justify-between flex-wrap gap-2">
+  <!-- ═══ سربرگ صفحه چسبان (Sticky Action Bar) ═══ -->
+  <div class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 -mx-4 -mt-4 px-4 py-3 shadow-xs flex items-center justify-between flex-wrap gap-2 transition-all">
     <div class="flex items-center gap-3">
       <div>
-        <h1 class="text-lg font-black text-slate-800">گزارش‌ساز پویا</h1>
-        <p class="text-[11px] text-slate-500 mt-0.5">ساخت گزارش‌های دلخواه، فیلترگذاری و خروجی‌های مختلف با امکان ذخیره و اشتراک‌گذاری</p>
+        <h1 class="text-base font-black text-slate-800">گزارش‌ساز پویا</h1>
+        <p class="text-[11px] text-slate-500 mt-0.5 hidden sm:block">ساخت گزارش‌های دلخواه، فیلترگذاری و خروجی‌های مختلف با امکان ذخیره و اشتراک‌گذاری</p>
       </div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
-      <!-- Refresh Button -->
-      <button type="button" [disabled]="store.isRefreshing()" (click)="store.refreshAll()" class="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm disabled:opacity-50" title="بروزرسانی">
+      <!-- 7. Reset / New Report Button (Square Slate Icon) -->
+      <button type="button" (click)="resetReport()"
+              [disabled]="!store.entityKey() && !store.hasRun()"
+              class="btn-icon-square btn-icon-slate" aria-label="گزارش جدید و پاک‌سازی فرم"
+              title="پاک‌سازی کامل فرم و شروع گزارش جدید">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18"></path>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </button>
+
+      <!-- 6. Refresh Button (Square Indigo Icon) -->
+      <button type="button" [disabled]="store.isRefreshing()" (click)="store.refreshAll()" class="btn-icon-square btn-icon-indigo" title="بروزرسانی داده‌های گزارش" aria-label="بروزرسانی">
         @if (!store.isRefreshing()) {
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10"></polyline>
@@ -21,34 +34,66 @@
           <span class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
         }
       </button>
-      <button type="button" (click)="openSaveModal()"
-              [disabled]="!store.entityKey()"
-              class="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-        ذخیره قالب
-      </button>
+
+      <!-- 5. Export PDF Button (Square Red Icon) -->
       <button type="button" (click)="exportPdf()"
               [disabled]="!store.hasRun() || store.isOffline() || exporting()"
-              class="text-xs font-bold px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+              class="btn-icon-square btn-icon-rose" aria-label="خروجی PDF"
+              title="خروجی و دانلود فایل PDF گزارش">
         @if (exportingPdf()) {
-          <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          <span class="animate-spin block w-[18px] h-[18px] border-2 border-rose-600 border-t-transparent rounded-full"></span>
+        } @else {
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
         }
-        خروجی PDF
       </button>
+
+      <!-- 4. Export Excel Button (Square Emerald Icon) -->
       <button type="button" (click)="exportExcel()"
               [disabled]="!store.hasRun() || store.isOffline() || exporting()"
-              class="text-xs font-bold px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+              class="btn-icon-square btn-icon-emerald" aria-label="خروجی اکسل"
+              title="خروجی و دانلود فایل Excel گزارش">
         @if (exportingExcel()) {
-          <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          <span class="animate-spin block w-[18px] h-[18px] border-2 border-emerald-600 border-t-transparent rounded-full"></span>
+        } @else {
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
         }
-        خروجی Excel
       </button>
+
+      <!-- 3. Run Report Button (Square Indigo Icon) -->
       <button type="button" (click)="runReport()"
               [disabled]="!store.entityKey() || store.isOffline() || store.loading()"
-              class="text-xs font-black px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+              class="btn-icon-square btn-icon-indigo"
+              title="اجرای فرآیند تولید گزارش" aria-label="اجرای گزارش">
         @if (store.loading()) {
-          <svg class="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          <span class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+        } @else {
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <polygon points="6 4 20 12 6 20 6 4"></polygon>
+          </svg>
         }
-        اجرای گزارش
+      </button>
+
+      <!-- 2. Save Template Button (Square Blue Icon) -->
+      <button type="button" (click)="openSaveModal()"
+              [disabled]="!store.entityKey()"
+              class="btn-icon-square btn-icon-blue"
+              title="ذخیره تنظیمات گزارش به عنوان قالب" aria-label="ذخیره قالب">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+      </button>
+
+      <!-- 1. Comprehensive Help Button (Square Purple Icon) -->
+      <button type="button" (click)="openHelpModal()"
+              class="btn-icon-square btn-icon-purple"
+              title="راهنمای جامع گزارش‌ساز و سناریوهای کاربردی" aria-label="راهنمای گزارش‌ساز">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
       </button>
     </div>
   </div>
@@ -97,16 +142,16 @@
         <div class="text-xs font-black text-slate-800 mb-2">۱. منبع داده</div>
         <div class="flex items-center gap-2 flex-wrap">
           <select [ngModel]="store.entityKey()" (ngModelChange)="onEntityChange($event)"
-                  class="text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 bg-white min-w-44">
+                  class="text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 bg-white min-w-44 shadow-xs custom-select">
             <option [ngValue]="null" disabled>انتخاب موجودیت…</option>
             @for (e of store.entities(); track e.key) {
-              <option [ngValue]="e.key">{{ e.label }}</option>
+              <option [ngValue]="e.key" [title]="e.key">{{ e.label }}</option>
             }
           </select>
 
           <select [ngModel]="store.warehouseId()"
                   (ngModelChange)="onWarehouseChange($event)"
-                  class="text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 bg-white min-w-44">
+                  class="text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 bg-white min-w-44 shadow-xs custom-select">
             <option [ngValue]="null">همه انبارهای مجاز</option>
             @for (w of warehouses(); track w.id) {
               <option [ngValue]="w.id">{{ w.name }}</option>
@@ -114,34 +159,39 @@
           </select>
 
           @if (store.entityKey() === 'items' && !store.warehouseId()) {
-            <span class="text-[10px] text-slate-400">برای دیدن فیلدهای پویا، انبار را مشخص کنید</span>
+            <span class="text-[11px] text-slate-400 flex items-center gap-1">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              برای مشاهده فیلدهای پویا، انبار را مشخص کنید
+            </span>
           }
         </div>
 
         <!-- ── JOINها ── -->
         @if (store.joinsMeta().length) {
-          <div class="mt-2 pt-2 border-t border-slate-200">
-            <div class="text-[10px] font-black text-slate-600 mb-1.5">ترکیب با جدول دیگر (JOIN)</div>
+          <div class="mt-2.5 pt-2.5 border-t border-slate-100">
+            <div class="text-[11px] font-black text-slate-600 mb-1.5">ترکیب با جدول دیگر (JOIN)</div>
             <div class="flex flex-wrap gap-1.5">
               @for (jm of store.joinsMeta(); track jm.key) {
                 @if (activeJoins().find(j => j.to === jm.key); as active) {
                   <!-- JOIN فعال -->
-                  <div class="flex items-center gap-1 bg-violet-50 border border-violet-200 rounded-lg px-2 py-1">
-                    <span class="text-[10px] font-bold text-violet-700">{{ jm.label }}</span>
+                  <div class="flex items-center gap-1.5 bg-violet-50 border border-violet-200 rounded-xl px-2.5 py-1 shadow-xs"
+                       [title]="jm.target">
+                    <span class="text-xs font-bold text-violet-700">{{ jm.label }}</span>
                     <select [ngModel]="active.type" (ngModelChange)="updateJoinType(jm.key, $event)"
-                            class="text-[10px] px-1 py-0.5 rounded border border-violet-200 bg-white text-violet-700 outline-none">
-                      <option value="left">شامل همه از پایه (LEFT)</option>
-                      <option value="inner">فقط مشترک‌ها (INNER)</option>
+                            class="text-[11px] px-1.5 py-0.5 rounded-lg border border-violet-200 bg-white text-violet-700 outline-none custom-select">
+                      <option value="left">شامل همه ردیف‌ها (LEFT)</option>
+                      <option value="inner">فقط ردیف‌های مشترک (INNER)</option>
                     </select>
                     <button type="button" (click)="removeJoin(jm.key)"
-                            class="text-violet-400 hover:text-rose-500 text-[10px] font-black leading-none">✕</button>
+                            class="text-violet-400 hover:text-rose-500 hover:bg-rose-50 rounded-md p-0.5 text-xs font-black leading-none transition-colors cursor-pointer"
+                            title="حذف پیوند با این جدول">✕</button>
                   </div>
                 } @else {
                   <!-- JOIN غیرفعال -->
                   <button type="button" (click)="addJoin(jm)" [disabled]="activeJoins().length >= 2"
-                          title="{{ activeJoins().length >= 2 ? 'حداکثر ۲ جدول مجاز است' : '' }}"
-                          class="text-[10px] font-bold px-2 py-1 rounded-lg border border-dashed text-slate-500 transition-colors"
-                          [class.border-slate-300]="activeJoins().length < 2" [class.hover:border-violet-400]="activeJoins().length < 2" [class.hover:text-violet-600]="activeJoins().length < 2"
+                          [title]="jm.target"
+                          class="text-xs font-bold px-2.5 py-1 rounded-xl border border-dashed text-slate-600 transition-all cursor-pointer active:scale-95"
+                          [class.border-slate-300]="activeJoins().length < 2" [class.hover:border-violet-400]="activeJoins().length < 2" [class.hover:text-violet-700]="activeJoins().length < 2" [class.hover:bg-violet-50/50]="activeJoins().length < 2"
                           [class.opacity-40]="activeJoins().length >= 2" [class.cursor-not-allowed]="activeJoins().length >= 2">
                     + {{ jm.label }}
                   </button>
@@ -156,52 +206,67 @@
 
         <!-- ── ۲. فیلدها ── -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3">
-          <div class="flex items-center justify-between mb-2">
-            <div class="text-xs font-black text-slate-800">
-              ۲. فیلدهای گزارش
+          <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+            <div class="text-xs font-black text-slate-800 flex items-center gap-2">
+              <span>۲. فیلدهای گزارش</span>
               @if (store.grouped()) {
-                <span class="text-[10px] font-bold text-amber-600 mr-2">(حالت گروه‌بندی فعال است — ستون‌ها از گروه‌بندی/تجمیع می‌آیند)</span>
+                <span class="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                  (حالت گروه‌بندی فعال است — ستون‌ها از گروه‌بندی/تجمیع می‌آیند)
+                </span>
               }
             </div>
-            <input type="text" [ngModel]="fieldSearch()" (ngModelChange)="fieldSearch.set($event)"
-                   placeholder="جستجوی فیلد…"
-                   class="text-[10px] px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-40">
+            <!-- Search Box with Icon -->
+            <div class="relative flex items-center">
+              <input type="text" [ngModel]="fieldSearch()" (ngModelChange)="fieldSearch.set($event)"
+                     placeholder="مثلاً: کد یکتا، fa_unic_code، دیسیپلین…"
+                     class="text-xs pr-7 pl-6 py-1.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 w-56 bg-slate-50/50 focus:bg-white transition-all shadow-2xs">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="absolute right-2 text-slate-400 pointer-events-none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              @if (fieldSearch()) {
+                <button type="button" (click)="fieldSearch.set('')" class="absolute left-2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer" title="پاک‌کردن جستجو">✕</button>
+              }
+            </div>
           </div>
 
           @if (store.fieldsLoading()) {
-            <div class="text-[10px] text-slate-400 py-2">در حال بارگذاری فیلدها…</div>
+            <div class="text-xs text-slate-400 py-3 text-center">در حال بارگذاری فیلدها…</div>
           } @else {
             <!-- فیلدهای جدول پایه -->
-            <div class="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto" [class.opacity-40]="store.grouped()">
+            <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto custom-scrollbar p-0.5" [class.opacity-40]="store.grouped()">
               @for (f of visibleFields(); track f.key) {
                 <button type="button" (click)="toggleField(f.key)" [disabled]="store.grouped()"
-                        class="text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors"
+                        [title]="f.key"
+                        class="text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer shadow-2xs"
                         [class.bg-indigo-600]="store.selectedFields().includes(f.key)"
                         [class.text-white]="store.selectedFields().includes(f.key)"
                         [class.border-indigo-600]="store.selectedFields().includes(f.key)"
                         [class.bg-white]="!store.selectedFields().includes(f.key)"
-                        [class.text-slate-600]="!store.selectedFields().includes(f.key)"
-                        [class.border-slate-200]="!store.selectedFields().includes(f.key)">
+                        [class.text-slate-700]="!store.selectedFields().includes(f.key)"
+                        [class.border-slate-200]="!store.selectedFields().includes(f.key)"
+                        [class.hover:border-indigo-300]="!store.selectedFields().includes(f.key)">
                   {{ f.label }}
-                  @if (f.dynamic) { <span class="text-[8px] opacity-70">(پویا)</span> }
                 </button>
               }
             </div>
 
             <!-- فیلدهای جداول JOIN -->
             @for (group of visibleJoinFields(); track group.alias) {
-              <div class="mt-2 pt-2 border-t border-violet-100">
-                <div class="text-[9px] font-black text-violet-500 mb-1">{{ group.label }}</div>
+              <div class="mt-2.5 pt-2.5 border-t border-violet-100">
+                <div class="text-[10px] font-black text-violet-600 mb-1 flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-violet-500 inline-block"></span>
+                  <span>فیلدهای جدول پیوندی: {{ group.label }}</span>
+                </div>
                 <div class="flex flex-wrap gap-1.5" [class.opacity-40]="store.grouped()">
                   @for (f of group.fields; track f.key) {
                     <button type="button" (click)="toggleJoinField(f.key)" [disabled]="store.grouped()"
-                            class="text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors"
+                            [title]="f.key"
+                            class="text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all active:scale-95 cursor-pointer shadow-2xs"
                             [class.bg-violet-600]="isJoinFieldSelected(f.key)"
                             [class.text-white]="isJoinFieldSelected(f.key)"
                             [class.border-violet-600]="isJoinFieldSelected(f.key)"
                             [class.bg-white]="!isJoinFieldSelected(f.key)"
-                            [class.text-violet-600]="!isJoinFieldSelected(f.key)"
-                            [class.border-violet-200]="!isJoinFieldSelected(f.key)">
+                            [class.text-violet-700]="!isJoinFieldSelected(f.key)"
+                            [class.border-violet-200]="!isJoinFieldSelected(f.key)"
+                            [class.hover:border-violet-400]="!isJoinFieldSelected(f.key)">
                       {{ f.label }}
                     </button>
                   }
@@ -211,12 +276,15 @@
 
             <!-- ترتیب ستون‌های انتخابی -->
             @if (store.selectedFields().length && !store.grouped()) {
-              <div class="mt-2 pt-2 border-t border-slate-200 flex flex-wrap gap-1.5">
+              <div class="mt-2.5 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
+                <span class="text-[11px] font-bold text-slate-500 ml-1">ترتیب ستون‌ها:</span>
                 @for (key of store.selectedFields(); track key; let i = $index) {
-                  <span class="inline-flex items-center gap-1 text-[10px] font-bold bg-slate-50 text-slate-800 rounded-lg px-2 py-1">
-                    <button type="button" (click)="moveField(key, -1)" class="text-slate-400 hover:text-indigo-600" title="جابجایی به راست">›</button>
-                    {{ store.fieldByKey().get(key)?.label || key }}
-                    <button type="button" (click)="moveField(key, 1)" class="text-slate-400 hover:text-indigo-600" title="جابجایی به چپ">‹</button>
+                  <span class="inline-flex items-center gap-1.5 text-[11px] font-bold bg-slate-100/90 text-slate-800 rounded-xl px-2.5 py-1 border border-slate-200/80 shadow-2xs group"
+                        [title]="key">
+                    <button type="button" (click)="moveField(key, -1)" class="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer text-xs font-black" title="جابجایی به سمت راست">›</button>
+                    <span>{{ getFieldLabel(key) }}</span>
+                    <button type="button" (click)="moveField(key, 1)" class="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer text-xs font-black" title="جابجایی به سمت چپ">‹</button>
+                    <button type="button" (click)="removeSelectedField(key)" class="text-slate-400 hover:text-rose-600 mr-0.5 text-xs font-bold transition-colors cursor-pointer" title="حذف این ستون">✕</button>
                   </span>
                 }
               </div>
@@ -227,149 +295,215 @@
         <!-- ── ۳. فیلترها ── -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3">
           <div class="text-xs font-black text-slate-800 mb-2">۳. فیلترها (اختیاری)</div>
-          <app-filter-group [group]="filterRoot" [fields]="allSelectableFields()" [depth]="0" [totalConditions]="totalConditionsCount" />
+          <app-filter-group [group]="filterRoot" [fields]="allSelectableFields()" [depth]="0" [totalConditions]="totalConditionsCount" (changed)="onFilterChanged()" />
         </div>
 
         <!-- ── ۴. گروه‌بندی و تجمیع ── -->
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-2">
-          <div class="text-xs font-black text-slate-800">۴. گروه‌بندی و توابع تجمیعی (اختیاری)</div>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-2.5">
+          <div class="text-xs font-black text-slate-800 flex items-center justify-between">
+            <span>۴. گروه‌بندی و توابع تجمیعی (اختیاری)</span>
+            @if (store.groupBy().length) {
+              <span class="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                {{ store.groupBy().length }} ستون گروه‌بندی فعال
+              </span>
+            }
+          </div>
+
+          <div class="bg-amber-50/60 border border-amber-200/80 rounded-xl px-3 py-2 text-[11px] text-amber-800 flex items-start gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-500 shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <div>
+              <span class="font-bold">راهنمای آماری: </span>
+              <span>برای ساخت گزارش‌های مدیریتی (مانند جمع موجودی فیزیکی به تفکیک دیسیپلین یا میانگین ارزش ریالی)، ابتدا فیلدهای دسته‌بندی و سپس توابع تجمیعی را انتخاب نمایید.</span>
+            </div>
+          </div>
 
           <div class="flex flex-wrap gap-1.5">
             @for (f of groupableFields(); track f.key) {
               <button type="button" (click)="toggleGroupBy(f.key)"
-                      class="text-[10px] font-bold px-2 py-1 rounded-lg border transition-colors"
+                      [title]="f.key"
+                      class="text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer shadow-2xs active:scale-95"
                       [class.bg-amber-500]="store.groupBy().includes(f.key)"
                       [class.text-white]="store.groupBy().includes(f.key)"
                       [class.border-amber-500]="store.groupBy().includes(f.key)"
                       [class.bg-white]="!store.groupBy().includes(f.key)"
-                      [class.text-slate-600]="!store.groupBy().includes(f.key)"
-                      [class.border-slate-200]="!store.groupBy().includes(f.key)">
+                      [class.text-slate-700]="!store.groupBy().includes(f.key)"
+                      [class.border-slate-200]="!store.groupBy().includes(f.key)"
+                      [class.hover:border-amber-400]="!store.groupBy().includes(f.key)">
                 {{ f.label }}
               </button>
             }
           </div>
 
           @if (store.grouped()) {
-            <div class="pt-2 border-t border-slate-200 space-y-1.5">
+            <div class="pt-2.5 border-t border-slate-100 space-y-2">
+              <div class="text-[11px] font-black text-slate-700">توابع تجمیعی روی ستون‌ها:</div>
               @for (agg of store.aggregations(); track $index; let i = $index) {
-                <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap bg-slate-50/70 p-2 rounded-xl border shadow-2xs transition-all"
+                     [class.border-rose-300]="isRowAliasConflict(agg.alias, i)"
+                     [class.border-slate-200/80]="!isRowAliasConflict(agg.alias, i)">
                   <select [ngModel]="agg.fn" (ngModelChange)="updateAggregation(i, { fn: $event })"
-                          class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400">
+                          class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 bg-white shadow-2xs custom-select">
                     @for (fn of aggFns; track fn.value) {
                       <option [ngValue]="fn.value" [disabled]="fn.value !== 'count' && isFieldCountOnly(agg.field)">{{ fn.label }}</option>
                     }
                   </select>
                   <select [ngModel]="agg.field" (ngModelChange)="updateAggregation(i, { field: $event })"
-                          class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36">
+                          class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs custom-select">
                     @for (f of (agg.fn === 'count' ? store.fieldsMeta() : aggregatableFields()); track f.key) {
-                      <option [ngValue]="f.key">{{ f.label }}</option>
+                      <option [ngValue]="f.key" [title]="f.key">{{ f.label }}</option>
                     }
                   </select>
-                  <input type="text" [ngModel]="agg.alias" (ngModelChange)="updateAggregation(i, { alias: $event })"
-                         placeholder="نام ستون (اختیاری، انگلیسی)" dir="ltr"
-                         class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-44 text-left">
-                  <button type="button" (click)="removeAggregation(i)" class="text-rose-400 hover:text-rose-600 text-xs font-bold">✕</button>
+                  <div class="relative flex items-center">
+                    <input type="text" [ngModel]="agg.alias" (ngModelChange)="updateAggregation(i, { alias: $event })"
+                           placeholder="عنوان دلخواه ستون (مثال: جمع موجودی)"
+                           [class.border-rose-400]="isRowAliasConflict(agg.alias, i)"
+                           [class.bg-rose-50/40]="isRowAliasConflict(agg.alias, i)"
+                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-48 bg-white shadow-2xs">
+                    @if (isRowAliasConflict(agg.alias, i)) {
+                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">تداخل نام مستعار تکراری!</span>
+                    }
+                  </div>
+                  <button type="button" (click)="removeAggregation(i)"
+                          title="حذف این تابع تجمیعی"
+                          class="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md p-1 text-xs font-bold transition-colors cursor-pointer mr-auto">✕</button>
                 </div>
               }
               <button type="button" (click)="addAggregation()"
-                      class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded-lg px-2 py-1">
-                + تابع تجمیعی
+                      class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded-xl px-2.5 py-1 transition-all cursor-pointer shadow-2xs hover:bg-indigo-50">
+                + افزودن تابع تجمیعی
               </button>
 
               <!-- ── شرط روی نتایج تجمیع (HAVING) ── -->
-              <div class="pt-2 border-t border-slate-200 space-y-1.5">
-                <div class="text-[11px] font-black text-slate-600">شرط روی نتایج (HAVING)</div>
+              <div class="pt-2.5 border-t border-slate-100 space-y-2">
+                <div class="text-[11px] font-black text-slate-700">شرط روی نتایج تجمیع (HAVING):</div>
                 @for (h of store.having(); track $index; let i = $index) {
-                  <div class="flex items-center gap-2 flex-wrap">
+                  <div class="flex items-center gap-2 flex-wrap bg-slate-50/70 p-2 rounded-xl border border-slate-200/80 shadow-2xs">
                     <select [ngModel]="h.alias" (ngModelChange)="updateHaving(i, { alias: $event })"
-                            class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36">
+                            class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs custom-select">
                       @for (a of store.aggAliases(); track a) {
-                        <option [ngValue]="a">{{ aliasLabel(a) }}</option>
+                        <option [ngValue]="a" [title]="a">{{ aliasLabel(a) }}</option>
                       }
                     </select>
                     <select [ngModel]="h.operator" (ngModelChange)="updateHaving(i, { operator: $event })"
-                            class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400">
+                            class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 bg-white shadow-2xs custom-select">
                       @for (op of havingOps; track op.value) {
                         <option [ngValue]="op.value">{{ op.label }}</option>
                       }
                     </select>
                     @if (h.operator === 'between') {
                       <input type="number" [ngModel]="havingBetweenVal(h.value, 0)"
-                             (ngModelChange)="updateHavingBetween(i, 0, $event)" placeholder="از" dir="ltr"
-                             class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-24 text-left">
+                             (ngModelChange)="updateHavingBetween(i, 0, $event)" placeholder="از: 100" dir="ltr"
+                             class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-24 text-left bg-white shadow-2xs">
                       <input type="number" [ngModel]="havingBetweenVal(h.value, 1)"
-                             (ngModelChange)="updateHavingBetween(i, 1, $event)" placeholder="تا" dir="ltr"
-                             class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-24 text-left">
+                             (ngModelChange)="updateHavingBetween(i, 1, $event)" placeholder="تا: 500" dir="ltr"
+                             class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-24 text-left bg-white shadow-2xs">
                     } @else {
                       <input type="number" [ngModel]="h.value" (ngModelChange)="updateHaving(i, { value: $event })"
-                             placeholder="مقدار" dir="ltr"
-                             class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-28 text-left">
+                             placeholder="مثال: 1000" dir="ltr"
+                             class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-28 text-left bg-white shadow-2xs">
                     }
-                    <button type="button" (click)="removeHaving(i)" class="text-rose-400 hover:text-rose-600 text-xs font-bold">✕</button>
+                    <button type="button" (click)="removeHaving(i)"
+                            title="حذف شرط HAVING"
+                            class="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md p-1 text-xs font-bold transition-colors cursor-pointer mr-auto">✕</button>
                   </div>
                 }
                 <button type="button" (click)="addHaving()" [disabled]="!store.aggAliases().length || store.having().length >= 10"
-                        title="{{ store.having().length >= 10 ? 'حداکثر ۱۰ شرط مجاز است' : '' }}"
-                        class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded-lg px-2 py-1 disabled:opacity-40 disabled:cursor-not-allowed">
-                  + شرط روی نتایج
+                        title="{{ store.having().length >= 10 ? 'حداکثر ۱۰ شرط مجاز است' : 'افزودن شرط روی نتیجه تجمیع' }}"
+                        class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 rounded-xl px-2.5 py-1 transition-all cursor-pointer shadow-2xs hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                  + افزودن شرط روی نتایج
                 </button>
               </div>
             </div>
           }
         </div>
 
-        <!-- ── ۵. پیش‌نمایش ── -->
+        <!-- ── ۵. نتایج و خروجی گزارش ── -->
         @if (store.hasRun()) {
-
-          <!-- بنر حالت Flat JOIN -->
-          @if (store.joinMode() === 'flat') {
-            <div class="bg-violet-50 border border-violet-200 rounded-xl px-4 py-2 flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet-500 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span class="text-[11px] font-bold text-violet-700">نتایج یک ردیف به ازای هر ترکیب (کالا × وظیفه) هستند — صفحه‌بندی روی ترکیب‌هاست.</span>
-            </div>
-          }
-
-          <!-- بنر حالت EXISTS -->
-          @if (store.joinMode() === 'exists') {
-            <div class="bg-sky-50 border border-sky-200 rounded-xl px-4 py-2 flex items-center gap-2">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky-500 shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
-              <span class="text-[11px] font-bold text-sky-700">فیلتر وجودی اعمال شد — ستون‌های جدول مقصد در خروجی نمایش داده نمی‌شوند.</span>
-            </div>
-          }
-
-          <app-data-table
-            [data]="store.rows()"
-            [totalCount]="store.count()"
-            [pageSize]="store.pageSize()"
-            [currentPage]="store.page()"
-            [isLoading]="store.loading()"
-            [showHeader]="false"
-            [showFilters]="false"
-            [showPagination]="true"
-            [showRowNumber]="true"
-            itemLabel="ردیف"
-            emptyMessage="نتیجه‌ای یافت نشد — فیلترها را تغییر دهید"
-            trackByKey=""
-            (pageChanged)="onPageChanged($event)"
-            (sortChanged)="onSortChanged($event)">
-
-            @for (col of store.columns(); track col.key) {
-              <ng-template [appTableCol]="col.key" [label]="col.label" [filterable]="false" let-value="value">
-                <span class="text-xs" [class.font-mono]="col.type === 'number'" [attr.dir]="col.type === 'number' ? 'ltr' : null">
-                  {{ formatCell(value, col.type) }}
+          <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-100">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs font-black text-slate-800">۵. نتایج و خروجی گزارش</span>
+                <span class="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                  تعداد کل رکوردها: {{ store.count() | number }}
                 </span>
-              </ng-template>
+              </div>
+              <div class="flex items-center gap-2">
+                <!-- Table Density Toggle -->
+                <div class="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-xl border border-slate-200/80">
+                  <button type="button" (click)="setTableDensity('standard')"
+                          [class.bg-white]="tableDensity() === 'standard'"
+                          [class.shadow-2xs]="tableDensity() === 'standard'"
+                          [class.text-indigo-700]="tableDensity() === 'standard'"
+                          [class.text-slate-600]="tableDensity() !== 'standard'"
+                          class="px-2 py-0.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
+                    استاندارد
+                  </button>
+                  <button type="button" (click)="setTableDensity('compact')"
+                          [class.bg-white]="tableDensity() === 'compact'"
+                          [class.shadow-2xs]="tableDensity() === 'compact'"
+                          [class.text-indigo-700]="tableDensity() === 'compact'"
+                          [class.text-slate-600]="tableDensity() !== 'compact'"
+                          class="px-2 py-0.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer">
+                    فشرده
+                  </button>
+                </div>
+                <span class="text-[11px] text-slate-400 hidden sm:inline">برای دیدن شناسه فنی، ماوس را روی نام ستون‌ها قرار دهید</span>
+              </div>
+            </div>
+
+            <!-- بنر حالت Flat JOIN -->
+            @if (store.joinMode() === 'flat') {
+              <div class="bg-violet-50 border border-violet-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet-500 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span class="text-xs font-bold text-violet-700">نتایج یک ردیف به ازای هر ترکیب پیوند نمایش داده می‌شوند — صفحه‌بندی روی ترکیب‌هاست.</span>
+              </div>
             }
-          </app-data-table>
+
+            <!-- بنر حالت EXISTS -->
+            @if (store.joinMode() === 'exists') {
+              <div class="bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky-500 shrink-0"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+                <span class="text-xs font-bold text-sky-700">فیلتر شرط وجودی اعمال شد — ستون‌های جدول مقصد در خروجی نمایش داده نمی‌شوند.</span>
+              </div>
+            }
+
+            <app-data-table
+              [class.dense-table]="tableDensity() === 'compact'"
+              [data]="store.rows()"
+              [totalCount]="store.count()"
+              [pageSize]="store.pageSize()"
+              [currentPage]="store.page()"
+              [isLoading]="store.loading()"
+              [showHeader]="false"
+              [showFilters]="false"
+              [showPagination]="true"
+              [showRowNumber]="true"
+              itemLabel="ردیف"
+              emptyMessage="نتیجه‌ای یافت نشد — فیلترها را تغییر دهید"
+              trackByKey=""
+              (pageChanged)="onPageChanged($event)"
+              (sortChanged)="onSortChanged($event)">
+
+              @for (col of store.columns(); track col.key) {
+                <ng-template [appTableCol]="col.key" [label]="col.label" [filterable]="false" let-value="value">
+                  <span class="text-xs" [class.font-mono]="col.type === 'number'" [attr.dir]="col.type === 'number' ? 'ltr' : null"
+                        [title]="col.key">
+                    {{ formatCell(value, col.type) }}
+                  </span>
+                </ng-template>
+              }
+            </app-data-table>
+          </div>
 
           <!-- ── ۶. نمودار (فقط نتایج گروه‌بندی‌شده) ── -->
           @if (store.grouped()) {
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 space-y-2">
-              <div class="flex items-center gap-2 flex-wrap">
-                <div class="text-xs font-black text-slate-800">۶. نمودار</div>
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+              <div class="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-100">
+                <div class="text-xs font-black text-slate-800">۶. نمودار تحلیلی</div>
 
                 <select [ngModel]="store.chart()?.type ?? ''" (ngModelChange)="setChart({ type: $event })"
-                        class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400">
+                        class="text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 bg-white shadow-2xs">
                   <option value="" disabled>نوع نمودار…</option>
                   @for (t of chartTypes; track t.value) {
                     <option [ngValue]="t.value">{{ t.label }}</option>
@@ -377,24 +511,24 @@
                 </select>
 
                 <select [ngModel]="store.chart()?.x ?? ''" (ngModelChange)="setChart({ x: $event })"
-                        class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-32">
+                        class="text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs">
                   <option value="" disabled>محور دسته‌ها…</option>
                   @for (g of store.groupBy(); track g) {
-                    <option [ngValue]="g">{{ store.fieldByKey().get(g)?.label || g }}</option>
+                    <option [ngValue]="g" [title]="g">{{ store.fieldByKey().get(g)?.label || g }}</option>
                   }
                 </select>
 
                 <select [ngModel]="store.chart()?.y ?? ''" (ngModelChange)="setChart({ y: $event })"
-                        class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-32">
-                  <option value="" disabled>مقدار…</option>
+                        class="text-xs px-2.5 py-1.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs">
+                  <option value="" disabled>محور مقادیر…</option>
                   @for (a of store.aggAliases(); track a) {
-                    <option [ngValue]="a">{{ aliasLabel(a) }}</option>
+                    <option [ngValue]="a" [title]="'شناسه ستون: ' + a">{{ aliasLabel(a) }}</option>
                   }
                 </select>
 
                 @if (store.chart()) {
                   <button type="button" (click)="clearChart()"
-                          class="text-[10px] font-bold text-rose-500 hover:text-rose-700 mr-auto">
+                          class="text-xs font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded-lg transition-colors cursor-pointer mr-auto">
                     حذف نمودار ✕
                   </button>
                 }
@@ -402,7 +536,7 @@
 
               @if (chartReady()) {
                 @if (store.chartRowsLoading()) {
-                  <p class="text-[11px] text-slate-400 text-center py-2">در حال دریافت داده نمودار…</p>
+                  <p class="text-xs text-slate-400 text-center py-4">در حال دریافت داده‌های نمودار…</p>
                 } @else {
                   <app-report-chart
                     [rows]="store.chartRows()"
@@ -411,13 +545,13 @@
                     [yLabel]="chartYLabel()" />
                 }
                 @if (store.count() > 200) {
-                  <p class="text-[11px] text-amber-600 text-center">
-                    نمودار ۲۰۰ گروه اول (از {{ store.count() }} گروه) را نشان می‌دهد.
+                  <p class="text-xs text-amber-600 text-center bg-amber-50 py-1 rounded-lg border border-amber-200">
+                    نمودار ۲۰۰ گروه اول (از {{ store.count() }} گروه) را نمایش می‌دهد.
                   </p>
                 }
               } @else {
-                <p class="text-[11px] text-slate-400 text-center py-2">
-                  برای رسم نمودار، نوع نمودار، محور دسته‌ها و مقدار را انتخاب کنید.
+                <p class="text-xs text-slate-400 text-center py-4">
+                  برای رسم نمودار، نوع نمودار، محور دسته‌ها و محور مقادیر را انتخاب کنید.
                 </p>
               }
             </div>
@@ -429,50 +563,295 @@
 
   <!-- ═══ مودال ذخیره قالب ═══ -->
   @if (isSaveModalOpen()) {
-    <div class="fixed inset-0 bg-slate-900/40 z-[70] flex items-center justify-center p-4" (click)="isSaveModalOpen.set(false)">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 space-y-3" (click)="$event.stopPropagation()">
-        <div class="text-sm font-black text-slate-800">ذخیره قالب گزارش</div>
-
-        <div>
-          <label class="text-[10px] font-bold text-slate-500 block mb-1">نام گزارش *</label>
-          <input type="text" [(ngModel)]="saveName" placeholder="مثلاً: موجودی به تفکیک انبار"
-                 class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400">
+    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="isSaveModalOpen.set(false)">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-100" (click)="$event.stopPropagation()">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-2xs">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-black text-slate-800">ذخیره قالب گزارش</h3>
+              <p class="text-[11px] text-slate-400">تنظیمات، فیلدها و فیلترهای فعلی را به عنوان قالب ذخیره کنید</p>
+            </div>
+          </div>
+          <button type="button" (click)="isSaveModalOpen.set(false)" class="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" title="بستن پنجره">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
         </div>
 
         <div>
-          <label class="text-[10px] font-bold text-slate-500 block mb-1">توضیحات</label>
-          <textarea [(ngModel)]="saveDescription" rows="2"
-                    class="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 outline-none focus:border-indigo-400"></textarea>
+          <label class="text-[11px] font-bold text-slate-700 block mb-1">نام قالب گزارش <span class="text-rose-500">*</span></label>
+          <input type="text" [(ngModel)]="saveName" placeholder="مثلاً: موجودی کالاها به تفکیک انبار"
+                 class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-white shadow-2xs">
         </div>
 
-        <label class="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" [(ngModel)]="saveIsPublic" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-          <span class="text-xs font-bold text-slate-800">اشتراک‌گذاری عمومی (سایر کاربران هم ببینند)</span>
-        </label>
+        <div>
+          <label class="text-[11px] font-bold text-slate-700 block mb-1">توضیحات (اختیاری)</label>
+          <textarea [(ngModel)]="saveDescription" rows="2" placeholder="توضیح مختصری درباره اهداف این گزارش بنویسید..."
+                    class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all resize-none bg-white shadow-2xs"></textarea>
+        </div>
 
-        <div class="flex items-center gap-2 pt-1">
+        <!-- Toggle switch for public sharing -->
+        <div class="p-3 bg-slate-50/80 rounded-xl border border-slate-100 flex items-center justify-between cursor-pointer" (click)="saveIsPublic = !saveIsPublic">
+          <div>
+            <div class="text-xs font-bold text-slate-800">اشتراک‌گذاری عمومی</div>
+            <div class="text-[10px] text-slate-400">سایر کاربران نیز بتوانند این قالب را مشاهده و اجرا کنند</div>
+          </div>
+          <button type="button" class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                  [class.bg-indigo-600]="saveIsPublic" [class.bg-slate-300]="!saveIsPublic">
+            <span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out"
+                  [class.translate-x-0]="saveIsPublic" [class.-translate-x-5]="!saveIsPublic"></span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
           @if (store.activeTemplate()?.is_owner) {
             <button type="button" (click)="saveTemplate(false)" [disabled]="!saveName.trim()"
-                    class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-xl disabled:opacity-40">
+                    class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl disabled:opacity-40 shadow-sm transition-all active:scale-95 cursor-pointer">
               به‌روزرسانی قالب فعلی
             </button>
             <button type="button" (click)="saveTemplate(true)" [disabled]="!saveName.trim()"
-                    class="flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2 rounded-xl disabled:opacity-40">
-              ذخیره به‌عنوان قالب جدید
+                    class="flex-1 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold py-2.5 rounded-xl disabled:opacity-40 transition-all active:scale-95 cursor-pointer">
+              ذخیره به عنوان قالب جدید
             </button>
           } @else {
             <button type="button" (click)="saveTemplate(true)" [disabled]="!saveName.trim()"
-                    class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-xl disabled:opacity-40">
+                    class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-xl disabled:opacity-40 shadow-sm transition-all active:scale-95 cursor-pointer">
               ذخیره قالب
             </button>
           }
           <button type="button" (click)="isSaveModalOpen.set(false)"
-                  class="bg-slate-50 hover:bg-slate-200 text-slate-600 text-xs font-bold py-2 px-4 rounded-xl">
+                  class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold py-2.5 px-4 rounded-xl transition-all cursor-pointer">
             انصراف
           </button>
         </div>
       </div>
     </div>
   }
+
+  <!-- ═══ مودال راهنمای جامع گزارش‌ساز و سناریوهای کاربردی ═══ -->
+  @if (isHelpModalOpen()) {
+    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="closeHelpModal()">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
+        
+        <!-- Modal Header -->
+        <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-l from-purple-50/50 to-white">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center shadow-md shadow-purple-200">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-sm sm:text-base font-black text-slate-800">راهنمای جامع و سناریوهای آماده گزارش‌ساز</h3>
+              <p class="text-[11px] text-slate-500 mt-0.5">آموزش گام‌به‌گام و نمونه گزارش‌های واقعی در فرآیندهای انبارداری</p>
+            </div>
+          </div>
+          <button type="button" (click)="closeHelpModal()" class="p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" title="بستن">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex items-center gap-1.5 px-4 pt-3 border-b border-slate-100 bg-slate-50/60 overflow-x-auto custom-scrollbar">
+          <button type="button" (click)="setHelpTab('scenarios')"
+                  [class.border-purple-600]="activeHelpTab() === 'scenarios'"
+                  [class.text-purple-700]="activeHelpTab() === 'scenarios'"
+                  [class.bg-white]="activeHelpTab() === 'scenarios'"
+                  [class.shadow-2xs]="activeHelpTab() === 'scenarios'"
+                  [class.text-slate-600]="activeHelpTab() !== 'scenarios'"
+                  class="px-3.5 py-2 text-xs font-black rounded-t-xl border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap">
+            🎯 سناریوهای آماده انبار
+          </button>
+          <button type="button" (click)="setHelpTab('steps')"
+                  [class.border-purple-600]="activeHelpTab() === 'steps'"
+                  [class.text-purple-700]="activeHelpTab() === 'steps'"
+                  [class.bg-white]="activeHelpTab() === 'steps'"
+                  [class.shadow-2xs]="activeHelpTab() === 'steps'"
+                  [class.text-slate-600]="activeHelpTab() !== 'steps'"
+                  class="px-3.5 py-2 text-xs font-black rounded-t-xl border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap">
+            📖 مراحل ساخت گزارش
+          </button>
+          <button type="button" (click)="setHelpTab('joins')"
+                  [class.border-purple-600]="activeHelpTab() === 'joins'"
+                  [class.text-purple-700]="activeHelpTab() === 'joins'"
+                  [class.bg-white]="activeHelpTab() === 'joins'"
+                  [class.shadow-2xs]="activeHelpTab() === 'joins'"
+                  [class.text-slate-600]="activeHelpTab() !== 'joins'"
+                  class="px-3.5 py-2 text-xs font-black rounded-t-xl border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap">
+            🔗 ترکیب جداول و تجمیع
+          </button>
+          <button type="button" (click)="setHelpTab('export')"
+                  [class.border-purple-600]="activeHelpTab() === 'export'"
+                  [class.text-purple-700]="activeHelpTab() === 'export'"
+                  [class.bg-white]="activeHelpTab() === 'export'"
+                  [class.shadow-2xs]="activeHelpTab() === 'export'"
+                  [class.text-slate-600]="activeHelpTab() !== 'export'"
+                  class="px-3.5 py-2 text-xs font-black rounded-t-xl border-b-2 border-transparent transition-all cursor-pointer whitespace-nowrap">
+            💾 قالب‌ها و خروجی اکسل/PDF
+          </button>
+        </div>
+
+        <!-- Modal Body Content (Scrollable) -->
+        <div class="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4 text-xs text-slate-700 leading-relaxed">
+          
+          <!-- ─── TAB 1: سناریوهای آماده ─── -->
+          @if (activeHelpTab() === 'scenarios') {
+            <div class="space-y-3">
+              <!-- سناریو ۱ -->
+              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black text-xs">۱</span>
+                    <span class="font-black text-slate-800 text-xs sm:text-sm">گزارش مغایرت‌های انبارگردانی</span>
+                  </div>
+                  <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">کنترل موجودی</span>
+                </div>
+                <p class="text-slate-600 text-[11px]">یافتن تمامی اقلامی که در آخرین دوره شمارش دارای مغایرت مثبت یا منفی با موجودی سیستمی بوده‌اند.</p>
+                <div class="bg-white p-2.5 rounded-xl border border-slate-200/60 text-[11px] space-y-1 font-medium">
+                  <div><strong>منبع داده:</strong> کالاها (items)</div>
+                  <div><strong>پیوند (JOIN):</strong> + شمارش انبارگردانی (count_tasks) با نوع LEFT JOIN</div>
+                  <div><strong>فیلدهای انتخابی:</strong> کد یکتا، شرح کالا، موجودی فیزیکی، موجودی سیستمی، مقدار مغایرت</div>
+                  <div><strong>فیلتر:</strong> <code class="bg-slate-100 px-1.5 py-0.5 rounded text-indigo-600 font-mono">count_tasks.status = مغایرت دار</code></div>
+                </div>
+              </div>
+
+              <!-- سناریو ۲ -->
+              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs">۲</span>
+                    <span class="font-black text-slate-800 text-xs sm:text-sm">گزارش ارزش و موجودی کالاها به تفکیک دیسیپلین</span>
+                  </div>
+                  <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">مدیریتی و مالی</span>
+                </div>
+                <p class="text-slate-600 text-[11px]">محاسبه مجموع موجودی فیزیکی و ارزش کل ریالی اقلام پایپینگ، برق، ابزاردقیق و سیویل.</p>
+                <div class="bg-white p-2.5 rounded-xl border border-slate-200/60 text-[11px] space-y-1 font-medium">
+                  <div><strong>منبع داده:</strong> کالاها (items)</div>
+                  <div><strong>گروه‌بندی (GROUP BY):</strong> دیسیپلین کاری (scope_discipline)</div>
+                  <div><strong>توابع تجمیعی:</strong> <code class="bg-slate-100 px-1 py-0.5 rounded text-emerald-600">SUM(موجودی)</code> و <code class="bg-slate-100 px-1 py-0.5 rounded text-emerald-600">SUM(ارزش کل)</code></div>
+                  <div><strong>شرط تجمیع (HAVING):</strong> <code class="bg-slate-100 px-1 py-0.5 rounded text-emerald-600">SUM(موجودی) > 0</code></div>
+                </div>
+              </div>
+
+              <!-- سناریو ۳ -->
+              <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-black text-xs">۳</span>
+                    <span class="font-black text-slate-800 text-xs sm:text-sm">پیگیری اقلام فاقد تگ یا سفارش خرید (PO)</span>
+                  </div>
+                  <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">اصلاح داده‌ها</span>
+                </div>
+                <p class="text-slate-600 text-[11px]">شناسایی کالاهایی که اطلاعات تگ فیزیکی یا شماره سفارش خرید آنها در سیستم ثبت نشده است.</p>
+                <div class="bg-white p-2.5 rounded-xl border border-slate-200/60 text-[11px] space-y-1 font-medium">
+                  <div><strong>منبع داده:</strong> کالاها (items)</div>
+                  <div><strong>فیلتر با عملگر OR:</strong> <code class="bg-slate-100 px-1 py-0.5 rounded text-amber-700">تگ = خالی است</code> <strong>یا</strong> <code class="bg-slate-100 px-1 py-0.5 rounded text-amber-700">شماره سفارش خرید = خالی است</code></div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- ─── TAB 2: آموزش گام‌به‌گام ─── -->
+          @if (activeHelpTab() === 'steps') {
+            <div class="space-y-3">
+              <div class="flex gap-3 items-start p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">۱</span>
+                <div>
+                  <div class="font-bold text-slate-800">انتخاب منبع داده و انبار:</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">ابتدا موجودیت اصلی (کالاها، انبارگردانی، انبارها، کاربران) را انتخاب کنید. در صورت نیاز به فیلدهای اختصاصی، انبار مربوطه را تعیین نمایید.</div>
+                </div>
+              </div>
+
+              <div class="flex gap-3 items-start p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">۲</span>
+                <div>
+                  <div class="font-bold text-slate-800">انتخاب فیلدها و چیدمان ستون‌ها:</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">فیلدهای مورد نظر خود را با کلیک روی آنها اضافه کنید. از طریق دکمه‌های جابجایی (‹ و ›) ترتیب قرارگیری ستون‌ها را مرتب کنید.</div>
+                </div>
+              </div>
+
+              <div class="flex gap-3 items-start p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">۳</span>
+                <div>
+                  <div class="font-bold text-slate-800">اعمال شروط و فیلترهای پیشرفته:</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">با استفاده از گروه‌های تودرتو و عملگرهای «و (AND)» / «یا (OR)» و نقیض (NOT)، شروط دقیق را روی متون، مقادیر عددی یا تاریخ‌ها اعمال کنید.</div>
+                </div>
+              </div>
+
+              <div class="flex gap-3 items-start p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs shrink-0 mt-0.5">۴</span>
+                <div>
+                  <div class="font-bold text-slate-800">اجرا و مشاهده جدول نتایج:</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">با زدن دکمه «اجرای گزارش» (آیکون Play بالای صفحه)، نتایج صفحه‌بندی‌شده استخراج و در جدول نمایش داده می‌شوند.</div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- ─── TAB 3: ترکیب جداول و تجمیع ─── -->
+          @if (activeHelpTab() === 'joins') {
+            <div class="space-y-3">
+              <div class="p-3.5 bg-violet-50/70 border border-violet-200 rounded-2xl space-y-1.5">
+                <div class="font-bold text-violet-800 text-xs">ترکیب با جدول دیگر (JOIN) چگونه کار می‌کند؟</div>
+                <p class="text-[11px] text-violet-700">با دکمه‌های پیوند می‌توانید اطلاعات دو جدول وابسته را تلفیق کنید:</p>
+                <ul class="list-disc list-inside text-[11px] text-violet-700 space-y-1 pr-2">
+                  <li><strong>شامل همه ردیف‌ها (LEFT JOIN):</strong> کلیه اقلام جدول اصلی نمایش می‌یابند، حتی اگر در جدول مقصد رکوردی نداشته باشند.</li>
+                  <li><strong>فقط ردیف‌های مشترک (INNER JOIN):</strong> فقط اقلامی نمایش می‌یابند که در هر دو جدول ثبت شده باشند.</li>
+                </ul>
+              </div>
+
+              <div class="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-1.5">
+                <div class="font-bold text-amber-800 text-xs">توابع تجمیعی و شروط HAVING:</div>
+                <p class="text-[11px] text-amber-700">هنگامی که یک یا چند ستون را به عنوان «گروه‌بندی» انتخاب می‌کنید، جدول وارد حالت آماری می‌شود و می‌توانید از توابع زیر استفاده کنید:</p>
+                <div class="grid grid-cols-2 gap-2 mt-2 text-[11px]">
+                  <div class="bg-white p-2 rounded-xl border border-amber-100"><strong>تعداد (COUNT):</strong> شمارش ردیف‌ها</div>
+                  <div class="bg-white p-2 rounded-xl border border-amber-100"><strong>مجموع (SUM):</strong> جمع مقادیر عددی</div>
+                  <div class="bg-white p-2 rounded-xl border border-amber-100"><strong>میانگین (AVG):</strong> معدل مقادیر عددی</div>
+                  <div class="bg-white p-2 rounded-xl border border-amber-100"><strong>کمینه/بیشینه (MIN/MAX):</strong> حداقل و حداکثر</div>
+                </div>
+              </div>
+            </div>
+          }
+
+          <!-- ─── TAB 4: قالب‌ها و خروجی ─── -->
+          @if (activeHelpTab() === 'export') {
+            <div class="space-y-3">
+              <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div class="font-bold text-slate-800 text-xs">ذخیره تنظیمات به عنوان قالب:</div>
+                <p class="text-[11px] text-slate-600">برای اینکه نیاز به تکرار تنظیم فیلدها و فیلترها در مراجعات بعدی نباشد، با کلیک روی دکمه ذخیره (آیکون فلاپی آبی) تنظیمات را ذخیره نمایید. قالب‌ها در سایدبار سمت راست قرار می‌گیرند.</p>
+                <div class="text-[11px] text-slate-600 bg-white p-2.5 rounded-xl border border-slate-100">
+                  💡 <strong>نکته اشتراک‌گذاری:</strong> با فعال‌سازی سوییچ «اشتراک‌گذاری عمومی»، سایر همکاران و کاربران مجاز نیز به این قالب دسترسی خواهند داشت.
+                </div>
+              </div>
+
+              <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div class="font-bold text-slate-800 text-xs">خروجی اکسل و PDF:</div>
+                <p class="text-[11px] text-slate-600">دکمه خروجی اکسل (سبز) و PDF (قرمز) تمامی رکوردهای فیلترشده را دقیقاً مطابق با ستون‌ها و ترتیب انتخابی دانلود می‌کنند. در صورت بزرگ بودن گزارش (بالای ۵۰۰۰ ردیف)، فرآیند در پس‌زمینه سرور اجرا شده و درصد پیشرفت نمایش می‌یابد.</p>
+              </div>
+            </div>
+          }
+
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+          <button type="button" (click)="closeHelpModal()" class="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 px-5 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95">
+            متوجه شدم
+          </button>
+        </div>
+
+      </div>
+    </div>
+  }
 </div>
+
 

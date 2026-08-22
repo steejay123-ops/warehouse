@@ -11,6 +11,7 @@ from django.views.static import serve
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
+    path('api/accounts/', include('accounts.urls')),
     path('api/warehouses/', include('warehouses.urls')),
     path('api/inventory/', include('inventory.urls')),
     path('api/reports/', include('reports.urls')),

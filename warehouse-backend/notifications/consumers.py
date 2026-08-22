@@ -57,10 +57,9 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'type': type_str,
                 'event': type_str,
             }
-            if 'warehouse_id' in event:
-                out_data['warehouse_id'] = event['warehouse_id']
-            if 'task_id' in event:
-                out_data['task_id'] = event['task_id']
+            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats'):
+                if k in event:
+                    out_data[k] = event[k]
 
             # Send message to WebSocket
             await self.send(text_data=json.dumps(out_data))

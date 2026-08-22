@@ -205,6 +205,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         return super().get_queryset()
 
     def perform_create(self, serializer):
+        from accounts.audit_utils import log_audit_event
         # احیای رکورد حذف‌نرم با همان (انبار، کد یکتا) به‌جای INSERT تکراری
         tombstone = Item.all_objects.filter(
             warehouse=serializer.validated_data.get('warehouse'),
@@ -213,11 +214,64 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         ).first()
         if tombstone:
             serializer.instance = tombstone
-            serializer.save(is_deleted=False)
+            instance = serializer.save(is_deleted=False)
         else:
-            serializer.save()
+            instance = serializer.save()
+
+        try:
+            log_audit_event(
+                module='docs',
+                action='CREATE',
+                target_model='Item',
+                target_object_id=instance.id,
+                target_repr=f"{instance.fa_unic_code or ''} - {instance.description or ''}"[:255],
+                warehouse=instance.warehouse,
+                user=self.request.user if self.request.user.is_authenticated else None,
+                after_state=model_to_dict(instance, exclude=['photo'])
+            )
+        except Exception:
+            pass
+
+    def perform_update(self, serializer):
+        from accounts.audit_utils import log_audit_event, calculate_model_diff
+        old_instance = self.get_object()
+        before_state = model_to_dict(old_instance, exclude=['photo'])
+        instance = serializer.save()
+        after_state = model_to_dict(instance, exclude=['photo'])
+        diff_b, diff_a = calculate_model_diff(before_state, after_state)
+        if diff_b or diff_a:
+            try:
+                log_audit_event(
+                    module='docs',
+                    action='UPDATE',
+                    target_model='Item',
+                    target_object_id=instance.id,
+                    target_repr=f"{instance.fa_unic_code or ''} - {instance.description or ''}"[:255],
+                    warehouse=instance.warehouse,
+                    user=self.request.user if self.request.user.is_authenticated else None,
+                    before_state=diff_b,
+                    after_state=diff_a
+                )
+            except Exception:
+                pass
 
     def perform_destroy(self, instance):
+        from accounts.audit_utils import log_audit_event
+        try:
+            log_audit_event(
+                module='docs',
+                action='DELETE',
+                severity='critical',
+                target_model='Item',
+                target_object_id=instance.id,
+                target_repr=f"{instance.fa_unic_code or ''} - {instance.description or ''}"[:255],
+                warehouse=instance.warehouse,
+                user=self.request.user if self.request.user.is_authenticated else None,
+                before_state=model_to_dict(instance, exclude=['photo'])
+            )
+        except Exception:
+            pass
+
         with transaction.atomic():
             _soft_delete_items_cascade(Item.objects.filter(id=instance.id))
 
@@ -248,6 +302,8 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def export_excel(self, request):
         import openpyxl
+        import io
+        import zipfile
         from django.http import HttpResponse
         
         data_scope = request.data.get('data_scope', 'all')
@@ -287,15 +343,13 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         else:
             headers = list(expected_fields_dict.keys())
             
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Export"
+        header_labels = [(valid_fields[h].verbose_name if hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h) if h in valid_fields else f"{h} (داینامیک)" for h in headers]
+        header_keys = [h for h in headers]
         
-        # Write headers
-        ws.append([(valid_fields[h].verbose_name if hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h) if h in valid_fields else f"{h} (داینامیک)" for h in headers])
-        ws.append([h for h in headers])
-        
-        for item in queryset.iterator():
+        CHUNK_SIZE = 100_000
+        total_count = queryset.count()
+
+        def _format_row(item):
             row = []
             for h in headers:
                 if h in valid_fields:
@@ -314,13 +368,66 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 else:
                     val = str(val)
                 row.append(val)
-            ws.append(row)
+            return row
+
+        if total_count <= CHUNK_SIZE:
+            wb = openpyxl.Workbook(write_only=True)
+            ws = wb.create_sheet(title="Export")
+            ws.append(header_labels)
+            ws.append(header_keys)
             
-        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        response['Content-Disposition'] = 'attachment; filename="export.xlsx"'
-        wb.save(response)
-        
-        return response
+            for item in queryset.iterator(chunk_size=5000):
+                ws.append(_format_row(item))
+                
+            response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = 'attachment; filename="export_items.xlsx"'
+            response['X-Export-Type'] = 'single'
+            response['X-Total-Records'] = str(total_count)
+            wb.save(response)
+            return response
+        else:
+            # Multi-part ZIP output for very large datasets
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                part_num = 1
+                current_wb = openpyxl.Workbook(write_only=True)
+                current_ws = current_wb.create_sheet(title=f"Part_{part_num}")
+                current_ws.append(header_labels)
+                current_ws.append(header_keys)
+                
+                rows_in_current_part = 0
+                for item in queryset.iterator(chunk_size=5000):
+                    current_ws.append(_format_row(item))
+                    rows_in_current_part += 1
+                    
+                    if rows_in_current_part >= CHUNK_SIZE:
+                        part_buffer = io.BytesIO()
+                        current_wb.save(part_buffer)
+                        part_buffer.seek(0)
+                        zip_file.writestr(f"export_part_{part_num}.xlsx", part_buffer.getvalue())
+                        part_buffer.close()
+                        
+                        part_num += 1
+                        current_wb = openpyxl.Workbook(write_only=True)
+                        current_ws = current_wb.create_sheet(title=f"Part_{part_num}")
+                        current_ws.append(header_labels)
+                        current_ws.append(header_keys)
+                        rows_in_current_part = 0
+                
+                if rows_in_current_part > 0:
+                    part_buffer = io.BytesIO()
+                    current_wb.save(part_buffer)
+                    part_buffer.seek(0)
+                    zip_file.writestr(f"export_part_{part_num}.xlsx", part_buffer.getvalue())
+                    part_buffer.close()
+            
+            zip_buffer.seek(0)
+            response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+            response['Content-Disposition'] = 'attachment; filename="export_items.zip"'
+            response['X-Export-Type'] = 'zip'
+            response['X-Total-Records'] = str(total_count)
+            response['X-Total-Parts'] = str(part_num)
+            return response
 
     @action(detail=False, methods=['get'])
     def export_columns(self, request):
@@ -498,8 +605,28 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         field_status = request.data.get('field_status')
         doc_status = request.data.get('doc_status')
         force = request.data.get('force', False)
+        select_all = request.data.get('select_all', False)
+        filters_dict = request.data.get('filters', {})
         
-        items = Item.objects.filter(id__in=ids)
+        if select_all and filters_dict:
+            from .filters import ItemFilter
+            items = ItemFilter(filters_dict, queryset=Item.objects.all()).qs
+            if 'search' in filters_dict and filters_dict['search']:
+                s = filters_dict['search']
+                items = items.filter(
+                    Q(fa_unic_code__icontains=s) |
+                    Q(description__icontains=s) |
+                    Q(po_number__icontains=s) |
+                    Q(packing_list_number__icontains=s) |
+                    Q(package_number__icontains=s) |
+                    Q(my_tag__icontains=s)
+                )
+            if 'warehouse' in filters_dict and filters_dict['warehouse']:
+                items = items.filter(warehouse_id=filters_dict['warehouse'])
+        elif ids:
+            items = Item.objects.filter(id__in=ids)
+        else:
+            items = Item.objects.none()
         
         # مورد 3: هشدار برای ارسال مجدد کالایی که CountTask دارد
         if field_status == 'counting' and not force:
@@ -685,6 +812,51 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def bulk_tag(self, request):
+        action = request.data.get('action')
+        tag_val = (request.data.get('tag') or '').strip()
+        item_ids = request.data.get('item_ids', [])
+        select_all = request.data.get('select_all', False)
+        filters_dict = request.data.get('filters', {})
+        
+        if action and (item_ids or select_all):
+            if select_all and filters_dict:
+                from .filters import ItemFilter
+                items = ItemFilter(filters_dict, queryset=Item.objects.all()).qs
+                if 'search' in filters_dict and filters_dict['search']:
+                    s = filters_dict['search']
+                    items = items.filter(
+                        Q(fa_unic_code__icontains=s) |
+                        Q(description__icontains=s) |
+                        Q(po_number__icontains=s) |
+                        Q(packing_list_number__icontains=s) |
+                        Q(package_number__icontains=s) |
+                        Q(my_tag__icontains=s)
+                    )
+                if 'warehouse' in filters_dict and filters_dict['warehouse']:
+                    items = items.filter(warehouse_id=filters_dict['warehouse'])
+            else:
+                items = Item.objects.filter(id__in=item_ids)
+            updated_count = 0
+            with transaction.atomic():
+                for item in items:
+                    current_tags = [t.strip() for t in (item.my_tag or '').split('،') if t.strip()]
+                    if action == 'add' and tag_val:
+                        if tag_val not in current_tags:
+                            current_tags.append(tag_val)
+                    elif action == 'remove' and tag_val:
+                        current_tags = [t for t in current_tags if t != tag_val]
+                    elif action == 'clear':
+                        current_tags = []
+                    
+                    new_tag_str = '، '.join(current_tags)
+                    if item.my_tag != new_tag_str:
+                        item.my_tag = new_tag_str
+                        item.updated_at = timezone.now()
+                        item.modified_by = request.user
+                        item.save(update_fields=['my_tag', 'updated_at', 'modified_by'])
+                    updated_count += 1
+            return Response({'status': 'success', 'updated': updated_count})
+
         updates = request.data.get('updates', [])
         updated_count = 0
         if updates:
@@ -819,7 +991,6 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         
         from warehouses.services import get_setting
         sys_conflict_strategy = get_setting('default_conflict_strategy', warehouse_id)
-        sys_tag_status = get_setting('default_tag_status', warehouse_id)
         
         conflict_strategy = request.data.get('conflict_strategy') or sys_conflict_strategy
         import_tag = request.data.get('import_tag', '')
@@ -1057,7 +1228,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
                                 if user_id: defaults['created_by_id'] = user_id
                                 if 'tag_status' not in defaults:
-                                    defaults['tag_status'] = sys_tag_status
+                                    defaults['tag_status'] = 'چاپ نشده'
                                 Item.all_objects.filter(id=resurrect_tombstone.id).update(
                                     fa_unic_code=fa_unic_code,
                                     is_deleted=False,
@@ -1145,7 +1316,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                 try:
                                     if user_id: defaults['created_by_id'] = user_id
                                     if 'tag_status' not in defaults:
-                                        defaults['tag_status'] = sys_tag_status
+                                        defaults['tag_status'] = 'چاپ نشده'
                                     new_item = Item.objects.create(fa_unic_code=fa_unic_code, **defaults)
                                     history_records.append(ImportHistory(item=new_item, action='create'))
                                     
@@ -1547,17 +1718,17 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         from rest_framework.permissions import IsAuthenticated
         
         if self.action in ['list', 'retrieve', 'pool_tasks', 'claim_tasks', 'get_export_columns', 'export_excel']:
-            permission_classes = [HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('view_sys_recounts')]
+            permission_classes = [HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('view_sys_recounts') | HasMenuAccess('view_wh_stocktaking')]
         elif self.action == 'bulk_submit':
-            permission_classes = [HasMenuAccess('view_sys_counter')]
+            permission_classes = [HasMenuAccess('view_sys_counter') | HasMenuAccess('can_act_as_counter')]
         elif self.action == 'bulk_approve':
-            permission_classes = [HasMenuAccess('view_sys_supervisor')]
+            permission_classes = [HasMenuAccess('view_sys_supervisor') | HasMenuAccess('can_act_as_supervisor') | HasMenuAccess('perm_feed_approve_action')]
         elif self.action in ['reject', 'bulk_reject']:
-            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review')]
+            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_supervisor') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('can_act_as_supervisor')]
         elif self.action in ['manager_reject', 'bulk_manager_reject']:
-            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_manager_review')]
+            permission_classes = [HasMenuAccess('perm_rec_recount') | HasMenuAccess('view_sys_manager_review') | HasMenuAccess('can_act_as_manager') | HasMenuAccess('perm_inventory_finalize')]
         elif self.action in ['bulk_manager_approve', 'bulk_cancel']:
-            permission_classes = [HasMenuAccess('view_sys_manager_review')]
+            permission_classes = [HasMenuAccess('view_sys_manager_review') | HasMenuAccess('can_act_as_manager') | HasMenuAccess('perm_inventory_finalize')]
         else: # create, update, etc
             permission_classes = [IsAuthenticated()]
             
@@ -1612,14 +1783,18 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
+        status_filter = self.request.query_params.get('status')
+        date_filter = self.request.query_params.get('date')
+        q_filter = self.request.query_params.get('q')
         
-        if warehouse_id:
+        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
         
+        # 1. فیلتر بر اساس نقش (Role Filter)
         if as_role == 'counter':
-            return queryset.filter(counter=user)
+            queryset = queryset.filter(counter=user)
         elif as_role == 'supervisor':
-            return queryset.filter(supervisor=user)
+            queryset = queryset.filter(supervisor=user)
         elif as_role == 'manager':
             from django.db.models import Q
             queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True))
@@ -1638,7 +1813,57 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             elif user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.can_act_as_counter') or user.has_perm('inventory.can_act_as_counter'):
                 queryset = queryset.filter(counter=user)
             else:
-                queryset = CountTask.objects.none()
+                return CountTask.objects.none()
+
+        # 2. فیلتر جستجوی متنی (Text Search Q)
+        if q_filter:
+            from django.db.models import Q
+            q_clean = q_filter.strip()
+            queryset = queryset.filter(
+                Q(item__fa_unic_code__icontains=q_clean) |
+                Q(item__description__icontains=q_clean) |
+                Q(item__item_no__icontains=q_clean) |
+                Q(item__po__icontains=q_clean) |
+                Q(item__new_location__icontains=q_clean) |
+                Q(item__old_location__icontains=q_clean)
+            )
+
+        # 3. فیلتر تاریخ (Date Filter)
+        if date_filter and date_filter != 'all':
+            from django.utils import timezone
+            from datetime import timedelta
+            now = timezone.localtime(timezone.now())
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if date_filter == 'today':
+                queryset = queryset.filter(updated_at__gte=today_start)
+            elif date_filter == 'yesterday':
+                yesterday_start = today_start - timedelta(days=1)
+                queryset = queryset.filter(updated_at__gte=yesterday_start, updated_at__lt=today_start)
+            elif date_filter == 'week':
+                week_start = today_start - timedelta(days=7)
+                queryset = queryset.filter(updated_at__gte=week_start)
+
+        # 4. فیلتر وضعیت (Status Filter)
+        if status_filter and status_filter != 'all':
+            from django.db.models import Q
+            if as_role == 'counter':
+                if status_filter == 'pending':
+                    queryset = queryset.filter(status='PENDING_COUNT', counted_balance__isnull=True)
+                elif status_filter == 'initial':
+                    queryset = queryset.filter(Q(status='INITIAL_COUNT') | Q(status='PENDING_COUNT', counted_balance__isnull=False))
+                elif status_filter == 'recount':
+                    queryset = queryset.filter(status__in=['SUPERVISOR_REJECTED', 'MANAGER_REJECTED'])
+                elif status_filter == 'completed':
+                    queryset = queryset.filter(status__in=['COUNTED', 'SUPERVISOR_APPROVED', 'MANAGER_REVIEW', 'FINAL_APPROVED'])
+            elif as_role in ['supervisor', 'doc_supervisor']:
+                if status_filter == 'counted':
+                    queryset = queryset.filter(status='COUNTED')
+                elif status_filter == 'recount':
+                    queryset = queryset.filter(status__in=['SUPERVISOR_REJECTED', 'MANAGER_REJECTED'])
+                else:
+                    queryset = queryset.filter(status=status_filter)
+            else:
+                queryset = queryset.filter(status=status_filter)
             
         return queryset
 
@@ -1671,34 +1896,44 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if not task_ids or not as_role:
             return Response({'error': 'شناسه تسک‌ها یا نقش ارسال نشده است.'}, status=400)
 
-        tasks = CountTask.objects.filter(id__in=task_ids)
+        with transaction.atomic():
+            if as_role == 'counter':
+                tasks = CountTask.objects.select_for_update().filter(
+                    id__in=task_ids,
+                    counter__isnull=True,
+                    status='PENDING_COUNT'
+                )
+                valid_task_ids = list(tasks.values_list('id', flat=True))
+                if not valid_task_ids:
+                    broadcast_count_task_update()
+                    return Response({'success': False, 'claimed_count': 0, 'message': 'این کالا(ها) قبلاً توسط انبارگردان دیگری بر عهده گرفته شده است.'})
 
-        if as_role == 'counter':
-            tasks = tasks.filter(counter__isnull=True, status='PENDING_COUNT')
-            # Fetch valid IDs to update Items as well
-            valid_task_ids = list(tasks.values_list('id', flat=True))
-            if not valid_task_ids:
-                broadcast_count_task_update()
-                return Response({'success': False, 'claimed_count': 0, 'message': 'این کالا(ها) قبلاً توسط انبارگردان دیگری بر عهده گرفته شده است.'})
+                from .models import Item
+                item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
 
-            from .models import Item
-            item_ids = list(CountTask.objects.filter(id__in=valid_task_ids).values_list('item_id', flat=True))
+                # Update CountTasks
+                updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user, updated_at=timezone.now())
 
-            # Update CountTasks
-            updated = CountTask.objects.filter(id__in=valid_task_ids).update(counter=request.user, updated_at=timezone.now())
+                # Update Item field_assignee
+                assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+                Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name, updated_at=timezone.now())
 
-            # Update Item field_assignee
-            assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            Item.objects.filter(id__in=item_ids).update(field_assignee=assignee_name, updated_at=timezone.now())
-
-        elif as_role == 'supervisor':
-            tasks = tasks.filter(supervisor__isnull=True, status='COUNTED')
-            updated = tasks.update(supervisor=request.user)
-        elif as_role == 'manager':
-            tasks = tasks.filter(assigned_manager__isnull=True, status='MANAGER_REVIEW')
-            updated = tasks.update(assigned_manager=request.user)
-        else:
-            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            elif as_role == 'supervisor':
+                tasks = CountTask.objects.select_for_update().filter(
+                    id__in=task_ids,
+                    supervisor__isnull=True,
+                    status='COUNTED'
+                )
+                updated = tasks.update(supervisor=request.user, updated_at=timezone.now())
+            elif as_role == 'manager':
+                tasks = CountTask.objects.select_for_update().filter(
+                    id__in=task_ids,
+                    assigned_manager__isnull=True,
+                    status='MANAGER_REVIEW'
+                )
+                updated = tasks.update(assigned_manager=request.user, updated_at=timezone.now())
+            else:
+                return Response({'error': 'نقش نامعتبر است.'}, status=400)
 
         broadcast_count_task_update()
         return Response({'success': True, 'claimed_count': updated})
@@ -1715,6 +1950,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         
         if old_status != new_status:
             from .models import CountTaskHistory
+            from accounts.audit_utils import log_audit_event
             
             note = ''
             if new_status in ['MANAGER_REJECTED', 'FINAL_APPROVED']:
@@ -1732,6 +1968,41 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 note=note
             )
 
+            try:
+                action_map = {
+                    'SUPERVISOR_APPROVED': 'APPROVE',
+                    'FINAL_APPROVED': 'APPROVE',
+                    'SUPERVISOR_REJECTED': 'REJECT',
+                    'MANAGER_REJECTED': 'REJECT',
+                    'RECOUNT': 'RECOUNT',
+                }
+                module_map = {
+                    'SUPERVISOR_APPROVED': 'supervisor',
+                    'SUPERVISOR_REJECTED': 'supervisor',
+                    'FINAL_APPROVED': 'manager',
+                    'MANAGER_REJECTED': 'manager',
+                    'INITIAL_COUNT': 'counter',
+                    'COUNTED': 'counter',
+                }
+                log_action = action_map.get(new_status, 'UPDATE')
+                log_module = module_map.get(new_status, 'counter')
+                item_label = updated_instance.item.fa_unic_code if updated_instance.item else f"#{updated_instance.id}"
+                wh = updated_instance.item.warehouse if updated_instance.item else None
+
+                log_audit_event(
+                    module=log_module,
+                    action=log_action,
+                    target_model='CountTask',
+                    target_object_id=updated_instance.id,
+                    target_repr=f"شمارش کالا {item_label} (تغییر وضعیت به {new_status})",
+                    warehouse=wh,
+                    user=self.request.user if self.request.user.is_authenticated else None,
+                    before_state={'status': old_status, 'counted_balance': str(instance.counted_balance)},
+                    after_state={'status': new_status, 'counted_balance': str(updated_instance.counted_balance), 'note': note}
+                )
+            except Exception:
+                pass
+
     @action(detail=False, methods=['post'])
     def bulk_submit(self, request):
         user = request.user
@@ -1745,69 +2016,73 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 CountTask.objects.filter(sync_id__in=sync_ids).values_list('id', flat=True)
             ))
 
-        if task_ids:
-            tasks = CountTask.objects.filter(id__in=task_ids, counter=user, status__in=['PENDING_COUNT', 'INITIAL_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
-        else:
-            tasks = CountTask.objects.filter(counter=user, status__in=['PENDING_COUNT', 'INITIAL_COUNT', 'SUPERVISOR_REJECTED', 'MANAGER_REJECTED'], counted_balance__isnull=False)
-
-        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
-            tasks = tasks.filter(item__warehouse_id=warehouse_id)
-
-        first_task = tasks.first()
-        if not first_task:
-            # Idempotency: اگر تسک‌های درخواستی قبلاً ارسال شده‌اند (مثلاً retry صف
-            # آفلاین پس از گم شدن پاسخ در تونل)، موفقیت no-op برگردان نه ابهام.
+        with transaction.atomic():
+            tasks_qs = CountTask.objects.select_for_update().filter(
+                counter=user,
+                status='INITIAL_COUNT',
+                counted_balance__isnull=False
+            )
             if task_ids:
-                already = CountTask.objects.filter(
-                    id__in=task_ids, counter=user,
-                    status__in=['COUNTED', 'MANAGER_REVIEW', 'FINAL_APPROVED'],
-                ).count()
-                if already > 0:
-                    return Response({
-                        'message': f'{already} مورد قبلاً ارسال شده بود.',
-                        'already_submitted': already,
-                    })
-            return Response({'message': 'هیچ موردی برای ارسال یافت نشد.'})
-            
-        from warehouses.services import get_setting
-        wh_setting_cache = {}
+                tasks_qs = tasks_qs.filter(id__in=task_ids)
 
-        def get_warehouse_req_sup(wh_id):
-            if wh_id not in wh_setting_cache:
-                wh_setting_cache[wh_id] = get_setting('require_supervisor_approval', wh_id)
-            return wh_setting_cache[wh_id]
-        
-        from .models import CountTaskHistory
-        histories = []
-        tasks_list = list(tasks)
-        counted_count = 0
-        manager_count = 0
-        for task in tasks_list:
-            wh_id = task.item.warehouse_id if task.item else None
-            req_sup_app = get_warehouse_req_sup(wh_id)
-            task_req_sup = req_sup_app and not task.skip_supervisor
-            target_status = 'COUNTED' if task_req_sup else 'MANAGER_REVIEW'
-            if target_status == 'COUNTED':
-                counted_count += 1
-            else:
-                manager_count += 1
-            histories.append(CountTaskHistory(
-                task=task,
-                action_by=user,
-                action_type=target_status,
-                counted_balance=task.counted_balance,
-                note=task.counter_note
-            ))
-            task.status = target_status
-            task.modified_by = user
-            task.updated_at = timezone.now()  # bulk_update سیگنال auto_now را رد می‌کند
+            if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
+                tasks_qs = tasks_qs.filter(item__warehouse_id=warehouse_id)
 
-        count = len(tasks_list)
-        if count > 0:
-            CountTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'updated_at'])
-        if histories:
-            CountTaskHistory.objects.bulk_create(histories)
+            tasks_list = list(tasks_qs.select_related('item'))
+
+            if not tasks_list:
+                # Idempotency: اگر تسک‌های درخواستی قبلاً ارسال شده‌اند (مثلاً retry صف
+                # آفلاین پس از گم شدن پاسخ در تونل)، موفقیت no-op برگردان نه ابهام.
+                if task_ids:
+                    already = CountTask.objects.filter(
+                        id__in=task_ids, counter=user,
+                        status__in=['COUNTED', 'MANAGER_REVIEW', 'FINAL_APPROVED'],
+                    ).count()
+                    if already > 0:
+                        return Response({
+                            'message': f'{already} مورد قبلاً ارسال شده بود.',
+                            'already_submitted': already,
+                        })
+                return Response({'message': 'هیچ موردی برای ارسال یافت نشد.'})
+                
+            from warehouses.services import get_setting
+            wh_setting_cache = {}
+
+            def get_warehouse_req_sup(wh_id):
+                if wh_id not in wh_setting_cache:
+                    wh_setting_cache[wh_id] = get_setting('require_supervisor_approval', wh_id)
+                return wh_setting_cache[wh_id]
             
+            from .models import CountTaskHistory
+            histories = []
+            counted_count = 0
+            manager_count = 0
+            for task in tasks_list:
+                wh_id = task.item.warehouse_id if task.item else None
+                req_sup_app = get_warehouse_req_sup(wh_id)
+                task_req_sup = req_sup_app and not task.skip_supervisor
+                target_status = 'COUNTED' if task_req_sup else 'MANAGER_REVIEW'
+                if target_status == 'COUNTED':
+                    counted_count += 1
+                else:
+                    manager_count += 1
+                histories.append(CountTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type=target_status,
+                    counted_balance=task.counted_balance,
+                    note=task.counter_note
+                ))
+                task.status = target_status
+                task.modified_by = user
+                task.updated_at = timezone.now()  # bulk_update سیگنال auto_now را رد می‌کند
+
+            count = len(tasks_list)
+            if count > 0:
+                CountTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'updated_at'])
+            if histories:
+                CountTaskHistory.objects.bulk_create(histories)
+                
         if counted_count > 0 and manager_count > 0:
             msg = f'{count} مورد ارسال شد ({counted_count} مورد به سرپرست و {manager_count} مورد مستقیم به مدیر).'
         elif counted_count > 0:
@@ -1824,28 +2099,36 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
             
-        tasks = CountTask.objects.filter(id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED'])
-        
         note = request.data.get('note', '')
-        
         from .models import CountTaskHistory
-        histories = []
-        for task in tasks:
-            task.supervisor_note = note
-            histories.append(CountTaskHistory(
-                task=task,
-                action_by=user,
-                action_type='MANAGER_REVIEW',
-                counted_balance=task.counted_balance,
-                note=note
-            ))
-            
-        count = tasks.update(status='MANAGER_REVIEW', supervisor_note=note, modified_by=user, updated_at=timezone.now())
-        if histories:
-            CountTaskHistory.objects.bulk_create(histories)
-            
+        from django.db import transaction
+        
+        with transaction.atomic():
+            tasks = CountTask.objects.select_for_update().filter(
+                id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED']
+            )
+            histories = []
+            tasks_list = list(tasks)
+            for task in tasks_list:
+                task.supervisor_note = note
+                task.status = 'MANAGER_REVIEW'
+                task.modified_by = user
+                task.updated_at = timezone.now()
+                histories.append(CountTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type='MANAGER_REVIEW',
+                    counted_balance=task.counted_balance,
+                    note=note
+                ))
+                
+            if tasks_list:
+                CountTask.objects.bulk_update(tasks_list, ['status', 'supervisor_note', 'modified_by', 'updated_at'])
+            if histories:
+                CountTaskHistory.objects.bulk_create(histories)
+                
         broadcast_count_task_update()
-        return Response({'message': f'{count} مورد تایید و برای مدیر ارسال شد.'})
+        return Response({'message': f'{len(tasks_list)} مورد تایید و برای مدیر ارسال شد.'})
 
     @action(detail=False, methods=['post'])
     def bulk_manager_approve(self, request):
@@ -1860,6 +2143,15 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         
         from .models import CountTaskHistory
         from django.db import transaction
+        from decimal import Decimal, InvalidOperation
+
+        def _to_decimal(val):
+            if val is None or str(val).strip() == '':
+                return None
+            try:
+                return Decimal(str(val).strip().replace(',', '.'))
+            except (InvalidOperation, ValueError, TypeError):
+                return None
         
         with transaction.atomic():
             histories = []
@@ -1879,9 +2171,15 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 item = task.item
                 item.field_status = 'done'
                 if task.counted_balance is not None:
-                    # بررسی مغایرت (اصلاح ۱۰)
-                    if str(task.counted_balance) != str(item.bal4miv):
-                        item.has_conflict = True
+                    # بررسی استاندارد و دقیق مغایرت با مقایسه اعشاری Decimal
+                    c_dec = _to_decimal(task.counted_balance)
+                    s_dec = _to_decimal(item.bal4miv)
+                    if c_dec is not None and s_dec is not None:
+                        item.has_conflict = (c_dec != s_dec)
+                    elif c_dec is not None:
+                        item.has_conflict = (c_dec != Decimal('0'))
+                    else:
+                        item.has_conflict = False
                     item.inventory = task.counted_balance
                 item.modified_by = user
                 item.updated_at = timezone.now()
@@ -1901,7 +2199,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         task = self.get_object()
-        note = request.data.get('note', '')
+        note = request.data.get('note') or request.data.get('reason', '')
         
         if task.status not in ['COUNTED', 'MANAGER_REJECTED']:
             return Response({'error': 'فقط موارد شمرده شده قابل رد هستند.'}, status=400)
@@ -1940,19 +2238,22 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         # بسته به تنظیم سرپرست، تعیین مقصد
         req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
         
+        prev_counted = task.counted_balance
+
         if req_supervisor and task.supervisor:
-            # ارسال به سرپرست
+            # ارسال به سرپرست (مقدار شمارش شده حفظ می‌شود تا سرپرست آن را بازبینی کند)
             target_status = 'MANAGER_REJECTED'
             target_msg = 'مورد برای بازشماری به سرپرست ارجاع شد.'
         else:
             # ارسال مستقیم به انبارگردان
             target_status = 'PENDING_COUNT'
             target_msg = 'مورد برای بازشماری مستقیماً به انبارگردان ارجاع شد.'
+            task.counted_balance = None  # پاک کردن مقدار قبلی برای شمارش مجدد
         
         task.status = target_status
         task.manager_note = note
-        task.counted_balance = None  # پاک کردن مقدار قبلی برای شمارش مجدد
         task.modified_by = request.user
+        task.updated_at = timezone.now()
         task.save()
         
         from .models import CountTaskHistory
@@ -1960,7 +2261,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             task=task,
             action_by=request.user,
             action_type='MANAGER_REJECTED',
-            counted_balance=task.counted_balance,
+            counted_balance=prev_counted,
             note=note
         )
         
@@ -1977,29 +2278,33 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
             
-        tasks = CountTask.objects.filter(id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED'])
-        
         from .models import CountTaskHistory
-        histories = []
-        tasks_list = list(tasks)
-        for task in tasks_list:
-            task.supervisor_note = note
-            task.status = 'SUPERVISOR_REJECTED'
-            task.modified_by = user
-            task.updated_at = timezone.now()
-            histories.append(CountTaskHistory(
-                task=task,
-                action_by=user,
-                action_type='SUPERVISOR_REJECTED',
-                counted_balance=task.counted_balance,
-                note=note
-            ))
-            
-        if tasks_list:
-            CountTask.objects.bulk_update(tasks_list, ['status', 'supervisor_note', 'modified_by', 'updated_at'])
-        if histories:
-            CountTaskHistory.objects.bulk_create(histories)
-            
+        from django.db import transaction
+        
+        with transaction.atomic():
+            tasks = CountTask.objects.select_for_update().filter(
+                id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED']
+            )
+            histories = []
+            tasks_list = list(tasks)
+            for task in tasks_list:
+                task.supervisor_note = note
+                task.status = 'SUPERVISOR_REJECTED'
+                task.modified_by = user
+                task.updated_at = timezone.now()
+                histories.append(CountTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type='SUPERVISOR_REJECTED',
+                    counted_balance=task.counted_balance,
+                    note=note
+                ))
+                
+            if tasks_list:
+                CountTask.objects.bulk_update(tasks_list, ['status', 'supervisor_note', 'modified_by', 'updated_at'])
+            if histories:
+                CountTaskHistory.objects.bulk_create(histories)
+                
         broadcast_count_task_update()
         return Response({'message': f'{len(tasks_list)} مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
 
@@ -2024,15 +2329,16 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         histories = []
         tasks_list = list(tasks)
         for task in tasks_list:
+            prev_counted = task.counted_balance
             req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
             if req_supervisor and task.supervisor:
                 target_status = 'MANAGER_REJECTED'
             else:
                 target_status = 'PENDING_COUNT'
+                task.counted_balance = None
                 
             task.status = target_status
             task.manager_note = note
-            task.counted_balance = None
             task.modified_by = user
             task.updated_at = timezone.now()
             
@@ -2040,7 +2346,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 task=task,
                 action_by=user,
                 action_type='MANAGER_REJECTED',
-                counted_balance=None,
+                counted_balance=prev_counted,
                 note=note
             ))
             
@@ -2381,6 +2687,16 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     serializer_class = DocTaskSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        from accounts.permissions import HasMenuAccess
+        from rest_framework.permissions import IsAuthenticated
+        
+        if self.action in ['bulk_approve', 'reject']:
+            return [HasMenuAccess('perm_doc_approve_action') | HasMenuAccess('view_wh_doc_approvals') | HasMenuAccess('can_act_as_doc_supervisor') | HasMenuAccess('can_act_as_manager') | HasMenuAccess('view_sys_manager_review')]
+        elif self.action in ['bulk_manager_approve', 'manager_reject']:
+            return [HasMenuAccess('perm_doc_approve_action') | HasMenuAccess('view_wh_doc_approvals') | HasMenuAccess('can_act_as_manager') | HasMenuAccess('view_sys_manager_review')]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         user = self.request.user
         queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
@@ -2388,13 +2704,13 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
         
-        if warehouse_id:
+        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
         
         if as_role == 'doc_worker':
-            return queryset.filter(doc_worker=user)
+            queryset = queryset.filter(doc_worker=user)
         elif as_role == 'doc_supervisor':
-            return queryset.filter(doc_supervisor=user)
+            queryset = queryset.filter(doc_supervisor=user)
         elif as_role == 'manager':
             queryset = queryset.filter(assigned_manager=user, status='DOC_MANAGER_REVIEW')
         elif as_role == 'tracking':
@@ -2408,6 +2724,53 @@ class DocTaskViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(Q(assigned_manager=user) | Q(assigned_manager__isnull=True) | Q(doc_worker=user) | Q(doc_supervisor=user))
             else:
                 queryset = queryset.filter(Q(doc_worker=user) | Q(doc_supervisor=user) | Q(assigned_manager=user))
+
+        # اعمال فیلترهای تکمیلی جستجو، وضعیت و تاریخ
+        q = self.request.query_params.get('q') or self.request.data.get('q')
+        if q:
+            q_clean = str(q).strip()
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(item__fa_unic_code__icontains=q_clean) |
+                Q(item__en_unic_code__icontains=q_clean) |
+                Q(item__description__icontains=q_clean) |
+                Q(item__item_no__icontains=q_clean) |
+                Q(item__po__icontains=q_clean) |
+                Q(item__tag__icontains=q_clean) |
+                Q(item__pk_number__icontains=q_clean) |
+                Q(item__new_location__icontains=q_clean) |
+                Q(inv_rti_number__icontains=q_clean) |
+                Q(added_rti_no__icontains=q_clean) |
+                Q(doc_supplier__icontains=q_clean)
+            )
+
+        status_param = self.request.query_params.get('status') or self.request.data.get('status')
+        if status_param and status_param != 'all':
+            if status_param == 'untouched':
+                queryset = queryset.filter(status='PENDING_DOC', inv_rti_number__isnull=True, added_rti_no__isnull=True, price_amount__isnull=True, doc_supplier__isnull=True)
+            elif status_param == 'rejected':
+                queryset = queryset.filter(status__in=['DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'])
+            elif status_param == 'ready':
+                queryset = queryset.filter(status='PENDING_DOC').exclude(inv_rti_number__isnull=True, added_rti_no__isnull=True, price_amount__isnull=True, doc_supplier__isnull=True)
+            elif status_param == 'completed':
+                queryset = queryset.filter(status='DOC_FINAL_APPROVED')
+            else:
+                queryset = queryset.filter(status=status_param)
+
+        date_param = self.request.query_params.get('date') or self.request.data.get('date')
+        if date_param and date_param != 'all':
+            from django.utils import timezone
+            import datetime
+            now = timezone.now()
+            today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            if date_param == 'today':
+                queryset = queryset.filter(updated_at__gte=today_start)
+            elif date_param == 'yesterday':
+                yesterday_start = today_start - datetime.timedelta(days=1)
+                queryset = queryset.filter(updated_at__gte=yesterday_start, updated_at__lt=today_start)
+            elif date_param == 'week':
+                week_start = today_start - datetime.timedelta(days=7)
+                queryset = queryset.filter(updated_at__gte=week_start)
             
         return queryset
 
@@ -2417,7 +2780,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         warehouse_id = request.query_params.get('warehouse_id')
         queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
         
-        if warehouse_id:
+        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
             
         if as_role == 'doc_worker':
@@ -2448,77 +2811,81 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if sync_ids:
             q_filter |= Q(sync_id__in=sync_ids)
 
-        tasks = DocTask.objects.filter(q_filter).select_related('item')
-        from .models import DocTaskHistory
+        with transaction.atomic():
+            tasks = DocTask.objects.select_for_update().filter(q_filter).select_related('item')
+            from .models import DocTaskHistory
 
-        if as_role == 'doc_worker':
-            tasks = tasks.filter(doc_worker__isnull=True, status='PENDING_DOC')
-            valid_tasks = list(tasks)
-            if not valid_tasks:
-                return Response({'success': True, 'claimed_count': 0})
+            if as_role == 'doc_worker':
+                tasks = tasks.filter(doc_worker__isnull=True, status='PENDING_DOC')
+                valid_tasks = list(tasks)
+                if not valid_tasks:
+                    broadcast_doc_task_update()
+                    return Response({'success': True, 'claimed_count': 0})
 
-            valid_task_ids = [t.id for t in valid_tasks]
-            item_ids = [t.item_id for t in valid_tasks if t.item_id]
+                valid_task_ids = [t.id for t in valid_tasks]
+                item_ids = [t.item_id for t in valid_tasks if t.item_id]
 
-            # Update DocTasks
-            updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_worker=request.user)
+                # Update DocTasks
+                updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_worker=request.user, updated_at=timezone.now())
 
-            # Update Item doc_assignee
-            assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            from .models import Item
-            Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name, updated_at=timezone.now())
+                # Update Item doc_assignee
+                assignee_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+                from .models import Item
+                Item.objects.filter(id__in=item_ids).update(doc_assignee=assignee_name, updated_at=timezone.now())
 
-            # Log History
-            histories = [
-                DocTaskHistory(
-                    task=t,
-                    action_by=request.user,
-                    action_type='CLAIMED',
-                    note=f'بر عهده گرفته شد توسط کارشناس مالی ({assignee_name})',
-                    data_snapshot=_create_doc_task_snapshot(t)
-                ) for t in valid_tasks
-            ]
-            DocTaskHistory.objects.bulk_create(histories)
+                # Log History
+                histories = [
+                    DocTaskHistory(
+                        task=t,
+                        action_by=request.user,
+                        action_type='CLAIMED',
+                        note=f'بر عهده گرفته شد توسط کارشناس مالی ({assignee_name})',
+                        data_snapshot=_create_doc_task_snapshot(t)
+                    ) for t in valid_tasks
+                ]
+                DocTaskHistory.objects.bulk_create(histories)
 
-        elif as_role == 'doc_supervisor':
-            tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
-            valid_tasks = list(tasks)
-            if not valid_tasks:
-                return Response({'success': True, 'claimed_count': 0})
-            valid_task_ids = [t.id for t in valid_tasks]
-            updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_supervisor=request.user)
-            supervisor_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            histories = [
-                DocTaskHistory(
-                    task=t,
-                    action_by=request.user,
-                    action_type='CLAIMED',
-                    note=f'بر عهده گرفته شد توسط سرپرست اسناد ({supervisor_name})',
-                    data_snapshot=_create_doc_task_snapshot(t)
-                ) for t in valid_tasks
-            ]
-            DocTaskHistory.objects.bulk_create(histories)
+            elif as_role == 'doc_supervisor':
+                tasks = tasks.filter(doc_supervisor__isnull=True, status='DOC_PROCESSED')
+                valid_tasks = list(tasks)
+                if not valid_tasks:
+                    broadcast_doc_task_update()
+                    return Response({'success': True, 'claimed_count': 0})
+                valid_task_ids = [t.id for t in valid_tasks]
+                updated = DocTask.objects.filter(id__in=valid_task_ids).update(doc_supervisor=request.user, updated_at=timezone.now())
+                supervisor_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+                histories = [
+                    DocTaskHistory(
+                        task=t,
+                        action_by=request.user,
+                        action_type='CLAIMED',
+                        note=f'بر عهده گرفته شد توسط سرپرست اسناد ({supervisor_name})',
+                        data_snapshot=_create_doc_task_snapshot(t)
+                    ) for t in valid_tasks
+                ]
+                DocTaskHistory.objects.bulk_create(histories)
 
-        elif as_role == 'manager':
-            tasks = tasks.filter(assigned_manager__isnull=True, status='DOC_MANAGER_REVIEW')
-            valid_tasks = list(tasks)
-            if not valid_tasks:
-                return Response({'success': True, 'claimed_count': 0})
-            valid_task_ids = [t.id for t in valid_tasks]
-            updated = DocTask.objects.filter(id__in=valid_task_ids).update(assigned_manager=request.user)
-            manager_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
-            histories = [
-                DocTaskHistory(
-                    task=t,
-                    action_by=request.user,
-                    action_type='CLAIMED',
-                    note=f'بر عهده گرفته شد توسط مدیر ({manager_name})',
-                    data_snapshot=_create_doc_task_snapshot(t)
-                ) for t in valid_tasks
-            ]
-            DocTaskHistory.objects.bulk_create(histories)
-        else:
-            return Response({'error': 'نقش نامعتبر است.'}, status=400)
+            elif as_role == 'manager':
+                tasks = tasks.filter(assigned_manager__isnull=True, status='DOC_MANAGER_REVIEW')
+                valid_tasks = list(tasks)
+                if not valid_tasks:
+                    broadcast_doc_task_update()
+                    return Response({'success': True, 'claimed_count': 0})
+                valid_task_ids = [t.id for t in valid_tasks]
+                updated = DocTask.objects.filter(id__in=valid_task_ids).update(assigned_manager=request.user, updated_at=timezone.now())
+                manager_name = f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username
+                histories = [
+                    DocTaskHistory(
+                        task=t,
+                        action_by=request.user,
+                        action_type='CLAIMED',
+                        note=f'بر عهده گرفته شد توسط مدیر ({manager_name})',
+                        data_snapshot=_create_doc_task_snapshot(t)
+                    ) for t in valid_tasks
+                ]
+                DocTaskHistory.objects.bulk_create(histories)
+            else:
+                return Response({'error': 'نقش نامعتبر است.'}, status=400)
 
         broadcast_doc_task_update()
         return Response({'success': True, 'claimed_count': updated})
@@ -2560,67 +2927,90 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
         
         from django.db.models import Q
-        if task_ids or sync_ids:
-            q_filter = Q()
-            if task_ids:
-                q_filter |= Q(id__in=task_ids)
-            if sync_ids:
-                q_filter |= Q(sync_id__in=sync_ids)
-            tasks = DocTask.objects.filter(q_filter, doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
-        else:
-            tasks = DocTask.objects.filter(doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
-        
-        if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
-            tasks = tasks.filter(item__warehouse_id=warehouse_id)
-        
-        first_task = tasks.first()
-        if not first_task:
-            return Response({'message': 'هیچ رکوردی برای ارجاع یافت نشد.'})
+        q_filter = Q()
+        if task_ids:
+            q_filter |= Q(id__in=task_ids)
+        if sync_ids:
+            q_filter |= Q(sync_id__in=sync_ids)
             
-        from warehouses.services import get_setting
-        from .models import DocTaskHistory
-        histories = []
-        tasks_list = list(tasks)
-        
-        # بررسی تنظیم تایید سرپرست به تفکیک انبار هر تسک
-        wh_settings_cache = {}
-        target_status_counts = {'DOC_PROCESSED': 0, 'DOC_MANAGER_REVIEW': 0}
-        
-        for task in tasks_list:
-            wh_id = task.item.warehouse_id if task.item else None
-            if wh_id not in wh_settings_cache:
-                wh_settings_cache[wh_id] = get_setting('require_doc_supervisor_approval', wh_id)
-            req_sup_app = wh_settings_cache[wh_id]
+        with transaction.atomic():
+            if task_ids or sync_ids:
+                tasks = DocTask.objects.select_for_update().filter(q_filter, doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
+            else:
+                tasks = DocTask.objects.select_for_update().filter(doc_worker=user, status__in=['PENDING_DOC', 'DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED']).select_related('item')
             
-            task_req_sup = req_sup_app and not task.skip_supervisor
-            target_status = 'DOC_PROCESSED' if task_req_sup else 'DOC_MANAGER_REVIEW'
-            task.status = target_status
-            task.modified_by = user
-            target_status_counts[target_status] += 1
+            if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
+                tasks = tasks.filter(item__warehouse_id=warehouse_id)
             
-            histories.append(DocTaskHistory(
-                task=task,
-                action_by=user,
-                action_type=target_status,
-                note=task.worker_note,
-                data_snapshot=_create_doc_task_snapshot(task)
-            ))
+            def has_doc_info(t):
+                return bool(
+                    t.status in ['DOC_SUPERVISOR_REJECTED', 'DOC_MANAGER_REJECTED'] or
+                    t.inv_rti_number or t.added_rti_no or t.doc_supplier or
+                    t.price_amount or t.total_value or t.similar_unit_price or
+                    t.invoice_type or t.invoice_date or t.folder_address or
+                    t.stamp or t.signature or (t.worker_note and str(t.worker_note).strip())
+                )
+
+            tasks_list = [t for t in tasks if has_doc_info(t)]
+            if not tasks_list:
+                if task_ids or sync_ids:
+                    already = DocTask.objects.filter(
+                        Q(id__in=task_ids) | Q(sync_id__in=sync_ids),
+                        doc_worker=user,
+                        status__in=['DOC_PROCESSED', 'DOC_MANAGER_REVIEW', 'DOC_FINAL_APPROVED']
+                    ).count()
+                    if already > 0:
+                        return Response({
+                            'message': f'{already} مورد قبلاً ارسال شده بود.',
+                            'already_submitted': already
+                        })
+                return Response({'message': 'هیچ سند مالی تکمیل‌شده‌ای برای ارجاع یافت نشد.'})
+                
+            from warehouses.services import get_setting
+            from .models import DocTaskHistory
+            histories = []
             
-        count = len(tasks_list)
-        if count > 0:
-            DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by'])
-            broadcast_doc_task_update()
-        if histories:
-            DocTaskHistory.objects.bulk_create(histories)
+            # بررسی تنظیم تایید سرپرست به تفکیک انبار هر تسک
+            wh_settings_cache = {}
+            target_status_counts = {'DOC_PROCESSED': 0, 'DOC_MANAGER_REVIEW': 0}
             
-        if target_status_counts['DOC_PROCESSED'] > 0 and target_status_counts['DOC_MANAGER_REVIEW'] > 0:
-            msg = f'{count} کالا ارسال شد ({target_status_counts["DOC_PROCESSED"]} مورد جهت بررسی سرپرست و {target_status_counts["DOC_MANAGER_REVIEW"]} مورد مستقیماً به مدیر).'
-        elif target_status_counts['DOC_PROCESSED'] > 0:
-            msg = f'{count} کالا جهت بررسی سرپرست ارسال شد.'
-        else:
-            msg = f'{count} کالا مستقیماً جهت بررسی مدیر ارسال شد.'
-            
-        return Response({'message': msg})
+            now_time = timezone.now()
+            for task in tasks_list:
+                wh_id = task.item.warehouse_id if task.item else None
+                if wh_id not in wh_settings_cache:
+                    wh_settings_cache[wh_id] = get_setting('require_doc_supervisor_approval', wh_id)
+                req_sup_app = wh_settings_cache[wh_id]
+                
+                task_req_sup = req_sup_app and not task.skip_supervisor
+                target_status = 'DOC_PROCESSED' if task_req_sup else 'DOC_MANAGER_REVIEW'
+                task.status = target_status
+                task.modified_by = user
+                task.updated_at = now_time
+                target_status_counts[target_status] += 1
+                
+                histories.append(DocTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type=target_status,
+                    note=task.worker_note,
+                    data_snapshot=_create_doc_task_snapshot(task)
+                ))
+                
+            count = len(tasks_list)
+            if count > 0:
+                DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'updated_at'])
+                broadcast_doc_task_update()
+            if histories:
+                DocTaskHistory.objects.bulk_create(histories)
+                
+            if target_status_counts['DOC_PROCESSED'] > 0 and target_status_counts['DOC_MANAGER_REVIEW'] > 0:
+                msg = f'{count} کالا ارسال شد ({target_status_counts["DOC_PROCESSED"]} مورد جهت بررسی سرپرست و {target_status_counts["DOC_MANAGER_REVIEW"]} مورد مستقیماً به مدیر).'
+            elif target_status_counts['DOC_PROCESSED'] > 0:
+                msg = f'{count} کالا جهت بررسی سرپرست ارسال شد.'
+            else:
+                msg = f'{count} کالا مستقیماً جهت بررسی مدیر ارسال شد.'
+                
+            return Response({'message': msg})
 
     @action(detail=False, methods=['post'])
     def bulk_approve(self, request):
@@ -2630,33 +3020,38 @@ class DocTaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'هیچ کالایی انتخاب نشده است.'}, status=400)
             
         from django.db.models import Q
-        tasks = DocTask.objects.filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
-        if not (user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists()):
-            tasks = tasks.filter(Q(doc_supervisor=user) | Q(doc_supervisor__isnull=True))
-        
+        from django.db import transaction
+        from .models import DocTaskHistory
         note = request.data.get('note', '')
         
-        from .models import DocTaskHistory
-        histories = []
-        for task in tasks:
-            task.supervisor_note = note
-            task.status = 'DOC_MANAGER_REVIEW'
-            task.modified_by = user
-            if task.doc_supervisor_id is None:
-                task.doc_supervisor = user
-            histories.append(DocTaskHistory(
-                task=task,
-                action_by=user,
-                action_type='DOC_MANAGER_REVIEW',
-                note=note,
-                data_snapshot=_create_doc_task_snapshot(task)
-            ))
+        with transaction.atomic():
+            tasks = DocTask.objects.select_for_update().filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+            if not (user.is_superuser or user.groups.filter(name__in=['admin', 'manager']).exists()):
+                tasks = tasks.filter(Q(doc_supervisor=user) | Q(doc_supervisor__isnull=True))
             
-        if tasks:
-            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note', 'doc_supervisor'])
-            DocTaskHistory.objects.bulk_create(histories)
-            broadcast_doc_task_update()
-            
+            histories = []
+            tasks_list = list(tasks)
+            for task in tasks_list:
+                task.supervisor_note = note
+                task.status = 'DOC_MANAGER_REVIEW'
+                task.modified_by = user
+                task.updated_at = timezone.now()
+                if task.doc_supervisor_id is None:
+                    task.doc_supervisor = user
+                histories.append(DocTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type='DOC_MANAGER_REVIEW',
+                    note=note,
+                    data_snapshot=_create_doc_task_snapshot(task)
+                ))
+                
+            if tasks_list:
+                DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'supervisor_note', 'doc_supervisor', 'updated_at'])
+            if histories:
+                DocTaskHistory.objects.bulk_create(histories)
+                
+        broadcast_doc_task_update()
         return Response({'message': f'{len(histories)} رکورد جهت تایید نهایی مدیر ارسال شد.'})
 
     @action(detail=False, methods=['post'])
@@ -2667,27 +3062,32 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
             
-        tasks = DocTask.objects.filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
-        
+        from django.db import transaction
         from .models import DocTaskHistory
-        histories = []
-        for task in tasks:
-            task.supervisor_note = note
-            task.status = 'DOC_SUPERVISOR_REJECTED'
-            task.modified_by = request.user
-            histories.append(DocTaskHistory(
-                task=task,
-                action_by=request.user,
-                action_type='DOC_SUPERVISOR_REJECTED',
-                note=note,
-                data_snapshot=_create_doc_task_snapshot(task)
-            ))
-            
-        if tasks:
-            DocTask.objects.bulk_update(tasks, ['status', 'modified_by', 'supervisor_note'])
-            DocTaskHistory.objects.bulk_create(histories)
-            broadcast_doc_task_update()
-            
+        
+        with transaction.atomic():
+            tasks = DocTask.objects.select_for_update().filter(id__in=task_ids, status__in=['DOC_PROCESSED', 'DOC_MANAGER_REJECTED'])
+            histories = []
+            tasks_list = list(tasks)
+            for task in tasks_list:
+                task.supervisor_note = note
+                task.status = 'DOC_SUPERVISOR_REJECTED'
+                task.modified_by = request.user
+                task.updated_at = timezone.now()
+                histories.append(DocTaskHistory(
+                    task=task,
+                    action_by=request.user,
+                    action_type='DOC_SUPERVISOR_REJECTED',
+                    note=note,
+                    data_snapshot=_create_doc_task_snapshot(task)
+                ))
+                
+            if tasks_list:
+                DocTask.objects.bulk_update(tasks_list, ['status', 'modified_by', 'supervisor_note', 'updated_at'])
+            if histories:
+                DocTaskHistory.objects.bulk_create(histories)
+                
+        broadcast_doc_task_update()
         return Response({'message': f'{len(histories)} رکورد به بررسی‌کننده اسناد برگشت داده شد.'})
 
     @action(detail=False, methods=['post'])

@@ -1,0 +1,20 @@
+{
+  "testId": "942bf717-d869-41ef-b4eb-df153e750303",
+  "status": "blocked",
+  "startedAt": "2026-08-16T03:11:43.638Z",
+  "finishedAt": "2026-08-16T03:15:29.237Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786850129043103//tmp/588cf7b3-6500-4c70-9c08-4c92682239d1/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_366ab429f52a9cd8",
+  "runIdIfAvailable": "9480a75e-ae95-4c93-8b80-dff2cfbcc43e",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 6,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the required item TS-ITEM-003 is not present in the manager review, so verification cannot be completed.\n\nObservations:\n- The manager review page displays the empty-state message: 'موردی برای بررسی وجود ندارد.' (no items to review).\n- A search for 'TS-ITEM-003' returned no results on the page.\n- The manager-review UI is reachable and working, but the prerequisite test data (TS-ITEM-003 dispatched to manager re…",
+  "apiOutput": null,
+  "trace": null
+}

@@ -1,0 +1,93 @@
+.fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Custom scrollbar for diff modal */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Persian Datepicker Popup Styling */
+::ng-deep .ng-persian-datepicker {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+::ng-deep .datepicker-outer-container {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  z-index: 99999 !important;
+  min-width: 275px !important;
+  width: 275px !important;
+  background-color: #ffffff !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 1rem !important;
+  border: 1px solid #e2e8f0 !important;
+  font-family: inherit !important;
+  padding: 10px !important;
+  box-sizing: border-box !important;
+}
+
+::ng-deep .from-datepicker .datepicker-outer-container {
+  right: 0 !important;
+  left: auto !important;
+}
+
+::ng-deep .to-datepicker .datepicker-outer-container {
+  left: 0 !important;
+  right: auto !important;
+}
+
+::ng-deep .datepicker-outer-container .days-container .day-col {
+  width: 14.2857% !important;
+  box-sizing: border-box !important;
+}
+
+::ng-deep .datepicker-outer-container .dp-btn {
+  border-radius: 0.5rem !important;
+  font-weight: bold !important;
+}
+
+::ng-deep .datepicker-outer-container .navigation-container {
+  margin-bottom: 8px !important;
+  align-items: center !important;
+}
+
+::ng-deep .datepicker-outer-container .switch-view {
+  font-weight: 800 !important;
+  color: #1e293b !important;
+}
+
+::ng-deep .datepicker-outer-container .week-days {
+  color: #64748b !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+}
+
+::ng-deep .datepicker-outer-container .month-days .day-col {
+  font-weight: 600 !important;
+}

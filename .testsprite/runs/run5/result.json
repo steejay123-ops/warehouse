@@ -1,0 +1,20 @@
+{
+  "testId": "f0ae5ba6-d71f-4470-97a8-64e0814d9561",
+  "status": "blocked",
+  "startedAt": "2026-08-16T02:15:58.270Z",
+  "finishedAt": "2026-08-16T02:18:12.355Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/17868466921595//tmp/a8c3602a-7221-4af4-ac8f-302e09e63737/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_f0377973b1720582",
+  "runIdIfAvailable": "077ff896-9d21-48e5-83ea-978774d4d311",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 5,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the UI cannot reach the backend server, preventing login and subsequent steps.\n\nObservations:\n- The login page displays 'در حال ارتباط با سرور...' (connecting to server) and the visible message 'سرور در دسترس نیست' (server is not available).\n- After entering credentials and clicking 'ورود به سامانه', the interface remains in the connecting state and no dashboard, item list, or error page that would allow retry…",
+  "apiOutput": null,
+  "trace": null
+}

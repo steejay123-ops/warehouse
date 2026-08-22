@@ -152,6 +152,7 @@ export class CustomsScannerParser {
       worker_note: ['worker_note', 'workernote', 'یادداشتکارشناس', 'یادداشتکارشناسمالی', 'یادداشت', 'توضیحات', 'note'],
       po: ['po', 'ponumber', 'شمارهسفارش', 'سفارشخرید', 'سفارش'],
       tag: ['tag', 'تگ', 'partnumber', 'partno', 'پارتنامبر', 'پارتنامبرکالا'],
+      item_no: ['item_no', 'itemno', 'شمارهفنی', 'شمارهفنیکالا', 'پارتنامبرفنی', 'کدفنی', 'کدفنیکالا'],
       pk_number: ['pknumber', 'pk_number', 'پکینگ', 'شمارهپکینگ', 'بسته']
     };
 

@@ -63,7 +63,6 @@ export const routes: Routes = [
       { path: 'tasks', component: Placeholders },
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },
-      { path: 'export', component: Placeholders },
       { path: 'customs', component: Customs },
       { path: 'doc_approvals', component: Placeholders },
       { path: 'feed_approvals', component: Placeholders },

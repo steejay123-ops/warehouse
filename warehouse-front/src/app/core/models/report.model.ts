@@ -170,3 +170,129 @@ export interface ReportExportJob {
 export type ExportOutcome =
   | { kind: 'file'; blob: Blob }
   | { kind: 'job'; jobId: number; totalRows: number };
+
+/** وضعیت کامل ذخیره‌شده گزارش جهت همگام‌سازی با URL و LocalStorage */
+export interface ReportSavedState {
+  entity: string;
+  warehouse_id?: number | null;
+  joins?: ReportJoinSpec[];
+  fields?: string[];
+  filters?: FilterGroup | null;
+  group_by?: string[];
+  aggregations?: ReportAggregation[];
+  having?: ReportHaving[];
+  sort?: ReportSort[];
+  chart?: ReportChart | null;
+  page?: number;
+  pageSize?: number;
+  density?: 'compact' | 'standard';
+}
+
+/** تبدیل وضعیت گزارش به پارامترهای تمیز و استاندارد URL */
+export function serializeReportToQueryParams(state: ReportSavedState): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (state.entity) params['entity'] = state.entity;
+  if (state.warehouse_id !== undefined && state.warehouse_id !== null) {
+    params['warehouse_id'] = String(state.warehouse_id);
+  }
+  if (state.fields && state.fields.length) {
+    params['fields'] = state.fields.join(',');
+  }
+  if (state.joins && state.joins.length) {
+    params['joins'] = JSON.stringify(state.joins);
+  }
+  if (state.group_by && state.group_by.length) {
+    params['group_by'] = state.group_by.join(',');
+  }
+  if (state.aggregations && state.aggregations.length) {
+    params['aggregations'] = JSON.stringify(state.aggregations);
+  }
+  if (state.having && state.having.length) {
+    params['having'] = JSON.stringify(state.having);
+  }
+  if (state.filters && state.filters.children && state.filters.children.length) {
+    params['filters'] = JSON.stringify(state.filters);
+  }
+  if (state.sort && state.sort.length) {
+    params['sort'] = JSON.stringify(state.sort);
+  }
+  if (state.chart) {
+    params['chart'] = JSON.stringify(state.chart);
+  }
+  if (state.page && state.page > 1) {
+    params['page'] = String(state.page);
+  }
+  if (state.pageSize && state.pageSize !== 50) {
+    params['pageSize'] = String(state.pageSize);
+  }
+  if (state.density && state.density !== 'standard') {
+    params['density'] = state.density;
+  }
+  return params;
+}
+
+/** پارس امن پارامترهای URL یا شیء LocalStorage به وضعیت استاندارد گزارش‌ساز */
+export function parseReportFromQueryParams(params: Record<string, any>): ReportSavedState | null {
+  const entity = params['entity'];
+  if (!entity || typeof entity !== 'string') return null;
+
+  const state: ReportSavedState = { entity };
+
+  if (params['warehouse_id'] !== undefined && params['warehouse_id'] !== null && params['warehouse_id'] !== '') {
+    const w = Number(params['warehouse_id']);
+    state.warehouse_id = isNaN(w) ? null : w;
+  }
+
+  if (params['fields']) {
+    if (Array.isArray(params['fields'])) {
+      state.fields = params['fields'];
+    } else if (typeof params['fields'] === 'string') {
+      state.fields = params['fields'].split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
+
+  if (params['group_by']) {
+    if (Array.isArray(params['group_by'])) {
+      state.group_by = params['group_by'];
+    } else if (typeof params['group_by'] === 'string') {
+      state.group_by = params['group_by'].split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
+
+  const safeJsonParse = <T>(val: unknown, fallback: T): T => {
+    if (!val) return fallback;
+    if (typeof val === 'object') return val as T;
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val) as T;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  };
+
+  if (params['joins']) state.joins = safeJsonParse<ReportJoinSpec[]>(params['joins'], []);
+  if (params['aggregations']) state.aggregations = safeJsonParse<ReportAggregation[]>(params['aggregations'], []);
+  if (params['having']) state.having = safeJsonParse<ReportHaving[]>(params['having'], []);
+  if (params['filters']) state.filters = safeJsonParse<FilterGroup | null>(params['filters'], null);
+  if (params['sort']) state.sort = safeJsonParse<ReportSort[]>(params['sort'], []);
+  if (params['chart']) state.chart = safeJsonParse<ReportChart | null>(params['chart'], null);
+
+  if (params['page']) {
+    const p = parseInt(params['page'], 10);
+    if (!isNaN(p) && p > 0) state.page = p;
+  }
+
+  if (params['pageSize']) {
+    const ps = parseInt(params['pageSize'], 10);
+    if (!isNaN(ps) && ps > 0) state.pageSize = ps;
+  }
+
+  if (params['density'] === 'compact' || params['density'] === 'standard') {
+    state.density = params['density'];
+  }
+
+  return state;
+}
+

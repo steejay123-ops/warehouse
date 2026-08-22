@@ -16,6 +16,8 @@ export { FileUploadComponent } from './components/file-upload/file-upload.compon
 export { WarehouseSelectorComponent } from './components/warehouse-selector/warehouse-selector.component';
 export { LoadingSkeletonComponent } from './components/loading-skeleton/loading-skeleton.component';
 export { BarcodeScannerComponent } from './components/barcode-scanner/barcode-scanner.component';
+export { CartableHeaderComponent } from './components/cartable-header/cartable-header.component';
+export { CartableCardBaseComponent } from './components/cartable-card-base/cartable-card-base.component';
 
 // Pipes
 export { PersianDatePipe } from './pipes/persian-date.pipe';

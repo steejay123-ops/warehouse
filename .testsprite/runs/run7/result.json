@@ -1,0 +1,20 @@
+{
+  "testId": "df6bbb0e-b981-459e-8cfc-e4ebe43d82e7",
+  "status": "blocked",
+  "startedAt": "2026-08-16T02:32:03.867Z",
+  "finishedAt": "2026-08-16T02:34:21.101Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786847660871447//tmp/24b595ad-194f-4387-9ca8-a8563b53499c/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_881a2366970c57dd",
+  "runIdIfAvailable": "dcccdb25-ed36-4f90-852b-f3909cdadf86",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 5,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the application server appears to be unavailable, preventing login and access to the dashboard.\n\nObservations:\n- The login page displays 'در حال ارتباط با سرور...' and the header shows 'سرور در دسترس نیست'.\n- No dashboard, cartable, or item list appeared after attempting to log in.\n- Only username/password inputs and a password-toggle are interactive; the item TS-ITEM-001 cannot be reached.",
+  "apiOutput": null,
+  "trace": null
+}

@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, HostListener, ViewChild } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
-import { Subscription, Subject, filter, debounceTime } from 'rxjs';
+import { Subscription, Subject, filter, debounceTime, distinctUntilChanged } from 'rxjs';
 import { WebSocketService } from '../../../core/http/websocket.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -13,16 +13,19 @@ import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/
 import { StateService } from '../../../services/state.service';
 import { WarehouseSelectorComponent } from '../../../shared/components/warehouse-selector/warehouse-selector.component';
 import { OfflinePendingBadgeComponent } from '../../../shared/components/offline-pending-badge/offline-pending-badge.component';
+import { BarcodeScannerComponent } from '../../../shared/components/barcode-scanner/barcode-scanner.component';
 import { AuthStore } from '../../../core/stores/auth.store';
 import { AuthService } from '../../../core/auth/auth.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
+import { NetworkStatusService } from '../../../core/services/network-status.service';
+import { PersianDatePipe } from '../../../shared/pipes/persian-date.pipe';
 
 @Component({
   selector: 'app-supervisor-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, PersianDatePipe],
   templateUrl: './supervisor-dashboard.html',
   styleUrl: './supervisor-dashboard.css'
 })
@@ -44,9 +47,223 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   selectedTasks: Set<number> = new Set();
   selectedPoolTasks: Set<number> = new Set();
   currentTab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool' = 'my-tasks';
+  lastCountTab: 'my-tasks' | 'pool' = 'my-tasks';
+  lastDocTab: 'doc' | 'doc-pool' = 'doc';
+
+  // ─── Search & Filters State ───
+  searchQuery: string = '';
+  searchSubject = new Subject<string>();
+  statusFilter: 'all' | 'counted' | 'recount' = 'all';
+  dateFilter: 'all' | 'today' | 'yesterday' | 'week' = 'all';
+  locationFilter: string = 'all';
+  filteredTasks: CountTask[] = [];
+  filteredPoolTasks: CountTask[] = [];
+  filteredDocTasks: DocTask[] = [];
+  filteredDocPoolTasks: DocTask[] = [];
+
+  // ─── Smart Sorting State ───
+  sortField: 'updated_at' | 'created_at' | 'location' | 'recount_first' | 'code' | 'title' = 'updated_at';
+  sortDirection: 'asc' | 'desc' = 'desc';
+  isSortMenuOpen = false;
+
+  // ─── Touch / Long Press Handling for Mobile ───
+  pressTimeout: any = null;
+  justLongPressed = false;
+  initialTouchY = 0;
+  initialTouchX = 0;
+
+  // ─── Counting Task Details Modal ───
+  selectedCountingDetailTask: CountTask | null = null;
+
+  openCountingDetail(task: CountTask, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.selectedCountingDetailTask = task;
+    this.cdr.detectChanges();
+  }
+
+  closeCountingDetail() {
+    this.selectedCountingDetailTask = null;
+    this.cdr.detectChanges();
+  }
+
+  setSort(field: 'created_at' | 'updated_at' | 'location' | 'recount_first' | 'code' | 'title') {
+    if (this.sortField === field) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortField = field;
+      this.sortDirection = (field === 'created_at' || field === 'updated_at') ? 'desc' : 'asc';
+    }
+    this.isSortMenuOpen = false;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  toggleSortDirection() {
+    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  toggleSortMenu(event?: Event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    this.isSortMenuOpen = !this.isSortMenuOpen;
+    this.cdr.detectChanges();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event) {
+    if (this.isSortMenuOpen) {
+      this.isSortMenuOpen = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  getSortLabel(): string {
+    switch (this.sortField) {
+      case 'updated_at': return 'آخرین تغییر';
+      case 'created_at': return 'زمان تخصیص';
+      case 'location': return 'مسیر لوکیشن';
+      case 'recount_first': return 'اولویت بازشماری';
+      case 'code': return 'کد کالا';
+      case 'title': return 'شرح کالا';
+      default: return 'مرتب‌سازی';
+    }
+  }
+
+  trackByTaskId(index: number, task: CountTask | DocTask): number {
+    return task.id ?? index;
+  }
+
+  // Barcode Scanning State
+  @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
+  private scanBusy = false;
+  private barcodeBuffer = '';
+  private lastKeyTime = 0;
 
   get activeSection(): 'counting' | 'financial' {
     return (this.currentTab === 'doc' || this.currentTab === 'doc-pool') ? 'financial' : 'counting';
+  }
+
+  get statusCounts() {
+    let counted = 0;
+    let recount = 0;
+    for (const t of this.tasks) {
+      if (t.status === 'COUNTED') counted++;
+      else if (t.status === 'SUPERVISOR_REJECTED' || t.status === 'MANAGER_REJECTED') recount++;
+    }
+    return {
+      all: this.tasks.length,
+      counted,
+      recount
+    };
+  }
+
+  get docStatusCounts() {
+    let processed = 0;
+    let rejected = 0;
+    for (const t of this.docTasks) {
+      if (t.status === 'DOC_PROCESSED') processed++;
+      else if (t.status === 'DOC_SUPERVISOR_REJECTED' || t.status === 'DOC_MANAGER_REJECTED') rejected++;
+    }
+    return {
+      all: this.docTasks.length,
+      processed,
+      rejected
+    };
+  }
+
+  switchSection(section: 'counting' | 'financial') {
+    if (section === 'counting') {
+      const target = this.lastCountTab || 'my-tasks';
+      this.setTab(target);
+    } else {
+      const target = this.lastDocTab || 'doc';
+      this.setTab(target);
+    }
+  }
+
+  setLocationFilter(loc: string) {
+    this.locationFilter = loc;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  get availableLocations(): string[] {
+    const locSet = new Set<string>();
+    const list = this.activeSection === 'counting'
+      ? (this.currentTab === 'my-tasks' ? this.tasks : this.poolTasks)
+      : (this.currentTab === 'doc' ? this.docTasks : this.docPoolTasks);
+    for (const t of list) {
+      const loc = (t.item_details?.new_location || t.item_details?.old_location || '').trim();
+      if (loc) {
+        const prefix = loc.split(/[-_/]/)[0] || loc;
+        locSet.add(prefix.toUpperCase());
+      }
+    }
+    return Array.from(locSet).sort();
+  }
+
+  onWarehouseChanged(whId: any) {
+    this.authStore.setActiveWarehouse(whId);
+    this.state.appState.activeWarehouseId = whId;
+    this.clearAllSelections();
+    this.tasks = [];
+    this.poolTasks = [];
+    this.docTasks = [];
+    this.docPoolTasks = [];
+    this.refreshCurrentTab();
+    this.preloadTabCounts();
+  }
+
+  normalizeText(str: string | null | undefined): string {
+    if (!str) return '';
+    return String(str)
+      .replace(/[آأإ]/g, 'ا')
+      .replace(/ي/g, 'ی')
+      .replace(/ك/g, 'ک')
+      .replace(/ة/g, 'ه')
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .toLowerCase()
+      .trim();
+  }
+
+  getDynamicEntries(task: CountTask | DocTask | null | undefined): { key: string, label: string, value: any }[] {
+    if (!task || !task.item_details) return [];
+    const dyn = (task.item_details as any).dynamic_data;
+    if (!dyn || typeof dyn !== 'object') return [];
+    return Object.entries(dyn).map(([k, v]) => ({
+      key: k,
+      label: k.replace(/_/g, ' '),
+      value: v !== undefined && v !== null && v !== '' ? v : '-'
+    }));
+  }
+
+  isTaskSelectable(task: CountTask | DocTask | null | undefined): boolean {
+    if (!task || !task.id) return false;
+    if (this.activeSection === 'counting') {
+      if (this.currentTab === 'pool') return true;
+      return task.status === 'COUNTED' || task.status === 'MANAGER_REJECTED';
+    } else {
+      if (this.currentTab === 'doc-pool') return true;
+      return task.status === 'DOC_PROCESSED' || task.status === 'DOC_MANAGER_REJECTED';
+    }
+  }
+
+  clearAllSelections() {
+    this.selectedTasks.clear();
+    this.selectedPoolTasks.clear();
+    this.selectedDocTasks.clear();
+    this.selectedDocPoolTasks.clear();
+    this.cdr.detectChanges();
   }
 
   // Reject Dialog State
@@ -120,7 +337,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     return parts.join('.');
   }
 
-  getItemDetail(task: DocTask | null, key: string): any {
+  getItemDetail(task: DocTask | CountTask | any | null, key: string): any {
     if (!task || !task.item_details) return '-';
     const item = task.item_details as any;
     return item[key] !== undefined && item[key] !== null && item[key] !== '' ? item[key] : '-';
@@ -150,7 +367,13 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
 
     // Escape: close any open dialog
     if (event.key === 'Escape') {
-      if (this.showRejectDialog) {
+      if (this.selectedCountingDetailTask) {
+        event.preventDefault();
+        this.closeCountingDetail();
+      } else if (this.selectedDocDetailTask) {
+        event.preventDefault();
+        this.closeDocDetail();
+      } else if (this.showRejectDialog) {
         event.preventDefault();
         this.closeRejectDialog();
       } else if (this.showBulkRejectDialog) {
@@ -197,15 +420,21 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       }
     }
 
-    // Quick Action A (Approve) when tasks selected and not inside text input
+    // Quick Action A (Approve / Claim) when tasks selected and not inside text input
     if (!isInsideInput && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (event.key === 'a' || event.key === 'A' || event.key === 'ش') {
-        if (this.activeSection === 'counting' && this.selectedTasks.size > 0 && !this.showApproveDialog && !this.showRejectDialog) {
+        if (this.currentTab === 'my-tasks' && this.selectedTasks.size > 0 && !this.showApproveDialog && !this.showRejectDialog) {
           event.preventDefault();
           this.openApproveDialog();
-        } else if (this.activeSection === 'financial' && this.selectedDocTasks.size > 0 && !this.showDocApproveDialog && !this.showDocRejectDialog) {
+        } else if (this.currentTab === 'doc' && this.selectedDocTasks.size > 0 && !this.showDocApproveDialog && !this.showDocRejectDialog) {
           event.preventDefault();
           this.openDocApproveDialog();
+        } else if (this.currentTab === 'pool' && this.selectedPoolTasks.size > 0) {
+          event.preventDefault();
+          this.claimSelectedTasks();
+        } else if (this.currentTab === 'doc-pool' && this.selectedDocPoolTasks.size > 0) {
+          event.preventDefault();
+          this.claimSelectedDocTasks();
         }
       }
     }
@@ -226,6 +455,45 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.setTab('doc-pool');
       }
     }
+
+    // Hardware Keyboard Wedge Barcode Scanner Listener
+    if (!this.selectedCountingDetailTask && !this.selectedDocDetailTask && !this.showRejectDialog && !this.showBulkRejectDialog && !this.showApproveDialog && !this.showHistoryDialog && !this.showDocRejectDialog && !this.showDocApproveDialog && !this.isExportModalOpen && !isInsideInput) {
+      const now = Date.now();
+      if (now - this.lastKeyTime > 500) {
+        this.barcodeBuffer = '';
+      }
+      this.lastKeyTime = now;
+
+      if (event.key === 'Enter') {
+        if (this.barcodeBuffer.length >= 3) {
+          const code = this.barcodeBuffer;
+          this.barcodeBuffer = '';
+          event.preventDefault();
+          this.onBarcodeScanned(code);
+        }
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        this.barcodeBuffer += event.key;
+      }
+    }
+  }
+
+  getActionTypeLabel(val: string | null | undefined): string {
+    if (!val) return '-';
+    const map: Record<string, string> = {
+      'COUNTED': 'شمارش شده',
+      'INITIAL_COUNT': 'ثبت اولیه شمارش',
+      'MANAGER_REVIEW': 'ارسال به مدیر',
+      'SUPERVISOR_REJECTED': 'بررسی مجدد (سرپرست)',
+      'MANAGER_REJECTED': 'بررسی مجدد (مدیر)',
+      'FINAL_APPROVED': 'تایید نهایی مدیر',
+      'DOC_PROCESSED': 'ثبت اولیه سند',
+      'DOC_SUPERVISOR_REJECTED': 'رد سرپرست مالی',
+      'DOC_MANAGER_REVIEW': 'ارسال به مدیر مالی',
+      'DOC_MANAGER_REJECTED': 'رد مدیر مالی',
+      'DOC_FINAL_APPROVED': 'تایید نهایی مالی',
+      'CLAIMED': 'به عهده گرفته شد',
+    };
+    return map[val] || val.replace(/_/g, ' ');
   }
 
   constructor(
@@ -237,7 +505,15 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     public state: StateService,
     private http: HttpClient,
     private wsService: WebSocketService
-  ) {}
+  ) {
+    this.searchSubject.pipe(debounceTime(350), distinctUntilChanged()).subscribe(() => {
+      this.applyFilters();
+      this.updateUrlState();
+      this.cdr.detectChanges();
+    });
+  }
+
+  initialLoadDone = false;
 
   ngOnInit() {
     this.wsService.connect();
@@ -247,6 +523,10 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     });
 
     this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      const activeWh = this.state.appState.activeWarehouseId;
+      if (data.warehouse_id && activeWh && activeWh !== 'ALL' && Number(data.warehouse_id) !== Number(activeWh)) {
+        return;
+      }
       if (data.type === 'count_task_update' || data.event === 'count_task_update') {
         if (data.task && data.task.id) {
           this.updateCountTaskInPlace(data.task);
@@ -266,21 +546,369 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       }
     });
 
-    // ── URL State: خواندن تب از آدرس مرورگر ──
-    this.syncTabFromUrl();
+    // ── URL State: خواندن وضعیت و فیلترها از آدرس مرورگر ──
+    this.syncStateFromUrl();
     this.routerSub = this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd)
-    ).subscribe(() => this.syncTabFromUrl());
+    ).subscribe(() => this.syncStateFromUrl());
+
+    // ── پیش‌بارگذاری آرام شمارنده‌های تب‌های دیگر ──
+    this.preloadTabCounts();
 
     // ─── SWR Live Revalidation: دریافت داده‌های جدیدتر سرور در پس‌زمینه با فیلتر دقیق نقش سرپرست ───
-    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url }) => {
-      const isSupervisorCount = url.includes('/api/inventory/count-tasks/') && url.includes('as_role=supervisor');
-      const isSupervisorDoc = url.includes('/api/inventory/doc-tasks/') && url.includes('as_role=doc_supervisor');
-      if (isSupervisorCount || isSupervisorDoc) {
-        this.refreshCurrentTab(false, true);
-        console.log('[SupervisorDashboard] ⚡ تب فعال سرپرست با استعلام پس‌زمینه SWR به‌روزرسانی شد.');
+    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url, data }) => {
+      if (!data) return;
+      const freshList = Array.isArray(data) ? data : data.results || [];
+      const isPoolUrl = url.includes('/pool_tasks/');
+
+      if (url.includes('/inventory/count-tasks/')) {
+        if (isPoolUrl) {
+          if (this.currentTab === 'pool') this.trackUpdates(this.poolTasks, freshList);
+          this.poolTasks = freshList;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        } else {
+          const filtered = freshList.filter((t: CountTask) => t.status === 'COUNTED' || t.status === 'MANAGER_REJECTED');
+          if (this.currentTab === 'my-tasks') this.trackUpdates(this.tasks, filtered);
+          this.tasks = filtered;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        }
+      } else if (url.includes('/inventory/doc-tasks/')) {
+        if (isPoolUrl) {
+          if (this.currentTab === 'doc-pool') this.trackUpdates(this.docPoolTasks, freshList);
+          this.docPoolTasks = freshList;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        } else {
+          const filtered = freshList.filter((t: DocTask) => t.status === 'DOC_PROCESSED' || t.status === 'DOC_MANAGER_REJECTED');
+          if (this.currentTab === 'doc') this.trackUpdates(this.docTasks, filtered);
+          this.docTasks = filtered;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        }
       }
     });
+  }
+
+  onSearchChange(val: string) {
+    this.searchQuery = val;
+    this.applyFilters();
+    this.searchSubject.next(val);
+  }
+
+  clearSearch() {
+    this.searchQuery = '';
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  setStatusFilter(filter: 'all' | 'counted' | 'recount') {
+    this.statusFilter = filter;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  setDateFilter(filter: 'all' | 'today' | 'yesterday' | 'week') {
+    this.dateFilter = filter;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  private normalizeDigits(str: any): string {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .replace(/[/،]/g, '.')
+      .trim();
+  }
+
+  private convertPersianKeyboardToEnglish(str: string): string {
+    if (!str) return '';
+    const faToEn: Record<string, string> = {
+      'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u', 'ه': 'i', 'خ': 'o', 'ح': 'p', 'ج': '[', 'چ': ']',
+      'ش': 'a', 'س': 's', 'ی': 'd', 'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ک': ';', 'گ': "'",
+      'ظ': 'z', 'ط': 'x', 'ز': 'c', 'ر': 'v', 'ذ': 'b', 'د': 'n', 'پ': 'm', 'و': ',', 'ئ': 'm'
+    };
+    return str.split('').map(char => faToEn[char] || faToEn[char.toLowerCase()] || char).join('');
+  }
+
+  applyFilters() {
+    const rawQuery = (this.searchQuery || '').trim();
+    const query = this.normalizeText(rawQuery);
+    const normDigitsQuery = this.normalizeDigits(rawQuery.toLowerCase());
+    const convertedQuery = this.convertPersianKeyboardToEnglish(rawQuery).toLowerCase();
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const week = today - 7 * 86400000;
+
+    const matchesSearch = (itemDetails: any, workerOrCounterName?: string, taskData?: any) => {
+      if (!rawQuery) return true;
+      const unic = this.normalizeText(itemDetails?.fa_unic_code || '');
+      const enUnic = this.normalizeText(itemDetails?.en_unic_code || '');
+      const desc = this.normalizeText(itemDetails?.description || '');
+      const itemNo = this.normalizeText(itemDetails?.item_no || itemDetails?.part_no || '');
+      const po = this.normalizeText(itemDetails?.po || '');
+      const tag = this.normalizeText(itemDetails?.tag || itemDetails?.tag_number || '');
+      const pkNumber = this.normalizeText(itemDetails?.pk_number || itemDetails?.plpkitem || '');
+      const locNew = this.normalizeText(itemDetails?.new_location || '');
+      const locOld = this.normalizeText(itemDetails?.old_location || '');
+      const personName = this.normalizeText(workerOrCounterName || '');
+      const rti = this.normalizeText(taskData?.inv_rti_number || taskData?.added_rti_no || '');
+      const supplier = this.normalizeText(taskData?.doc_supplier || '');
+
+      return unic.includes(query) || unic.includes(normDigitsQuery) || unic.includes(convertedQuery) ||
+             enUnic.includes(query) ||
+             desc.includes(query) ||
+             itemNo.includes(query) ||
+             po.includes(query) ||
+             tag.includes(query) ||
+             pkNumber.includes(query) ||
+             locNew.includes(query) || locOld.includes(query) ||
+             personName.includes(query) ||
+             rti.includes(query) ||
+             supplier.includes(query);
+    };
+
+    const matchesLocation = (itemDetails: any) => {
+      if (!this.locationFilter || this.locationFilter === 'all') return true;
+      const loc = (itemDetails?.new_location || itemDetails?.old_location || '').toLowerCase().trim();
+      return loc.startsWith(this.locationFilter.toLowerCase().trim());
+    };
+
+    const matchesDate = (t: any) => {
+      if (this.dateFilter === 'all') return true;
+      const dateStr = t.updated_at || t.created_at;
+      if (!dateStr) return true;
+      const taskDate = new Date(dateStr).getTime();
+      if (this.dateFilter === 'today') return taskDate >= today;
+      if (this.dateFilter === 'yesterday') return taskDate >= yesterday && taskDate < today;
+      if (this.dateFilter === 'week') return taskDate >= week;
+      return true;
+    };
+
+    // ۱. فیلتر کارهای من (انبارگردانی)
+    this.filteredTasks = this.tasks.filter(t => {
+      if (!matchesDate(t)) return false;
+      if (this.statusFilter === 'counted' && t.status !== 'COUNTED') return false;
+      if (this.statusFilter === 'recount' && t.status !== 'MANAGER_REJECTED') return false;
+      if (!matchesLocation(t.item_details)) return false;
+      return matchesSearch(t.item_details, t.counter_name, t);
+    });
+
+    // ۲. فیلتر استخر (انبارگردانی)
+    this.filteredPoolTasks = this.poolTasks.filter(t => matchesLocation(t.item_details) && matchesSearch(t.item_details, undefined, t));
+
+    // ۳. فیلتر اسناد مالی
+    this.filteredDocTasks = this.docTasks.filter(t => {
+      if (!matchesDate(t)) return false;
+      if (this.statusFilter === 'counted' && t.status !== 'DOC_PROCESSED') return false;
+      if (this.statusFilter === 'recount' && t.status !== 'DOC_MANAGER_REJECTED') return false;
+      if (!matchesLocation(t.item_details)) return false;
+      return matchesSearch(t.item_details, t.doc_worker_name, t);
+    });
+
+    // ۴. فیلتر استخر اسناد
+    this.filteredDocPoolTasks = this.docPoolTasks.filter(t => matchesLocation(t.item_details) && matchesSearch(t.item_details, undefined, t));
+
+    // ۵. اعمال مرتب‌سازی هوشمند برای اقلام انبارگردانی
+    this.filteredTasks.sort((a, b) => {
+      let result = 0;
+      if (this.sortField === 'created_at') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        result = timeA - timeB;
+      } else if (this.sortField === 'updated_at') {
+        const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : (a.id || 0));
+        const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : (b.id || 0));
+        result = timeA - timeB;
+      } else if (this.sortField === 'location') {
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        result = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'recount_first') {
+        const isRecountA = (a.status === 'SUPERVISOR_REJECTED' || a.status === 'MANAGER_REJECTED') ? 0 : 1;
+        const isRecountB = (b.status === 'SUPERVISOR_REJECTED' || b.status === 'MANAGER_REJECTED') ? 0 : 1;
+        if (isRecountA !== isRecountB) {
+          return isRecountA - isRecountB;
+        }
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        const locCompare = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+        return this.sortDirection === 'asc' ? locCompare : -locCompare;
+      } else if (this.sortField === 'code') {
+        const codeA = a.item_details?.fa_unic_code || '';
+        const codeB = b.item_details?.fa_unic_code || '';
+        result = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'title') {
+        const titleA = a.item_details?.description || '';
+        const titleB = b.item_details?.description || '';
+        result = titleA.localeCompare(titleB, 'fa', { sensitivity: 'base' });
+      }
+      return this.sortDirection === 'asc' ? result : -result;
+    });
+
+    // ۶. اعمال مرتب‌سازی هوشمند برای اسناد مالی
+    this.filteredDocTasks.sort((a, b) => {
+      let result = 0;
+      if (this.sortField === 'created_at') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        result = timeA - timeB;
+      } else if (this.sortField === 'updated_at') {
+        const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : (a.id || 0));
+        const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : (b.id || 0));
+        result = timeA - timeB;
+      } else if (this.sortField === 'location') {
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        result = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'recount_first') {
+        const isRecountA = (a.status === 'DOC_SUPERVISOR_REJECTED' || a.status === 'DOC_MANAGER_REJECTED') ? 0 : 1;
+        const isRecountB = (b.status === 'DOC_SUPERVISOR_REJECTED' || b.status === 'DOC_MANAGER_REJECTED') ? 0 : 1;
+        if (isRecountA !== isRecountB) {
+          return isRecountA - isRecountB;
+        }
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        const locCompare = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+        return this.sortDirection === 'asc' ? locCompare : -locCompare;
+      } else if (this.sortField === 'code') {
+        const codeA = a.item_details?.fa_unic_code || '';
+        const codeB = b.item_details?.fa_unic_code || '';
+        result = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'title') {
+        const titleA = a.item_details?.description || '';
+        const titleB = b.item_details?.description || '';
+        result = titleA.localeCompare(titleB, 'fa', { sensitivity: 'base' });
+      }
+      return this.sortDirection === 'asc' ? result : -result;
+    });
+  }
+
+  async onBarcodeScanned(code: string) {
+    if (this.selectedCountingDetailTask || this.selectedDocDetailTask) {
+      this.toast.info('لطفاً ابتدا پنجره جزئیات کالا/سند جاری را تعیین تکلیف نمایید');
+      return;
+    }
+    if (this.scanBusy) return;
+    this.scanBusy = true;
+    try {
+      const rawQ = (code || '').trim().toLowerCase();
+      const convertedQ = this.convertPersianKeyboardToEnglish(rawQ).toLowerCase();
+      const normQ = this.normalizeDigits(rawQ).toLowerCase();
+      const normConvertedQ = this.normalizeDigits(convertedQ).toLowerCase();
+
+      const match = (t: any) => {
+        const unic = (t.item_details?.fa_unic_code || '').trim().toLowerCase();
+        const normUnic = this.normalizeDigits(unic).toLowerCase();
+        const itemNo = (t.item_details?.item_no || '').trim().toLowerCase();
+        const itemId = String(t.item_details?.id || t.item || '').trim();
+        const po = (t.item_details?.po || '').trim().toLowerCase();
+
+        const matchesAny = (val: string) => {
+          if (!val) return false;
+          return val === rawQ || val === convertedQ || val === normQ || val === normConvertedQ;
+        };
+
+        return matchesAny(unic) || matchesAny(normUnic) || matchesAny(itemNo) || matchesAny(itemId) || matchesAny(po);
+      };
+
+      if (this.activeSection === 'counting') {
+        const targetMyTask = this.tasks.find(match);
+        if (targetMyTask) {
+          this.selectedTasks.clear();
+          this.selectedTasks.add(targetMyTask.id);
+          this.toast.success(`کالای «${targetMyTask.item_details?.fa_unic_code}» انتخاب شد`);
+          this.triggerFlash(targetMyTask.id);
+          this.cdr.detectChanges();
+          return;
+        }
+
+        const targetPoolTask = this.poolTasks.find(match);
+        if (targetPoolTask) {
+          const confirmed = await this.confirmDialog.open({
+            title: 'بر عهده گرفتن کالا',
+            message: `کالای «${targetPoolTask.item_details?.fa_unic_code} - ${targetPoolTask.item_details?.description}» در مخزن سرپرستان است. آیا آن را بر عهده می‌گیرید؟`,
+            confirmText: 'بله، بر عهده می‌گیرم',
+            cancelText: 'انصراف',
+            type: 'info'
+          });
+          if (confirmed) {
+            this.selectedPoolTasks = new Set([targetPoolTask.id]);
+            this.claimSelectedTasks();
+          }
+          return;
+        }
+      } else {
+        const targetDocTask = this.docTasks.find(match);
+        if (targetDocTask) {
+          this.openDocDetail(targetDocTask);
+          return;
+        }
+        const targetDocPool = this.docPoolTasks.find(match);
+        if (targetDocPool) {
+          this.selectedDocPoolTasks = new Set([targetDocPool.id]);
+          this.claimSelectedDocTasks();
+          return;
+        }
+      }
+
+      this.toast.error(`کالایی با کد «${code}» در کارتابل یا استخر یافت نشد`);
+    } finally {
+      this.scanBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  preloadTabCounts() {
+    const whId = this.state.appState.activeWarehouseId;
+    const countParams: any = { as_role: 'supervisor' };
+    if (whId && whId !== 'ALL' && whId !== -1) countParams.warehouse_id = whId;
+
+    // استعلام سبک برای بج استخر انبارگردانی
+    if (this.currentTab !== 'pool') {
+      this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params: countParams }).subscribe({
+        next: (res: any) => {
+          this.poolTasks = Array.isArray(res) ? res : (res.results || []);
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
+
+    // استعلام سبک برای بج کارهای اسناد مالی
+    if (this.currentTab !== 'doc') {
+      const docParams: any = { as_role: 'doc_supervisor', page_size: 500 };
+      if (whId && whId !== 'ALL' && whId !== -1) docParams.warehouse_id = whId;
+      this.docTaskApi.getAll(docParams).subscribe({
+        next: (res: any) => {
+          const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
+          this.docTasks = all.filter(t => t.status === 'DOC_PROCESSED' || t.status === 'DOC_MANAGER_REJECTED');
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
+
+    // استعلام سبک برای بج استخر اسناد مالی
+    if (this.currentTab !== 'doc-pool') {
+      const docPoolParams: any = { as_role: 'doc_supervisor' };
+      if (whId && whId !== 'ALL' && whId !== -1) docPoolParams.warehouse_id = whId;
+      this.docTaskApi.poolTasks(docPoolParams).subscribe({
+        next: (res: any) => {
+          this.docPoolTasks = Array.isArray(res) ? res : (res.results || []);
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
   }
 
   ngOnDestroy() {
@@ -337,7 +965,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       (taskData.supervisor && typeof taskData.supervisor === 'object' && taskData.supervisor.id === currentUserId);
     const isPool = !taskData.supervisor;
 
-    if (isMyTask || (!taskData.supervisor && this.currentTab === 'my-tasks')) {
+    if (isMyTask) {
       const idx = this.tasks.findIndex(t => t.id === id);
       if (idx !== -1) {
         this.tasks[idx] = { ...this.tasks[idx], ...taskData };
@@ -355,6 +983,19 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       }
       this.tasks = this.tasks.filter(t => t.id !== id);
       this.triggerFlash(id);
+    } else {
+      // به سرپرست دیگری تخصیص یافته است
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.poolTasks = this.poolTasks.filter(t => t.id !== id);
+      this.selectedTasks.delete(id);
+      this.selectedPoolTasks.delete(id);
+    }
+    if (this.selectedCountingDetailTask && this.selectedCountingDetailTask.id === id) {
+      if (taskData._deleted || !isSupervisorStatus) {
+        this.selectedCountingDetailTask = null;
+      } else {
+        this.selectedCountingDetailTask = { ...this.selectedCountingDetailTask, ...taskData };
+      }
     }
     this.cdr.detectChanges();
   }
@@ -368,17 +1009,23 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
       this.selectedDocTasks.delete(id);
       this.selectedDocPoolTasks.delete(id);
+      if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+        this.selectedDocDetailTask = null;
+      }
       this.cdr.detectChanges();
       return;
     }
 
-    const isSupervisorDocStatus = taskData.status === 'DOC_PROCESSED';
+    const isSupervisorDocStatus = taskData.status === 'DOC_PROCESSED' || taskData.status === 'DOC_MANAGER_REJECTED';
 
     if (!isSupervisorDocStatus) {
       this.docTasks = this.docTasks.filter(t => t.id !== id);
       this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
       this.selectedDocTasks.delete(id);
       this.selectedDocPoolTasks.delete(id);
+      if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+        this.selectedDocDetailTask = null;
+      }
       this.cdr.detectChanges();
       return;
     }
@@ -388,7 +1035,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       (taskData.doc_supervisor && typeof taskData.doc_supervisor === 'object' && taskData.doc_supervisor.id === currentUserId);
     const isPool = !taskData.doc_supervisor;
 
-    if (isMyDoc || (!taskData.doc_supervisor && this.currentTab === 'doc')) {
+    if (isMyDoc) {
       const idx = this.docTasks.findIndex(t => t.id === id);
       if (idx !== -1) {
         this.docTasks[idx] = { ...this.docTasks[idx], ...taskData };
@@ -406,6 +1053,20 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       }
       this.docTasks = this.docTasks.filter(t => t.id !== id);
       this.triggerFlash(id);
+    } else {
+      // به سرپرست مالی دیگری تخصیص یافته است
+      this.docTasks = this.docTasks.filter(t => t.id !== id);
+      this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
+      this.selectedDocTasks.delete(id);
+      this.selectedDocPoolTasks.delete(id);
+    }
+
+    if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+      if (taskData._deleted || !isSupervisorDocStatus) {
+        this.selectedDocDetailTask = null;
+      } else {
+        this.selectedDocDetailTask = { ...this.selectedDocDetailTask, ...taskData };
+      }
     }
     this.cdr.detectChanges();
   }
@@ -473,6 +1134,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
           const newTasks = Array.isArray(allTasks) ? allTasks.filter((t: CountTask) => t.status === 'COUNTED' || t.status === 'MANAGER_REJECTED') : [];
           this.trackUpdates(this.tasks, newTasks);
           this.tasks = newTasks;
+          this.applyFilters();
           if (preserveState) {
             const validIds = new Set(this.tasks.map(t => t.id));
             this.selectedTasks = new Set(Array.from(this.selectedTasks).filter(id => validIds.has(id)));
@@ -480,12 +1142,15 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         } catch (e) {
           console.error('Error assigning tasks:', e);
           this.tasks = [];
+          this.applyFilters();
         }
         this.isLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.error('خطا در دریافت اطلاعات');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت اطلاعات');
+        }
         this.isLoading = false;
         this.cdr.detectChanges();
       }
@@ -512,6 +1177,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
         this.trackUpdates(this.poolTasks, newPoolTasks);
         this.poolTasks = newPoolTasks;
+        this.applyFilters();
         if (preserveState) {
           const validIds = new Set(this.poolTasks.map(t => t.id));
           this.selectedPoolTasks = new Set(Array.from(this.selectedPoolTasks).filter(id => validIds.has(id)));
@@ -519,33 +1185,254 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.isLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.error('خطا در دریافت تسک‌های استخر');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت تسک‌های استخر');
+        }
         this.isLoading = false;
         this.cdr.detectChanges();
       }
     });
   }
 
-  /** خواندن تب فعال از پارامترهای آدرس مرورگر */
-  private syncTabFromUrl() {
+  /** به‌روزرسانی پارامترهای آدرس مرورگر و حافظه مرورگر */
+  private updateUrlState() {
+    const defaultSortDir = (this.sortField === 'created_at' || this.sortField === 'updated_at') ? 'desc' : 'asc';
+    const queryParams: any = {
+      tab: this.currentTab,
+      q: this.searchQuery ? this.searchQuery : null,
+      status: this.statusFilter !== 'all' ? this.statusFilter : null,
+      date: this.dateFilter !== 'all' ? this.dateFilter : null,
+      loc: this.locationFilter !== 'all' ? this.locationFilter : null,
+      sort: this.sortField !== 'updated_at' ? this.sortField : null,
+      sortDir: this.sortDirection !== defaultSortDir ? this.sortDirection : null
+    };
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem('supervisor_active_tab', this.currentTab);
+        if (this.currentTab === 'my-tasks' || this.currentTab === 'pool') {
+          this.lastCountTab = this.currentTab;
+          localStorage.setItem('supervisor_last_count_tab', this.currentTab);
+          localStorage.setItem('supervisor_active_section', 'counting');
+        } else {
+          this.lastDocTab = this.currentTab;
+          localStorage.setItem('supervisor_last_doc_tab', this.currentTab);
+          localStorage.setItem('supervisor_active_section', 'financial');
+        }
+      } catch (e) {
+        console.warn('LocalStorage write failed:', e);
+      }
+    }
+
+    this.router.navigate([], { queryParams, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+
+  /** خواندن وضعیت فیلترها از پارامترهای آدرس مرورگر و LocalStorage */
+  private syncStateFromUrl() {
     if (!this.router.url.split('?')[0].includes('/supervisor')) return;
     const params = this.router.parseUrl(this.router.url).queryParams;
-    const tab = params['tab'] as typeof this.currentTab;
+    
+    // 1. Sync Tab & Persistence
+    let tab = params['tab'] as typeof this.currentTab;
     const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool', 'doc', 'doc-pool'];
-    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
-    if (resolved !== this.currentTab) {
-      this.currentTab = resolved;
-      this.selectedTasks.clear();
-      this.selectedPoolTasks.clear();
-      this.selectedDocTasks.clear();
-      this.selectedDocPoolTasks.clear();
+    
+    if (!validTabs.includes(tab) && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const savedTab = localStorage.getItem('supervisor_active_tab') as typeof this.currentTab;
+        if (validTabs.includes(savedTab)) {
+          tab = savedTab;
+        }
+      } catch (e) {
+        console.warn('LocalStorage read failed:', e);
+      }
     }
-    this.refreshCurrentTab();
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const savedLastCount = localStorage.getItem('supervisor_last_count_tab');
+        if (savedLastCount === 'my-tasks' || savedLastCount === 'pool') {
+          this.lastCountTab = savedLastCount;
+        }
+        const savedLastDoc = localStorage.getItem('supervisor_last_doc_tab');
+        if (savedLastDoc === 'doc' || savedLastDoc === 'doc-pool') {
+          this.lastDocTab = savedLastDoc;
+        }
+      } catch (e) {}
+    }
+
+    const resolvedTab = validTabs.includes(tab) ? tab : 'my-tasks';
+    let tabChanged = false;
+    if (resolvedTab !== this.currentTab) {
+      this.currentTab = resolvedTab;
+      this.clearAllSelections();
+      tabChanged = true;
+    }
+
+    if (this.currentTab === 'my-tasks' || this.currentTab === 'pool') {
+      this.lastCountTab = this.currentTab;
+    } else {
+      this.lastDocTab = this.currentTab;
+    }
+
+    // 2. Status Filter
+    const status = params['status'];
+    const validStatuses = ['all', 'counted', 'recount'];
+    this.statusFilter = validStatuses.includes(status) ? (status as any) : 'all';
+
+    // 3. Date Filter
+    const date = params['date'];
+    const validDates = ['all', 'today', 'yesterday', 'week'];
+    this.dateFilter = validDates.includes(date) ? (date as any) : 'all';
+
+    // 3.5 Location Filter
+    const loc = params['loc'];
+    this.locationFilter = loc || 'all';
+
+    // 4. Sort Field
+    const sort = params['sort'];
+    const validSorts = ['created_at', 'updated_at', 'location', 'recount_first', 'code', 'title'];
+    this.sortField = validSorts.includes(sort) ? (sort as any) : 'updated_at';
+
+    // 5. Sort Direction
+    const sortDir = params['sortDir'];
+    if (sortDir === 'asc' || sortDir === 'desc') {
+      this.sortDirection = sortDir;
+    } else {
+      this.sortDirection = (this.sortField === 'created_at' || this.sortField === 'updated_at') ? 'desc' : 'asc';
+    }
+
+    // 6. Search Query
+    const q = params['q'] || '';
+    this.searchQuery = q;
+
+    this.applyFilters();
+
+    if (tabChanged || !this.initialLoadDone) {
+      this.initialLoadDone = true;
+      this.refreshCurrentTab();
+    }
   }
 
   setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
-    this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
+    this.currentTab = tab;
+    if (tab === 'my-tasks' || tab === 'pool') {
+      this.lastCountTab = tab;
+    } else {
+      this.lastDocTab = tab;
+    }
+    this.clearAllSelections();
+    this.updateUrlState();
+    this.refreshCurrentTab();
+  }
+
+  // ─── Touch / Long Press Handling for Counting Tasks ───
+  onTaskPressStart(task: CountTask, event: PointerEvent) {
+    if (!this.isTaskSelectable(task)) return;
+    this.initialTouchY = event.clientY;
+    this.initialTouchX = event.clientX;
+    
+    this.pressTimeout = setTimeout(() => {
+      this.pressTimeout = null;
+      this.justLongPressed = true;
+      if (!this.selectedTasks.has(task.id)) {
+        this.selectedTasks.add(task.id);
+      } else {
+        this.selectedTasks.delete(task.id);
+      }
+      this.selectedTasks = new Set(this.selectedTasks);
+      this.cdr.markForCheck();
+      if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+        (navigator as any).vibrate(50);
+      }
+    }, 450);
+  }
+
+  onTaskPressMove(event: PointerEvent) {
+    if (this.pressTimeout) {
+      if (Math.abs(event.clientY - this.initialTouchY) > 10 || Math.abs(event.clientX - this.initialTouchX) > 10) {
+        clearTimeout(this.pressTimeout);
+        this.pressTimeout = null;
+      }
+    }
+  }
+
+  onTaskPressEnd() {
+    if (this.pressTimeout) {
+      clearTimeout(this.pressTimeout);
+      this.pressTimeout = null;
+    }
+  }
+
+  onTaskClick(task: CountTask, event: Event) {
+    if (this.justLongPressed) {
+      this.justLongPressed = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    
+    // اگر در حالت انتخاب گروهی هستیم، ترافیک انتخاب را تغییر می‌دهیم
+    if (this.selectedTasks.size > 0) {
+      this.toggleSelection(task.id);
+      return;
+    }
+
+    this.openCountingDetail(task, event);
+  }
+
+  // ─── Touch / Long Press Handling for Doc Tasks ───
+  onDocTaskPressStart(task: DocTask, event: PointerEvent) {
+    if (!this.isTaskSelectable(task)) return;
+    this.initialTouchY = event.clientY;
+    this.initialTouchX = event.clientX;
+    
+    this.pressTimeout = setTimeout(() => {
+      this.pressTimeout = null;
+      this.justLongPressed = true;
+      if (!this.selectedDocTasks.has(task.id)) {
+        this.selectedDocTasks.add(task.id);
+      } else {
+        this.selectedDocTasks.delete(task.id);
+      }
+      this.selectedDocTasks = new Set(this.selectedDocTasks);
+      this.cdr.markForCheck();
+      if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+        (navigator as any).vibrate(50);
+      }
+    }, 450);
+  }
+
+  onDocTaskPressMove(event: PointerEvent) {
+    if (this.pressTimeout) {
+      if (Math.abs(event.clientY - this.initialTouchY) > 10 || Math.abs(event.clientX - this.initialTouchX) > 10) {
+        clearTimeout(this.pressTimeout);
+        this.pressTimeout = null;
+      }
+    }
+  }
+
+  onDocTaskPressEnd() {
+    if (this.pressTimeout) {
+      clearTimeout(this.pressTimeout);
+      this.pressTimeout = null;
+    }
+  }
+
+  onDocTaskClick(task: DocTask, event: Event) {
+    if (this.justLongPressed) {
+      this.justLongPressed = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    
+    if (this.selectedDocTasks.size > 0) {
+      this.toggleDocSelection(task.id);
+      return;
+    }
+
+    this.openDocDetail(task);
   }
 
   togglePoolSelection(taskId: number) {
@@ -558,17 +1445,43 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  toggleAllPool(event: Event) {
+    const isChecked = (event.target as HTMLInputElement).checked;
+    const targetList = this.filteredPoolTasks;
+    if (isChecked) {
+      targetList.forEach(t => this.selectedPoolTasks.add(t.id));
+    } else {
+      targetList.forEach(t => this.selectedPoolTasks.delete(t.id));
+    }
+    this.selectedPoolTasks = new Set(this.selectedPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  isAllPoolSelected() {
+    return this.filteredPoolTasks.length > 0 && this.filteredPoolTasks.every(t => this.selectedPoolTasks.has(t.id));
+  }
+
   async claimSelectedTasks() {
     if (this.selectedPoolTasks.size === 0) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.toast.error('عملیات به عهده گرفتن نیازمند اتصال اینترنت است');
+      return;
+    }
     
-    const payload = {
+    const payload: any = {
       task_ids: Array.from(this.selectedPoolTasks),
       as_role: 'supervisor'
     };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      payload.warehouse_id = whId;
+    }
 
     this.http.post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, payload).subscribe({
       next: (res: any) => {
         this.toast.success(`${res.claimed_count} کالا با موفقیت به عهده گرفته شد`);
+        this.selectedPoolTasks.clear();
+        this.loadPoolTasks(false);
         this.setTab('my-tasks');
       },
       error: (err: any) => {
@@ -588,19 +1501,23 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  toggleAll(event: Event) {
-    const isChecked = (event.target as HTMLInputElement).checked;
+  toggleAll(event?: Event) {
+    const target = event?.target as HTMLInputElement | undefined;
+    const isCheckbox = target?.type === 'checkbox';
+    const isChecked = isCheckbox ? target.checked : !this.isAllSelected();
+
+    const targetList = this.filteredTasks;
     if (isChecked) {
-      this.tasks.forEach(t => this.selectedTasks.add(t.id));
+      targetList.forEach(t => this.selectedTasks.add(t.id));
     } else {
-      this.selectedTasks.clear();
+      targetList.forEach(t => this.selectedTasks.delete(t.id));
     }
     this.selectedTasks = new Set(this.selectedTasks);
     this.cdr.detectChanges();
   }
 
   isAllSelected() {
-    return this.tasks.length > 0 && this.selectedTasks.size === this.tasks.length;
+    return this.filteredTasks.length > 0 && this.filteredTasks.every(t => this.selectedTasks.has(t.id));
   }
 
   openApproveDialog() {
@@ -620,6 +1537,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     if (this.selectedTasks.size === 0) return;
     const taskIds = Array.from(this.selectedTasks);
     const count = taskIds.length;
+    const backupTasks = [...this.tasks];
 
     // اعمال خوش‌بینانه در جدول
     this.tasks = this.tasks.filter(t => !taskIds.includes(t.id));
@@ -638,6 +1556,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.loadTasks(false, true);
       },
       error: (err: any) => {
+        this.tasks = backupTasks;
         this.toast.error(err?.error?.error || 'خطا در تایید کالاها');
         this.loadTasks(false, true);
       }
@@ -657,6 +1576,9 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   }
 
   closeRejectDialog() {
+    if (this.rejectNote.trim()) {
+      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+    }
     this.showRejectDialog = false;
     this.rejectingTask = null;
     this.rejectNote = '';
@@ -671,23 +1593,25 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
 
     if (this.rejectingTask) {
       const taskId = this.rejectingTask.id;
+      const backupTasks = [...this.tasks];
       // اعمال خوش‌بینانه
       this.tasks = this.tasks.filter(t => t.id !== taskId);
       this.selectedTasks.delete(taskId);
-      this.closeRejectDialog();
+      this.showRejectDialog = false;
       this.cdr.detectChanges();
 
       this.countTaskApi.reject(taskId, this.rejectNote).subscribe({
         next: (res: any) => {
           const isOffline = res?._offlinePending || !navigator.onLine;
           if (isOffline) {
-            this.toast.info('ارجاع به بازشماری در صف آفلاین ذخیره شد.');
+            this.toast.info('ارجاع جهت بررسی مجدد در صف آفلاین ذخیره شد.');
           } else {
-            this.toast.success(res?.message || 'کالا با موفقیت رد شد');
+            this.toast.success(res?.message || 'کالا با موفقیت جهت بررسی مجدد ارجاع داده شد');
           }
           this.loadTasks(false, true);
         },
         error: (err: any) => {
+          this.tasks = backupTasks;
           this.toast.error(err?.error?.error || 'خطا در انجام عملیات');
           this.loadTasks(false, true);
         }
@@ -703,6 +1627,9 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   }
 
   cancelBulkReject() {
+    if (this.bulkRejectNote.trim()) {
+      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+    }
     this.showBulkRejectDialog = false;
     this.bulkRejectNote = '';
     this.cdr.detectChanges();
@@ -711,11 +1638,12 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   confirmBulkReject() {
     if (this.selectedTasks.size === 0) return;
     if (!this.bulkRejectNote.trim()) {
-      this.toast.error('لطفاً دلیل رد کردن (بازشماری) را بنویسید.');
+      this.toast.error('لطفاً دلیل ارجاع جهت بررسی مجدد را بنویسید.');
       return;
     }
     const taskIds = Array.from(this.selectedTasks);
     const count = taskIds.length;
+    const backupTasks = [...this.tasks];
 
     // اعمال خوش‌بینانه
     this.tasks = this.tasks.filter(t => !taskIds.includes(t.id));
@@ -727,13 +1655,14 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.info(`ارجاع به بازشماری ${count} کالا در صف آفلاین ذخیره شد.`);
+          this.toast.info(`ارجاع جهت بررسی مجدد ${count} کالا در صف آفلاین ذخیره شد.`);
         } else {
-          this.toast.success(res?.message || `${count} کالا جهت بازشماری ارجاع داده شد`);
+          this.toast.success(res?.message || `${count} کالا جهت بررسی مجدد ارجاع داده شد`);
         }
         this.loadTasks(false, true);
       },
       error: (err: any) => {
+        this.tasks = backupTasks;
         const msg = err?.error?.error || 'خطا در رد گروهی کالاها';
         this.toast.error(msg);
         this.loadTasks(false, true);
@@ -751,6 +1680,30 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.showHistoryDialog = false;
     this.historyTask = null;
     this.cdr.detectChanges();
+  }
+
+  approveSingleDoc(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocTasks = new Set([task.id]);
+    this.openDocApproveDialog();
+  }
+
+  rejectSingleDoc(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocTasks = new Set([task.id]);
+    this.openDocRejectDialog();
+  }
+
+  claimSingleDocTask(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocPoolTasks = new Set([task.id]);
+    this.claimSelectedDocTasks();
+  }
+
+  claimSingleTask(task: CountTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedPoolTasks = new Set([task.id]);
+    this.claimSelectedTasks();
   }
 
   // ════════════════════════════════════════════
@@ -772,9 +1725,10 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.docTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
-        const newDocTasks = all.filter(t => t.status === 'DOC_PROCESSED');
+        const newDocTasks = all.filter(t => t.status === 'DOC_PROCESSED' || t.status === 'DOC_MANAGER_REJECTED');
         this.trackUpdates(this.docTasks, newDocTasks);
         this.docTasks = newDocTasks;
+        this.applyFilters();
         if (preserveState) {
           const validIds = new Set(this.docTasks.map(t => t.id));
           this.selectedDocTasks = new Set(Array.from(this.selectedDocTasks).filter(id => validIds.has(id)));
@@ -782,8 +1736,10 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.isDocLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.error('خطا در دریافت اسناد مالی');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت اسناد مالی');
+        }
         this.isDocLoading = false;
         this.cdr.detectChanges();
       }
@@ -797,16 +1753,20 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  toggleAllDoc(event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    if (checked) this.docTasks.forEach(t => this.selectedDocTasks.add(t.id));
-    else this.selectedDocTasks.clear();
+  toggleAllDoc(event?: Event) {
+    const target = event?.target as HTMLInputElement | undefined;
+    const isCheckbox = target?.type === 'checkbox';
+    const isChecked = isCheckbox ? target.checked : !this.isAllDocSelected();
+
+    const targetList = this.filteredDocTasks;
+    if (isChecked) targetList.forEach(t => this.selectedDocTasks.add(t.id));
+    else targetList.forEach(t => this.selectedDocTasks.delete(t.id));
     this.selectedDocTasks = new Set(this.selectedDocTasks);
     this.cdr.detectChanges();
   }
 
   isAllDocSelected() {
-    return this.docTasks.length > 0 && this.selectedDocTasks.size === this.docTasks.length;
+    return this.filteredDocTasks.length > 0 && this.filteredDocTasks.every(t => this.selectedDocTasks.has(t.id));
   }
 
   openDocApproveDialog() {
@@ -826,6 +1786,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     if (this.selectedDocTasks.size === 0) return;
     const taskIds = Array.from(this.selectedDocTasks);
     const count = taskIds.length;
+    const backupDocTasks = [...this.docTasks];
 
     // اعمال خوش‌بینانه
     this.docTasks = this.docTasks.filter(t => !taskIds.includes(t.id));
@@ -844,6 +1805,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.loadDocTasks(false, true);
       },
       error: (err: any) => {
+        this.docTasks = backupDocTasks;
         this.toast.error(err?.error?.error || 'خطا در تایید اسناد');
         this.loadDocTasks(false, true);
       }
@@ -858,6 +1820,9 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   }
 
   closeDocRejectDialog() {
+    if (this.docRejectNote.trim()) {
+      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+    }
     this.showDocRejectDialog = false;
     this.docRejectNote = '';
     this.cdr.detectChanges();
@@ -867,11 +1832,12 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     if (!this.docRejectNote.trim()) { this.toast.error('لطفاً دلیل رد را بنویسید'); return; }
     const taskIds = Array.from(this.selectedDocTasks);
     const count = taskIds.length;
+    const backupDocTasks = [...this.docTasks];
 
     // اعمال خوش‌بینانه
     this.docTasks = this.docTasks.filter(t => !taskIds.includes(t.id));
     this.selectedDocTasks.clear();
-    this.closeDocRejectDialog();
+    this.showDocRejectDialog = false;
     this.cdr.detectChanges();
 
     this.docTaskApi.reject(taskIds, this.docRejectNote).subscribe({
@@ -885,6 +1851,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.loadDocTasks(false, true);
       },
       error: (err: any) => {
+        this.docTasks = backupDocTasks;
         this.toast.error(err?.error?.error || 'خطا در رد اسناد');
         this.loadDocTasks(false, true);
       }
@@ -912,6 +1879,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         const newDocPoolTasks = Array.isArray(res) ? res : (res.results || []);
         this.trackUpdates(this.docPoolTasks, newDocPoolTasks);
         this.docPoolTasks = newDocPoolTasks;
+        this.applyFilters();
         if (preserveState) {
           const validIds = new Set(this.docPoolTasks.map(t => t.id));
           this.selectedDocPoolTasks = new Set(Array.from(this.selectedDocPoolTasks).filter(id => validIds.has(id)));
@@ -919,8 +1887,10 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
         this.isDocPoolLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.error('خطا در دریافت استخر اسناد');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت استخر اسناد');
+        }
         this.isDocPoolLoading = false;
         this.cdr.detectChanges();
       }
@@ -936,21 +1906,28 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
 
   toggleAllDocPool(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    if (checked) this.docPoolTasks.forEach(t => this.selectedDocPoolTasks.add(t.id));
-    else this.selectedDocPoolTasks.clear();
+    const targetList = this.filteredDocPoolTasks;
+    if (checked) targetList.forEach(t => this.selectedDocPoolTasks.add(t.id));
+    else targetList.forEach(t => this.selectedDocPoolTasks.delete(t.id));
     this.selectedDocPoolTasks = new Set(this.selectedDocPoolTasks);
     this.cdr.detectChanges();
   }
 
   isAllDocPoolSelected() {
-    return this.docPoolTasks.length > 0 && this.selectedDocPoolTasks.size === this.docPoolTasks.length;
+    return this.filteredDocPoolTasks.length > 0 && this.filteredDocPoolTasks.every(t => this.selectedDocPoolTasks.has(t.id));
   }
 
   claimSelectedDocTasks() {
     if (this.selectedDocPoolTasks.size === 0) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.toast.error('عملیات به عهده گرفتن نیازمند اتصال اینترنت است');
+      return;
+    }
     this.docTaskApi.claimTasks(Array.from(this.selectedDocPoolTasks), 'doc_supervisor').subscribe({
       next: (res: any) => {
         this.toast.success(`${res.claimed_count} سند با موفقیت به عهده گرفته شد`);
+        this.selectedDocPoolTasks.clear();
+        this.loadDocPoolTasks(false);
         this.setTab('doc');
       },
       error: (err: any) => {
@@ -1021,12 +1998,22 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;
     }
-    // Also include pool filter logic if needed, but the backend handles `as_role` and `pool` might not be natively supported in export without extra params. Wait, export_excel endpoint uses the same get_queryset, so we need to inject `pool_only` if we are in a pool tab.
-    if (this.currentTab === 'pool' || this.currentTab === 'doc-pool') {
-      // Though there is no pool_only param for count/doc tasks typically? Wait, the endpoints are pool_tasks/ vs my_tasks.
-      // But we can just use selected_ids if they select from pool. For 'all', we might want to export pool tasks?
-      // Since it's complex, we will just send it to exportExcel which hits standard endpoint, and it might export all supervisor tasks.
-      // To be safe:
+    if (this.searchQuery && this.searchQuery.trim()) {
+      params.q = this.searchQuery.trim();
+    }
+    if (this.statusFilter && this.statusFilter !== 'all') {
+      params.status = this.statusFilter;
+    }
+    if (this.dateFilter && this.dateFilter !== 'all') {
+      params.date = this.dateFilter;
+    }
+
+    if ((this.currentTab === 'pool' || this.currentTab === 'doc-pool') && this.exportDataScope === 'all') {
+      const poolIds = this.currentTab === 'pool'
+        ? this.poolTasks.map(t => t.id)
+        : this.docPoolTasks.map(t => t.id);
+      payload.selected_ids = poolIds;
+      payload.data_scope = 'selected';
     }
 
     this.exportSubscription = api.exportExcel({ ...payload, ...params }).subscribe({

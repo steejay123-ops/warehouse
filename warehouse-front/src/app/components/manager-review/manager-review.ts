@@ -1,27 +1,31 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
-import { Router, ActivatedRoute, NavigationEnd } from '@angular/router';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, HostListener, ViewChild } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
 import { Subscription, Subject, filter, debounceTime, distinctUntilChanged } from 'rxjs';
 import { WebSocketService } from '../../core/http/websocket.service';
 import { CommonModule } from '@angular/common';
-import { AuthStore } from '../../core/stores/auth.store';
-import { AuthService } from '../../core/auth/auth.service';
 import { FormsModule } from '@angular/forms';
-import { StateService } from '../../services/state.service';
-import { ToastService } from '../../services/toast.service';
 import { CountTaskApiService } from '../../core/api/count-task-api.service';
 import { CountTask } from '../../core/models/count-task.model';
 import { DocTaskApiService } from '../../core/api/doc-task-api.service';
 import { DocTask } from '../../core/models/doc-task.model';
-import { HasPermissionDirective } from '../../shared';
+import { ToastService } from '../../services/toast.service';
+import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { StateService } from '../../services/state.service';
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
+import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
+import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
+import { AuthStore } from '../../core/stores/auth.store';
+import { AuthService } from '../../core/auth/auth.service';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 import { OfflineSyncService } from '../../core/services/offline-sync.service';
+import { NetworkStatusService } from '../../core/services/network-status.service';
+import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
 
 @Component({
   selector: 'app-manager-review',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, PersianDatePipe],
   templateUrl: './manager-review.html',
   styleUrl: './manager-review.css'
 })
@@ -34,89 +38,244 @@ export class ManagerReview implements OnInit, OnDestroy {
   updatedTaskIds = new Set<number>();
   flashTimeout: any;
   private routerSub?: Subscription;
+  authStore = inject(AuthStore);
+  auth = inject(AuthService);
+  private router = inject(Router);
+  tasks: CountTask[] = [];
+  poolTasks: CountTask[] = [];
+  isLoading = true;
+  selectedTasks: Set<number> = new Set();
+  selectedPoolTasks: Set<number> = new Set();
   currentTab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool' = 'my-tasks';
+  lastCountTab: 'my-tasks' | 'pool' = 'my-tasks';
+  lastDocTab: 'doc' | 'doc-pool' = 'doc';
 
   // ─── Search & Filters State ───
-  searchQuery = '';
-  private searchSubject = new Subject<string>();
-  statusFilter: 'all' | 'pending' | 'recount' | 'initial' | 'completed' = 'pending';
+  searchQuery: string = '';
+  searchSubject = new Subject<string>();
+  statusFilter: 'all' | 'pending' | 'recount' = 'all';
   dateFilter: 'all' | 'today' | 'yesterday' | 'week' = 'all';
-
-  // ─── Performance Metrics & Status Counts ───
-  totalTasksCount = 0;
-  matchedTasksCount = 0;
-  mismatchedTasksCount = 0;
-  completedTasksCount = 0;
-  remainingTasksCount = 0;
-
-  statusCounts = {
-    pending: 0,
-    recount: 0,
-    initial: 0,
-    completed: 0,
-    all: 0
-  };
-
-  // ─── Filtered Data Lists ───
+  locationFilter: string = 'all';
   filteredTasks: CountTask[] = [];
-  filteredDocTasks: DocTask[] = [];
   filteredPoolTasks: CountTask[] = [];
+  filteredDocTasks: DocTask[] = [];
   filteredDocPoolTasks: DocTask[] = [];
+
+  // ─── Smart Sorting State ───
+  sortField: 'updated_at' | 'created_at' | 'location' | 'recount_first' | 'code' | 'title' = 'updated_at';
+  sortDirection: 'asc' | 'desc' = 'desc';
+  isSortMenuOpen = false;
+
+  // ─── Touch / Long Press Handling for Mobile ───
+  pressTimeout: any = null;
+  justLongPressed = false;
+  initialTouchY = 0;
+  initialTouchX = 0;
+
+  // ─── Counting Task Details Modal ───
+  selectedCountingDetailTask: CountTask | null = null;
+  detailManagerNote = '';
+
+  openCountingDetail(task: CountTask, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.selectedCountingDetailTask = task;
+    this.detailManagerNote = task.manager_note || '';
+    this.cdr.detectChanges();
+  }
+
+  closeCountingDetail() {
+    this.selectedCountingDetailTask = null;
+    this.detailManagerNote = '';
+    this.cdr.detectChanges();
+  }
+
+  setSort(field: 'created_at' | 'updated_at' | 'location' | 'recount_first' | 'code' | 'title') {
+    if (this.sortField === field) {
+      this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortField = field;
+      this.sortDirection = (field === 'created_at' || field === 'updated_at') ? 'desc' : 'asc';
+    }
+    this.isSortMenuOpen = false;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  toggleSortDirection() {
+    this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  toggleSortMenu(event?: Event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    this.isSortMenuOpen = !this.isSortMenuOpen;
+    this.cdr.detectChanges();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event) {
+    if (this.isSortMenuOpen) {
+      this.isSortMenuOpen = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  getSortLabel(): string {
+    switch (this.sortField) {
+      case 'updated_at': return 'آخرین تغییر';
+      case 'created_at': return 'زمان تخصیص';
+      case 'location': return 'مسیر لوکیشن';
+      case 'recount_first': return 'اولویت بازشماری';
+      case 'code': return 'کد کالا';
+      case 'title': return 'شرح کالا';
+      default: return 'مرتب‌سازی';
+    }
+  }
+
+  trackByTaskId(index: number, task: CountTask | DocTask): number {
+    return task.id ?? index;
+  }
+
+  // Barcode Scanning State
+  @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
+  private scanBusy = false;
+  private barcodeBuffer = '';
+  private lastKeyTime = 0;
 
   get activeSection(): 'counting' | 'financial' {
     return (this.currentTab === 'doc' || this.currentTab === 'doc-pool') ? 'financial' : 'counting';
   }
 
-  // Export Modal State
-  isExportModalOpen = false;
-  exportDataScope: 'all' | 'selected' = 'all';
-  exportColumnScope: 'all_db' | 'visible' | 'custom' = 'all_db';
-  selectedExportColumns: Set<string> = new Set();
-  isExporting = false;
-  exportSubscription?: Subscription;
-  availableExportColumns: {key: string, label: string}[] = [];
-
-  get currentSelectedTasks() {
-    if (this.currentTab === 'my-tasks') return this.selectedTasks;
-    if (this.currentTab === 'pool') return this.selectedPoolTasks;
-    if (this.currentTab === 'doc') return this.selectedDocTasks;
-    if (this.currentTab === 'doc-pool') return this.selectedDocPoolTasks;
-    return new Set<number>();
+  get statusCounts() {
+    let pending = 0;
+    let recount = 0;
+    for (const t of this.tasks) {
+      if (t.status === 'MANAGER_REVIEW') pending++;
+      else if (t.status === 'MANAGER_REJECTED') recount++;
+    }
+    return {
+      all: this.tasks.length,
+      pending,
+      recount
+    };
   }
 
-  // ── Count Task Tab ──
-  tasks: CountTask[] = [];
-  isLoading = true;
-  selectedTasks: Set<number> = new Set();
+  get docStatusCounts() {
+    let pending = 0;
+    let recount = 0;
+    for (const t of this.docTasks) {
+      if (t.status === 'DOC_MANAGER_REVIEW') pending++;
+      else if (t.status === 'DOC_MANAGER_REJECTED') recount++;
+    }
+    return {
+      all: this.docTasks.length,
+      pending,
+      recount
+    };
+  }
 
-  // Pool Tab
-  poolTasks: CountTask[] = [];
-  selectedPoolTasks: Set<number> = new Set();
+  switchSection(section: 'counting' | 'financial') {
+    if (section === 'counting') {
+      const target = this.lastCountTab || 'my-tasks';
+      this.setTab(target);
+    } else {
+      const target = this.lastDocTab || 'doc';
+      this.setTab(target);
+    }
+  }
 
-  // Single Detail Inspection Modal State
-  selectedDetailTask: CountTask | null = null;
-  detailManagerNote = '';
+  setLocationFilter(loc: string) {
+    this.locationFilter = loc;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
 
-  // Single Quick Reject Dialog State
-  singleRejectTask: CountTask | null = null;
-  singleRejectNote = '';
+  get availableLocations(): string[] {
+    const locSet = new Set<string>();
+    const list = this.activeSection === 'counting'
+      ? (this.currentTab === 'my-tasks' ? this.tasks : this.poolTasks)
+      : (this.currentTab === 'doc' ? this.docTasks : this.docPoolTasks);
+    for (const t of list) {
+      const loc = (t.item_details?.new_location || t.item_details?.old_location || '').trim();
+      if (loc) {
+        const prefix = loc.split(/[-_/]/)[0] || loc;
+        locSet.add(prefix.toUpperCase());
+      }
+    }
+    return Array.from(locSet).sort();
+  }
 
-  // Single Review State (Legacy fallback if needed)
-  selectedTask: CountTask | null = null;
-  managerNote = '';
+  onWarehouseChanged(whId: any) {
+    this.authStore.setActiveWarehouse(whId);
+    this.state.appState.activeWarehouseId = whId;
+    this.clearAllSelections();
+    this.tasks = [];
+    this.poolTasks = [];
+    this.docTasks = [];
+    this.docPoolTasks = [];
+    this.refreshCurrentTab();
+    this.preloadTabCounts();
+  }
 
-  // Bulk Approve Dialog
-  showApproveDialog = false;
-  approveNote = '';
+  normalizeText(str: string | null | undefined): string {
+    if (!str) return '';
+    return String(str)
+      .replace(/[آأإ]/g, 'ا')
+      .replace(/ي/g, 'ی')
+      .replace(/ك/g, 'ک')
+      .replace(/ة/g, 'ه')
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .toLowerCase()
+      .trim();
+  }
 
-  // Bulk Reject Dialog
+  getDynamicEntries(task: CountTask | DocTask | null | undefined): { key: string, label: string, value: any }[] {
+    if (!task || !task.item_details) return [];
+    const dyn = (task.item_details as any).dynamic_data;
+    if (!dyn || typeof dyn !== 'object') return [];
+    return Object.entries(dyn).map(([k, v]) => ({
+      key: k,
+      label: k.replace(/_/g, ' '),
+      value: v !== undefined && v !== null && v !== '' ? v : '-'
+    }));
+  }
+
+  isTaskSelectable(task: CountTask | DocTask | null | undefined): boolean {
+    if (!task || !task.id) return false;
+    if (this.activeSection === 'counting') {
+      if (this.currentTab === 'pool') return true;
+      return task.status === 'MANAGER_REVIEW' || task.status === 'MANAGER_REJECTED';
+    } else {
+      if (this.currentTab === 'doc-pool') return true;
+      return task.status === 'DOC_MANAGER_REVIEW' || task.status === 'DOC_MANAGER_REJECTED';
+    }
+  }
+
+  clearAllSelections() {
+    this.selectedTasks.clear();
+    this.selectedPoolTasks.clear();
+    this.selectedDocTasks.clear();
+    this.selectedDocPoolTasks.clear();
+    this.cdr.detectChanges();
+  }
+
+  // Bulk Reject Dialog State
   showBulkRejectDialog = false;
-  bulkRejectNote = '';
+  bulkRejectNote: string = '';
 
-  // Doc Pool Tab
-  docPoolTasks: DocTask[] = [];
-  isDocPoolLoading = false;
-  selectedDocPoolTasks = new Set<number>();
+  // Approve Dialog State
+  showApproveDialog = false;
+  approveNote: string = '';
 
   // ── Doc Task Tab ──
   docTasks: DocTask[] = [];
@@ -126,6 +285,12 @@ export class ManagerReview implements OnInit, OnDestroy {
   docApproveNote = '';
   showDocRejectDialog = false;
   docRejectNote = '';
+
+  // ── Doc Pool Tab ──
+  docPoolTasks: DocTask[] = [];
+  isDocPoolLoading = false;
+  selectedDocPoolTasks = new Set<number>();
+
   // Doc Detail Modal State
   selectedDocDetailTask: DocTask | null = null;
 
@@ -166,10 +331,27 @@ export class ManagerReview implements OnInit, OnDestroy {
     return parts.join('.');
   }
 
-  getItemDetail(task: DocTask | null, key: string): any {
+  getItemDetail(task: DocTask | CountTask | any | null, key: string): any {
     if (!task || !task.item_details) return '-';
     const item = task.item_details as any;
     return item[key] !== undefined && item[key] !== null && item[key] !== '' ? item[key] : '-';
+  }
+
+  // Export Modal State
+  isExportModalOpen = false;
+  exportDataScope: 'all' | 'selected' = 'all';
+  exportColumnScope: 'all_db' | 'visible' | 'custom' = 'all_db';
+  selectedExportColumns: Set<string> = new Set();
+  isExporting = false;
+  exportSubscription?: Subscription;
+  availableExportColumns: {key: string, label: string}[] = [];
+
+  get currentSelectedTasks() {
+    if (this.currentTab === 'my-tasks') return this.selectedTasks;
+    if (this.currentTab === 'pool') return this.selectedPoolTasks;
+    if (this.currentTab === 'doc') return this.selectedDocTasks;
+    if (this.currentTab === 'doc-pool') return this.selectedDocPoolTasks;
+    return new Set<number>();
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -177,32 +359,26 @@ export class ManagerReview implements OnInit, OnDestroy {
     const target = event.target as HTMLElement;
     const isInsideInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
 
-    // Escape: close any open dialog or review modal
+    // Escape: close any open dialog
     if (event.key === 'Escape') {
-      if (this.selectedDetailTask) {
+      if (this.selectedCountingDetailTask) {
         event.preventDefault();
-        this.closeTaskDetail();
-      } else if (this.singleRejectTask) {
+        this.closeCountingDetail();
+      } else if (this.selectedDocDetailTask) {
         event.preventDefault();
-        this.closeRejectDialog();
-      } else if (this.selectedTask) {
-        event.preventDefault();
-        this.cancelReview();
-      } else if (this.showApproveDialog) {
-        event.preventDefault();
-        this.cancelApprove();
+        this.closeDocDetail();
       } else if (this.showBulkRejectDialog) {
         event.preventDefault();
         this.cancelBulkReject();
+      } else if (this.showApproveDialog) {
+        event.preventDefault();
+        this.cancelApprove();
       } else if (this.showDocRejectDialog) {
         event.preventDefault();
         this.closeDocRejectDialog();
       } else if (this.showDocApproveDialog) {
         event.preventDefault();
         this.cancelDocApprove();
-      } else if (this.selectedDocDetailTask) {
-        event.preventDefault();
-        this.closeDocDetail();
       } else if (this.isExportModalOpen) {
         event.preventDefault();
         this.closeExportModal();
@@ -211,18 +387,19 @@ export class ManagerReview implements OnInit, OnDestroy {
 
     // Ctrl+Enter: confirm active action dialog
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      if (this.selectedDetailTask) {
+      if (this.selectedCountingDetailTask) {
         event.preventDefault();
-        this.approveDetailTask();
-      } else if (this.singleRejectTask) {
-        event.preventDefault();
-        this.confirmSingleReject();
-      } else if (this.showApproveDialog) {
-        event.preventDefault();
-        this.confirmApprove();
+        if (this.detailManagerNote && this.detailManagerNote.trim()) {
+          this.rejectDetailTask();
+        } else {
+          this.approveDetailTask();
+        }
       } else if (this.showBulkRejectDialog) {
         event.preventDefault();
         this.confirmBulkReject();
+      } else if (this.showApproveDialog) {
+        event.preventDefault();
+        this.confirmApprove();
       } else if (this.showDocRejectDialog) {
         event.preventDefault();
         this.confirmDocReject();
@@ -235,15 +412,21 @@ export class ManagerReview implements OnInit, OnDestroy {
       }
     }
 
-    // Quick Action A (Approve) when tasks selected and not inside text input
+    // Quick Action A (Approve / Claim) when tasks selected and not inside text input
     if (!isInsideInput && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (event.key === 'a' || event.key === 'A' || event.key === 'ش') {
-        if (this.activeSection === 'counting' && this.selectedTasks.size > 0 && !this.showApproveDialog && !this.selectedTask && !this.selectedDetailTask) {
+        if (this.currentTab === 'my-tasks' && this.selectedTasks.size > 0 && !this.showApproveDialog && !this.showBulkRejectDialog && !this.selectedCountingDetailTask) {
           event.preventDefault();
           this.openApproveDialog();
-        } else if (this.activeSection === 'financial' && this.selectedDocTasks.size > 0 && !this.showDocApproveDialog && !this.showDocRejectDialog && !this.selectedDocDetailTask) {
+        } else if (this.currentTab === 'doc' && this.selectedDocTasks.size > 0 && !this.showDocApproveDialog && !this.showDocRejectDialog && !this.selectedDocDetailTask) {
           event.preventDefault();
           this.openDocApproveDialog();
+        } else if (this.currentTab === 'pool' && this.selectedPoolTasks.size > 0) {
+          event.preventDefault();
+          this.claimSelectedTasks();
+        } else if (this.currentTab === 'doc-pool' && this.selectedDocPoolTasks.size > 0) {
+          event.preventDefault();
+          this.claimSelectedDocTasks();
         }
       }
     }
@@ -264,26 +447,65 @@ export class ManagerReview implements OnInit, OnDestroy {
         this.setTab('doc-pool');
       }
     }
+
+    // Hardware Keyboard Wedge Barcode Scanner Listener
+    if (!this.selectedCountingDetailTask && !this.selectedDocDetailTask && !this.showBulkRejectDialog && !this.showApproveDialog && !this.showDocRejectDialog && !this.showDocApproveDialog && !this.isExportModalOpen && !isInsideInput) {
+      const now = Date.now();
+      if (now - this.lastKeyTime > 500) {
+        this.barcodeBuffer = '';
+      }
+      this.lastKeyTime = now;
+
+      if (event.key === 'Enter') {
+        if (this.barcodeBuffer.length >= 3) {
+          const code = this.barcodeBuffer;
+          this.barcodeBuffer = '';
+          event.preventDefault();
+          this.onBarcodeScanned(code);
+        }
+      } else if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+        this.barcodeBuffer += event.key;
+      }
+    }
+  }
+
+  getActionTypeLabel(val: string | null | undefined): string {
+    if (!val) return '-';
+    const map: Record<string, string> = {
+      'COUNTED': 'شمارش شده',
+      'INITIAL_COUNT': 'ثبت اولیه شمارش',
+      'MANAGER_REVIEW': 'در انتظار تایید مدیر',
+      'SUPERVISOR_REJECTED': 'بررسی مجدد (سرپرست)',
+      'MANAGER_REJECTED': 'دستور بازشماری (مدیر)',
+      'FINAL_APPROVED': 'تایید نهایی مدیر',
+      'DOC_PROCESSED': 'ثبت اولیه سند',
+      'DOC_SUPERVISOR_REJECTED': 'رد سرپرست مالی',
+      'DOC_MANAGER_REVIEW': 'در انتظار تایید مدیر مالی',
+      'DOC_MANAGER_REJECTED': 'رد مدیر مالی',
+      'DOC_FINAL_APPROVED': 'تایید نهایی مالی',
+      'CLAIMED': 'به عهده گرفته شد',
+    };
+    return map[val] || val.replace(/_/g, ' ');
   }
 
   constructor(
-    public state: StateService,
-    public authStore: AuthStore,
-    public auth: AuthService,
-    private toast: ToastService,
     private countTaskApi: CountTaskApiService,
     private docTaskApi: DocTaskApiService,
+    private toast: ToastService,
+    private confirmDialog: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
+    public state: StateService,
     private http: HttpClient,
-    private wsService: WebSocketService,
-    private router: Router,
-    private route: ActivatedRoute
+    private wsService: WebSocketService
   ) {
     this.searchSubject.pipe(debounceTime(350), distinctUntilChanged()).subscribe(() => {
       this.applyFilters();
       this.updateUrlState();
+      this.cdr.detectChanges();
     });
   }
+
+  initialLoadDone = false;
 
   ngOnInit() {
     this.wsService.connect();
@@ -293,6 +515,10 @@ export class ManagerReview implements OnInit, OnDestroy {
     });
 
     this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
+      const activeWh = this.state.appState.activeWarehouseId;
+      if (data.warehouse_id && activeWh && activeWh !== 'ALL' && Number(data.warehouse_id) !== Number(activeWh)) {
+        return;
+      }
       if (data.type === 'count_task_update' || data.event === 'count_task_update') {
         if (data.task && data.task.id) {
           this.updateCountTaskInPlace(data.task);
@@ -312,21 +538,369 @@ export class ManagerReview implements OnInit, OnDestroy {
       }
     });
 
-    // ── URL State: خواندن پارامترها از آدرس مرورگر ──
+    // ── URL State: خواندن وضعیت و فیلترها از آدرس مرورگر ──
     this.syncStateFromUrl();
     this.routerSub = this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd)
     ).subscribe(() => this.syncStateFromUrl());
 
+    // ── پیش‌بارگذاری آرام شمارنده‌های تب‌های دیگر ──
+    this.preloadTabCounts();
+
     // ─── SWR Live Revalidation: دریافت داده‌های جدیدتر سرور در پس‌زمینه با فیلتر دقیق نقش مدیر ───
-    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url }) => {
-      const isManagerCount = url.includes('/api/inventory/count-tasks/') && url.includes('as_role=manager');
-      const isManagerDoc = url.includes('/api/inventory/doc-tasks/') && url.includes('as_role=manager');
-      if (isManagerCount || isManagerDoc) {
-        this.refreshCurrentTab(false, true);
-        console.log('[ManagerReview] ⚡ تب فعال مدیر با استعلام پس‌زمینه SWR به‌روزرسانی شد.');
+    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url, data }) => {
+      if (!data) return;
+      const freshList = Array.isArray(data) ? data : data.results || [];
+      const isPoolUrl = url.includes('/pool_tasks/');
+
+      if (url.includes('/inventory/count-tasks/')) {
+        if (isPoolUrl) {
+          if (this.currentTab === 'pool') this.trackUpdates(this.poolTasks, freshList);
+          this.poolTasks = freshList;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        } else {
+          const filtered = freshList.filter((t: CountTask) => t.status === 'MANAGER_REVIEW' || t.status === 'MANAGER_REJECTED');
+          if (this.currentTab === 'my-tasks') this.trackUpdates(this.tasks, filtered);
+          this.tasks = filtered;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        }
+      } else if (url.includes('/inventory/doc-tasks/')) {
+        if (isPoolUrl) {
+          if (this.currentTab === 'doc-pool') this.trackUpdates(this.docPoolTasks, freshList);
+          this.docPoolTasks = freshList;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        } else {
+          const filtered = freshList.filter((t: DocTask) => t.status === 'DOC_MANAGER_REVIEW' || t.status === 'DOC_MANAGER_REJECTED');
+          if (this.currentTab === 'doc') this.trackUpdates(this.docTasks, filtered);
+          this.docTasks = filtered;
+          this.applyFilters();
+          this.cdr.detectChanges();
+        }
       }
     });
+  }
+
+  onSearchChange(val: string) {
+    this.searchQuery = val;
+    this.applyFilters();
+    this.searchSubject.next(val);
+  }
+
+  clearSearch() {
+    this.searchQuery = '';
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  setStatusFilter(filter: 'all' | 'pending' | 'recount') {
+    this.statusFilter = filter;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  setDateFilter(filter: 'all' | 'today' | 'yesterday' | 'week') {
+    this.dateFilter = filter;
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
+  private normalizeDigits(str: any): string {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
+      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)])
+      .replace(/[/،]/g, '.')
+      .trim();
+  }
+
+  private convertPersianKeyboardToEnglish(str: string): string {
+    if (!str) return '';
+    const faToEn: Record<string, string> = {
+      'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u', 'ه': 'i', 'خ': 'o', 'ح': 'p', 'ج': '[', 'چ': ']',
+      'ش': 'a', 'س': 's', 'ی': 'd', 'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ک': ';', 'گ': "'",
+      'ظ': 'z', 'ط': 'x', 'ز': 'c', 'ر': 'v', 'ذ': 'b', 'د': 'n', 'پ': 'm', 'و': ',', 'ئ': 'm'
+    };
+    return str.split('').map(char => faToEn[char] || faToEn[char.toLowerCase()] || char).join('');
+  }
+
+  applyFilters() {
+    const rawQuery = (this.searchQuery || '').trim();
+    const query = this.normalizeText(rawQuery);
+    const normDigitsQuery = this.normalizeDigits(rawQuery.toLowerCase());
+    const convertedQuery = this.convertPersianKeyboardToEnglish(rawQuery).toLowerCase();
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const week = today - 7 * 86400000;
+
+    const matchesSearch = (itemDetails: any, workerOrCounterName?: string, taskData?: any) => {
+      if (!rawQuery) return true;
+      const unic = this.normalizeText(itemDetails?.fa_unic_code || '');
+      const enUnic = this.normalizeText(itemDetails?.en_unic_code || '');
+      const desc = this.normalizeText(itemDetails?.description || '');
+      const itemNo = this.normalizeText(itemDetails?.item_no || itemDetails?.part_no || '');
+      const po = this.normalizeText(itemDetails?.po || '');
+      const tag = this.normalizeText(itemDetails?.tag || itemDetails?.tag_number || '');
+      const pkNumber = this.normalizeText(itemDetails?.pk_number || itemDetails?.plpkitem || '');
+      const locNew = this.normalizeText(itemDetails?.new_location || '');
+      const locOld = this.normalizeText(itemDetails?.old_location || '');
+      const personName = this.normalizeText(workerOrCounterName || '');
+      const rti = this.normalizeText(taskData?.inv_rti_number || taskData?.added_rti_no || '');
+      const supplier = this.normalizeText(taskData?.doc_supplier || '');
+
+      return unic.includes(query) || unic.includes(normDigitsQuery) || unic.includes(convertedQuery) ||
+             enUnic.includes(query) ||
+             desc.includes(query) ||
+             itemNo.includes(query) ||
+             po.includes(query) ||
+             tag.includes(query) ||
+             pkNumber.includes(query) ||
+             locNew.includes(query) || locOld.includes(query) ||
+             personName.includes(query) ||
+             rti.includes(query) ||
+             supplier.includes(query);
+    };
+
+    const matchesLocation = (itemDetails: any) => {
+      if (!this.locationFilter || this.locationFilter === 'all') return true;
+      const loc = (itemDetails?.new_location || itemDetails?.old_location || '').toLowerCase().trim();
+      return loc.startsWith(this.locationFilter.toLowerCase().trim());
+    };
+
+    const matchesDate = (t: any) => {
+      if (this.dateFilter === 'all') return true;
+      const dateStr = t.updated_at || t.created_at;
+      if (!dateStr) return true;
+      const taskDate = new Date(dateStr).getTime();
+      if (this.dateFilter === 'today') return taskDate >= today;
+      if (this.dateFilter === 'yesterday') return taskDate >= yesterday && taskDate < today;
+      if (this.dateFilter === 'week') return taskDate >= week;
+      return true;
+    };
+
+    // ۱. فیلتر کارهای من (انبارگردانی مدیر)
+    this.filteredTasks = this.tasks.filter(t => {
+      if (!matchesDate(t)) return false;
+      if (this.statusFilter === 'pending' && t.status !== 'MANAGER_REVIEW') return false;
+      if (this.statusFilter === 'recount' && t.status !== 'MANAGER_REJECTED') return false;
+      if (!matchesLocation(t.item_details)) return false;
+      return matchesSearch(t.item_details, t.counter_name, t);
+    });
+
+    // ۲. فیلتر استخر (انبارگردانی مدیر)
+    this.filteredPoolTasks = this.poolTasks.filter(t => matchesLocation(t.item_details) && matchesSearch(t.item_details, undefined, t));
+
+    // ۳. فیلتر اسناد مالی مدیر
+    this.filteredDocTasks = this.docTasks.filter(t => {
+      if (!matchesDate(t)) return false;
+      if (this.statusFilter === 'pending' && t.status !== 'DOC_MANAGER_REVIEW') return false;
+      if (this.statusFilter === 'recount' && t.status !== 'DOC_MANAGER_REJECTED') return false;
+      if (!matchesLocation(t.item_details)) return false;
+      return matchesSearch(t.item_details, t.doc_worker_name, t);
+    });
+
+    // ۴. فیلتر استخر اسناد مدیر
+    this.filteredDocPoolTasks = this.docPoolTasks.filter(t => matchesLocation(t.item_details) && matchesSearch(t.item_details, undefined, t));
+
+    // ۵. اعمال مرتب‌سازی هوشمند برای اقلام انبارگردانی
+    this.filteredTasks.sort((a, b) => {
+      let result = 0;
+      if (this.sortField === 'created_at') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        result = timeA - timeB;
+      } else if (this.sortField === 'updated_at') {
+        const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : (a.id || 0));
+        const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : (b.id || 0));
+        result = timeA - timeB;
+      } else if (this.sortField === 'location') {
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        result = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'recount_first') {
+        const isRecountA = (a.status === 'MANAGER_REJECTED') ? 0 : 1;
+        const isRecountB = (b.status === 'MANAGER_REJECTED') ? 0 : 1;
+        if (isRecountA !== isRecountB) {
+          return isRecountA - isRecountB;
+        }
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        const locCompare = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+        return this.sortDirection === 'asc' ? locCompare : -locCompare;
+      } else if (this.sortField === 'code') {
+        const codeA = a.item_details?.fa_unic_code || '';
+        const codeB = b.item_details?.fa_unic_code || '';
+        result = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'title') {
+        const titleA = a.item_details?.description || '';
+        const titleB = b.item_details?.description || '';
+        result = titleA.localeCompare(titleB, 'fa', { sensitivity: 'base' });
+      }
+      return this.sortDirection === 'asc' ? result : -result;
+    });
+
+    // ۶. اعمال مرتب‌سازی هوشمند برای اسناد مالی
+    this.filteredDocTasks.sort((a, b) => {
+      let result = 0;
+      if (this.sortField === 'created_at') {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        result = timeA - timeB;
+      } else if (this.sortField === 'updated_at') {
+        const timeA = (a as any).updated_at ? new Date((a as any).updated_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : (a.id || 0));
+        const timeB = (b as any).updated_at ? new Date((b as any).updated_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : (b.id || 0));
+        result = timeA - timeB;
+      } else if (this.sortField === 'location') {
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        result = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'recount_first') {
+        const isRecountA = (a.status === 'DOC_MANAGER_REJECTED') ? 0 : 1;
+        const isRecountB = (b.status === 'DOC_MANAGER_REJECTED') ? 0 : 1;
+        if (isRecountA !== isRecountB) {
+          return isRecountA - isRecountB;
+        }
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        const locCompare = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+        return this.sortDirection === 'asc' ? locCompare : -locCompare;
+      } else if (this.sortField === 'code') {
+        const codeA = a.item_details?.fa_unic_code || '';
+        const codeB = b.item_details?.fa_unic_code || '';
+        result = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (this.sortField === 'title') {
+        const titleA = a.item_details?.description || '';
+        const titleB = b.item_details?.description || '';
+        result = titleA.localeCompare(titleB, 'fa', { sensitivity: 'base' });
+      }
+      return this.sortDirection === 'asc' ? result : -result;
+    });
+  }
+
+  async onBarcodeScanned(code: string) {
+    if (this.selectedCountingDetailTask || this.selectedDocDetailTask) {
+      this.toast.info('لطفاً ابتدا پنجره جزئیات کالا/سند جاری را تعیین تکلیف نمایید');
+      return;
+    }
+    if (this.scanBusy) return;
+    this.scanBusy = true;
+    try {
+      const rawQ = (code || '').trim().toLowerCase();
+      const convertedQ = this.convertPersianKeyboardToEnglish(rawQ).toLowerCase();
+      const normQ = this.normalizeDigits(rawQ).toLowerCase();
+      const normConvertedQ = this.normalizeDigits(convertedQ).toLowerCase();
+
+      const match = (t: any) => {
+        const unic = (t.item_details?.fa_unic_code || '').trim().toLowerCase();
+        const normUnic = this.normalizeDigits(unic).toLowerCase();
+        const itemNo = (t.item_details?.item_no || '').trim().toLowerCase();
+        const itemId = String(t.item_details?.id || t.item || '').trim();
+        const po = (t.item_details?.po || '').trim().toLowerCase();
+
+        const matchesAny = (val: string) => {
+          if (!val) return false;
+          return val === rawQ || val === convertedQ || val === normQ || val === normConvertedQ;
+        };
+
+        return matchesAny(unic) || matchesAny(normUnic) || matchesAny(itemNo) || matchesAny(itemId) || matchesAny(po);
+      };
+
+      if (this.activeSection === 'counting') {
+        const targetMyTask = this.tasks.find(match);
+        if (targetMyTask) {
+          this.selectedTasks.clear();
+          this.selectedTasks.add(targetMyTask.id);
+          this.toast.success(`کالای «${targetMyTask.item_details?.fa_unic_code}» انتخاب شد`);
+          this.triggerFlash(targetMyTask.id);
+          this.cdr.detectChanges();
+          return;
+        }
+
+        const targetPoolTask = this.poolTasks.find(match);
+        if (targetPoolTask) {
+          const confirmed = await this.confirmDialog.open({
+            title: 'بر عهده گرفتن کالا',
+            message: `کالای «${targetPoolTask.item_details?.fa_unic_code} - ${targetPoolTask.item_details?.description}» در مخزن کالاها است. آیا آن را بر عهده می‌گیرید؟`,
+            confirmText: 'بله، بر عهده می‌گیرم',
+            cancelText: 'انصراف',
+            type: 'info'
+          });
+          if (confirmed) {
+            this.selectedPoolTasks = new Set([targetPoolTask.id]);
+            this.claimSelectedTasks();
+          }
+          return;
+        }
+      } else {
+        const targetDocTask = this.docTasks.find(match);
+        if (targetDocTask) {
+          this.openDocDetail(targetDocTask);
+          return;
+        }
+        const targetDocPool = this.docPoolTasks.find(match);
+        if (targetDocPool) {
+          this.selectedDocPoolTasks = new Set([targetDocPool.id]);
+          this.claimSelectedDocTasks();
+          return;
+        }
+      }
+
+      this.toast.error(`کالایی با کد «${code}» در کارتابل یا استخر یافت نشد`);
+    } finally {
+      this.scanBusy = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  preloadTabCounts() {
+    const whId = this.state.appState.activeWarehouseId;
+    const countParams: any = { as_role: 'manager' };
+    if (whId && whId !== 'ALL' && whId !== -1) countParams.warehouse_id = whId;
+
+    // استعلام سبک برای بج استخر انبارگردانی مدیر
+    if (this.currentTab !== 'pool') {
+      this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params: countParams }).subscribe({
+        next: (res: any) => {
+          this.poolTasks = Array.isArray(res) ? res : (res.results || []);
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
+
+    // استعلام سبک برای بج کارهای اسناد مالی مدیر
+    if (this.currentTab !== 'doc') {
+      const docParams: any = { as_role: 'manager', page_size: 500 };
+      if (whId && whId !== 'ALL' && whId !== -1) docParams.warehouse_id = whId;
+      this.docTaskApi.getAll(docParams).subscribe({
+        next: (res: any) => {
+          const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
+          this.docTasks = all.filter(t => t.status === 'DOC_MANAGER_REVIEW' || t.status === 'DOC_MANAGER_REJECTED');
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
+
+    // استعلام سبک برای بج استخر اسناد مالی مدیر
+    if (this.currentTab !== 'doc-pool') {
+      const docPoolParams: any = { as_role: 'manager' };
+      if (whId && whId !== 'ALL' && whId !== -1) docPoolParams.warehouse_id = whId;
+      this.docTaskApi.poolTasks(docPoolParams).subscribe({
+        next: (res: any) => {
+          this.docPoolTasks = Array.isArray(res) ? res : (res.results || []);
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
   }
 
   ngOnDestroy() {
@@ -334,7 +908,6 @@ export class ManagerReview implements OnInit, OnDestroy {
     this.wsDebounceSub?.unsubscribe();
     this.routerSub?.unsubscribe();
     this.swrSub?.unsubscribe();
-    this.searchSubject.complete();
     if (this.flashTimeout) clearTimeout(this.flashTimeout);
   }
 
@@ -363,19 +936,19 @@ export class ManagerReview implements OnInit, OnDestroy {
       this.poolTasks = this.poolTasks.filter(t => t.id !== id);
       this.selectedTasks.delete(id);
       this.selectedPoolTasks.delete(id);
-      this.applyFilters();
+      this.cdr.detectChanges();
       return;
     }
 
-    const isManagerStatus = taskData.status === 'MANAGER_REVIEW';
+    const isManagerStatus = taskData.status === 'MANAGER_REVIEW' || taskData.status === 'MANAGER_REJECTED';
 
     if (!isManagerStatus) {
-      // تسک از کارتابل بررسی مدیر خارج شده است (مثلاً تایید نهایی شده یا به بازشماری رفته)
+      // تسک از کارتابل مدیر خارج شده است (مثلاً تایید نهایی شده)
       this.tasks = this.tasks.filter(t => t.id !== id);
       this.poolTasks = this.poolTasks.filter(t => t.id !== id);
       this.selectedTasks.delete(id);
       this.selectedPoolTasks.delete(id);
-      this.applyFilters();
+      this.cdr.detectChanges();
       return;
     }
 
@@ -384,7 +957,7 @@ export class ManagerReview implements OnInit, OnDestroy {
       (taskData.assigned_manager && typeof taskData.assigned_manager === 'object' && taskData.assigned_manager.id === currentUserId);
     const isPool = !taskData.assigned_manager;
 
-    if (isMyTask || (!taskData.assigned_manager && this.currentTab === 'my-tasks')) {
+    if (isMyTask) {
       const idx = this.tasks.findIndex(t => t.id === id);
       if (idx !== -1) {
         this.tasks[idx] = { ...this.tasks[idx], ...taskData };
@@ -402,8 +975,21 @@ export class ManagerReview implements OnInit, OnDestroy {
       }
       this.tasks = this.tasks.filter(t => t.id !== id);
       this.triggerFlash(id);
+    } else {
+      // به مدیر دیگری تخصیص یافته است
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.poolTasks = this.poolTasks.filter(t => t.id !== id);
+      this.selectedTasks.delete(id);
+      this.selectedPoolTasks.delete(id);
     }
-    this.applyFilters();
+    if (this.selectedCountingDetailTask && this.selectedCountingDetailTask.id === id) {
+      if (taskData._deleted || !isManagerStatus) {
+        this.selectedCountingDetailTask = null;
+      } else {
+        this.selectedCountingDetailTask = { ...this.selectedCountingDetailTask, ...taskData };
+      }
+    }
+    this.cdr.detectChanges();
   }
 
   updateDocTaskInPlace(taskData: any) {
@@ -415,18 +1001,24 @@ export class ManagerReview implements OnInit, OnDestroy {
       this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
       this.selectedDocTasks.delete(id);
       this.selectedDocPoolTasks.delete(id);
-      this.applyFilters();
+      if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+        this.selectedDocDetailTask = null;
+      }
+      this.cdr.detectChanges();
       return;
     }
 
-    const isManagerDocStatus = taskData.status === 'DOC_MANAGER_REVIEW';
+    const isManagerDocStatus = taskData.status === 'DOC_MANAGER_REVIEW' || taskData.status === 'DOC_MANAGER_REJECTED';
 
     if (!isManagerDocStatus) {
       this.docTasks = this.docTasks.filter(t => t.id !== id);
       this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
       this.selectedDocTasks.delete(id);
       this.selectedDocPoolTasks.delete(id);
-      this.applyFilters();
+      if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+        this.selectedDocDetailTask = null;
+      }
+      this.cdr.detectChanges();
       return;
     }
 
@@ -435,7 +1027,7 @@ export class ManagerReview implements OnInit, OnDestroy {
       (taskData.assigned_manager && typeof taskData.assigned_manager === 'object' && taskData.assigned_manager.id === currentUserId);
     const isPool = !taskData.assigned_manager;
 
-    if (isMyDoc || (!taskData.assigned_manager && this.currentTab === 'doc')) {
+    if (isMyDoc) {
       const idx = this.docTasks.findIndex(t => t.id === id);
       if (idx !== -1) {
         this.docTasks[idx] = { ...this.docTasks[idx], ...taskData };
@@ -453,8 +1045,22 @@ export class ManagerReview implements OnInit, OnDestroy {
       }
       this.docTasks = this.docTasks.filter(t => t.id !== id);
       this.triggerFlash(id);
+    } else {
+      // به مدیر مالی دیگری تخصیص یافته است
+      this.docTasks = this.docTasks.filter(t => t.id !== id);
+      this.docPoolTasks = this.docPoolTasks.filter(t => t.id !== id);
+      this.selectedDocTasks.delete(id);
+      this.selectedDocPoolTasks.delete(id);
     }
-    this.applyFilters();
+
+    if (this.selectedDocDetailTask && this.selectedDocDetailTask.id === id) {
+      if (taskData._deleted || !isManagerDocStatus) {
+        this.selectedDocDetailTask = null;
+      } else {
+        this.selectedDocDetailTask = { ...this.selectedDocDetailTask, ...taskData };
+      }
+    }
+    this.cdr.detectChanges();
   }
 
   fetchSingleCountTask(taskId: number) {
@@ -498,234 +1104,6 @@ export class ManagerReview implements OnInit, OnDestroy {
     }
   }
 
-  normalizeDigits(str: string): string {
-    if (!str) return '';
-    return str
-      .replace(/[۰-۹]/g, d => '0123456789'['۰۱۲۳۴۵۶۷۸۹'.indexOf(d)])
-      .replace(/[٠-٩]/g, d => '0123456789'['٠١٢٣٤٥٦٧٨٩'.indexOf(d)]);
-  }
-
-  // ── URL State Persistence ──
-  private syncStateFromUrl() {
-    if (!this.router.url.split('?')[0].includes('/manager-review')) return;
-    const params = this.router.parseUrl(this.router.url).queryParams;
-    
-    // 1. Tab
-    const tab = params['tab'] as typeof this.currentTab;
-    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool', 'doc', 'doc-pool'];
-    const resolved = validTabs.includes(tab) ? tab : 'my-tasks';
-    if (resolved !== this.currentTab) {
-      this.currentTab = resolved;
-      this.selectedTasks.clear();
-      this.selectedPoolTasks.clear();
-      this.selectedDocTasks.clear();
-      this.selectedDocPoolTasks.clear();
-      this.selectedTask = null;
-      this.selectedDetailTask = null;
-      this.singleRejectTask = null;
-    }
-
-    // 2. Search Query
-    if (params['q'] !== undefined && params['q'] !== this.searchQuery) {
-      this.searchQuery = params['q'] || '';
-    }
-
-    // 3. Status Filter
-    const st = params['status'] as typeof this.statusFilter;
-    const validStatuses: typeof this.statusFilter[] = ['all', 'pending', 'recount', 'initial', 'completed'];
-    if (st && validStatuses.includes(st)) {
-      this.statusFilter = st;
-    }
-
-    // 4. Date Filter
-    const df = params['date'] as typeof this.dateFilter;
-    const validDates: typeof this.dateFilter[] = ['all', 'today', 'yesterday', 'week'];
-    if (df && validDates.includes(df)) {
-      this.dateFilter = df;
-    }
-
-    this.refreshCurrentTab();
-    if (this.currentTab === 'my-tasks' || this.currentTab === 'pool') {
-      this.loadDocTasks();
-      this.loadDocPoolTasks();
-    }
-    this.cdr.detectChanges();
-  }
-
-  private updateUrlState() {
-    const queryParams: any = { tab: this.currentTab };
-    if (this.searchQuery && this.searchQuery.trim()) queryParams.q = this.searchQuery.trim();
-    if (this.statusFilter && this.statusFilter !== 'pending') queryParams.status = this.statusFilter;
-    if (this.dateFilter && this.dateFilter !== 'all') queryParams.date = this.dateFilter;
-
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams,
-      replaceUrl: true
-    });
-  }
-
-  setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
-    this.currentTab = tab;
-    this.clearAllSelections();
-    this.selectedDetailTask = null;
-    this.singleRejectTask = null;
-    this.updateUrlState();
-    this.refreshCurrentTab();
-  }
-
-  onSearchChange(val: string) {
-    this.searchQuery = val;
-    this.searchSubject.next(val);
-  }
-
-  onSearchEnter() {
-    this.applyFilters();
-    this.updateUrlState();
-  }
-
-  clearSearch() {
-    this.searchQuery = '';
-    this.applyFilters();
-    this.updateUrlState();
-  }
-
-  setStatusFilter(filter: 'all' | 'pending' | 'recount' | 'initial' | 'completed') {
-    this.statusFilter = filter;
-    this.applyFilters();
-    this.updateUrlState();
-  }
-
-  setDateFilter(filter: 'all' | 'today' | 'yesterday' | 'week') {
-    this.dateFilter = filter;
-    this.applyFilters();
-    this.updateUrlState();
-  }
-
-  // ── Smart Selection Actions ──
-  selectMatchedTasks() {
-    const matched = this.filteredTasks.filter(t => this.isMatched(t));
-    if (matched.length === 0) {
-      this.toast.show('info', 'هیچ کالای منطبقی در این لیست وجود ندارد.');
-      return;
-    }
-    matched.forEach(t => this.selectedTasks.add(t.id));
-    this.selectedTasks = new Set(this.selectedTasks);
-    this.toast.show('success', `${matched.length} کالای منطبق (بدون مغایرت) انتخاب شدند.`);
-    this.cdr.detectChanges();
-  }
-
-  clearAllSelections() {
-    this.selectedTasks.clear();
-    this.selectedPoolTasks.clear();
-    this.selectedDocTasks.clear();
-    this.selectedDocPoolTasks.clear();
-    this.cdr.detectChanges();
-  }
-
-  // ── Filter Application & Live Stats Calculation ──
-  applyFilters() {
-    const query = (this.searchQuery || '').toLowerCase().trim();
-    const normQuery = this.normalizeDigits(query);
-
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterday = today - 86400000;
-    const week = today - 7 * 86400000;
-
-    // 1. Filter and Stats for My Tasks
-    const allCountTasks = this.tasks;
-    this.totalTasksCount = allCountTasks.length;
-    this.matchedTasksCount = allCountTasks.filter(t => this.isMatched(t)).length;
-    this.mismatchedTasksCount = allCountTasks.filter(t => !this.isMatched(t)).length;
-    this.remainingTasksCount = allCountTasks.length;
-    this.completedTasksCount = 0; // manager review shows pending tasks
-
-    // Live counts for status chips
-    this.statusCounts = {
-      pending: allCountTasks.length,
-      recount: this.mismatchedTasksCount,
-      initial: this.matchedTasksCount,
-      completed: 0,
-      all: allCountTasks.length
-    };
-
-    this.filteredTasks = allCountTasks.filter(t => {
-      // Date Filter
-      let matchDate = true;
-      const dateStr = (t as any).updated_at || t.created_at;
-      if (dateStr && this.dateFilter !== 'all') {
-        const taskDate = new Date(dateStr).getTime();
-        if (this.dateFilter === 'today') matchDate = taskDate >= today;
-        else if (this.dateFilter === 'yesterday') matchDate = taskDate >= yesterday && taskDate < today;
-        else if (this.dateFilter === 'week') matchDate = taskDate >= week;
-      }
-      if (!matchDate) return false;
-
-      // Status Filter
-      if (this.statusFilter === 'recount' && this.isMatched(t)) return false;
-      if (this.statusFilter === 'initial' && !this.isMatched(t)) return false;
-
-      // Text Search Filter
-      if (query) {
-        const faCode = (t.item_details?.fa_unic_code || '').toLowerCase();
-        const desc = (t.item_details?.description || '').toLowerCase();
-        const newLoc = (t.item_details?.new_location || '').toLowerCase();
-        const oldLoc = (t.item_details?.old_location || '').toLowerCase();
-        const counter = (t.counter_name || '').toLowerCase();
-        const supervisor = ((t as any).supervisor_name || '').toLowerCase();
-        const counterNote = (t.counter_note || '').toLowerCase();
-        const managerNote = (t.manager_note || '').toLowerCase();
-
-        const match = faCode.includes(query) || faCode.includes(normQuery) ||
-                      desc.includes(query) ||
-                      newLoc.includes(query) ||
-                      oldLoc.includes(query) ||
-                      counter.includes(query) ||
-                      supervisor.includes(query) ||
-                      counterNote.includes(query) ||
-                      managerNote.includes(query);
-
-        if (!match) return false;
-      }
-
-      return true;
-    });
-
-    // 2. Filter for Pool Tasks
-    this.filteredPoolTasks = this.poolTasks.filter(t => {
-      if (!query) return true;
-      const faCode = (t.item_details?.fa_unic_code || '').toLowerCase();
-      const desc = (t.item_details?.description || '').toLowerCase();
-      const loc = (t.item_details?.new_location || t.item_details?.old_location || '').toLowerCase();
-      return faCode.includes(query) || faCode.includes(normQuery) || desc.includes(query) || loc.includes(query);
-    });
-
-    // 3. Filter for Doc Tasks
-    this.filteredDocTasks = this.docTasks.filter(t => {
-      if (!query) return true;
-      const faCode = (t.item_details?.fa_unic_code || '').toLowerCase();
-      const desc = (t.item_details?.description || '').toLowerCase();
-      const supplier = (t.doc_supplier || '').toLowerCase();
-      const note = (t.worker_note || t.supervisor_note || t.manager_note || '').toLowerCase();
-      return faCode.includes(query) || faCode.includes(normQuery) || desc.includes(query) || supplier.includes(query) || note.includes(query);
-    });
-
-    // 4. Filter for Doc Pool Tasks
-    this.filteredDocPoolTasks = this.docPoolTasks.filter(t => {
-      if (!query) return true;
-      const faCode = (t.item_details?.fa_unic_code || '').toLowerCase();
-      const desc = (t.item_details?.description || '').toLowerCase();
-      return faCode.includes(query) || faCode.includes(normQuery) || desc.includes(query);
-    });
-
-    this.cdr.detectChanges();
-  }
-
-  // ════════════════════════════════════════════
-  //  My Tasks Tab
-  // ════════════════════════════════════════════
-
   loadTasks(showLoading = true, preserveState = false) {
     if (!preserveState) {
       this.selectedTasks.clear();
@@ -734,195 +1112,428 @@ export class ManagerReview implements OnInit, OnDestroy {
       this.isLoading = true;
       this.cdr.detectChanges();
     }
-    const params: any = { as_role: 'manager', status: 'MANAGER_REVIEW' };
+    
+    const params: any = { as_role: 'manager', page_size: 1000 };
     const whId = this.state.appState.activeWarehouseId;
-    if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      params.warehouse_id = whId;
+    }
 
     this.countTaskApi.getAll(params).subscribe({
       next: (res: any) => {
-        const all = Array.isArray(res) ? res : (res.results || []);
-        const newTasks = all.filter((t: CountTask) => t.status === 'MANAGER_REVIEW');
-        this.trackUpdates(this.tasks, newTasks);
-        this.tasks = newTasks;
-        if (preserveState) {
-          const validIds = new Set(this.tasks.map(t => t.id));
-          this.selectedTasks = new Set(Array.from(this.selectedTasks).filter(id => validIds.has(id)));
+        try {
+          const allTasks = Array.isArray(res) ? res : (res.results || []);
+          const newTasks = Array.isArray(allTasks) ? allTasks.filter((t: CountTask) => t.status === 'MANAGER_REVIEW' || t.status === 'MANAGER_REJECTED') : [];
+          this.trackUpdates(this.tasks, newTasks);
+          this.tasks = newTasks;
+          this.applyFilters();
+          if (preserveState) {
+            const validIds = new Set(this.tasks.map(t => t.id));
+            this.selectedTasks = new Set(Array.from(this.selectedTasks).filter(id => validIds.has(id)));
+          }
+        } catch (e) {
+          console.error('Error assigning tasks:', e);
+          this.tasks = [];
+          this.applyFilters();
         }
-        this.applyFilters();
         this.isLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.show('error', 'خطا در دریافت لیست بررسی');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت اطلاعات کارتابل مدیر');
+        }
         this.isLoading = false;
         this.cdr.detectChanges();
       }
     });
   }
 
+  loadPoolTasks(showLoading = true, preserveState = false) {
+    if (!preserveState) {
+      this.selectedPoolTasks.clear();
+    }
+    if (showLoading) {
+      this.isLoading = true;
+      this.cdr.detectChanges();
+    }
+    
+    const params: any = { as_role: 'manager' };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      params.warehouse_id = whId;
+    }
+    
+    this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
+      next: (res: any) => {
+        const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
+        this.trackUpdates(this.poolTasks, newPoolTasks);
+        this.poolTasks = newPoolTasks;
+        this.applyFilters();
+        if (preserveState) {
+          const validIds = new Set(this.poolTasks.map(t => t.id));
+          this.selectedPoolTasks = new Set(Array.from(this.selectedPoolTasks).filter(id => validIds.has(id)));
+        }
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت مخزن کالاهای مدیر');
+        }
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** به‌روزرسانی پارامترهای آدرس مرورگر و حافظه مرورگر */
+  private updateUrlState() {
+    const defaultSortDir = (this.sortField === 'created_at' || this.sortField === 'updated_at') ? 'desc' : 'asc';
+    const queryParams: any = {
+      tab: this.currentTab,
+      q: this.searchQuery ? this.searchQuery : null,
+      status: this.statusFilter !== 'all' ? this.statusFilter : null,
+      date: this.dateFilter !== 'all' ? this.dateFilter : null,
+      loc: this.locationFilter !== 'all' ? this.locationFilter : null,
+      sort: this.sortField !== 'updated_at' ? this.sortField : null,
+      sortDir: this.sortDirection !== defaultSortDir ? this.sortDirection : null
+    };
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem('manager_review_active_tab', this.currentTab);
+        if (this.currentTab === 'my-tasks' || this.currentTab === 'pool') {
+          this.lastCountTab = this.currentTab;
+          localStorage.setItem('manager_review_last_count_tab', this.currentTab);
+          localStorage.setItem('manager_review_active_section', 'counting');
+        } else {
+          this.lastDocTab = this.currentTab;
+          localStorage.setItem('manager_review_last_doc_tab', this.currentTab);
+          localStorage.setItem('manager_review_active_section', 'financial');
+        }
+      } catch (e) {
+        console.warn('LocalStorage write failed:', e);
+      }
+    }
+
+    this.router.navigate([], { queryParams, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+
+  /** خواندن وضعیت فیلترها از پارامترهای آدرس مرورگر و LocalStorage */
+  private syncStateFromUrl() {
+    if (!this.router.url.split('?')[0].includes('/manager-review')) return;
+    const params = this.router.parseUrl(this.router.url).queryParams;
+    
+    // 1. Sync Tab & Persistence
+    let tab = params['tab'] as typeof this.currentTab;
+    const validTabs: typeof this.currentTab[] = ['my-tasks', 'pool', 'doc', 'doc-pool'];
+    
+    if (!validTabs.includes(tab) && typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const savedTab = localStorage.getItem('manager_review_active_tab') as typeof this.currentTab;
+        if (validTabs.includes(savedTab)) {
+          tab = savedTab;
+        }
+      } catch (e) {
+        console.warn('LocalStorage read failed:', e);
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const savedLastCount = localStorage.getItem('manager_review_last_count_tab');
+        if (savedLastCount === 'my-tasks' || savedLastCount === 'pool') {
+          this.lastCountTab = savedLastCount;
+        }
+        const savedLastDoc = localStorage.getItem('manager_review_last_doc_tab');
+        if (savedLastDoc === 'doc' || savedLastDoc === 'doc-pool') {
+          this.lastDocTab = savedLastDoc;
+        }
+      } catch (e) {}
+    }
+
+    const resolvedTab = validTabs.includes(tab) ? tab : 'my-tasks';
+    let tabChanged = false;
+    if (resolvedTab !== this.currentTab) {
+      this.currentTab = resolvedTab;
+      this.clearAllSelections();
+      tabChanged = true;
+    }
+
+    if (this.currentTab === 'my-tasks' || this.currentTab === 'pool') {
+      this.lastCountTab = this.currentTab;
+    } else {
+      this.lastDocTab = this.currentTab;
+    }
+
+    // 2. Status Filter
+    const status = params['status'];
+    const validStatuses = ['all', 'pending', 'recount'];
+    this.statusFilter = validStatuses.includes(status) ? (status as any) : 'all';
+
+    // 3. Date Filter
+    const date = params['date'];
+    const validDates = ['all', 'today', 'yesterday', 'week'];
+    this.dateFilter = validDates.includes(date) ? (date as any) : 'all';
+
+    // 3.5 Location Filter
+    const loc = params['loc'];
+    this.locationFilter = loc || 'all';
+
+    // 4. Sort Field
+    const sort = params['sort'];
+    const validSorts = ['created_at', 'updated_at', 'location', 'recount_first', 'code', 'title'];
+    this.sortField = validSorts.includes(sort) ? (sort as any) : 'updated_at';
+
+    // 5. Sort Direction
+    const sortDir = params['sortDir'];
+    if (sortDir === 'asc' || sortDir === 'desc') {
+      this.sortDirection = sortDir;
+    } else {
+      this.sortDirection = (this.sortField === 'created_at' || this.sortField === 'updated_at') ? 'desc' : 'asc';
+    }
+
+    // 6. Search Query
+    const q = params['q'] || '';
+    this.searchQuery = q;
+
+    this.applyFilters();
+
+    if (tabChanged || !this.initialLoadDone) {
+      this.initialLoadDone = true;
+      this.refreshCurrentTab();
+    }
+  }
+
+  setTab(tab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool') {
+    this.currentTab = tab;
+    if (tab === 'my-tasks' || tab === 'pool') {
+      this.lastCountTab = tab;
+    } else {
+      this.lastDocTab = tab;
+    }
+    this.clearAllSelections();
+    this.updateUrlState();
+    this.refreshCurrentTab();
+  }
+
+  // ─── Touch / Long Press Handling for Counting Tasks ───
+  onTaskPressStart(task: CountTask, event: PointerEvent) {
+    if (!this.isTaskSelectable(task)) return;
+    this.initialTouchY = event.clientY;
+    this.initialTouchX = event.clientX;
+    
+    this.pressTimeout = setTimeout(() => {
+      this.pressTimeout = null;
+      this.justLongPressed = true;
+      if (!this.selectedTasks.has(task.id)) {
+        this.selectedTasks.add(task.id);
+      } else {
+        this.selectedTasks.delete(task.id);
+      }
+      this.selectedTasks = new Set(this.selectedTasks);
+      this.cdr.markForCheck();
+      if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+        (navigator as any).vibrate(50);
+      }
+    }, 450);
+  }
+
+  onTaskPressMove(event: PointerEvent) {
+    if (this.pressTimeout) {
+      if (Math.abs(event.clientY - this.initialTouchY) > 10 || Math.abs(event.clientX - this.initialTouchX) > 10) {
+        clearTimeout(this.pressTimeout);
+        this.pressTimeout = null;
+      }
+    }
+  }
+
+  onTaskPressEnd() {
+    if (this.pressTimeout) {
+      clearTimeout(this.pressTimeout);
+      this.pressTimeout = null;
+    }
+  }
+
+  onTaskClick(task: CountTask, event: Event) {
+    if (this.justLongPressed) {
+      this.justLongPressed = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    
+    // اگر در حالت انتخاب گروهی هستیم، ترافیک انتخاب را تغییر می‌دهیم
+    if (this.selectedTasks.size > 0) {
+      this.toggleSelection(task.id);
+      return;
+    }
+
+    this.openCountingDetail(task, event);
+  }
+
+  // ─── Touch / Long Press Handling for Doc Tasks ───
+  onDocTaskPressStart(task: DocTask, event: PointerEvent) {
+    if (!this.isTaskSelectable(task)) return;
+    this.initialTouchY = event.clientY;
+    this.initialTouchX = event.clientX;
+    
+    this.pressTimeout = setTimeout(() => {
+      this.pressTimeout = null;
+      this.justLongPressed = true;
+      if (!this.selectedDocTasks.has(task.id)) {
+        this.selectedDocTasks.add(task.id);
+      } else {
+        this.selectedDocTasks.delete(task.id);
+      }
+      this.selectedDocTasks = new Set(this.selectedDocTasks);
+      this.cdr.markForCheck();
+      if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+        (navigator as any).vibrate(50);
+      }
+    }, 450);
+  }
+
+  onDocTaskPressMove(event: PointerEvent) {
+    if (this.pressTimeout) {
+      if (Math.abs(event.clientY - this.initialTouchY) > 10 || Math.abs(event.clientX - this.initialTouchX) > 10) {
+        clearTimeout(this.pressTimeout);
+        this.pressTimeout = null;
+      }
+    }
+  }
+
+  onDocTaskPressEnd() {
+    if (this.pressTimeout) {
+      clearTimeout(this.pressTimeout);
+      this.pressTimeout = null;
+    }
+  }
+
+  onDocTaskClick(task: DocTask, event: Event) {
+    if (this.justLongPressed) {
+      this.justLongPressed = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    
+    if (this.selectedDocTasks.size > 0) {
+      this.toggleDocSelection(task.id);
+      return;
+    }
+
+    this.openDocDetail(task);
+  }
+
+  togglePoolSelection(taskId: number) {
+    if (this.selectedPoolTasks.has(taskId)) {
+      this.selectedPoolTasks.delete(taskId);
+    } else {
+      this.selectedPoolTasks.add(taskId);
+    }
+    this.selectedPoolTasks = new Set(this.selectedPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  toggleAllPool(event: Event) {
+    const isChecked = (event.target as HTMLInputElement).checked;
+    const targetList = this.filteredPoolTasks;
+    if (isChecked) {
+      targetList.forEach(t => this.selectedPoolTasks.add(t.id));
+    } else {
+      targetList.forEach(t => this.selectedPoolTasks.delete(t.id));
+    }
+    this.selectedPoolTasks = new Set(this.selectedPoolTasks);
+    this.cdr.detectChanges();
+  }
+
+  isAllPoolSelected() {
+    return this.filteredPoolTasks.length > 0 && this.filteredPoolTasks.every(t => this.selectedPoolTasks.has(t.id));
+  }
+
+  async claimSelectedTasks() {
+    if (this.selectedPoolTasks.size === 0) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.toast.error('عملیات به عهده گرفتن نیازمند اتصال اینترنت است');
+      return;
+    }
+    
+    const payload: any = {
+      task_ids: Array.from(this.selectedPoolTasks),
+      as_role: 'manager'
+    };
+    const whId = this.state.appState.activeWarehouseId;
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      payload.warehouse_id = whId;
+    }
+
+    this.http.post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, payload).subscribe({
+      next: (res: any) => {
+        this.toast.success(`${res.claimed_count} کالا با موفقیت به عهده گرفته شد`);
+        this.selectedPoolTasks.clear();
+        this.loadPoolTasks(false);
+        this.setTab('my-tasks');
+      },
+      error: (err: any) => {
+        const errorMsg = err?.error?.error || 'خطا در عملیات';
+        this.toast.error(errorMsg);
+      }
+    });
+  }
+
   toggleSelection(taskId: number) {
-    if (this.selectedTasks.has(taskId)) this.selectedTasks.delete(taskId);
-    else this.selectedTasks.add(taskId);
+    if (this.selectedTasks.has(taskId)) {
+      this.selectedTasks.delete(taskId);
+    } else {
+      this.selectedTasks.add(taskId);
+    }
     this.selectedTasks = new Set(this.selectedTasks);
     this.cdr.detectChanges();
   }
 
   toggleAll(event?: Event) {
-    if (event) {
-      const checked = (event.target as HTMLInputElement).checked;
-      if (checked) this.filteredTasks.forEach(t => this.selectedTasks.add(t.id));
-      else this.selectedTasks.clear();
+    const target = event?.target as HTMLInputElement | undefined;
+    const isCheckbox = target?.type === 'checkbox';
+    const isChecked = isCheckbox ? target.checked : !this.isAllSelected();
+
+    const targetList = this.filteredTasks;
+    if (isChecked) {
+      targetList.forEach(t => this.selectedTasks.add(t.id));
     } else {
-      if (this.selectedTasks.size === this.filteredTasks.length && this.filteredTasks.length > 0) {
-        this.selectedTasks.clear();
-      } else {
-        this.filteredTasks.forEach(t => this.selectedTasks.add(t.id));
-      }
+      targetList.forEach(t => this.selectedTasks.delete(t.id));
     }
     this.selectedTasks = new Set(this.selectedTasks);
     this.cdr.detectChanges();
   }
 
   isAllSelected() {
-    return this.filteredTasks.length > 0 && this.selectedTasks.size === this.filteredTasks.length;
+    return this.filteredTasks.length > 0 && this.filteredTasks.every(t => this.selectedTasks.has(t.id));
   }
 
-  // ── Single & Detail Action Methods ──
-  openTaskDetail(task: CountTask) {
-    this.selectedDetailTask = task;
-    this.detailManagerNote = task.manager_note || '';
-    this.cdr.detectChanges();
-  }
-
-  closeTaskDetail() {
-    this.selectedDetailTask = null;
-    this.detailManagerNote = '';
-    this.cdr.detectChanges();
-  }
-
-  approveDetailTask() {
-    if (!this.selectedDetailTask) return;
-    const task = this.selectedDetailTask;
-    const taskId = task.id;
-
-    // اعمال خوش‌بینانه
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-    this.selectedTasks.delete(taskId);
-    this.closeTaskDetail();
-    this.applyFilters();
-
-    this.countTaskApi.bulkManagerApprove([taskId], this.detailManagerNote).subscribe({
-      next: (res: any) => {
-        const isOffline = res?._offlinePending || !navigator.onLine;
-        if (isOffline) {
-          this.toast.show('info', 'تایید نهایی کالا در صف ارسال آفلاین قرار گرفت.');
-        } else {
-          this.toast.show('success', res?.message || 'تایید نهایی با موفقیت ثبت شد');
-        }
-        this.loadTasks(false, true);
-      },
-      error: () => {
-        this.toast.show('error', 'خطا در تایید کالا');
-        this.loadTasks(false, true);
-      }
-    });
-  }
-
-  rejectDetailTask() {
-    if (!this.selectedDetailTask) return;
-    if (!this.detailManagerNote.trim()) {
-      return this.toast.show('error', 'لطفاً علت رد (دستورات به سرپرست) را در یادداشت مدیر بنویسید.');
+  selectMatchedTasks() {
+    const matched = this.filteredTasks.filter(t => this.isMatched(t));
+    if (matched.length === 0) {
+      this.toast.info('هیچ کالای منطبقی در این لیست وجود ندارد.');
+      return;
     }
-    const task = this.selectedDetailTask;
-    const taskId = task.id;
-
-    // اعمال خوش‌بینانه
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-    this.selectedTasks.delete(taskId);
-    this.closeTaskDetail();
-    this.applyFilters();
-
-    this.countTaskApi.managerReject(taskId, this.detailManagerNote).subscribe({
-      next: (res: any) => {
-        const isOffline = res?._offlinePending || !navigator.onLine;
-        if (isOffline) {
-          this.toast.show('info', 'ارجاع به بازشماری در صف آفلاین ذخیره شد.');
-        } else {
-          this.toast.show('success', res?.message || 'کالا جهت بازشماری ارجاع داده شد.');
-        }
-        this.loadTasks(false, true);
-      },
-      error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت رد کالا');
-        this.loadTasks(false, true);
-      }
-    });
-  }
-
-  approveSingle(task: CountTask) {
-    const taskId = task.id;
-    // اعمال خوش‌بینانه
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-    this.selectedTasks.delete(taskId);
-    this.applyFilters();
-
-    this.countTaskApi.bulkManagerApprove([taskId], '').subscribe({
-      next: (res: any) => {
-        const isOffline = res?._offlinePending || !navigator.onLine;
-        if (isOffline) {
-          this.toast.show('info', 'تایید کالا در صف آفلاین ذخیره شد.');
-        } else {
-          this.toast.show('success', res?.message || `${task.item_details?.fa_unic_code} تایید شد`);
-        }
-        this.loadTasks(false, true);
-      },
-      error: () => {
-        this.toast.show('error', 'خطا در تایید کالا');
-        this.loadTasks(false, true);
-      }
-    });
-  }
-
-  openRejectDialog(task: CountTask) {
-    this.singleRejectTask = task;
-    this.singleRejectNote = '';
+    matched.forEach(t => this.selectedTasks.add(t.id));
+    this.selectedTasks = new Set(this.selectedTasks);
+    this.toast.success(`${matched.length} کالای منطبق (بدون مغایرت) انتخاب شدند.`);
     this.cdr.detectChanges();
   }
 
-  closeRejectDialog() {
-    this.singleRejectTask = null;
-    this.singleRejectNote = '';
-    this.cdr.detectChanges();
-  }
-
-  confirmSingleReject() {
-    if (!this.singleRejectTask) return;
-    if (!this.singleRejectNote.trim()) {
-      return this.toast.show('error', 'لطفاً علت درخواست بازشماری را بنویسید.');
+  selectMismatchedTasks() {
+    const mismatched = this.filteredTasks.filter(t => !this.isMatched(t));
+    if (mismatched.length === 0) {
+      this.toast.info('هیچ کالای دارای مغایرتی در این لیست وجود ندارد.');
+      return;
     }
-    const taskId = this.singleRejectTask.id;
-
-    // اعمال خوش‌بینانه
-    this.tasks = this.tasks.filter(t => t.id !== taskId);
-    this.selectedTasks.delete(taskId);
-    this.closeRejectDialog();
-    this.applyFilters();
-
-    this.countTaskApi.managerReject(taskId, this.singleRejectNote).subscribe({
-      next: (res: any) => {
-        const isOffline = res?._offlinePending || !navigator.onLine;
-        if (isOffline) {
-          this.toast.show('info', 'ارجاع به بازشماری در صف آفلاین ذخیره شد.');
-        } else {
-          this.toast.show('success', res?.message || 'کالا جهت بازشماری ارجاع داده شد.');
-        }
-        this.loadTasks(false, true);
-      },
-      error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت اطلاعات');
-        this.loadTasks(false, true);
-      }
-    });
+    mismatched.forEach(t => this.selectedTasks.add(t.id));
+    this.selectedTasks = new Set(this.selectedTasks);
+    this.toast.success(`${mismatched.length} کالای دارای مغایرت انتخاب شدند.`);
+    this.cdr.detectChanges();
   }
 
   openApproveDialog() {
@@ -942,94 +1553,97 @@ export class ManagerReview implements OnInit, OnDestroy {
     if (this.selectedTasks.size === 0) return;
     const taskIds = Array.from(this.selectedTasks);
     const count = taskIds.length;
+    const backupTasks = [...this.tasks];
 
-    // اعمال خوش‌بینانه
+    // اعمال خوش‌بینانه در جدول
     this.tasks = this.tasks.filter(t => !taskIds.includes(t.id));
     this.selectedTasks.clear();
     this.showApproveDialog = false;
-    this.applyFilters();
+    this.cdr.detectChanges();
 
     this.countTaskApi.bulkManagerApprove(taskIds, this.approveNote).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', `تایید نهایی ${count} کالا در صف آفلاین ذخیره شد.`);
+          this.toast.info(`تأیید نهایی ${count} کالا در صف ارسال آفلاین قرار گرفت.`);
         } else {
-          this.toast.show('success', res?.message || `${count} کالا با موفقیت تایید نهایی شدند.`);
+          this.toast.success(res?.message || `${count} کالا با موفقیت تایید نهایی شد`);
         }
         this.loadTasks(false, true);
       },
-      error: () => {
-        this.toast.show('error', 'خطا در تایید گروهی');
+      error: (err: any) => {
+        this.tasks = backupTasks;
+        this.toast.error(err?.error?.error || 'خطا در تایید نهایی کالاها');
         this.loadTasks(false, true);
       }
     });
   }
 
-  selectTask(task: CountTask) {
-    this.selectedTask = task;
-    this.managerNote = task.manager_note || '';
-    this.cdr.detectChanges();
+  approveSingle(task: CountTask) {
+    this.selectedTasks = new Set([task.id]);
+    this.openApproveDialog();
   }
 
-  cancelReview() {
-    this.selectedTask = null;
-    this.managerNote = '';
-    this.cdr.detectChanges();
+  rejectSingle(task: CountTask) {
+    this.selectedTasks = new Set([task.id]);
+    this.openBulkRejectDialog();
   }
 
-  approveTask() {
-    if (!this.selectedTask) return;
-    const taskId = this.selectedTask.id;
+  approveDetailTask() {
+    if (!this.selectedCountingDetailTask) return;
+    const task = this.selectedCountingDetailTask;
+    const taskId = task.id;
 
     // اعمال خوش‌بینانه
     this.tasks = this.tasks.filter(t => t.id !== taskId);
     this.selectedTasks.delete(taskId);
-    this.selectedTask = null;
+    this.closeCountingDetail();
     this.applyFilters();
 
-    this.countTaskApi.bulkManagerApprove([taskId], this.managerNote).subscribe({
+    this.countTaskApi.bulkManagerApprove([taskId], this.detailManagerNote).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', 'تایید نهایی در صف آفلاین ذخیره شد.');
+          this.toast.info('تایید نهایی کالا در صف ارسال آفلاین قرار گرفت.');
         } else {
-          this.toast.show('success', res?.message || 'تایید نهایی با موفقیت انجام شد');
+          this.toast.success(res?.message || 'تایید نهایی با موفقیت ثبت شد');
         }
         this.loadTasks(false, true);
       },
       error: () => {
-        this.toast.show('error', 'خطا در ثبت اطلاعات');
+        this.toast.error('خطا در تایید کالا');
         this.loadTasks(false, true);
       }
     });
   }
 
-  rejectTask() {
-    if (!this.managerNote.trim()) {
-      return this.toast.show('error', 'لطفاً علت درخواست بازشماری (دستورات به سرپرست) را بنویسید.');
+  rejectDetailTask() {
+    if (!this.selectedCountingDetailTask) return;
+    const note = (this.detailManagerNote || '').trim();
+    if (!note) {
+      return this.toast.error('لطفاً علت رد (دستورات به سرپرست یا شمارشگر) را بنویسید.');
     }
-    if (!this.selectedTask) return;
-    const taskId = this.selectedTask.id;
+    const task = this.selectedCountingDetailTask;
+    const taskId = task.id;
 
     // اعمال خوش‌بینانه
     this.tasks = this.tasks.filter(t => t.id !== taskId);
     this.selectedTasks.delete(taskId);
-    this.selectedTask = null;
+    this.closeCountingDetail();
     this.applyFilters();
 
-    this.countTaskApi.managerReject(taskId, this.managerNote).subscribe({
+    this.countTaskApi.managerReject(taskId, note).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', 'ارجاع به بازشماری در صف آفلاین ذخیره شد.');
+          this.toast.info('ارجاع جهت بازشماری در صف آفلاین ذخیره شد.');
         } else {
-          this.toast.show('success', res?.message || 'کالا با موفقیت جهت بازشماری ارجاع داده شد.');
+          this.toast.success(res?.message || 'کالا جهت بازشماری ارجاع داده شد.');
         }
         this.loadTasks(false, true);
       },
       error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت اطلاعات');
+        this.toast.error(err?.error?.error || 'خطا در ثبت رد کالا');
         this.loadTasks(false, true);
       }
     });
@@ -1043,6 +1657,9 @@ export class ManagerReview implements OnInit, OnDestroy {
   }
 
   cancelBulkReject() {
+    if (this.bulkRejectNote.trim()) {
+      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+    }
     this.showBulkRejectDialog = false;
     this.bulkRejectNote = '';
     this.cdr.detectChanges();
@@ -1051,103 +1668,60 @@ export class ManagerReview implements OnInit, OnDestroy {
   confirmBulkReject() {
     if (this.selectedTasks.size === 0) return;
     if (!this.bulkRejectNote.trim()) {
-      return this.toast.show('error', 'لطفاً علت درخواست بازشماری (دستورات به سرپرست) را بنویسید.');
+      this.toast.error('لطفاً دلیل ارجاع جهت بازشماری را بنویسید.');
+      return;
     }
     const taskIds = Array.from(this.selectedTasks);
     const count = taskIds.length;
+    const backupTasks = [...this.tasks];
 
     // اعمال خوش‌بینانه
     this.tasks = this.tasks.filter(t => !taskIds.includes(t.id));
     this.selectedTasks.clear();
     this.showBulkRejectDialog = false;
-    this.applyFilters();
+    this.cdr.detectChanges();
 
     this.countTaskApi.bulkManagerReject(taskIds, this.bulkRejectNote).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', `ارجاع ${count} کالا به بازشماری در صف آفلاین ذخیره شد.`);
+          this.toast.info(`دستور بازشماری برای ${count} کالا در صف آفلاین ذخیره شد.`);
         } else {
-          this.toast.show('success', res?.message || `${count} کالا با موفقیت جهت بازشماری ارجاع داده شدند.`);
+          this.toast.success(res?.message || `${count} کالا جهت بازشماری ارجاع داده شد`);
         }
         this.loadTasks(false, true);
-      },
-      error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت اطلاعات');
-        this.loadTasks(false, true);
-      }
-    });
-  }
-
-  isMatched(task: CountTask | null): boolean {
-    if (!task || !task.item_details || task.counted_balance === null || task.counted_balance === undefined) return false;
-    const counted = parseFloat(String(task.counted_balance));
-    const system = task.item_details.bal4miv !== undefined && task.item_details.bal4miv !== null 
-      ? parseFloat(String(task.item_details.bal4miv)) 
-      : (task.item_details.inventory !== undefined && task.item_details.inventory !== null ? parseFloat(String(task.item_details.inventory)) : null);
-    if (isNaN(counted) || system === null || isNaN(system)) return false;
-    return Math.abs(counted - system) < 0.0001;
-  }
-
-  // ════════════════════════════════════════════
-  //  Pool Tab
-  // ════════════════════════════════════════════
-
-  loadPoolTasks(showLoading = true, preserveState = false) {
-    if (!preserveState) {
-      this.selectedPoolTasks.clear();
-    }
-    if (showLoading) {
-      this.isLoading = true;
-      this.cdr.detectChanges();
-    }
-    const params: any = { as_role: 'manager' };
-    const whId = this.state.appState.activeWarehouseId;
-    if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
-
-    this.http.get<CountTask[]>(`${environment.apiUrl}/inventory/count-tasks/pool_tasks/`, { params }).subscribe({
-      next: (res: any) => {
-        const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
-        this.trackUpdates(this.poolTasks, newPoolTasks);
-        this.poolTasks = newPoolTasks;
-        if (preserveState) {
-          const validIds = new Set(this.poolTasks.map(t => t.id));
-          this.selectedPoolTasks = new Set(Array.from(this.selectedPoolTasks).filter(id => validIds.has(id)));
-        }
-        this.applyFilters();
-        this.isLoading = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.toast.show('error', 'خطا در دریافت استخر تسک‌ها');
-        this.isLoading = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  togglePoolSelection(taskId: number) {
-    if (this.selectedPoolTasks.has(taskId)) this.selectedPoolTasks.delete(taskId);
-    else this.selectedPoolTasks.add(taskId);
-    this.selectedPoolTasks = new Set(this.selectedPoolTasks);
-    this.cdr.detectChanges();
-  }
-
-  claimSelectedTasks() {
-    if (this.selectedPoolTasks.size === 0) return;
-    this.http.post(`${environment.apiUrl}/inventory/count-tasks/claim_tasks/`, {
-      task_ids: Array.from(this.selectedPoolTasks),
-      as_role: 'manager'
-    }).subscribe({
-      next: (res: any) => {
-        this.toast.show('success', `${res.claimed_count} کالا با موفقیت به عهده گرفته شد`);
-        this.setTab('my-tasks');
       },
       error: (err: any) => {
-        this.toast.show('error', err?.error?.error || 'خطا در عملیات');
-        this.cdr.detectChanges();
+        this.tasks = backupTasks;
+        const msg = err?.error?.error || 'خطا در رد گروهی کالاها';
+        this.toast.error(msg);
+        this.loadTasks(false, true);
       }
     });
+  }
+
+  approveSingleDoc(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocTasks = new Set([task.id]);
+    this.openDocApproveDialog();
+  }
+
+  rejectSingleDoc(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocTasks = new Set([task.id]);
+    this.openDocRejectDialog();
+  }
+
+  claimSingleDocTask(task: DocTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedDocPoolTasks = new Set([task.id]);
+    this.claimSelectedDocTasks();
+  }
+
+  claimSingleTask(task: CountTask, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedPoolTasks = new Set([task.id]);
+    this.claimSelectedTasks();
   }
 
   // ════════════════════════════════════════════
@@ -1169,19 +1743,21 @@ export class ManagerReview implements OnInit, OnDestroy {
     this.docTaskApi.getAll(params).subscribe({
       next: (res: any) => {
         const all: DocTask[] = Array.isArray(res) ? res : (res.results || []);
-        const newDocTasks = all.filter(t => t.status === 'DOC_MANAGER_REVIEW' && t.assigned_manager !== null);
+        const newDocTasks = all.filter(t => t.status === 'DOC_MANAGER_REVIEW' || t.status === 'DOC_MANAGER_REJECTED');
         this.trackUpdates(this.docTasks, newDocTasks);
         this.docTasks = newDocTasks;
+        this.applyFilters();
         if (preserveState) {
           const validIds = new Set(this.docTasks.map(t => t.id));
           this.selectedDocTasks = new Set(Array.from(this.selectedDocTasks).filter(id => validIds.has(id)));
         }
-        this.applyFilters();
         this.isDocLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.show('error', 'خطا در دریافت اسناد مالی');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت اسناد مالی مدیر');
+        }
         this.isDocLoading = false;
         this.cdr.detectChanges();
       }
@@ -1195,16 +1771,20 @@ export class ManagerReview implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  toggleAllDoc(event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    if (checked) this.docTasks.forEach(t => this.selectedDocTasks.add(t.id));
-    else this.selectedDocTasks.clear();
+  toggleAllDoc(event?: Event) {
+    const target = event?.target as HTMLInputElement | undefined;
+    const isCheckbox = target?.type === 'checkbox';
+    const isChecked = isCheckbox ? target.checked : !this.isAllDocSelected();
+
+    const targetList = this.filteredDocTasks;
+    if (isChecked) targetList.forEach(t => this.selectedDocTasks.add(t.id));
+    else targetList.forEach(t => this.selectedDocTasks.delete(t.id));
     this.selectedDocTasks = new Set(this.selectedDocTasks);
     this.cdr.detectChanges();
   }
 
   isAllDocSelected() {
-    return this.docTasks.length > 0 && this.selectedDocTasks.size === this.docTasks.length;
+    return this.filteredDocTasks.length > 0 && this.filteredDocTasks.every(t => this.selectedDocTasks.has(t.id));
   }
 
   openDocApproveDialog() {
@@ -1224,25 +1804,27 @@ export class ManagerReview implements OnInit, OnDestroy {
     if (this.selectedDocTasks.size === 0) return;
     const taskIds = Array.from(this.selectedDocTasks);
     const count = taskIds.length;
+    const backupDocTasks = [...this.docTasks];
 
     // اعمال خوش‌بینانه
     this.docTasks = this.docTasks.filter(t => !taskIds.includes(t.id));
     this.selectedDocTasks.clear();
     this.showDocApproveDialog = false;
-    this.applyFilters();
+    this.cdr.detectChanges();
 
     this.docTaskApi.bulkManagerApprove(taskIds, this.docApproveNote).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', `تایید نهایی ${count} سند در صف آفلاین ذخیره شد.`);
+          this.toast.info(`تأیید نهایی ${count} سند در صف آفلاین ذخیره شد.`);
         } else {
-          this.toast.show('success', res?.message || `${count} سند با موفقیت تایید شد`);
+          this.toast.success(res?.message || `${count} سند با موفقیت تایید نهایی شد`);
         }
         this.loadDocTasks(false, true);
       },
-      error: () => {
-        this.toast.show('error', 'خطا در تایید اسناد');
+      error: (err: any) => {
+        this.docTasks = backupDocTasks;
+        this.toast.error(err?.error?.error || 'خطا در تایید نهایی اسناد');
         this.loadDocTasks(false, true);
       }
     });
@@ -1256,34 +1838,39 @@ export class ManagerReview implements OnInit, OnDestroy {
   }
 
   closeDocRejectDialog() {
+    if (this.docRejectNote.trim()) {
+      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+    }
     this.showDocRejectDialog = false;
     this.docRejectNote = '';
     this.cdr.detectChanges();
   }
 
   confirmDocReject() {
-    if (!this.docRejectNote.trim()) { this.toast.show('error', 'لطفاً دلیل رد را بنویسید'); return; }
+    if (!this.docRejectNote.trim()) { this.toast.error('لطفاً دلیل رد را بنویسید'); return; }
     const taskIds = Array.from(this.selectedDocTasks);
     const count = taskIds.length;
+    const backupDocTasks = [...this.docTasks];
 
     // اعمال خوش‌بینانه
     this.docTasks = this.docTasks.filter(t => !taskIds.includes(t.id));
     this.selectedDocTasks.clear();
-    this.closeDocRejectDialog();
-    this.applyFilters();
+    this.showDocRejectDialog = false;
+    this.cdr.detectChanges();
 
     this.docTaskApi.managerReject(taskIds, this.docRejectNote).subscribe({
       next: (res: any) => {
         const isOffline = res?._offlinePending || !navigator.onLine;
         if (isOffline) {
-          this.toast.show('info', `رد ${count} سند در صف آفلاین ذخیره شد.`);
+          this.toast.info(`رد ${count} سند در صف آفلاین ذخیره شد.`);
         } else {
-          this.toast.show('success', res?.message || `${count} سند با موفقیت رد شد`);
+          this.toast.success(res?.message || `${count} سند با موفقیت رد شد`);
         }
         this.loadDocTasks(false, true);
       },
-      error: () => {
-        this.toast.show('error', 'خطا در رد اسناد');
+      error: (err: any) => {
+        this.docTasks = backupDocTasks;
+        this.toast.error(err?.error?.error || 'خطا در رد اسناد');
         this.loadDocTasks(false, true);
       }
     });
@@ -1305,21 +1892,23 @@ export class ManagerReview implements OnInit, OnDestroy {
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) params.warehouse_id = whId;
 
-    this.http.get<DocTask[]>(`${environment.apiUrl}/inventory/doc-tasks/pool_tasks/`, { params }).subscribe({
+    this.docTaskApi.poolTasks(params).subscribe({
       next: (res: any) => {
         const newDocPoolTasks = Array.isArray(res) ? res : (res.results || []);
         this.trackUpdates(this.docPoolTasks, newDocPoolTasks);
         this.docPoolTasks = newDocPoolTasks;
+        this.applyFilters();
         if (preserveState) {
           const validIds = new Set(this.docPoolTasks.map(t => t.id));
           this.selectedDocPoolTasks = new Set(Array.from(this.selectedDocPoolTasks).filter(id => validIds.has(id)));
         }
-        this.applyFilters();
         this.isDocPoolLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.toast.show('error', 'خطا در دریافت استخر اسناد');
+      error: (err: any) => {
+        if (NetworkStatusService.getInstance().isOnline && err?.status !== 503) {
+          this.toast.error('خطا در دریافت استخر اسناد مدیر');
+        }
         this.isDocPoolLoading = false;
         this.cdr.detectChanges();
       }
@@ -1335,31 +1924,57 @@ export class ManagerReview implements OnInit, OnDestroy {
 
   toggleAllDocPool(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    if (checked) this.docPoolTasks.forEach(t => this.selectedDocPoolTasks.add(t.id));
-    else this.selectedDocPoolTasks.clear();
+    const targetList = this.filteredDocPoolTasks;
+    if (checked) targetList.forEach(t => this.selectedDocPoolTasks.add(t.id));
+    else targetList.forEach(t => this.selectedDocPoolTasks.delete(t.id));
     this.selectedDocPoolTasks = new Set(this.selectedDocPoolTasks);
     this.cdr.detectChanges();
   }
 
   isAllDocPoolSelected() {
-    return this.docPoolTasks.length > 0 && this.selectedDocPoolTasks.size === this.docPoolTasks.length;
+    return this.filteredDocPoolTasks.length > 0 && this.filteredDocPoolTasks.every(t => this.selectedDocPoolTasks.has(t.id));
   }
 
   claimSelectedDocTasks() {
     if (this.selectedDocPoolTasks.size === 0) return;
-    this.http.post(`${environment.apiUrl}/inventory/doc-tasks/claim_tasks/`, {
-      task_ids: Array.from(this.selectedDocPoolTasks),
-      as_role: 'manager'
-    }).subscribe({
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      this.toast.error('عملیات به عهده گرفتن نیازمند اتصال اینترنت است');
+      return;
+    }
+    this.docTaskApi.claimTasks(Array.from(this.selectedDocPoolTasks), 'manager').subscribe({
       next: (res: any) => {
-        this.toast.show('success', `${res.claimed_count} سند با موفقیت به عهده گرفته شد`);
+        this.toast.success(`${res.claimed_count} سند با موفقیت به عهده گرفته شد`);
+        this.selectedDocPoolTasks.clear();
+        this.loadDocPoolTasks(false);
         this.setTab('doc');
       },
       error: (err: any) => {
-        this.toast.show('error', err?.error?.error || 'خطا در عملیات');
-        this.cdr.detectChanges();
+        const errorMsg = err?.error?.error || 'خطا در عملیات';
+        this.toast.error(errorMsg);
       }
     });
+  }
+
+  // ── Matching / Discrepancy Helpers ──
+  isMatched(task: CountTask): boolean {
+    if (!task || task.counted_balance === null || task.counted_balance === undefined) return false;
+    const expected = task.item_details?.bal4miv;
+    if (expected === null || expected === undefined) return false;
+    return Number(task.counted_balance) === Number(expected);
+  }
+
+  getDifference(task: CountTask): number {
+    if (!task || task.counted_balance === null || task.counted_balance === undefined) return 0;
+    const expected = Number(task.item_details?.bal4miv ?? 0);
+    return Number(task.counted_balance) - expected;
+  }
+
+  getDifferenceAbs(task: CountTask): number {
+    return Math.abs(this.getDifference(task));
+  }
+
+  hasConflict(task: CountTask): boolean {
+    return !this.isMatched(task);
   }
 
   // Export Methods
@@ -1369,7 +1984,6 @@ export class ManagerReview implements OnInit, OnDestroy {
     this.exportColumnScope = 'all_db';
     this.selectedExportColumns.clear();
     
-    // We fetch columns dynamically based on the active section (Count vs Doc)
     const api = this.activeSection === 'counting' ? this.countTaskApi : this.docTaskApi;
     api.getExportColumns().subscribe({
       next: (cols) => {
@@ -1395,6 +2009,22 @@ export class ManagerReview implements OnInit, OnDestroy {
     } else if (scope === 'selected') {
       this.exportColumnScope = 'visible';
     }
+  }
+
+  setExportColumnScope(scope: 'all_db' | 'visible' | 'custom') {
+    this.exportColumnScope = scope;
+  }
+
+  toggleExportColumn(key: string) {
+    if (this.selectedExportColumns.has(key)) {
+      this.selectedExportColumns.delete(key);
+    } else {
+      this.selectedExportColumns.add(key);
+    }
+  }
+
+  isExportColumnSelected(key: string): boolean {
+    return this.selectedExportColumns.has(key);
   }
 
   executeExport() {
@@ -1423,6 +2053,23 @@ export class ManagerReview implements OnInit, OnDestroy {
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;
     }
+    if (this.searchQuery && this.searchQuery.trim()) {
+      params.q = this.searchQuery.trim();
+    }
+    if (this.statusFilter && this.statusFilter !== 'all') {
+      params.status = this.statusFilter;
+    }
+    if (this.dateFilter && this.dateFilter !== 'all') {
+      params.date = this.dateFilter;
+    }
+
+    if ((this.currentTab === 'pool' || this.currentTab === 'doc-pool') && this.exportDataScope === 'all') {
+      const poolIds = this.currentTab === 'pool'
+        ? this.poolTasks.map(t => t.id)
+        : this.docPoolTasks.map(t => t.id);
+      payload.selected_ids = poolIds;
+      payload.data_scope = 'selected';
+    }
 
     this.exportSubscription = api.exportExcel({ ...payload, ...params }).subscribe({
       next: (blob) => {
@@ -1430,7 +2077,7 @@ export class ManagerReview implements OnInit, OnDestroy {
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `export_manager_${new Date().getTime()}.xlsx`;
+          a.download = `export_manager_${isCount ? 'count' : 'doc'}_${new Date().getTime()}.xlsx`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -1453,4 +2100,21 @@ export class ManagerReview implements OnInit, OnDestroy {
     });
   }
 
+  // ── Barcode Scanner Dialog ──
+  isBarcodeScannerOpen = false;
+
+  openBarcodeScanner() {
+    this.isBarcodeScannerOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closeBarcodeScanner() {
+    this.isBarcodeScannerOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  onCameraBarcodeScanned(code: string) {
+    this.closeBarcodeScanner();
+    this.onBarcodeScanned(code);
+  }
 }

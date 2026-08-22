@@ -17,12 +17,9 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
   @Input() isSubmitting: boolean = false;
   @Input() errorMessage: string = '';
 
-  @Output() softDelete = new EventEmitter<void>();
   @Output() hardDelete = new EventEmitter<void>();
   @Output() cancel = new EventEmitter<void>();
 
-  activeTab: 'soft' | 'hard' = 'soft';
-  
   isLoadingImpact = false;
   impactData: any[] = [];
   totalAffected = 0;
@@ -34,6 +31,7 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
   constructor(private http: HttpClient, private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
+    this.startCountdown();
     if (this.deleteImpactUrl) {
       this.fetchImpact();
     }
@@ -42,13 +40,6 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
-    }
-  }
-
-  switchTab(tab: 'soft' | 'hard') {
-    this.activeTab = tab;
-    if (tab === 'hard' && this.countdown > 0 && !this.timerInterval) {
-      this.startCountdown();
     }
   }
 
@@ -82,10 +73,6 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
     return this.countdown <= 0 && this.confirmationText.trim() === 'حذف';
   }
 
-  onSoftDelete() {
-    this.softDelete.emit();
-  }
-
   onHardDelete() {
     if (this.isHardDeleteEnabled) {
       this.hardDelete.emit();
@@ -106,9 +93,7 @@ export class SmartDeleteModalComponent implements OnInit, OnDestroy {
   @HostListener('document:keydown.enter')
   handleEnter() {
     if (this.isSubmitting) return;
-    if (this.activeTab === 'soft') {
-      this.onSoftDelete();
-    } else if (this.activeTab === 'hard' && this.isHardDeleteEnabled) {
+    if (this.isHardDeleteEnabled) {
       this.onHardDelete();
     }
   }

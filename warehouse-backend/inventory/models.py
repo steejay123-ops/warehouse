@@ -44,10 +44,10 @@ class ItemFieldDefinition(SyncModelMixin):
 class Item(SyncModelMixin):
     # Tracking & IDs
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='items', verbose_name="انبار")
-    fa_unic_code = models.CharField(max_length=100, verbose_name="کد یکتا (FA-UNIC)")
-    pl = models.CharField(max_length=100, null=True, blank=True, verbose_name="پکینگ لیست (PL)")
-    po = models.CharField(max_length=100, null=True, blank=True, verbose_name="سفارش خرید (PO)")
-    pk_number = models.CharField(max_length=100, null=True, blank=True, verbose_name="پکیج (PK)")
+    fa_unic_code = models.CharField(max_length=100, verbose_name="کد یکتا")
+    pl = models.CharField(max_length=100, null=True, blank=True, verbose_name="پکینگ لیست")
+    po = models.CharField(max_length=100, null=True, blank=True, verbose_name="سفارش خرید")
+    pk_number = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره پکیج")
     request_number_of_table = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره درخواست جدول")
     tag = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره تگ کالا")
     size = models.CharField(max_length=100, null=True, blank=True, verbose_name="سایز اصلی")
@@ -59,7 +59,7 @@ class Item(SyncModelMixin):
     
     # Quantities
     inventory = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی فیزیکی")
-    bal4miv = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی مجاز MIV")
+    bal4miv = models.DecimalField(max_digits=15, decimal_places=3, default=0.0, verbose_name="موجودی مجاز")
     
     # Locations
     new_location = models.CharField(max_length=255, null=True, blank=True, verbose_name="لوکیشن جدید")
@@ -68,14 +68,14 @@ class Item(SyncModelMixin):
     hov_no = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره HOV")
     hov_date = models.DateField(null=True, blank=True, verbose_name="تاریخ HOV")
     msr_status = models.CharField(max_length=100, null=True, blank=True, verbose_name="وضعیت MSR")
-    vendor = models.CharField(max_length=255, null=True, blank=True, verbose_name="سازنده (Vendor)")
-    supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین کننده (Supplier)")
+    vendor = models.CharField(max_length=255, null=True, blank=True, verbose_name="سازنده")
+    supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین کننده")
     irn_no = models.CharField(max_length=100, null=True, blank=True, verbose_name="شماره IRN")
-    indent = models.CharField(max_length=100, null=True, blank=True, verbose_name="تقاضای خرید (INDENT)")
+    indent = models.CharField(max_length=100, null=True, blank=True, verbose_name="تقاضای خرید")
     remark = models.TextField(null=True, blank=True, verbose_name="ملاحظات")
 
     # Pricing & Documents (پیمانکار-مدارک)
-    price_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت واحد (UnitPrice)")
+    price_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت واحد")
     similar_unit_price = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True, verbose_name="قیمت کالای مشابه")
     total_value = models.DecimalField(max_digits=25, decimal_places=2, null=True, blank=True, verbose_name="ارزش کل")
     currency = models.CharField(max_length=50, null=True, blank=True, verbose_name="ارز")
@@ -84,8 +84,8 @@ class Item(SyncModelMixin):
     inv_rti_number = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره RTI فاکتور")
     added_rti_no = models.CharField(max_length=255, null=True, blank=True, verbose_name="شماره RTI افزوده‌شده")
     page_row = models.CharField(max_length=100, null=True, blank=True, verbose_name="ردیف در فاکتور")
-    invoice_page = models.CharField(max_length=100, null=True, blank=True, verbose_name="صفحه فاکتور (PageNumber)")
-    doc_supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین‌کننده فاکتور (Supplier)")
+    invoice_page = models.CharField(max_length=100, null=True, blank=True, verbose_name="صفحه فاکتور")
+    doc_supplier = models.CharField(max_length=255, null=True, blank=True, verbose_name="تامین‌کننده فاکتور")
     folder_address = models.CharField(max_length=500, null=True, blank=True, verbose_name="مسیر پوشه اسناد")
     hyperlink = models.CharField(max_length=500, null=True, blank=True, verbose_name="هایپرلینک اسناد")
     
@@ -109,16 +109,16 @@ class Item(SyncModelMixin):
     my_tag = models.CharField(max_length=500, null=True, blank=True, verbose_name="تگ‌ها")
     
     # Dynamic Data
-    dynamic_data = models.JSONField(default=dict, blank=True, verbose_name="اطلاعات متغیر (پویا)")
+    dynamic_data = models.JSONField(default=dict, blank=True, verbose_name="اطلاعات متغیر")
     
-    field_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به (میدانی)")
-    doc_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به (مدارک و قیمت)")
+    field_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به میدانی")
+    doc_assignee = models.CharField(max_length=255, blank=True, null=True, verbose_name="محول شده به مدارک و قیمت")
     
     # Auditing
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_items')
-    modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_items')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ ویرایش")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_items', verbose_name="ایجادکننده")
+    modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_items', verbose_name="ویرایش‌کننده")
 
     class Meta:
         unique_together = ('warehouse', 'fa_unic_code')
@@ -226,7 +226,7 @@ class CountTaskHistory(SyncModelMixin):
     task = models.ForeignKey(CountTask, on_delete=models.CASCADE, related_name='history', verbose_name="تسک شمارش")
     action_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='action_histories', verbose_name="اقدام کننده")
     action_type = models.CharField(max_length=50, verbose_name="نوع اقدام")
-    counted_balance = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, verbose_name="مقدار شمرده شده (Snapshot)")
+    counted_balance = models.DecimalField(max_digits=15, decimal_places=3, null=True, blank=True, verbose_name="مقدار شمرده شده")
     note = models.TextField(null=True, blank=True, verbose_name="توضیحات در لحظه ثبت")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
     # برای cursor سینک (Pull) لازم است؛ رکورد تاریخچه immutable است پس عملاً برابر created_at می‌ماند

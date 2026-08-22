@@ -5,9 +5,15 @@ from .models import CustomUser, CustomRole
 from warehouses.models import Warehouse
 
 class PermissionSerializer(serializers.ModelSerializer):
+    is_sensitive = serializers.SerializerMethodField()
+
     class Meta:
         model = Permission
-        fields = ['id', 'name', 'codename']
+        fields = ['id', 'name', 'codename', 'is_sensitive']
+
+    def get_is_sensitive(self, obj):
+        from .models import SENSITIVE_PERMISSION_CODENAMES
+        return obj.codename in SENSITIVE_PERMISSION_CODENAMES
 
 class CustomRoleSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
@@ -131,20 +137,35 @@ class UserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 from axes.handlers.proxy import AxesProxyHandler
-from rest_framework.exceptions import Throttled
+from rest_framework.exceptions import Throttled, AuthenticationFailed
+from .middleware import get_client_ip
+from .audit_utils import log_login_event
+from .models import UserLoginLog, AuditLog
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    device_model = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
     def validate(self, attrs):
         request = self.context.get('request')
+        ip_address = get_client_ip(request) if request else None
+        user_agent = request.META.get('HTTP_USER_AGENT', '') if request else ''
+        
+        device_model = attrs.get('device_model')
+        if not device_model and hasattr(self, 'initial_data') and isinstance(self.initial_data, dict):
+            device_model = self.initial_data.get('device_model')
+        if not device_model and request:
+            device_model = request.data.get('device_model') if hasattr(request, 'data') else None
+            if not device_model:
+                device_model = request.headers.get('Sec-Ch-Ua-Model') or request.META.get('HTTP_SEC_CH_UA_MODEL')
+
+        username = attrs.get(self.username_field, '')
+
         if request and not AxesProxyHandler.is_allowed(request):
             import math
             from django.utils.timezone import now
             from django.conf import settings
             from axes.models import AccessAttempt
             from django.db.models import Q
-            
-            username = attrs.get(self.username_field)
-            ip_address = request.META.get('REMOTE_ADDR')
             
             attempt = AccessAttempt.objects.filter(Q(username=username) | Q(ip_address=ip_address)).order_by('-attempt_time').first()
             minutes_left = 15
@@ -153,11 +174,65 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 minutes_left = int(math.ceil(delta.total_seconds() / 60.0))
                 if minutes_left < 1:
                     minutes_left = 1
-                    
+            
+            log_login_event(
+                username=username,
+                status='FAILED_LOCKED',
+                ip_address=ip_address,
+                user_agent=user_agent,
+                device_model=device_model,
+                failure_reason=f'مسدودسازی ضدنفوذ به دلیل تلاش‌های مکرر ({minutes_left} دقیقه)'
+            )
             raise Throttled(detail=f'تعداد تلاش‌های ناموفق شما بیش از حد مجاز است. لطفاً {minutes_left} دقیقه دیگر دوباره امتحان کنید.')
 
-        data = super().validate(attrs)
+        try:
+            data = super().validate(attrs)
+        except AuthenticationFailed as e:
+            # بررسی وجود کاربر برای تعیین علت دقیق
+            user_obj = CustomUser.objects.filter(username=username).first()
+            if user_obj and not user_obj.is_active:
+                log_login_event(
+                    username=username,
+                    status='FAILED_INACTIVE',
+                    user=user_obj,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    device_model=device_model,
+                    failure_reason='حساب کاربری غیرفعال است'
+                )
+            else:
+                log_login_event(
+                    username=username,
+                    status='FAILED_CREDENTIALS',
+                    user=user_obj,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    device_model=device_model,
+                    failure_reason='کلمه عبور نادرست یا نام کاربری نامعتبر'
+                )
+            raise e
+        except Exception as e:
+            log_login_event(
+                username=username,
+                status='FAILED_CREDENTIALS',
+                ip_address=ip_address,
+                user_agent=user_agent,
+                device_model=device_model,
+                failure_reason=str(e)
+            )
+            raise e
+
         user = self.user
+        
+        # ثبت موفقیت ورود
+        log_login_event(
+            username=user.username,
+            status='SUCCESS',
+            user=user,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            device_model=device_model
+        )
         
         # Calculate permissions
         user_perms = set(user.user_permissions.values_list('codename', flat=True))
@@ -204,6 +279,86 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             },
             'user': data['user']
         }
+
+
+class UserLoginLogSerializer(serializers.ModelSerializer):
+    user_display = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = UserLoginLog
+        fields = [
+            'id', 'user', 'user_display', 'username_attempted',
+            'ip_address', 'user_agent', 'device_model', 'status', 'status_display',
+            'failure_reason', 'metadata', 'created_at'
+        ]
+        read_only_fields = fields
+
+    def get_user_display(self, obj):
+        if obj.user:
+            name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+            return name if name else obj.user.username
+        return obj.username_attempted
+
+
+class AuditLogListSerializer(serializers.ModelSerializer):
+    user_display = serializers.SerializerMethodField()
+    user_role = serializers.SerializerMethodField()
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
+    module_display = serializers.CharField(source='get_module_display', read_only=True)
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    severity_display = serializers.CharField(source='get_severity_display', read_only=True)
+    has_diff = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role', 'warehouse', 'warehouse_name',
+            'module', 'module_display', 'action', 'action_display',
+            'severity', 'severity_display', 'target_model', 'target_object_id',
+            'target_repr', 'has_diff', 'ip_address', 'created_at'
+        ]
+        read_only_fields = fields
+
+    def get_has_diff(self, obj):
+        return bool(obj.before_state or obj.after_state)
+
+    def get_user_display(self, obj):
+        if obj.user:
+            name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+            return name if name else obj.user.username
+        if obj.actor_name:
+            return f"{obj.actor_name} (سابق)"
+        if obj.actor_username:
+            return f"{obj.actor_username} (سابق)"
+        return "سیستم"
+
+    def get_user_role(self, obj):
+        if obj.user:
+            groups = list(obj.user.groups.all())
+            if groups:
+                first_group = groups[0]
+                try:
+                    return first_group.customrole.title
+                except Exception:
+                    return first_group.name
+            if obj.user.is_superuser:
+                return "مدیر ارشد (Admin)"
+            return "کاربر سیستم"
+        return "سیستم"
+
+
+class AuditLogSerializer(AuditLogListSerializer):
+    class Meta(AuditLogListSerializer.Meta):
+        fields = [
+            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role', 'warehouse', 'warehouse_name',
+            'module', 'module_display', 'action', 'action_display',
+            'severity', 'severity_display', 'target_model', 'target_object_id',
+            'target_repr', 'before_state', 'after_state', 'details',
+            'ip_address', 'created_at'
+        ]
+        read_only_fields = fields
+
 
 
 from .models import CustomUser, CustomRole, UserTableViewState

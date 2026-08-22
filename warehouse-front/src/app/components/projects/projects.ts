@@ -252,25 +252,6 @@ export class Projects implements OnInit, OnDestroy {
     }
   }
 
-  handleSoftDelete() {
-    if (!this.entityToDelete) return;
-    this.isDeleting = true;
-    this.deleteErrorMessage = '';
-    this.whService.toggleArchive(this.entityToDelete.id).subscribe({
-      next: () => {
-        this.loadWarehouses();
-        this.toast.show('warning', `انبار ${this.entityToDelete.name} بایگانی/غیرفعال شد.`);
-        this.isDeleteModalOpen = false;
-        this.entityToDelete = null;
-        this.isDeleting = false;
-      },
-      error: (err) => {
-        this.deleteErrorMessage = err.error?.error || 'خطایی رخ داد';
-        this.isDeleting = false;
-      }
-    });
-  }
-
   handleHardDelete() {
     if (!this.entityToDelete) return;
     this.isDeleting = true;

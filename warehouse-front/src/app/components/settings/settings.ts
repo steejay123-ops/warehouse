@@ -42,8 +42,17 @@ export class Settings implements OnInit {
   // ── Barcode Scanner Delimiters State ─────────────────────────────────────────
   scannerPreset: 'default' | 'control' | 'hybrid' | 'excel' | 'custom' = 'default';
 
-  // ── Superuser State ─────────────────────────────────────────────────────────
+  // ── Superuser & Permissions State ───────────────────────────────────────────
   isSuperUser = computed(() => this.auth.user()?.is_superuser ?? false);
+  canManageBackup = computed(() => !!(
+    this.auth.user()?.is_superuser ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_manage') ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_restore')
+  ));
+  canRestoreDatabase = computed(() => !!(
+    this.auth.user()?.is_superuser ||
+    this.auth.user()?.permissions?.includes('perm_sys_backup_restore')
+  ));
 
   // ── Backup State ────────────────────────────────────────────────────────────
   backupPassword = '';

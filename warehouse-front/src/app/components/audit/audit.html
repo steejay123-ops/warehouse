@@ -1,173 +1,1723 @@
-<div class="space-y-6 fade-in text-right pb-10" dir="rtl">
+<div class="p-4 space-y-4 text-right pb-12" dir="rtl">
     
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-      <div>
-        <h3 class="font-black text-slate-800 text-base flex items-center gap-2">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          رهگیری تغییرات و لاگ امنیتی سیستم (Audit Trail)
-        </h3>
-        <p class="text-[11px] text-slate-500 mt-1">مانیتورینگ جامع رویدادها، تغییرات داده‌ها و رفتار کاربران با قابلیت بازگردانی (Rollback)</p>
+  <!-- ═══ سربرگ صفحه چسبان (Sticky Action Bar) ═══ -->
+  <div class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80 -mx-4 -mt-4 px-4 py-3 shadow-xs flex items-center justify-between flex-wrap gap-2 transition-all">
+    <div>
+      <div class="flex items-center gap-2.5">
+        <div class="p-2 bg-indigo-50 text-indigo-600 rounded-xl shrink-0 shadow-xs">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="space-y-0.5">
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="font-black text-slate-800 text-sm sm:text-base leading-tight">
+              مرکز ممیزی، امنیت و رهگیری رویدادها
+            </h1>
+            <span *ngIf="currentWarehouseName" class="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-indigo-100 shrink-0 whitespace-nowrap">
+              انبار: {{currentWarehouseName}}
+            </span>
+            <span *ngIf="!currentWarehouseName" class="bg-slate-100 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-slate-200 shrink-0 whitespace-nowrap">
+              همه انبارها (سراسری)
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 hidden sm:block">مانیتورینگ بلادرنگ تغییرات داده‌ها، لاگین کاربران، هشدارهای امنیتی و مقایسه تفاضل (Diff)</p>
+        </div>
       </div>
-      <button (click)="downloadCsv()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 bg-slate-50 hover:bg-slate-50 border border-slate-200 transition-all flex items-center gap-2 shadow-sm">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        خروجی گزارش (CSV)
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap">
+      <!-- دکمه اسکنر بارکد / QR (Square Indigo Icon) -->
+      <button (click)="openScanner()" type="button" class="btn-icon-square btn-icon-indigo" title="اسکن بارکد / QR با دوربین یا بارکدخوان فیزیکی" aria-label="اسکن بارکد">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+          <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+          <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+          <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+          <line x1="7" y1="12" x2="17" y2="12"></line>
+          <line x1="7" y1="8" x2="17" y2="8"></line>
+          <line x1="7" y1="16" x2="17" y2="16"></line>
+        </svg>
+      </button>
+
+      <!-- دکمه پاکسازی لاگ‌ها (Square Rose Icon) -->
+      <button *ngIf="canPurgeLogs()" (click)="openPurgeModal()" type="button" class="btn-icon-square btn-icon-rose" title="پاکسازی دوره‌ای لاگ‌های ممیزی قدیمی" aria-label="پاکسازی لاگ‌ها">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
+      </button>
+
+      <!-- دکمه بازگردانی دسته‌ای به تاریخ مشخص (Square Purple Icon) -->
+      <button *ngIf="canRollbackBulk()" (click)="openPointInTimeModal()" type="button" class="btn-icon-square btn-icon-purple" title="بازگردانی زنجیره‌ای تغییرات به تاریخ و ساعت مشخص (Point-in-Time Rollback)" aria-label="بازگردانی به تاریخ مشخص">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </button>
+
+      <!-- دکمه خروجی اکسل (Square Emerald Icon) -->
+      <button *ngIf="canExportAudit()" (click)="openExportModal()" type="button" class="btn-icon-square btn-icon-emerald" title="تنظیم فیلترها و دریافت فایل اکسل/CSV لاگ‌ها" aria-label="خروجی اکسل">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+
+      <!-- دکمه بروزرسانی (Square Indigo Icon) -->
+      <button type="button" [disabled]="isLoading" (click)="refreshAll()" class="btn-icon-square btn-icon-indigo" title="بروزرسانی بلادرنگ داده‌های ممیزی و امنیت" aria-label="بروزرسانی">
+        @if (!isLoading) {
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        } @else {
+          <span class="animate-spin block w-[18px] h-[18px] border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+        }
+      </button>
+
+      <!-- دکمه راهنمای جامع رهگیری و امنیت (Square Purple/Indigo Icon) -->
+      <button type="button" (click)="openHelpModal()" class="btn-icon-square btn-icon-purple" title="راهنمای جامع مرکز ممیزی، امنیت و سناریوهای بازگردانی" aria-label="راهنمای رهگیری">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
       </button>
     </div>
+  </div>
 
-    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-      <div class="flex items-center gap-2 mb-2">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-        <span class="text-xs font-bold text-slate-600">فیلترهای جستجو</span>
+  <!-- اسکنر بارکد دوربینی و هندزفری سخت‌افزاری -->
+  <app-barcode-scanner #barcodeScanner [headless]="true" (scanned)="onBarcodeScanned($event)"></app-barcode-scanner>
+
+  <!-- ═══ بخش آکاردئونی شاخص‌های آماری و حجم داده‌ها (KPI Accordion Container) ═══ -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden transition-all duration-300">
+    <!-- هدر تاشوی آکاردئون (روی خود باکس آمار) -->
+    <div (click)="toggleKpi()" class="px-4 py-2.5 bg-slate-50/80 hover:bg-slate-100/90 border-b border-slate-200/60 flex items-center justify-between cursor-pointer select-none transition-all group">
+      <div class="flex items-center gap-2.5">
+        <div class="p-1.5 bg-indigo-50 text-indigo-600 rounded-xl shrink-0 group-hover:bg-indigo-100 transition-colors">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs font-black text-slate-800">شاخص‌های آماری و وضعیت حجم داده‌ها</span>
+          <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white text-indigo-700 border border-slate-200 font-mono shadow-2xs">
+            {{activeTab === 'audit' ? (auditStats.total_all_time | number) : (loginStats.total_all_time | number)}} رکورد ثبت‌شده
+          </span>
+        </div>
       </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div class="relative lg:col-span-1">
-          <input type="text" placeholder="جستجوی کاربر، شناسه..." class="w-full pl-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400/20 transition-all">
-          <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <div class="flex items-center gap-1.5 text-slate-500 group-hover:text-indigo-600 transition-colors text-xs font-bold">
+        <span>{{isKpiCollapsed ? 'نمایش شاخص‌ها' : 'بستن آمار'}}</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [class.rotate-180]="!isKpiCollapsed" class="transition-transform duration-300"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+
+    <!-- محتوای ۵ کارت آماری (هنگام باز بودن آکاردئون) -->
+    <div *ngIf="!isKpiCollapsed" class="p-3 bg-slate-50/30">
+      <!-- کارت‌های ممیزی -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5" *ngIf="activeTab === 'audit'">
+        <!-- کل رویدادها -->
+        <div (click)="filterBySeverity('')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-indigo-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedSeverity === ''" [class.ring-indigo-500]="selectedSeverity === ''" [class.bg-indigo-50/25]="selectedSeverity === ''">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors">کل رویدادها</p>
+            <h4 class="text-base font-black text-slate-800 font-mono tracking-tight leading-none">{{auditStats.total_all_time | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-blue-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
           </div>
         </div>
 
-        <div class="lg:col-span-1">
-          <select class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 cursor-pointer">
+        <!-- ۲۴ ساعت اخیر -->
+        <div class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-slate-500">تغییرات ۲۴ ساعت</p>
+            <h4 class="text-base font-black text-indigo-600 font-mono tracking-tight leading-none">{{auditStats.audits_24h | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+        </div>
+
+        <!-- رویدادهای بحرانی -->
+        <div (click)="filterBySeverity('critical')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-rose-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedSeverity === 'critical'" [class.ring-rose-500]="selectedSeverity === 'critical'" [class.bg-rose-50/25]="selectedSeverity === 'critical'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-rose-600 group-hover:text-rose-700 transition-colors">رویدادهای بحرانی</p>
+            <h4 class="text-base font-black text-rose-600 font-mono tracking-tight leading-none">{{auditStats.critical_count | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-rose-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+        </div>
+
+        <!-- تغییرات هشدار -->
+        <div (click)="filterBySeverity('warning')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-amber-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedSeverity === 'warning'" [class.ring-amber-500]="selectedSeverity === 'warning'" [class.bg-amber-50/25]="selectedSeverity === 'warning'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-amber-600 group-hover:text-amber-700 transition-colors">تغییرات هشدار</p>
+            <h4 class="text-base font-black text-amber-600 font-mono tracking-tight leading-none">{{auditStats.warning_count | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-amber-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          </div>
+        </div>
+
+        <!-- حجم پایگاه‌داده و لاگ‌های ممیزی -->
+        <div class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between" [title]="'حجم لاگ‌های ممیزی: ' + (auditStats.storage?.audit_formatted || '—') + ' | حجم کل پایگاه‌داده: ' + (auditStats.storage?.db_total_formatted || '—')">
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <div class="flex items-center gap-1.5">
+                <p class="text-[10px] font-bold text-slate-500">حجم پایگاه‌داده</p>
+                <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono border border-purple-100">
+                  کل: {{auditStats.storage?.db_total_formatted || '—'}}
+                </span>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <h4 class="text-sm font-black text-purple-700 font-mono tracking-tight leading-none">{{auditStats.storage?.audit_formatted || '—'}}</h4>
+                <span class="text-[9px] text-slate-400 font-bold">لاگ‌های ممیزی</span>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+          </div>
+          <div class="mt-1.5 flex items-center gap-1.5 text-[9px] font-bold text-slate-400">
+            <div class="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500" [style.width.%]="auditStats.storage?.audit_percent || 0"></div>
+            </div>
+            <span class="font-mono text-purple-700 font-bold">{{(auditStats.storage?.audit_percent || 0) | number:'1.0-1'}}٪</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- کارت‌های ورود و نشست‌ها -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5" *ngIf="activeTab === 'login'">
+        <!-- کل ورودها -->
+        <div (click)="filterByLoginStatus('')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-indigo-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedLoginStatus === ''" [class.ring-indigo-500]="selectedLoginStatus === ''" [class.bg-indigo-50/25]="selectedLoginStatus === ''">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors">کل ورودها</p>
+            <h4 class="text-base font-black text-slate-800 font-mono tracking-tight leading-none">{{loginStats.total_all_time | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-blue-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+        </div>
+
+        <!-- ورودهای ۲۴ ساعت -->
+        <div class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-slate-500">ورودهای ۲۴ ساعت</p>
+            <h4 class="text-base font-black text-indigo-600 font-mono tracking-tight leading-none">{{loginStats.logins_24h | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+        </div>
+
+        <!-- ورودهای موفق -->
+        <div (click)="filterByLoginStatus('success')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-emerald-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedLoginStatus === 'success'" [class.ring-emerald-500]="selectedLoginStatus === 'success'" [class.bg-emerald-50/25]="selectedLoginStatus === 'success'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-emerald-600 group-hover:text-emerald-700 transition-colors">ورودهای موفق ۲۴ساعت</p>
+            <h4 class="text-base font-black text-emerald-600 font-mono tracking-tight leading-none">{{loginStats.success_24h | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-emerald-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+
+        <!-- تلاش‌های ناموفق -->
+        <div (click)="filterByLoginStatus('failed')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-rose-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedLoginStatus === 'failed'" [class.ring-rose-500]="selectedLoginStatus === 'failed'" [class.bg-rose-50/25]="selectedLoginStatus === 'failed'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-rose-600 group-hover:text-rose-700 transition-colors">تلاش ناموفق ۲۴ساعت</p>
+            <h4 class="text-base font-black text-rose-600 font-mono tracking-tight leading-none">{{loginStats.failed_24h | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-rose-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          </div>
+        </div>
+
+        <!-- حجم پایگاه‌داده و لاگ‌های ورود -->
+        <div class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-2xs flex flex-col justify-between" [title]="'حجم لاگ‌های ورود: ' + (loginStats.storage?.login_formatted || '—') + ' | حجم کل پایگاه‌داده: ' + (loginStats.storage?.db_total_formatted || '—')">
+          <div class="flex items-center justify-between">
+            <div class="space-y-0.5">
+              <div class="flex items-center gap-1.5">
+                <p class="text-[10px] font-bold text-slate-500">حجم پایگاه‌داده</p>
+                <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-mono border border-purple-100">
+                  کل: {{loginStats.storage?.db_total_formatted || '—'}}
+                </span>
+              </div>
+              <div class="flex items-baseline gap-1.5">
+                <h4 class="text-sm font-black text-purple-700 font-mono tracking-tight leading-none">{{loginStats.storage?.login_formatted || '—'}}</h4>
+                <span class="text-[9px] text-slate-400 font-bold">لاگ‌های ورود</span>
+              </div>
+            </div>
+            <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </div>
+          </div>
+          <div class="mt-1.5 flex items-center gap-1.5 text-[9px] font-bold text-slate-400">
+            <div class="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500" [style.width.%]="loginStats.storage?.login_percent || 0"></div>
+            </div>
+            <span class="font-mono text-purple-700 font-bold">{{(loginStats.storage?.login_percent || 0) | number:'1.0-1'}}٪</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ نوار فیلترها و تب‌های کارتابل ممیزی (ادغام‌شده) ═══ -->
+  <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+    <!-- هدر داخلی کارت: سوئیچر تب‌ها در راست، پاکسازی فیلترها در چپ -->
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pb-3 border-b border-slate-100">
+      <!-- سوئیچر تب‌های اصلی (Segmented Control) -->
+      <div class="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 text-xs font-bold w-full sm:w-auto shadow-inner">
+        <button (click)="setTab('audit')" [class.bg-white]="activeTab === 'audit'" [class.text-indigo-600]="activeTab === 'audit'" [class.shadow-xs]="activeTab === 'audit'" [class.text-slate-600]="activeTab !== 'audit'" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-black">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>تغییرات داده‌ها (Audit Trail)</span>
+          <span class="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold mr-1">{{auditTotalCount | number}}</span>
+        </button>
+        <button (click)="setTab('login')" [class.bg-white]="activeTab === 'login'" [class.text-indigo-600]="activeTab === 'login'" [class.shadow-xs]="activeTab === 'login'" [class.text-slate-600]="activeTab !== 'login'" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-black">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          <span>تاریخچه ورود و نشست‌ها</span>
+          <span class="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold mr-1">{{loginTotalCount | number}}</span>
+        </button>
+      </div>
+
+      <!-- دکمه‌های میانبر بازه زمانی سریع و پاکسازی فیلترها -->
+      <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-between sm:justify-end">
+        <div class="flex items-center gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200/80 text-[11px] font-bold text-slate-600">
+          <span class="text-[10px] text-slate-400 font-bold px-1 hidden md:inline">بازه سریع:</span>
+          <button (click)="setPresetRange('today')" type="button" class="px-2 py-1 rounded-lg hover:bg-white hover:text-indigo-600 hover:shadow-xs transition-all cursor-pointer">امروز</button>
+          <button (click)="setPresetRange('24h')" type="button" class="px-2 py-1 rounded-lg hover:bg-white hover:text-indigo-600 hover:shadow-xs transition-all cursor-pointer">۲۴ ساعت</button>
+          <button (click)="setPresetRange('7d')" type="button" class="px-2 py-1 rounded-lg hover:bg-white hover:text-indigo-600 hover:shadow-xs transition-all cursor-pointer">۷ روز</button>
+          <button (click)="setPresetRange('30d')" type="button" class="px-2 py-1 rounded-lg hover:bg-white hover:text-indigo-600 hover:shadow-xs transition-all cursor-pointer">۳۰ روز</button>
+        </div>
+
+        <button (click)="resetFilters()" class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/70 hover:bg-indigo-100/70 border border-indigo-100 cursor-pointer shadow-xs active:scale-95">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          پاکسازی فیلترها
+        </button>
+      </div>
+    </div>
+    
+    <!-- ردیف فیلدهای فیلتر (یک خطی متوازن در دسکتاپ) -->
+    <div class="flex flex-wrap lg:flex-nowrap items-center gap-2">
+      <!-- انتخابگر انبار (در تب ممیزی داده‌ها) -->
+      <div class="w-full sm:w-[150px] lg:w-[160px] shrink-0" *ngIf="activeTab === 'audit'">
+        <app-warehouse-selector
+          [allowAll]="true"
+          [projects]="state.appState.projects"
+          [activeId]="authStore.activeWarehouseId()"
+          (changed)="onWarehouseChanged($event)"
+        ></app-warehouse-selector>
+      </div>
+
+      <!-- فیلد جستجوی متنی (ابعاد متوازن) -->
+      <div class="relative shrink-0" [class.w-full]="true" [class.sm:w-[200px]]="activeTab === 'audit'" [class.lg:w-[230px]]="activeTab === 'audit'" [class.sm:w-[260px]]="activeTab === 'login'" [class.lg:w-[280px]]="activeTab === 'login'">
+        <input [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()" type="text" [placeholder]="activeTab === 'audit' ? 'جستجوی کاربر، شرح رویداد یا شناسه...' : 'جستجوی نام کاربری، پرسنل یا IP...'" class="w-full pl-3 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/10 focus:bg-white transition-all shadow-xs">
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
+      </div>
+
+      <!-- فیلترهای مخصوص تب تغییرات داده‌ها -->
+      <ng-container *ngIf="activeTab === 'audit'">
+        <div class="w-full sm:w-[135px] lg:w-[145px] shrink-0">
+          <select [(ngModel)]="selectedModule" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:bg-white custom-select cursor-pointer shadow-xs">
             <option value="">همه ماژول‌ها</option>
-            <option value="Base Data">تزریق داده (Base Data)</option>
-            <option value="لیبلینگ">لیبلینگ و QR</option>
-            <option value="تغذیه MT">تغذیه سامانه‌های MT</option>
-            <option value="کاربران">کاربران و گیت‌پاس</option>
+            <option value="docs">مدیریت کالا</option>
+            <option value="dispatch">تخصیص کالا</option>
+            <option value="customs">مالی و گمرکی</option>
+            <option value="feeding">تغذیه سامانه‌ها (MT)</option>
+            <option value="labels">لیبلینگ و بارکد</option>
+            <option value="counter">میزکار شمارش</option>
+            <option value="supervisor">کارتابل سرپرست</option>
+            <option value="manager">بررسی مدیر</option>
+            <option value="users">کاربران و نقش‌ها</option>
+            <option value="warehouses">مدیریت انبارها</option>
+            <option value="settings">تنظیمات انبار و سیستم</option>
+            <option value="system">رویدادهای سیستمی</option>
           </select>
         </div>
 
-        <div class="lg:col-span-1">
-          <select class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 cursor-pointer">
-            <option value="">همه سطوح حساسیت</option>
+        <div class="w-full sm:w-[135px] lg:w-[145px] shrink-0">
+          <select [(ngModel)]="selectedAction" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:bg-white custom-select cursor-pointer shadow-xs">
+            <option value="">همه نوع عملیات</option>
+            <option value="CREATE">ایجاد رکورد</option>
+            <option value="UPDATE">ویرایش رکورد</option>
+            <option value="DELETE">حذف رکورد</option>
+            <option value="BULK_UPDATE">ویرایش گروهی</option>
+            <option value="APPROVE">تایید سرپرست</option>
+            <option value="REJECT">رد درخواست</option>
+            <option value="RECOUNT">دستور بازشماری</option>
+            <option value="PRINT">چاپ لیبل / گزارش</option>
+            <option value="EXPORT">خروجی اکسل/CSV</option>
+            <option value="IMPORT">تزریق / ایمپورت داده</option>
+            <option value="ROLLBACK">بازگردانی اطلاعات</option>
+          </select>
+        </div>
+
+        <div class="w-full sm:w-[125px] lg:w-[135px] shrink-0">
+          <select [(ngModel)]="selectedSeverity" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:bg-white custom-select cursor-pointer shadow-xs">
+            <option value="">همه سطوح اهمیت</option>
             <option value="info">عادی (اطلاع‌رسانی)</option>
-            <option value="warning">هشدار (تغییرات محدود)</option>
-            <option value="critical">بحرانی (حذف/تغییرات گروهی)</option>
+            <option value="warning">هشدار (محدود)</option>
+            <option value="critical">بحرانی (حذف/عمده)</option>
+          </select>
+        </div>
+      </ng-container>
+
+      <!-- فیلترهای مخصوص تب تاریخچه ورود -->
+      <ng-container *ngIf="activeTab === 'login'">
+        <div class="w-full sm:w-[180px] lg:w-[200px] shrink-0">
+          <select [(ngModel)]="selectedLoginStatus" (change)="onFilterChange()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:bg-white custom-select cursor-pointer shadow-xs">
+            <option value="">همه وضعیت‌های ورود</option>
+            <option value="SUCCESS">ورود موفق (Success)</option>
+            <option value="DAILY_ACTIVE">حضور روزانه (Daily)</option>
+            <option value="FAILED_CREDENTIALS">رمز عبور اشتباه</option>
+            <option value="FAILED_LOCKED">مسدود شده توسط ضدنفوذ (Axes)</option>
+            <option value="FAILED_INACTIVE">حساب کاربری غیرفعال</option>
+            <option value="LOGOUT">خروج از حساب (Logout)</option>
+          </select>
+        </div>
+      </ng-container>
+
+      <!-- انتخابگر بازه تاریخی شمسی با پشتیبانی از تایپ مستقیم 8 رقمی (14050531) -->
+      <div class="w-full sm:w-auto lg:w-[250px] xl:w-[260px] shrink-0 flex items-center bg-slate-50 border border-slate-200 rounded-xl focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-400/10 focus-within:bg-white transition-all shadow-xs relative z-20">
+        <div class="flex-1 flex items-center pr-2 pl-1 group relative min-w-0">
+          <span class="text-[10px] font-black text-slate-400 ml-1 shrink-0">از:</span>
+          <ng-persian-datepicker (dateOnSelect)="onFromDateSelect($event)" class="w-full from-datepicker">
+            <input type="text" [formControl]="fromDateControl" (input)="onDateInput('from', $event)" placeholder="14050531" title="تاریخ شروع (تایپ ۸ رقمی یا انتخاب تقویم)" class="w-full bg-transparent py-2 text-[11px] font-bold text-slate-800 outline-none cursor-pointer placeholder:text-slate-400 font-mono">
+          </ng-persian-datepicker>
+        </div>
+        <div class="w-px h-5 bg-slate-300 shrink-0"></div>
+        <div class="flex-1 flex items-center pr-2 pl-1 group relative min-w-0">
+          <span class="text-[10px] font-black text-slate-400 ml-1 shrink-0">تا:</span>
+          <ng-persian-datepicker (dateOnSelect)="onToDateSelect($event)" class="w-full to-datepicker">
+            <input type="text" [formControl]="toDateControl" (input)="onDateInput('to', $event)" placeholder="14050531" title="تاریخ پایان (تایپ ۸ رقمی یا انتخاب تقویم)" class="w-full bg-transparent py-2 text-[11px] font-bold text-slate-800 outline-none cursor-pointer placeholder:text-slate-400 font-mono">
+          </ng-persian-datepicker>
+        </div>
+      </div>
+    </div>
+
+    <!-- نوار چیپ‌های فیلتر فعال (Active Filter Chips) -->
+    <div *ngIf="hasActiveFilters()" class="flex items-center gap-2 flex-wrap pt-2.5 border-t border-slate-100 text-xs">
+      <span class="text-[10px] font-black text-slate-400 flex items-center gap-1">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        فیلترهای فعال:
+      </span>
+
+      <!-- چیپ جستجو -->
+      <span *ngIf="searchTerm.trim()" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
+        <span>جستجو: «{{searchTerm}}»</span>
+        <button (click)="clearSearch()" type="button" class="hover:bg-indigo-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ ماژول -->
+      <span *ngIf="activeTab === 'audit' && selectedModule" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-xs">
+        <span>ماژول: {{getModuleLabel(selectedModule)}}</span>
+        <button (click)="clearModuleFilter()" type="button" class="hover:bg-blue-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ عملیات -->
+      <span *ngIf="activeTab === 'audit' && selectedAction" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shadow-xs">
+        <span>عملیات: {{getActionLabel(selectedAction)}}</span>
+        <button (click)="clearActionFilter()" type="button" class="hover:bg-purple-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ سطح اهمیت -->
+      <span *ngIf="activeTab === 'audit' && selectedSeverity" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold" [ngClass]="selectedSeverity === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+        <span>اهمیت: {{getSeverityLabel(selectedSeverity)}}</span>
+        <button (click)="clearSeverityFilter()" type="button" class="rounded-full w-4 h-4 flex items-center justify-center transition-colors hover:bg-black/10 cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ وضعیت ورود -->
+      <span *ngIf="activeTab === 'login' && selectedLoginStatus" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
+        <span>وضعیت: {{getLoginStatusLabel(selectedLoginStatus)}}</span>
+        <button (click)="clearLoginStatusFilter()" type="button" class="hover:bg-emerald-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ تاریخ -->
+      <span *ngIf="fromDate || toDate" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shadow-xs">
+        <span>بازه زمانی فیلترشده</span>
+        <button (click)="clearDateFilter()" type="button" class="hover:bg-slate-200 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <button (click)="resetFilters()" type="button" class="text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors mr-1 underline cursor-pointer">
+        حذف همه
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ جدول لاگ‌های ممیزی (Audit Trail Table) ═══ -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" *ngIf="activeTab === 'audit'">
+    <div class="overflow-x-auto min-h-[380px]">
+      <table class="w-full text-right border-collapse text-xs">
+        <thead>
+          <tr class="bg-slate-50/95 text-[10px] font-bold text-slate-500 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
+            <th class="py-3 px-4 w-14 text-center">ردیف</th>
+            <th class="py-3 px-4 w-40 text-center">زمان ثبت رویداد</th>
+            <th class="py-3 px-4 w-44">کاربر / نقش</th>
+            <th class="py-3 px-4 w-36">ماژول</th>
+            <th class="py-3 px-4">شرح رویداد و تارگت</th>
+            <th class="py-3 px-4 w-28">انبار</th>
+            <th class="py-3 px-4 w-28 text-center">سطح اهمیت</th>
+            <th class="py-3 px-4 w-36 text-center">عملیات و تفاضل</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <!-- اسکلت بارگذاری (Skeleton Loading) -->
+          <ng-container *ngIf="isLoading">
+            <tr *ngFor="let s of [1,2,3,4,5]" class="animate-pulse">
+              <td class="py-3.5 px-4 text-center"><div class="h-4 w-6 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-28 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-32 bg-slate-200 rounded mb-1"></div><div class="h-3 w-20 bg-slate-100 rounded"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-20 bg-slate-200 rounded"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-48 bg-slate-200 rounded mb-1"></div><div class="h-3 w-32 bg-slate-100 rounded"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-20 bg-slate-200 rounded"></div></td>
+              <td class="py-3.5 px-4 text-center"><div class="h-4 w-16 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4 text-center"><div class="h-6 w-20 bg-slate-200 rounded-lg mx-auto"></div></td>
+            </tr>
+          </ng-container>
+
+          <!-- رکوردهای داده واقعی -->
+          <ng-container *ngIf="!isLoading && !hasError">
+            <tr *ngFor="let log of auditLogs; let i = index; trackBy: trackByLogId" class="hover:bg-slate-50/80 transition-colors" [class.status-updated-flash]="updatedLogIds.has(log.id)" [ngClass]="log.action === 'ROLLBACK' ? 'bg-purple-50/30' : (log.severity === 'critical' ? 'bg-rose-50/20' : (log.severity === 'warning' ? 'bg-amber-50/10' : ''))">
+              <td class="py-3 px-4 text-center font-bold text-slate-400 font-mono">{{((auditPage - 1) * auditPageSize + i + 1) | number}}</td>
+              <td class="py-3 px-4 font-mono text-[10px] font-bold text-slate-600 text-center">{{log.created_at | persianDate:'short-time'}}</td>
+              <td class="py-3 px-4">
+                <p class="text-slate-800 font-bold text-[11px]">{{log.user_display}}</p>
+                <span class="text-[10px] text-slate-500 font-medium">{{log.user ? (log.user_role || 'کاربر سیستم') : 'رویداد سیستمی'}}</span>
+              </td>
+              <td class="py-3 px-4">
+                <span class="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg text-[10px] font-bold border border-slate-200 whitespace-nowrap inline-block">{{log.module_display || log.module}}</span>
+              </td>
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span *ngIf="log.action === 'ROLLBACK'" class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    بازگردانی داده (Rollback)
+                  </span>
+                  <span *ngIf="log.action !== 'ROLLBACK'" class="font-bold text-slate-800 text-[11px]">{{log.action_display || log.action}}</span>
+                </div>
+                <div *ngIf="log.target_repr" class="mt-0.5 text-right">
+                  <bdi class="text-[11px] text-slate-600 font-mono inline-block text-right font-medium" dir="auto">{{log.target_repr}}</bdi>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-slate-600 font-bold text-[11px]">{{log.warehouse_name || '—'}}</td>
+              <td class="py-3 px-4 text-center">
+                <span *ngIf="log.severity === 'info'" class="bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">عادی (Info)</span>
+                <span *ngIf="log.severity === 'warning'" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">هشدار (Warn)</span>
+                <span *ngIf="log.severity === 'critical'" class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">بحرانی (Critical)</span>
+              </td>
+              <td class="py-3 px-4 text-center">
+                <div class="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <button (click)="openAuditDiffModal(log)" type="button" class="px-2.5 py-1 text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100 rounded-lg transition-colors font-bold text-[10px] border border-indigo-200 flex items-center gap-1 cursor-pointer shadow-xs active:scale-95" title="مشاهده تفاضل داده و تغییرات فیلدها">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>تفاضل</span>
+                  </button>
+                  <button *ngIf="canRevertLog(log)" (click)="openRevertModal(log, $event)" type="button" class="px-2.5 py-1 text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors font-bold text-[10px] border border-purple-200 flex items-center gap-1 cursor-pointer shadow-xs active:scale-95" title="بازگردانی داده به وضعیت قبل از این عملیات">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    <span>بازگردانی</span>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </ng-container>
+
+          <!-- حالت خطا (Error State with Retry) -->
+          <tr *ngIf="!isLoading && hasError">
+            <td colspan="8" class="py-12 text-center">
+              <div class="flex flex-col items-center justify-center gap-3 text-rose-600">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p class="text-xs font-bold text-slate-700">خطا در دریافت اطلاعات ممیزی از سرور.</p>
+                <button (click)="loadActiveTabData()" type="button" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl border border-indigo-200 text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  تلاش مجدد
+                </button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- حالت خالی (Empty State) -->
+          <tr *ngIf="!isLoading && !hasError && auditLogs.length === 0">
+            <td colspan="8" class="py-12 text-center text-slate-400 font-bold">
+              <div class="flex flex-col items-center justify-center gap-2">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>هیچ لاگ ممیزی مطابق با فیلترهای انتخابی یافت نشد.</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- صفحه‌بندی -->
+    <div class="p-3.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-slate-50/50">
+      <div class="flex items-center gap-2 text-slate-600 font-bold">
+        <span>نمایش</span>
+        <select [ngModel]="auditPageSize" (ngModelChange)="onPageSizeChange($event)" class="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none font-mono">
+          <option [value]="20">۲۰</option>
+          <option [value]="50">۵۰</option>
+          <option [value]="100">۱۰۰</option>
+        </select>
+        <span>مورد از مجموع {{auditTotalCount | number}} رکورد (صفحه {{auditPage}} از {{totalPages}})</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button (click)="prevPage()" [disabled]="auditPage <= 1" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs">قبلی</button>
+        <span class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-mono font-black border border-indigo-100">{{auditPage}}</span>
+        <button (click)="nextPage()" [disabled]="auditPage >= totalPages" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs">بعدی</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ بنر هشدار کاربران قفل‌شده در ضدنفوذ (Locked Accounts Banner) ═══ -->
+  <div *ngIf="activeTab === 'login' && hasLockedAccounts" class="p-3.5 bg-gradient-to-r from-rose-50 via-rose-50/90 to-amber-50 border border-rose-200 rounded-2xl shadow-xs flex items-center justify-between flex-wrap gap-3 animate-fade-in">
+    <div class="flex items-center gap-3">
+      <div class="p-2.5 bg-rose-600 text-white rounded-xl shadow-xs shrink-0 animate-pulse">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-black text-rose-950">حساب‌های کاربری مسدود شده توسط سیستم ضدنفوذ (Axes)</span>
+          <span class="px-2 py-0.5 rounded-full bg-rose-200 text-rose-900 text-[10px] font-mono font-black">{{activeLockedAccounts.length}} کاربر</span>
+        </div>
+        <p class="text-[11px] text-rose-700 font-medium mt-0.5">کاربران زیر به دلیل ۵ بار تلاش ناموفق موقتاً مسدود شده‌اند. می‌توانید با یک کلیک قفل آنها را بازنشانی کنید:</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 flex-wrap">
+      <div *ngFor="let u of activeLockedAccounts" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-rose-200 rounded-xl shadow-2xs">
+        <span class="font-mono text-xs font-bold text-slate-800">{{u.username}}</span>
+        <span class="text-[10px] text-slate-400 font-mono" dir="ltr" *ngIf="u.ip_address">({{u.ip_address}})</span>
+        <button (click)="confirmUnlockUser(u.username, u.ip_address, $event)" type="button" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1 cursor-pointer">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+          <span>رفع مسدودیت</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ جدول تاریخچه ورود (Login History Table) ═══ -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" *ngIf="activeTab === 'login'">
+    <div class="overflow-x-auto min-h-[380px]">
+      <table class="w-full text-right border-collapse text-xs">
+        <thead>
+          <tr class="bg-slate-50/95 text-[10px] font-bold text-slate-500 border-b border-slate-200 sticky top-0 z-10 backdrop-blur-xs">
+            <th class="py-3 px-4 w-14 text-center">ردیف</th>
+            <th class="py-3 px-4 w-40 text-center">تاریخ و زمان</th>
+            <th class="py-3 px-4 w-44">نام کاربری ورودی</th>
+            <th class="py-3 px-4 w-44">کاربر منتسب</th>
+            <th class="py-3 px-4 w-32">آدرس آی‌پی</th>
+            <th class="py-3 px-4 w-36 text-center">وضعیت احراز هویت</th>
+            <th class="py-3 px-4">مشخصات دستگاه / علت خطا</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <!-- اسکلت بارگذاری (Skeleton Loading) -->
+          <ng-container *ngIf="isLoading">
+            <tr *ngFor="let s of [1,2,3,4,5]" class="animate-pulse">
+              <td class="py-3.5 px-4 text-center"><div class="h-4 w-6 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-28 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-24 bg-slate-200 rounded"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-28 bg-slate-200 rounded"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-20 bg-slate-200 rounded"></div></td>
+              <td class="py-3.5 px-4 text-center"><div class="h-4 w-16 bg-slate-200 rounded mx-auto"></div></td>
+              <td class="py-3.5 px-4"><div class="h-4 w-44 bg-slate-200 rounded"></div></td>
+            </tr>
+          </ng-container>
+
+          <!-- رکوردهای داده واقعی -->
+          <ng-container *ngIf="!isLoading && !hasError">
+            <tr *ngFor="let log of loginLogs; let i = index; trackBy: trackByLoginId" (click)="openLoginDetailsModal(log)" class="hover:bg-slate-50/80 transition-colors cursor-pointer group" [class.status-updated-flash]="updatedLoginIds.has(log.id)" [ngClass]="log.status === 'FAILED_LOCKED' ? 'bg-rose-50/40' : (log.status.startsWith('FAILED') ? 'bg-amber-50/20' : '')">
+              <td class="py-3 px-4 text-center font-bold text-slate-400 font-mono">{{((loginPage - 1) * loginPageSize + i + 1) | number}}</td>
+              <td class="py-3 px-4 font-mono text-[10px] font-bold text-slate-600 text-center">{{log.created_at | persianDate:'short-time'}}</td>
+              <td class="py-3 px-4 font-mono font-bold text-slate-800 text-[11px]">{{log.username_attempted}}</td>
+              <td class="py-3 px-4 text-slate-700 font-bold text-[11px]">{{log.user_display || '—'}}</td>
+              <td class="py-3 px-4 font-mono text-slate-600 text-[10px]" dir="ltr">{{log.ip_address || '—'}}</td>
+              <td class="py-3 px-4 text-center">
+                <div class="flex flex-col items-center gap-1">
+                  <span *ngIf="log.status === 'SUCCESS'" class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">ورود موفق</span>
+                  <span *ngIf="log.status === 'DAILY_ACTIVE'" class="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">حضور روزانه</span>
+                  <span *ngIf="log.status === 'FAILED_CREDENTIALS'" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">رمز اشتباه</span>
+                  <span *ngIf="log.status === 'FAILED_LOCKED'" class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">مسدود ضدنفوذ</span>
+                  <span *ngIf="log.status === 'FAILED_INACTIVE'" class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">حساب غیرفعال</span>
+                  <span *ngIf="log.status === 'LOGOUT'" class="bg-slate-50 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">خروج امن</span>
+
+                  <!-- دکمه سریع رفع مسدودیت در سطر -->
+                  <button *ngIf="log.status === 'FAILED_LOCKED'" (click)="confirmUnlockUser(log.username_attempted, log.ip_address, $event)" type="button" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black shadow-xs transition-all active:scale-95 cursor-pointer" title="رفع مسدودیت و بازنشانی قفل کاربر">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+                    <span>رفع قفل</span>
+                  </button>
+                </div>
+              </td>
+              <td class="py-3 px-4">
+                <p class="text-[10px] text-rose-600 font-bold mb-1" *ngIf="log.failure_reason">{{log.failure_reason}}</p>
+                <div class="flex items-center gap-1.5 flex-wrap" *ngIf="log.user_agent || log.device_model">
+                  <span *ngIf="getFormattedDeviceModel(log)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-50 text-sky-800 text-[10px] font-bold border border-sky-200 shadow-2xs">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                    <span>{{getFormattedDeviceModel(log)}}</span>
+                  </span>
+                  <span *ngIf="log.user_agent" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200 shadow-2xs">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>{{parseUserAgent(log.user_agent).browser}} <strong *ngIf="parseUserAgent(log.user_agent).browserVersion" class="font-mono">{{parseUserAgent(log.user_agent).browserVersion}}</strong></span>
+                  </span>
+                  <span *ngIf="log.user_agent" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-bold border border-slate-200">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    <span>{{parseUserAgent(log.user_agent).os}}</span>
+                  </span>
+                  <button (click)="openLoginDetailsModal(log, $event)" type="button" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-slate-100 group-hover:bg-indigo-100 text-slate-600 group-hover:text-indigo-700 text-[10px] font-bold border border-slate-200 transition-colors" title="مشاهده شناسنامه کامل فنی و جزئیات نشست">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>جزئیات</span>
+                  </button>
+                </div>
+                <p class="text-[10px] text-slate-400 group-hover:text-indigo-600 font-mono truncate max-w-[240px] mt-1 transition-colors" *ngIf="log.user_agent" [title]="log.user_agent">
+                  {{log.user_agent}}
+                </p>
+              </td>
+            </tr>
+          </ng-container>
+
+          <!-- حالت خطا (Error State with Retry) -->
+          <tr *ngIf="!isLoading && hasError">
+            <td colspan="7" class="py-12 text-center">
+              <div class="flex flex-col items-center justify-center gap-3 text-rose-600">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <p class="text-xs font-bold text-slate-700">خطا در دریافت تاریخچه ورود از سرور.</p>
+                <button (click)="loadActiveTabData()" type="button" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl border border-indigo-200 text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                  تلاش مجدد
+                </button>
+              </div>
+            </td>
+          </tr>
+
+          <!-- حالت خالی (Empty State) -->
+          <tr *ngIf="!isLoading && !hasError && loginLogs.length === 0">
+            <td colspan="7" class="py-12 text-center text-slate-400 font-bold">
+              <div class="flex flex-col items-center justify-center gap-2">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>هیچ لاگ ورودی با معیارهای جستجو یافت نشد.</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- صفحه‌بندی -->
+    <div class="p-3.5 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs bg-slate-50/50">
+      <div class="flex items-center gap-2 text-slate-600 font-bold">
+        <span>نمایش</span>
+        <select [ngModel]="loginPageSize" (ngModelChange)="onPageSizeChange($event)" class="bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none font-mono">
+          <option [value]="20">۲۰</option>
+          <option [value]="50">۵۰</option>
+          <option [value]="100">۱۰۰</option>
+        </select>
+        <span>مورد از مجموع {{loginTotalCount | number}} تلاش ورود (صفحه {{loginPage}} از {{totalPages}})</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button (click)="prevPage()" [disabled]="loginPage <= 1" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs">قبلی</button>
+        <span class="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-mono font-black border border-indigo-100">{{loginPage}}</span>
+        <button (click)="nextPage()" [disabled]="loginPage >= totalPages" type="button" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 font-bold text-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-xs">بعدی</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- پنجره‌های شناور و مدال‌ها (Modals & Overlays) -->
+<!-- ========================================================================= -->
+
+<!-- مدال پیشرفته مشاهده تفاضل و تغییرات داده (Visual JSON Diff Viewer Modal) -->
+  <div *ngIf="isDiffModalOpen && selectedLog" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden text-right z-10 my-auto" (click)="$event.stopPropagation()">
+      
+      <!-- هدر مدال -->
+      <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-slate-800 text-sm">جزئیات ممیزی و تفاضل داده (Audit Diff #{{selectedLog.id}})</h4>
+            <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500 font-bold">
+              <span>ماژول: <b class="text-slate-700">{{selectedLog.module_display || selectedLog.module}}</b></span>
+              <span>•</span>
+              <span>عملیات: <b class="text-indigo-600">{{selectedLog.action_display || selectedLog.action}}</b></span>
+              <span>•</span>
+              <span>توسط: <b class="text-slate-700">{{selectedLog.user_display}}</b></span>
+            </div>
+          </div>
+        </div>
+
+        <button (click)="closeModal()" class="w-8 h-8 rounded-full bg-slate-200/60 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- بدنه مدال -->
+      <div class="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+        
+        <!-- نوار اطلاعات سریع رکورد -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-[11px]">
+          <div>
+            <span class="text-slate-400 font-bold block text-[10px]">عنوان/کد رکورد:</span>
+            <span class="font-bold text-slate-800 font-mono">{{selectedLog.target_repr || selectedLog.target_object_id || '—'}}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 font-bold block text-[10px]">انبار مرتبط:</span>
+            <span class="font-bold text-slate-800">{{selectedLog.warehouse_name || 'سراسری / نامشخص'}}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 font-bold block text-[10px]">آدرس آی‌پی:</span>
+            <span class="font-bold text-slate-800 font-mono" dir="ltr">{{selectedLog.ip_address || '—'}}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 font-bold block text-[10px]">زمان دقیق:</span>
+            <span class="font-bold text-slate-800 font-mono text-center">{{selectedLog.created_at | persianDate:'short-time'}}</span>
+          </div>
+        </div>
+
+        <!-- بارگذاری دیف در صورت نیاز -->
+        <div *ngIf="isLoadingDiff" class="py-12 flex flex-col items-center justify-center gap-3 text-indigo-600">
+          <svg class="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <p class="font-bold text-slate-700 text-xs">در حال واکشی جزئیات تغییرات از سرور...</p>
+        </div>
+
+        <ng-container *ngIf="!isLoadingDiff">
+          <!-- فیلتر سریع در فیلدهای تغییریافته -->
+          <div class="flex items-center justify-between gap-3" *ngIf="diffItems.length > 0">
+            <h5 class="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              تغییرات فیلدها (تفاضل قبل و بعد)
+            </h5>
+            <input [(ngModel)]="modalSearchKey" type="text" placeholder="فیلتر نام فیلد یا مقدار..." class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-indigo-400 w-56">
+          </div>
+
+          <!-- جدول تفاضل بصری -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-xs" *ngIf="diffItems.length > 0">
+            <table class="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-[10px] font-bold text-slate-500 border-b border-slate-200">
+                  <th class="py-2.5 px-4 w-40">نام فیلد / مشخصه</th>
+                  <th class="py-2.5 px-4 w-1/2 bg-rose-50/40 text-rose-700">مقدار قبل از تغییر (Before)</th>
+                  <th class="py-2.5 px-4 w-1/2 bg-emerald-50/40 text-emerald-700">مقدار بعد از تغییر (After)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 font-mono text-[11px]">
+                <tr *ngFor="let item of filteredDiffItems" class="hover:bg-slate-50/50">
+                  <td class="py-2 px-4 font-bold text-slate-700 bg-slate-50/30">
+                    <span>{{item.key}}</span>
+                    <span *ngIf="item.type === 'added'" class="mr-1.5 text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-sans">جدید</span>
+                    <span *ngIf="item.type === 'removed'" class="mr-1.5 text-[9px] bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded font-sans">حذف</span>
+                    <span *ngIf="item.type === 'changed'" class="mr-1.5 text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-sans">تغییر</span>
+                  </td>
+                  <td class="py-2 px-4 text-rose-700 bg-rose-50/15 break-all align-top">
+                    <pre *ngIf="isMultiline(item.oldValue)" class="text-[10px] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto bg-white/80 p-1.5 rounded border border-rose-200" dir="ltr" [class.line-through]="item.type === 'changed' || item.type === 'removed'">{{item.oldValue}}</pre>
+                    <span *ngIf="!isMultiline(item.oldValue)" [class.line-through]="item.type === 'changed' || item.type === 'removed'">{{item.oldValue}}</span>
+                  </td>
+                  <td class="py-2 px-4 text-emerald-700 bg-emerald-50/15 break-all font-bold align-top">
+                    <pre *ngIf="isMultiline(item.newValue)" class="text-[10px] font-mono whitespace-pre-wrap max-h-32 overflow-y-auto bg-white/80 p-1.5 rounded border border-emerald-200" dir="ltr">{{item.newValue}}</pre>
+                    <span *ngIf="!isMultiline(item.newValue)">{{item.newValue}}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div *ngIf="diffItems.length === 0" class="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-200">
+            <p class="font-bold">هیچ تفاضل فیلدی برای این رویداد ثبت نشده است (رویداد سیستمی یا اطلاع‌رسانی).</p>
+          </div>
+        </ng-container>
+
+        <!-- نمایش خام JSON (اختیاری) -->
+        <details class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+          <summary class="font-bold text-slate-600 text-xs cursor-pointer select-none">نمایش داده‌های خام JSON (Raw Payload)</summary>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-slate-500">قبل (Before JSON):</span>
+                <button (click)="copyJson(modalRawBefore)" class="text-[9px] text-indigo-600 font-bold hover:underline cursor-pointer">کپی</button>
+              </div>
+              <pre class="bg-slate-900 text-emerald-400 p-3 rounded-xl text-[10px] font-mono overflow-x-auto max-h-48" dir="ltr">{{modalRawBefore || '{}'}}</pre>
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-slate-500">بعد (After JSON):</span>
+                <button (click)="copyJson(modalRawAfter)" class="text-[9px] text-indigo-600 font-bold hover:underline cursor-pointer">کپی</button>
+              </div>
+              <pre class="bg-slate-900 text-cyan-400 p-3 rounded-xl text-[10px] font-mono overflow-x-auto max-h-48" dir="ltr">{{modalRawAfter || '{}'}}</pre>
+            </div>
+          </div>
+        </details>
+
+      </div>
+
+      <!-- فوتر مدال -->
+      <div class="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50/80">
+        <div>
+          <button *ngIf="canRevertLog(selectedLog)" (click)="openRevertModal(selectedLog, $event)" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            بازگردانی به وضعیت قبل از این رویداد (Rollback)
+          </button>
+        </div>
+        <button (click)="closeModal()" class="px-5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer">
+          بستن
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Revert / Rollback Confirmation & Live Comparison Modal (با هایلایت کلمه به کلمه) -->
+  <div *ngIf="isRevertModalOpen" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeRevertModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-purple-200 overflow-hidden max-h-[90vh] flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+      
+      <!-- Modal Header -->
+      <div class="p-5 bg-gradient-to-r from-purple-600 to-indigo-700 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md text-white shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">پیش‌نمایش بصری و تایید بازگردانی داده (Rollback)</h4>
+            <p class="text-[11px] text-purple-100 mt-0.5">بازگردانی مقادیر رکورد به وضعیت پیش از لاگ #{{revertLogTarget?.id}}</p>
+          </div>
+        </div>
+        <button (click)="closeRevertModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+        
+        <!-- بارگذاری پیش‌نمایش -->
+        <div *ngIf="isLoadingRevertPreview" class="py-12 flex flex-col items-center justify-center gap-3 text-purple-600">
+          <svg class="animate-spin" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <p class="font-bold text-slate-700 text-xs">در حال مقایسه هوشمند وضعیت زنده پایگاه داده با نسخه پیشین...</p>
+        </div>
+
+        <!-- محتوای پیش‌نمایش پس از دریافت -->
+        <ng-container *ngIf="!isLoadingRevertPreview && revertPreview">
+          
+          <!-- خلاصه عملیات -->
+          <div class="bg-purple-50/80 border border-purple-200 rounded-2xl p-3.5 flex items-center justify-between">
+            <div>
+              <span class="text-[10px] text-purple-700 font-bold block">رکورد هدف:</span>
+              <span class="font-black text-slate-800 text-sm font-mono">{{revertPreview.target_repr || revertPreview.target_object_id || 'رویداد ممیزی'}}</span>
+              <span class="text-[10px] text-slate-500 font-bold mr-2">({{revertPreview.target_model || 'عمومی'}})</span>
+            </div>
+            <div class="text-left">
+              <span class="text-[10px] bg-purple-200 text-purple-900 font-black px-3 py-1 rounded-full shadow-xs">{{revertPreview.action_display || revertPreview.action}}</span>
+            </div>
+          </div>
+
+          <!-- حالت عدم امکان بازگردانی خودکار (can_revert === false) -->
+          <div *ngIf="!revertPreview.can_revert" class="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-2.5">
+            <div class="flex items-start gap-3">
+              <div class="p-2 bg-rose-100 text-rose-700 rounded-xl shrink-0 mt-0.5">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              </div>
+              <div class="space-y-1 text-slate-800">
+                <h5 class="font-black text-rose-800 text-xs">امکان بازگردانی خودکار این رویداد وجود ندارد</h5>
+                <p class="text-rose-700 text-[11px] leading-relaxed font-medium">
+                  {{revertPreview.message || 'این رویداد قابلیت بازگردانی خودکار ندارد.'}}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- حالت امکان بازگردانی (can_revert === true) -->
+          <ng-container *ngIf="revertPreview.can_revert">
+            <!-- هشدار تداخل زمانی (Conflict Warning) -->
+            <div *ngIf="revertPreview.has_conflict" class="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 flex items-start gap-3">
+              <div class="p-1.5 bg-amber-100 text-amber-800 rounded-xl shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div class="text-amber-900 leading-relaxed text-[11px]">
+                <strong class="font-black text-xs block mb-0.5">هشدار تغییرات بعدی (Conflict):</strong>
+                این رکورد پس از ثبت لاگ دستخوش تغییرات شده است. با تایید بازگردانی، مقادیر فعلی با مقادیر لاگ رونویسی خواهند شد.
+              </div>
+            </div>
+
+            <!-- جدول مقایسه بصری کلمه به کلمه (Word-by-Word Visual Diff) -->
+            <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-xs" *ngIf="revertPreview.changes && revertPreview.changes.length > 0">
+              <div class="bg-slate-50 p-2.5 border-b border-slate-200 font-bold text-[11px] text-slate-700 flex items-center justify-between">
+                <span>مقایسه دقیق تفاوت‌ها ({{revertPreview.changes.length}} فیلد)</span>
+                <span class="text-[10px] text-indigo-600 font-bold">هایلایت کلمات تغییریافته</span>
+              </div>
+              <div class="max-h-60 overflow-y-auto divide-y divide-slate-100">
+                <div *ngFor="let ch of revertPreview.changes" class="p-3 hover:bg-slate-50/80 transition-colors space-y-2" [ngClass]="ch.has_conflict ? 'bg-amber-50/20' : ''">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                      <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                      <span>{{ch.label || ch.field}}</span>
+                      <span class="text-[9px] text-slate-400 font-mono">({{ch.field}})</span>
+                    </span>
+                    <span *ngIf="ch.has_conflict" class="text-[9px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold">تداخل داده</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                    <!-- مقدار زنده کنونی (Live Value with Removed Highlight) -->
+                    <div class="bg-rose-50/50 border border-rose-200/70 rounded-xl p-2.5 space-y-1">
+                      <span class="text-[9px] font-black text-rose-700 block">مقدار فعلی زنده (Live):</span>
+                      <div class="font-mono text-slate-800 leading-relaxed break-all">
+                        <ng-container *ngFor="let token of computeWordDiff(ch.target_revert_value, ch.current_value).newTokens">
+                          <span *ngIf="token.type === 'added'" class="bg-rose-200 text-rose-950 font-bold line-through px-1 py-0.5 rounded mx-0.5 shadow-xs">{{token.text}}</span>
+                          <span *ngIf="token.type !== 'added'">{{token.text}}</span>
+                        </ng-container>
+                      </div>
+                    </div>
+
+                    <!-- مقدار پس از بازگردانی (Reverted Target Value with Added Highlight) -->
+                    <div class="bg-emerald-50/50 border border-emerald-200/70 rounded-xl p-2.5 space-y-1">
+                      <span class="text-[9px] font-black text-emerald-700 block">مقدار پس از بازگردانی (Target):</span>
+                      <div class="font-mono text-slate-900 leading-relaxed break-all font-medium">
+                        <ng-container *ngFor="let token of computeWordDiff(ch.current_value, ch.target_revert_value).newTokens">
+                          <span *ngIf="token.type === 'added'" class="bg-emerald-200 text-emerald-950 font-black px-1 py-0.5 rounded mx-0.5 shadow-xs border border-emerald-300">{{token.text}}</span>
+                          <span *ngIf="token.type !== 'added'">{{token.text}}</span>
+                        </ng-container>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- فیلد علت بازگردانی -->
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold text-slate-700">علت یا توضیحات بازگردانی (جهت درج در لاگ ممیزی):</label>
+              <input type="text" [(ngModel)]="revertReason" placeholder="مثال: اصلاح اشتباه کاربری در ثبت اطلاعات یا مغایرت شمارش..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-purple-500 bg-slate-50 focus:bg-white transition-all text-slate-800 font-medium">
+            </div>
+          </ng-container>
+
+        </ng-container>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+        <button (click)="closeRevertModal()" [disabled]="isReverting" type="button" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer">
+          {{revertPreview && !revertPreview.can_revert ? 'بستن پنجره' : 'انصراف'}}
+        </button>
+        <button *ngIf="revertPreview?.can_revert" (click)="executeRevert()" [disabled]="isReverting || isLoadingRevertPreview" type="button" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg *ngIf="isReverting" class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <svg *ngIf="!isReverting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          {{isReverting ? 'در حال بازگردانی داده...' : 'تایید و بازگردانی قطعی داده'}}
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Purge Logs Modal (مدال پاکسازی بازه‌ای لاگ‌های ممیزی) -->
+  <div *ngIf="isPurgeModalOpen" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closePurgeModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-rose-200 overflow-hidden flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+      
+      <!-- Modal Header -->
+      <div class="p-5 bg-gradient-to-r from-rose-600 to-rose-700 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md text-white shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">پاکسازی و حذف دوره‌ای لاگ‌های ممیزی</h4>
+            <p class="text-[11px] text-rose-100 mt-0.5">آزادسازی فضای دیتابیس و مدیریت تاریخچه ممیزی</p>
+          </div>
+        </div>
+        <button (click)="closePurgeModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 space-y-4 text-xs">
+        <!-- هشدار امنیتی -->
+        <div class="bg-rose-50 border border-rose-200 rounded-2xl p-3.5 flex items-start gap-2.5 text-rose-800">
+          <svg class="shrink-0 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="leading-relaxed text-[11px]">
+            <strong class="block font-black mb-0.5">هشدار غیرقابل بازگشت:</strong>
+            رکوردهای حذف‌شده از جدول ممیزی به هیچ عنوان قابل بازیابی نخواهند بود.
+          </div>
+        </div>
+
+        <!-- فیلترهای بازه زمانی -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">از تاریخ (شمسی):</label>
+            <div class="relative flex items-center bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-400/20 shadow-xs">
+              <ng-persian-datepicker (dateOnSelect)="onPurgeFromDateSelect($event)" class="w-full">
+                <input type="text" [formControl]="purgeFromDateControl" (input)="onModalDateInput('purgeFrom', $event)" placeholder="مثال: 14050531 یا تقویم" class="w-full bg-transparent text-xs outline-none font-bold text-slate-800 font-mono">
+              </ng-persian-datepicker>
+            </div>
+            <span *ngIf="purgeFromDate" class="text-[10px] text-rose-700 font-bold mt-1 block font-mono">معادل میلادی: {{purgeFromDate}}</span>
+          </div>
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">تا تاریخ (شمسی):</label>
+            <div class="relative flex items-center bg-white border border-slate-200 rounded-xl px-3 py-1.5 focus-within:border-rose-400 focus-within:ring-2 focus-within:ring-rose-400/20 shadow-xs">
+              <ng-persian-datepicker (dateOnSelect)="onPurgeToDateSelect($event)" class="w-full">
+                <input type="text" [formControl]="purgeToDateControl" (input)="onModalDateInput('purgeTo', $event)" placeholder="مثال: 14050531 یا تقویم" class="w-full bg-transparent text-xs outline-none font-bold text-slate-800 font-mono">
+              </ng-persian-datepicker>
+            </div>
+            <span *ngIf="purgeToDate" class="text-[10px] text-rose-700 font-bold mt-1 block font-mono">معادل میلادی: {{purgeToDate}}</span>
+          </div>
+        </div>
+
+        <!-- فیلتر ماژول -->
+        <div>
+          <label class="block text-[11px] font-bold text-slate-700 mb-1">فیلتر ماژول (اختیاری):</label>
+          <select [(ngModel)]="purgeModule" (ngModelChange)="fetchPurgePreview()" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-rose-400 font-bold cursor-pointer">
+            <option value="">همه ماژول‌ها</option>
+            <option value="docs">مدیریت کالا</option>
+            <option value="dispatch">تخصیص کالا</option>
+            <option value="counter">میزکار شمارش</option>
+            <option value="users">کاربران و نقش‌ها</option>
+            <option value="system">رویدادهای سیستمی</option>
           </select>
         </div>
 
-        <div class="lg:col-span-3 flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400/20 focus-within:bg-white transition-all shadow-inner">
-          
-          <div class="flex-1 flex items-center pr-4 pl-2 hover:bg-slate-50/50 transition-colors group">
-            <span class="text-[10px] font-black text-slate-400 ml-2 shrink-0 group-hover:text-indigo-600 transition-colors">از تاریخ:</span>
-            <input type="date" class="w-full bg-transparent py-2.5 text-xs font-bold text-slate-800 outline-none cursor-pointer" style="font-family: inherit;">
+        <!-- کارت شمارنده پیش‌نمایش رکوردهای مشمول حذف -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-between">
+          <div>
+            <span class="text-[10px] text-slate-500 font-bold block">تعداد لاگ‌های مشمول حذف:</span>
+            <span class="text-lg font-black text-rose-600 font-mono">
+              {{isLoadingPurgePreview ? 'در حال شمارش...' : ((purgePreviewCount | number) || '۰') + ' رکورد'}}
+            </span>
           </div>
-          
-          <div class="w-px h-6 bg-slate-300 shrink-0"></div>
-          
-          <div class="flex-1 flex items-center pr-4 pl-2 hover:bg-slate-50/50 transition-colors group">
-            <span class="text-[10px] font-black text-slate-400 ml-2 shrink-0 group-hover:text-indigo-600 transition-colors">تا تاریخ:</span>
-            <input type="date" class="w-full bg-transparent py-2.5 text-xs font-bold text-slate-800 outline-none cursor-pointer" style="font-family: inherit;">
-          </div>
-          
+          <button (click)="fetchPurgePreview()" type="button" class="text-xs text-indigo-600 font-bold hover:underline">به‌روزرسانی</button>
+        </div>
+
+        <!-- کادر تاییدیه امنیتی ۲ مرحله‌ای -->
+        <div class="space-y-1.5 pt-1">
+          <label class="block text-[11px] font-bold text-slate-700">
+            تایید امنیتی (عبارت <span class="font-mono text-rose-600 font-black select-all">PURGE_AUDIT_LOGS_CONFIRM</span> را تایپ کنید):
+          </label>
+          <input type="text" [(ngModel)]="purgeConfirmText" placeholder="PURGE_AUDIT_LOGS_CONFIRM" class="w-full px-3.5 py-2.5 rounded-xl border border-rose-200 text-xs outline-none focus:border-rose-500 bg-rose-50/20 font-mono text-center font-bold tracking-wider">
         </div>
       </div>
-    </div>
 
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div class="overflow-x-auto min-h-[400px]">
-        <table class="w-full text-right border-collapse text-xs">
-          <thead>
-            <tr class="bg-slate-50/80 text-[10px] font-bold text-slate-500 border-b-2 border-slate-200">
-              <th class="py-3 px-4 w-12 text-center">ردیف</th>
-              <th class="py-3 px-4 w-32">تاریخ و زمان</th>
-              <th class="py-3 px-4 w-40">کاربر / نقش</th>
-              <th class="py-3 px-4 w-28">ماژول</th>
-              <th class="py-3 px-4">شرح رویداد و تارگت</th>
-              <th class="py-3 px-4 w-28 text-center">سطح اهمیت</th>
-              <th class="py-3 px-4 w-24 text-center">عملیات</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let log of mockAuditLogs; let i = index" class="hover:bg-slate-50 transition-colors" [ngClass]="log.severity === 'critical' ? 'bg-rose-50/20' : ''">
-                <td class="py-3 px-4 text-center font-bold text-slate-400">{{i + 1}}</td>
-                <td class="py-3 px-4 font-mono text-[10px] font-bold text-slate-500" dir="ltr">{{log.date}}</td>
-                <td class="py-3 px-4 text-slate-800 font-bold">{{log.user}}</td>
-                <td class="py-3 px-4"><span class="bg-slate-50 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-slate-200">{{log.module}}</span></td>
-                <td class="py-3 px-4">
-                  <p class="font-bold text-slate-800 text-[11px]">{{log.action}}</p>
-                  <p class="text-[10px] text-slate-500 mt-0.5">{{log.target}}</p>
-                </td>
-                <td class="py-3 px-4 text-center">
-                    <span *ngIf="log.severity === 'info'" class="bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded text-[9px] font-bold">عادی (Info)</span>
-                    <span *ngIf="log.severity === 'warning'" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[9px] font-bold">هشدار (Warn)</span>
-                    <span *ngIf="log.severity === 'critical'" class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded text-[9px] font-bold">بحرانی (Critical)</span>
-                </td>
-                <td class="py-3 px-4">
-                  <div class="flex items-center justify-center gap-2">
-                    <button (click)="openAuditDiffModal(log)" class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors tooltip" title="مشاهده جزئیات تغییرات">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                    </button>
-                    
-                    <button *ngIf="log.severity !== 'info'" (click)="executeRollback(log.id)" class="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors tooltip" title="بازگردانی این تغییر (Undo)">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" opacity="0.3"/><polyline points="9 22 9 12 15 12 15 22" opacity="0.3"/><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                    </button>
-
-                    <span *ngIf="log.severity === 'info'" class="p-1.5 text-slate-300">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                    </span>
-                  </div>
-                </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Modal Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+        <button (click)="closePurgeModal()" [disabled]="isPurging" type="button" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer">
+          انصراف
+        </button>
+        <button (click)="executePurge()" [disabled]="isPurging || purgeConfirmText.trim() !== 'PURGE_AUDIT_LOGS_CONFIRM' || (purgePreviewCount === 0)" type="button" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg *ngIf="isPurging" class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <svg *ngIf="!isPurging" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          {{isPurging ? 'در حال پاکسازی لاگ‌ها...' : 'تایید و حذف قطعی لاگ‌ها'}}
+        </button>
       </div>
-    </div>
-</div>
 
-<!-- Modal -->
-<div *ngIf="isDiffModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm fade-in text-right" dir="rtl">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden scale-in">
-        <div class="flex items-center justify-between p-5 border-b border-slate-200 bg-slate-50">
+    </div>
+  </div>
+
+  <!-- Point-in-Time Rollback Modal (مدال بازگردانی زنجیره‌ای به تاریخ مشخص) -->
+  <div *ngIf="isPointInTimeModalOpen" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closePointInTimeModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-purple-200 overflow-hidden max-h-[90vh] flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+      
+      <!-- Modal Header -->
+      <div class="p-5 bg-gradient-to-r from-purple-700 to-indigo-800 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md text-white shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">بازگردانی زنجیره‌ای به تاریخ مشخص (Point-in-Time Rollback)</h4>
+            <p class="text-[11px] text-purple-100 mt-0.5">معکوس‌سازی کلیه تغییرات ثبت‌شده از یک نقطه زمانی تا لحظه فعلی</p>
+          </div>
+        </div>
+        <button (click)="closePointInTimeModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+        
+        <!-- انتخاب زمان هدف (شمسی با ماسک هوشمند و تقویم) -->
+        <div class="bg-purple-50/70 border border-purple-200 rounded-2xl p-4 space-y-3">
+          <span class="text-xs font-black text-purple-900 block">نقطه زمانی هدف (سیستم به این لحظه برگردانده می‌شود):</span>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-            <h3 class="font-black text-slate-800 text-sm">جزئیات رویداد سیستمی (Log #{{selectedLog?.id}})</h3>
-            <p class="text-[10px] text-slate-500 font-bold mt-1">ماژول: <span class="text-indigo-600">{{selectedLog?.module}}</span> | کاربر: {{selectedLog?.user}}</p>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ مقصد (شمسی):</label>
+              <div class="relative flex items-center bg-white border border-purple-200 rounded-xl px-3 py-1.5 focus-within:border-purple-500 focus-within:ring-2 focus-within:ring-purple-400/20 shadow-xs">
+                <ng-persian-datepicker (dateOnSelect)="onPitDateSelect($event)" class="w-full">
+                  <input type="text" [formControl]="pitTargetDateControl" (input)="onModalDateInput('pit', $event)" placeholder="مثال: 14050531 یا تقویم" class="w-full bg-transparent text-xs outline-none font-bold text-slate-800 font-mono">
+                </ng-persian-datepicker>
+              </div>
+              <span *ngIf="pitTargetDate" class="text-[10px] text-purple-700 font-bold mt-1 block font-mono">معادل میلادی: {{pitTargetDate}}</span>
             </div>
-            <button (click)="closeModal()" class="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">ساعت و دقیقه مقصد:</label>
+              <input type="time" [(ngModel)]="pitTargetTime" (ngModelChange)="fetchPointInTimePreview()" class="w-full px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs outline-none focus:border-purple-500 font-bold font-mono">
+            </div>
+          </div>
         </div>
-        
-        <div class="p-6">
-            <div class="flex items-center gap-2 mb-2">
-                <span class="w-2 h-2 rounded-full" [ngClass]="selectedLog?.severity === 'critical' ? 'bg-rose-500' : selectedLog?.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'"></span>
-                <span class="text-xs font-black text-slate-800">عملیات: {{selectedLog?.action}}</span>
-                <span class="text-[10px] text-slate-400 font-bold mr-2">(تارگت: {{selectedLog?.target}})</span>
-            </div>
-            
-            <ng-container *ngIf="selectedLog?.before && selectedLog?.after">
-                <div class="grid grid-cols-2 gap-4 mt-4 text-left" dir="ltr">
-                    <div class="border border-rose-200 rounded-xl overflow-hidden shadow-sm">
-                        <div class="bg-rose-50 px-3 py-2 text-[10px] font-black text-rose-700 border-b border-rose-200 flex justify-between">
-                        <span>مقدار قبلی (Before)</span>
-                        <span class="text-rose-400">- Removed</span>
-                        </div>
-                        <pre class="p-3 text-[10px] font-mono text-rose-900 bg-white overflow-x-auto m-0 leading-relaxed">{{beforeStr}}</pre>
-                    </div>
-                    <div class="border border-emerald-200 rounded-xl overflow-hidden shadow-sm">
-                        <div class="bg-emerald-50 px-3 py-2 text-[10px] font-black text-emerald-700 border-b border-emerald-200 flex justify-between">
-                        <span>مقدار جدید (After)</span>
-                        <span class="text-emerald-500">+ Added</span>
-                        </div>
-                        <pre class="p-3 text-[10px] font-mono text-emerald-900 bg-white overflow-x-auto m-0 leading-relaxed">{{afterStr}}</pre>
-                    </div>
-                </div>
-            </ng-container>
 
-            <ng-container *ngIf="selectedLog?.details?.msg">
-                <div class="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 leading-loose">
-                    {{selectedLog?.details?.msg}}
+        <!-- بارگذاری پیش‌نمایش -->
+        <div *ngIf="isLoadingPitPreview" class="py-8 flex flex-col items-center justify-center gap-2.5 text-purple-600">
+          <svg class="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <p class="font-bold text-slate-700 text-xs">در حال شناسایی و شبیه‌سازی زنجیره رویدادهای ممیزی...</p>
+        </div>
+
+        <!-- کارت‌های خلاصه پیش‌نمایش -->
+        <ng-container *ngIf="!isLoadingPitPreview && pitPreview">
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+              <span class="text-[10px] font-bold text-slate-500 block">کل رویدادهای مشمول:</span>
+              <span class="text-base font-black text-purple-700 font-mono">{{pitPreview.total_logs | number}}</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center">
+              <span class="text-[10px] font-bold text-slate-500 block">رکوردهای مشمول تغییر:</span>
+              <span class="text-base font-black text-indigo-700 font-mono">{{pitPreview.total_records | number}}</span>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-center col-span-2 sm:col-span-1">
+              <span class="text-[10px] font-bold text-slate-500 block">وضعیت تداخل:</span>
+              <span class="text-xs font-black" [ngClass]="pitPreview.has_conflict ? 'text-amber-600' : 'text-emerald-600'">
+                {{pitPreview.has_conflict ? 'دارای تغییرات همزمان' : 'سازگار و بدون تداخل'}}
+              </span>
+            </div>
+          </div>
+
+          <!-- لیست رکوردهای مشمول معکوس‌سازی -->
+          <div class="border border-slate-200 rounded-2xl overflow-hidden shadow-xs" *ngIf="pitPreview.items_preview && pitPreview.items_preview.length > 0">
+            <div class="bg-slate-50 p-2.5 border-b border-slate-200 font-bold text-[11px] text-slate-700 flex items-center justify-between">
+              <span>رکوردهای شاخص مشمول بازگردانی</span>
+              <span class="text-[10px] text-slate-500">معکوس‌سازی به ترتیب زمانی معکوس</span>
+            </div>
+            <div class="max-h-48 overflow-y-auto divide-y divide-slate-100">
+              <div *ngFor="let item of pitPreview.items_preview" class="p-3 hover:bg-slate-50/80 flex items-center justify-between text-xs">
+                <div>
+                  <span class="font-bold text-slate-800 block">{{item.target_repr}}</span>
+                  <span class="text-[10px] text-slate-400 font-mono">{{item.target_model}} ({{item.logs_count}} رویداد ثبت‌شده)</span>
                 </div>
-            </ng-container>
-        </div>
-        
-        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-            <button (click)="closeModal()" class="px-5 py-2 rounded-xl text-xs font-bold text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 transition-all">بستن</button>
-            <button *ngIf="selectedLog?.severity !== 'info'" (click)="rollbackFromModal()" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 shadow-md shadow-rose-200 transition-all flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-                بازگردانی تغییرات (Undo)
-            </button>
-        </div>
+                <span class="text-[10px] bg-purple-100 text-purple-900 font-bold px-2.5 py-1 rounded-full">
+                  {{item.first_action}} ← {{item.last_action}}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- فیلد علت بازگردانی -->
+          <div class="space-y-1.5">
+            <label class="block text-[11px] font-bold text-slate-700">علت بازگردانی به این تاریخ:</label>
+            <input type="text" [(ngModel)]="pitReason" placeholder="مثال: بازگردانی اسناد پس از قطعی برق یا اشتباه گروهی کاربران..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs outline-none focus:border-purple-500 bg-slate-50 focus:bg-white transition-all text-slate-800 font-medium">
+          </div>
+        </ng-container>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+        <button (click)="closePointInTimeModal()" [disabled]="isExecutingPit" type="button" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer">
+          انصراف
+        </button>
+        <button (click)="executePointInTimeRollback()" [disabled]="isExecutingPit || isLoadingPitPreview || !pitPreview || pitPreview.total_logs === 0" type="button" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 shadow-md hover:shadow-lg active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg *ngIf="isExecutingPit" class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg>
+          <svg *ngIf="!isExecutingPit" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {{isExecutingPit ? 'در حال اجرای بازگردانی زنجیره‌ای...' : 'تایید و اجرای بازگردانی به این تاریخ'}}
+        </button>
+      </div>
+
     </div>
-</div>
+  </div>
+
+  <!-- ═══ پنجره شناور راهنمای جامع مرکز ممیزی و امنیت داده‌ها (Comprehensive Help Modal) ═══ -->
+  <div *ngIf="isHelpModalOpen" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeHelpModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+      
+      <!-- هدر مدال راهنما با گرادیان سرمه‌ای نیلی -->
+      <div class="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-indigo-500/20 rounded-2xl border border-indigo-400/30 backdrop-blur-md text-indigo-300 shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">راهنمای جامع مرکز ممیزی، امنیت و رهگیری تغییرات</h4>
+            <p class="text-[11px] text-slate-300 mt-0.5">آشنایی با قابلیت‌ها، ساختار ثبت رویدادها، بازیابی داده‌ها و امنیت نشست‌ها</p>
+          </div>
+        </div>
+        <button (click)="closeHelpModal()" type="button" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- بدنه مدال راهنما -->
+      <div class="p-6 overflow-y-auto space-y-6 flex-1 text-xs text-slate-700 leading-relaxed">
+        
+        <!-- بخش ۱: رهگیری داده‌ها -->
+        <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-2.5">
+          <div class="flex items-center gap-2 text-indigo-900 font-black text-sm">
+            <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs">۱</span>
+            <h5>ردیابی لحظه‌ای تغییرات داده‌ها (Audit Trail)</h5>
+          </div>
+          <p class="text-slate-600">
+            تمامی عملیات ایجاد، ویرایش، حذف و تایید اطلاعات به صورت خودکار و در سطح فیلد به همراه شناسه کاربر، آدرس IP و زمان دقیق ثبت می‌شوند. با کلیک بر روی دکمه <b>«تفاضل»</b> می‌توانید تغییرات قبل و بعد مقادیر را به صورت رنگی و فیلد به فیلد مشاهده نمایید.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+            <div class="bg-white p-2 rounded-xl border border-indigo-100">
+              <span class="font-bold text-blue-700 block mb-0.5">سطح عادی (Info):</span>
+              <span class="text-slate-500">عملیات متداول مانند ایجاد یا چاپ</span>
+            </div>
+            <div class="bg-white p-2 rounded-xl border border-indigo-100">
+              <span class="font-bold text-amber-700 block mb-0.5">سطح هشدار (Warn):</span>
+              <span class="text-slate-500">ویرایش رکوردهای حساس یا بازشماری</span>
+            </div>
+            <div class="bg-white p-2 rounded-xl border border-indigo-100">
+              <span class="font-bold text-rose-700 block mb-0.5">سطح بحرانی (Critical):</span>
+              <span class="text-slate-500">حذف رکورد یا تغییرات گروهی حجیم</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- بخش ۲: موتور بازگردانی -->
+        <div class="bg-purple-50/50 border border-purple-100 rounded-2xl p-4 space-y-2.5">
+          <div class="flex items-center gap-2 text-purple-900 font-black text-sm">
+            <span class="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-xs">۲</span>
+            <h5>موتور بازگردانی و Rollback هوشمند</h5>
+          </div>
+          <p class="text-slate-600">
+            سامانه مجهز به موتور اختصاصی بازگردانی است که امکان معکوس‌سازی تغییرات را در دو سطح فراهم می‌کند:
+          </p>
+          <ul class="list-disc list-inside space-y-1 text-slate-600 font-medium mr-2">
+            <li><b>بازگردانی تکی رکورد:</b> با کلیک روی دکمه بازگردانی در ردیف لاگ، سیستم مقادیر زنده را با نسخه قبل مقایسه کرده و در صورت عدم تداخل، اطلاعات را بازیابی می‌کند.</li>
+            <li><b>بازگردانی زنجیره‌ای (Point-in-Time):</b> امکان بازگرداندن کلیه رکوردهای تغییریافته به یک تاریخ و زمان مشخص در گذشته برای شرایط بحرانی.</li>
+          </ul>
+        </div>
+
+        <!-- بخش ۳: امنیت نشست‌ها و احراز هویت -->
+        <div class="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 space-y-2.5">
+          <div class="flex items-center gap-2 text-emerald-900 font-black text-sm">
+            <span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">۳</span>
+            <h5>امنیت نشست‌ها و پدافند احراز هویت (Login Security)</h5>
+          </div>
+          <p class="text-slate-600">
+            در تب «تاریخچه ورود و نشست‌ها»، کلیه تلاش‌های ورود به سیستم به همراه سیستم‌عامل، مرورگر، IP و علت خطای احتمالی (مانند رمز اشتباه یا مسدودسازی توسط سیستم ضدنفوذ Axes) ذخیره شده و قابل پایش لحظه‌ای است.
+          </p>
+        </div>
+
+        <!-- بخش ۴: هرس و نگهداری دیتابیس -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
+          <div class="flex items-center gap-2 text-slate-900 font-black text-sm">
+            <span class="w-6 h-6 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center text-xs">۴</span>
+            <h5>سیاست‌های پاکسازی و بهینه‌سازی دیتابیس (Log Purge)</h5>
+          </div>
+          <p class="text-slate-600 text-[11px]">
+            مدیران ارشد دارای دسترسی ویژه می‌توانند از طریق دکمه پاکسازی قدیمی در هدر، لاگ‌های ماه‌های قبل را به منظور صرفه‌جویی در حجم دیتابیس با تاییدیه دو مرحله‌ای امنیتی هرس نمایند.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- فوتر مدال راهنما -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <span class="text-[10px] font-bold text-slate-400">سامانه اتوماسیون جامع انبار و رهگیری ممیزی</span>
+        <button (click)="closeHelpModal()" type="button" class="px-5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer shadow-xs">
+          متوجه شدم و بستن
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ مدال مشخصات کامل دستگاه و نشست لاگین (Login Device & Session Details Modal) ═══ -->
+  <div *ngIf="isLoginDetailsModalOpen && selectedLoginForDetails" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeLoginDetailsModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+      
+      <!-- Modal Header -->
+      <div class="p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/10 rounded-2xl backdrop-blur-md text-indigo-300 shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">مشخصات دستگاه، کلاینت و نشست کاربر</h4>
+            <p class="text-[11px] text-slate-300 mt-0.5">شناسنامه فنی، وضعیت احراز هویت و اطلاعات امنیتی ورود</p>
+          </div>
+        </div>
+        <button (click)="closeLoginDetailsModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-5 space-y-4 text-xs overflow-y-auto max-h-[75vh]">
+        <!-- کارت اطلاعات کاربر و وضعیت ورود -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
+            <span class="text-[10px] font-bold text-slate-400 block mb-0.5">نام کاربری:</span>
+            <span class="text-xs font-black text-slate-800 font-mono">{{selectedLoginForDetails.username_attempted}}</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
+            <span class="text-[10px] font-bold text-slate-400 block mb-0.5">کاربر تطبیق‌یافته:</span>
+            <span class="text-xs font-black text-slate-800">{{selectedLoginForDetails.user_display || 'نامشخص / ثبت‌نشده'}}</span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 col-span-2 sm:col-span-1">
+            <span class="text-[10px] font-bold text-slate-400 block mb-0.5">وضعیت ورود:</span>
+            <span *ngIf="selectedLoginForDetails.status === 'SUCCESS'" class="text-xs font-black text-emerald-700">ورود موفقیت‌آمیز</span>
+            <span *ngIf="selectedLoginForDetails.status === 'DAILY_ACTIVE'" class="text-xs font-black text-purple-700">حضور فعال روزانه</span>
+            <span *ngIf="selectedLoginForDetails.status === 'FAILED_CREDENTIALS'" class="text-xs font-black text-amber-700">گذرواژه اشتباه</span>
+            <span *ngIf="selectedLoginForDetails.status === 'FAILED_LOCKED'" class="text-xs font-black text-rose-700">مسدودسازی خودکار</span>
+            <span *ngIf="selectedLoginForDetails.status === 'FAILED_INACTIVE'" class="text-xs font-black text-slate-700">حساب غیرفعال</span>
+            <span *ngIf="selectedLoginForDetails.status === 'LOGOUT'" class="text-xs font-black text-slate-600">خروج امن از حساب</span>
+          </div>
+        </div>
+
+        <!-- کارت جزئیات فنی کلاینت (Device Breakdown) -->
+        <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-indigo-100/80">
+            <span class="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              تحلیل و تفکیک مشخصات کلاینت:
+            </span>
+            <span class="text-[10px] font-black px-2 py-0.5 rounded-full bg-white text-indigo-700 border border-indigo-200 font-mono">
+              IP: {{selectedLoginForDetails.ip_address || '—'}}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            <!-- مدل سخت‌افزاری در صورت وجود -->
+            <div class="bg-sky-50 p-2.5 rounded-xl border border-sky-200 col-span-2 sm:col-span-3" *ngIf="getFormattedDeviceModel(selectedLoginForDetails)">
+              <span class="text-[10px] text-sky-700 font-bold block mb-0.5">مدل سخت‌افزاری دستگاه:</span>
+              <span class="font-black text-sky-950 text-xs flex items-center gap-1.5 flex-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                <span>{{getFormattedDeviceModel(selectedLoginForDetails)}}</span>
+                <span class="text-[10px] font-mono text-sky-600 bg-white px-1.5 py-0.5 rounded border border-sky-200" *ngIf="selectedLoginForDetails.device_model">({{selectedLoginForDetails.device_model}})</span>
+              </span>
+            </div>
+
+            <div class="bg-white p-2.5 rounded-xl border border-indigo-100">
+              <span class="text-[10px] text-slate-400 font-bold block mb-0.5">مرورگر و نسخه:</span>
+              <span class="font-black text-slate-800 text-xs flex items-center gap-1">
+                {{parseUserAgent(selectedLoginForDetails.user_agent).browser}}
+                <strong *ngIf="parseUserAgent(selectedLoginForDetails.user_agent).browserVersion" class="font-mono text-indigo-600">v{{parseUserAgent(selectedLoginForDetails.user_agent).browserVersion}}</strong>
+              </span>
+            </div>
+
+            <div class="bg-white p-2.5 rounded-xl border border-indigo-100">
+              <span class="text-[10px] text-slate-400 font-bold block mb-0.5">سیستم‌عامل:</span>
+              <span class="font-black text-slate-800 text-xs flex items-center gap-1">
+                {{parseUserAgent(selectedLoginForDetails.user_agent).os}}
+                <strong *ngIf="parseUserAgent(selectedLoginForDetails.user_agent).osVersion" class="font-mono text-indigo-600">({{parseUserAgent(selectedLoginForDetails.user_agent).osVersion}})</strong>
+              </span>
+            </div>
+
+            <div class="bg-white p-2.5 rounded-xl border border-indigo-100 col-span-2 sm:col-span-1">
+              <span class="text-[10px] text-slate-400 font-bold block mb-0.5">نوع دستگاه:</span>
+              <span class="font-black text-slate-800 text-xs">
+                {{parseUserAgent(selectedLoginForDetails.user_agent).deviceType}}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- رشته کامل خام User-Agent -->
+        <div class="space-y-1.5" *ngIf="selectedLoginForDetails.user_agent">
+          <div class="flex items-center justify-between">
+            <label class="block text-[11px] font-bold text-slate-700">رشته کامل و خام User-Agent:</label>
+            <button (click)="copyUserAgent(selectedLoginForDetails.user_agent)" type="button" class="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>کپی متن</span>
+            </button>
+          </div>
+          <div class="p-3 bg-slate-900 text-slate-200 rounded-xl font-mono text-[11px] leading-relaxed break-all select-all border border-slate-800">
+            {{selectedLoginForDetails.user_agent}}
+          </div>
+        </div>
+
+        <!-- زمان دقیق و علت خطا -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+          <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <span class="text-[10px] text-slate-400 font-bold block mb-0.5">زمان ثبت رویداد:</span>
+            <span class="font-bold text-slate-700 text-xs font-mono">{{selectedLoginForDetails.created_at | persianDate:'long'}}</span>
+          </div>
+          <div class="bg-rose-50/60 p-2.5 rounded-xl border border-rose-200" *ngIf="selectedLoginForDetails.failure_reason">
+            <span class="text-[10px] text-rose-700 font-bold block mb-0.5">علت ثبت خطا:</span>
+            <span class="font-black text-rose-800 text-xs">{{selectedLoginForDetails.failure_reason}}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <button *ngIf="selectedLoginForDetails.status === 'FAILED_LOCKED'" (click)="confirmUnlockUser(selectedLoginForDetails.username_attempted, selectedLoginForDetails.ip_address)" type="button" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+            <span>رفع مسدودیت کاربر (آنلاک)</span>
+          </button>
+        </div>
+        <button (click)="closeLoginDetailsModal()" type="button" class="px-5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer shadow-xs">
+          بستن
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ مدال پیشرفته دریافت خروجی اکسل / CSV با قابلیت فیلترگذاری (Export Modal) ═══ -->
+  <div *ngIf="isExportModalOpen" class="fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeExportModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="p-5 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/10 rounded-2xl backdrop-blur-md text-emerald-300 shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">دریافت خروجی گزارش فیلترشده</h4>
+            <p class="text-[11px] text-emerald-200/90 mt-0.5">
+              {{activeTab === 'audit' ? 'خروجی داده‌های ممیزی و رهگیری تغییرات' : 'خروجی تاریخچه ورود و نشست‌های امنیتی'}}
+            </p>
+          </div>
+        </div>
+        <button (click)="closeExportModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 space-y-4 text-xs overflow-y-auto max-h-[75vh]">
+        
+        <!-- انتخاب فرمت خروجی -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-2">فرمت فایل خروجی:</label>
+          <div class="grid grid-cols-2 gap-2.5">
+            <label class="flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all" [class.border-emerald-500]="exportFormat === 'xlsx'" [class.bg-emerald-50/50]="exportFormat === 'xlsx'" [class.border-slate-200]="exportFormat !== 'xlsx'">
+              <input type="radio" name="exportFmt" value="xlsx" [(ngModel)]="exportFormat" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <div>
+                <span class="text-xs font-black text-slate-800 block">اکسل رسمی (.xlsx)</span>
+                <span class="text-[10px] text-slate-500 font-medium">قالب استایل‌دار، راست‌به‌چپ با هدرهای رنگی</span>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all" [class.border-emerald-500]="exportFormat === 'csv'" [class.bg-emerald-50/50]="exportFormat === 'csv'" [class.border-slate-200]="exportFormat !== 'csv'">
+              <input type="radio" name="exportFmt" value="csv" [(ngModel)]="exportFormat" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <div>
+                <span class="text-xs font-black text-slate-800 block">فایل متنی (.csv)</span>
+                <span class="text-[10px] text-slate-500 font-medium">فرمت فشرده با انکودینگ UTF-8 BOM</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- فیلترهای خروجی -->
+        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-200/80 pb-2">
+            <span class="text-xs font-black text-slate-800">فیلترهای اعمال‌شده روی فایل خروجی:</span>
+            <span class="text-[10px] font-bold text-slate-500">می‌توانید فیلترها را قبل از دانلود تغییر دهید</span>
+          </div>
+
+          <!-- بازه تاریخی -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-600 mb-1">بازه زمانی شمسی (از تاریخ / تا تاریخ):</label>
+            <div class="flex items-center bg-white border border-slate-200 rounded-xl focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all shadow-2xs">
+              <div class="flex-1 flex items-center pr-2 pl-1 min-w-0">
+                <span class="text-[10px] font-black text-slate-400 ml-1 shrink-0">از:</span>
+                <ng-persian-datepicker (dateOnSelect)="onExportFromDateSelect($event)" class="w-full">
+                  <input type="text" [formControl]="exportFromDateControl" (input)="onExportDateInput('from', $event)" placeholder="14050531" class="w-full bg-transparent py-2 text-xs font-bold text-slate-800 outline-none font-mono">
+                </ng-persian-datepicker>
+              </div>
+              <div class="w-px h-5 bg-slate-200 shrink-0"></div>
+              <div class="flex-1 flex items-center pr-2 pl-1 min-w-0">
+                <span class="text-[10px] font-black text-slate-400 ml-1 shrink-0">تا:</span>
+                <ng-persian-datepicker (dateOnSelect)="onExportToDateSelect($event)" class="w-full">
+                  <input type="text" [formControl]="exportToDateControl" (input)="onExportDateInput('to', $event)" placeholder="14050531" class="w-full bg-transparent py-2 text-xs font-bold text-slate-800 outline-none font-mono">
+                </ng-persian-datepicker>
+              </div>
+            </div>
+          </div>
+
+          <!-- فیلترهای مخصوص ممیزی -->
+          <div *ngIf="activeTab === 'audit'" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">ماژول:</label>
+              <select [(ngModel)]="exportModule" class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 custom-select cursor-pointer shadow-2xs">
+                <option value="">همه ماژول‌ها</option>
+                <option value="docs">مدیریت کالا</option>
+                <option value="dispatch">تخصیص کالا</option>
+                <option value="customs">مالی و گمرکی</option>
+                <option value="feeding">تغذیه سامانه‌ها (MT)</option>
+                <option value="labels">لیبلینگ و بارکد</option>
+                <option value="counter">میزکار شمارش</option>
+                <option value="supervisor">کارتابل سرپرست</option>
+                <option value="manager">بررسی مدیر</option>
+                <option value="users">کاربران و نقش‌ها</option>
+                <option value="warehouses">مدیریت انبارها</option>
+                <option value="settings">تنظیمات سیستم</option>
+                <option value="system">رویدادهای سیستمی</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">نوع عملیات:</label>
+              <select [(ngModel)]="exportAction" class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 custom-select cursor-pointer shadow-2xs">
+                <option value="">همه عملیات‌ها</option>
+                <option value="CREATE">ایجاد رکورد</option>
+                <option value="UPDATE">ویرایش رکورد</option>
+                <option value="DELETE">حذف رکورد</option>
+                <option value="BULK_UPDATE">ویرایش گروهی</option>
+                <option value="APPROVE">تایید سرپرست</option>
+                <option value="REJECT">رد درخواست</option>
+                <option value="RECOUNT">دستور بازشماری</option>
+                <option value="PRINT">چاپ لیبل</option>
+                <option value="EXPORT">خروجی اکسل/CSV</option>
+                <option value="IMPORT">ایمپورت داده</option>
+                <option value="ROLLBACK">بازگردانی اطلاعات</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">سطح اهمیت:</label>
+              <select [(ngModel)]="exportSeverity" class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 custom-select cursor-pointer shadow-2xs">
+                <option value="">همه سطوح</option>
+                <option value="info">عادی (اطلاع‌رسانی)</option>
+                <option value="warning">هشدار (محدود)</option>
+                <option value="critical">بحرانی (عمده/حذف)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- فیلترهای مخصوص لاگین -->
+          <div *ngIf="activeTab === 'login'" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">وضعیت احراز هویت:</label>
+              <select [(ngModel)]="exportLoginStatus" class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 custom-select cursor-pointer shadow-2xs">
+                <option value="">همه وضعیت‌ها</option>
+                <option value="SUCCESS">ورود موفق (Success)</option>
+                <option value="DAILY_ACTIVE">حضور روزانه (Daily)</option>
+                <option value="FAILED_CREDENTIALS">رمز عبور اشتباه</option>
+                <option value="FAILED_LOCKED">مسدود شده توسط ضدنفوذ (Axes)</option>
+                <option value="FAILED_INACTIVE">حساب کاربری غیرفعال</option>
+                <option value="LOGOUT">خروج از حساب (Logout)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 mb-1">جستجوی متنی:</label>
+              <input [(ngModel)]="exportSearch" type="text" placeholder="نام کاربری، پرسنل یا IP..." class="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-emerald-500 shadow-2xs">
+            </div>
+          </div>
+        </div>
+
+        <!-- انتخاب ستون‌های فایل -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-xs font-bold text-slate-700">دامنه ستون‌های فایل:</label>
+            <div class="flex items-center gap-2" *ngIf="exportColumnsScope === 'custom'">
+              <button (click)="activeTab === 'audit' ? selectAllAuditColumns() : selectAllLoginColumns()" type="button" class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer">انتخاب همه</button>
+              <span class="text-slate-300">|</span>
+              <button (click)="activeTab === 'audit' ? deselectAllAuditColumns() : deselectAllLoginColumns()" type="button" class="text-[10px] font-bold text-rose-600 hover:text-rose-800 underline cursor-pointer">عدم انتخاب هیچکدام</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 mb-3">
+            <label class="flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all" [class.border-emerald-500]="exportColumnsScope === 'all'" [class.bg-emerald-50/50]="exportColumnsScope === 'all'" [class.border-slate-200]="exportColumnsScope !== 'all'">
+              <input type="radio" name="exportColScope" value="all" [(ngModel)]="exportColumnsScope" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <span class="text-xs font-bold text-slate-800">همه ستون‌های پیش‌فرض</span>
+            </label>
+            <label class="flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all" [class.border-emerald-500]="exportColumnsScope === 'custom'" [class.bg-emerald-50/50]="exportColumnsScope === 'custom'" [class.border-slate-200]="exportColumnsScope !== 'custom'">
+              <input type="radio" name="exportColScope" value="custom" [(ngModel)]="exportColumnsScope" class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <span class="text-xs font-bold text-slate-800">انتخاب سفارشی ستون‌ها</span>
+            </label>
+          </div>
+
+          <!-- چک‌باکس‌های ستون‌های سفارشی -->
+          <div *ngIf="exportColumnsScope === 'custom'" class="p-3 bg-slate-50 rounded-2xl border border-slate-200">
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pl-1" *ngIf="activeTab === 'audit'">
+              <label *ngFor="let col of availableAuditColumns" class="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                <input type="checkbox" [checked]="selectedAuditColumns.has(col.key)" (change)="toggleAuditColumn(col.key)" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300">
+                <span class="text-[11px] font-bold text-slate-700">{{col.label}}</span>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pl-1" *ngIf="activeTab === 'login'">
+              <label *ngFor="let col of availableLoginColumns" class="flex items-center gap-2 p-1.5 hover:bg-white rounded-lg cursor-pointer transition-colors">
+                <input type="checkbox" [checked]="selectedLoginColumns.has(col.key)" (change)="toggleLoginColumn(col.key)" class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300">
+                <span class="text-[11px] font-bold text-slate-700">{{col.label}}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <button (click)="closeExportModal()" type="button" class="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer shadow-xs" [disabled]="isExporting">
+          انصراف
+        </button>
+        <button (click)="executeExport()" type="button" [disabled]="isExporting || (exportColumnsScope === 'custom' && (activeTab === 'audit' ? selectedAuditColumns.size === 0 : selectedLoginColumns.size === 0))" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer active:scale-95">
+          <svg *ngIf="!isExporting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span *ngIf="isExporting" class="animate-spin block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+          <span>{{isExporting ? 'در حال آماده‌سازی فایل...' : 'تولید و دانلود فایل گزارش'}}</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ پنجره دیالوگ تاییدیه امنیتی رفع مسدودیت کاربر (Unlock Security Modal) ═══ -->
+  <div *ngIf="showUnlockConfirmModal && targetUserToUnlock" class="fixed inset-0 z-[10000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" (click)="closeUnlockConfirmModal()" dir="rtl">
+    <div class="relative bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col z-10 my-auto text-right" (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="p-5 bg-gradient-to-r from-rose-600 via-rose-700 to-rose-900 text-white flex items-center justify-between shadow-md">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 bg-white/10 rounded-2xl backdrop-blur-md text-white shadow-inner flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+          </div>
+          <div>
+            <h4 class="font-black text-base">تاییدیه امنیتی رفع مسدودیت</h4>
+            <p class="text-[11px] text-rose-200 mt-0.5">بازنشانی شمارنده خطای سیستم ضد نفوذ (Axes)</p>
+          </div>
+        </div>
+        <button (click)="closeUnlockConfirmModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="p-5 space-y-3.5 text-xs">
+        <div class="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
+          <div class="p-2 bg-rose-200 text-rose-800 rounded-xl shrink-0 mt-0.5">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          </div>
+          <div class="space-y-1">
+            <p class="font-bold text-slate-800 leading-relaxed">
+              آیا از رفع مسدودیت و بازنشانی قفل برای حساب کاربری زیر اطمینان دارید؟
+            </p>
+            <div class="p-2 bg-white rounded-xl border border-rose-200/80 font-mono font-black text-rose-900 text-xs mt-1">
+              {{targetUserToUnlock.username ? ('نام کاربری: ' + targetUserToUnlock.username) : ''}}
+              {{targetUserToUnlock.ip_address ? (' | آی‌پی: ' + targetUserToUnlock.ip_address) : ''}}
+            </div>
+          </div>
+        </div>
+
+        <p class="text-slate-600 leading-relaxed font-medium">
+          با تایید این عملیات، شمارنده تلاش‌های ناموفق این حساب کاربری در سیستم امنیتی ضدنفوذ به صفر بازنشانی شده و کاربر می‌تواند مجدداً وارد سامانه شود.
+        </p>
+
+        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500">
+          ⚠️ توجه: این اقدام امنیتی به همراه مشخصات شما در لاگ‌های ممیزی سیستم ثبت خواهد شد.
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <button (click)="closeUnlockConfirmModal()" type="button" class="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer shadow-xs" [disabled]="isUnlocking">
+          انصراف
+        </button>
+        <button (click)="executeUnlockUser()" type="button" [disabled]="isUnlocking" class="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer active:scale-95">
+          <span *ngIf="isUnlocking" class="animate-spin block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+          <span>{{isUnlocking ? 'در حال رفع قفل...' : 'بله، رفع مسدودیت کاربر'}}</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+

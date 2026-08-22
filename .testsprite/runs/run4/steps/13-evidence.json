@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 13,
+    "summary": "Step 13 'Expected the server to be available so the item could be submitted (no offline banner).' failed. Error: TEST BLOCKED\n\nThe submission could not be completed — the UI indicates the server is unavailable and submission controls are disabled.\n\nObservations:\n- An orange banner stating the server is not available is visible at the top of the page.\n- The submit-related buttons in the item detail (the send/submit controls) are disabled and not actionable.\n- No success toast or confirmation text (e.g., 'با موفقیت' or similar) appeared after attempting to submit.",
+    "path": "steps/13-snapshot.html"
+  }
+]

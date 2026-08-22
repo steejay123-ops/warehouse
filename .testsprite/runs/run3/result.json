@@ -1,0 +1,20 @@
+{
+  "testId": "f0ae5ba6-d71f-4470-97a8-64e0814d9561",
+  "status": "blocked",
+  "startedAt": "2026-08-16T02:05:42.234Z",
+  "finishedAt": "2026-08-16T02:07:52.048Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786846071681603//tmp/873089eb-5a15-4c3c-a28c-b9ee12e50701/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_985c7346102fd104",
+  "runIdIfAvailable": "035dd6be-fd33-45e7-854f-47a051a335ba",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 5,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the application server is unavailable and the user cannot be logged in, so the task submission flow cannot be executed.\n\nObservations:\n- The login page shows the persistent message 'در حال ارتباط با سرور...' (Connecting to server).\n- A visible banner/text states 'سرور در دسترس نیست' (server not available).\n- The dashboard/task list is not accessible, so the item TS-ITEM-001 cannot be located or submitted.",
+  "apiOutput": null,
+  "trace": null
+}

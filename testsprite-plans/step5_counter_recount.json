@@ -1,0 +1,41 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Counter Dashboard — Recount rejected item and resubmit",
+  "description": "Counter logs in with test_counter, opens rejected item TS-ITEM-002, inputs recount value 55, and resubmits to supervisor.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_counter into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Locate the item TS-ITEM-002 in the counter list and click to open its detail"
+    },
+    {
+      "type": "action",
+      "description": "Enter 55 into the counted quantity input field"
+    },
+    {
+      "type": "action",
+      "description": "Enter شمارش مجدد انجام شد into the counter note textarea"
+    },
+    {
+      "type": "action",
+      "description": "Click the submit button labelled ثبت و ارسال به سرپرست"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item TS-ITEM-002 detail closes or a success message is shown indicating recount submission"
+    }
+  ]
+}

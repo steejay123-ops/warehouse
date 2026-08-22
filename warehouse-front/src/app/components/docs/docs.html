@@ -3,12 +3,14 @@
       
       <!-- پنل اصلی آپلود و تنظیمات -->
       <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 md:p-8">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
           <h3 class="font-black text-slate-800 text-base">آپلود و تزریق رکوردهای انبار</h3>
-          <button (click)="downloadTemplate()" class="px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all flex items-center gap-1.5 border border-slate-200 shadow-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            دانلود قالب نمونه
-          </button>
+          <div class="flex items-center gap-2">
+            <button (click)="downloadTemplate()" class="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold transition-all flex items-center gap-1.5 border border-emerald-200 shadow-xs cursor-pointer active:scale-95" title="دانلود قالب نمونه فایل اکسل">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>دانلود قالب نمونه</span>
+            </button>
+          </div>
         </div>
         
         <app-file-upload

@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet, InvalidToken
 
-from accounts.permissions import IsSuperUser
+from accounts.permissions import IsSuperUser, CanManageDatabaseBackup, CanRestoreDatabase
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ class BackupCreateView(APIView):
 
     Only Superusers can call this endpoint.
     """
-    permission_classes = [IsSuperUser]
+    permission_classes = [CanManageDatabaseBackup]
 
     def post(self, request):
         password = request.data.get("password", "").strip()
@@ -272,7 +272,7 @@ class BackupRestoreView(APIView):
 
     Only Superusers can call this endpoint.
     """
-    permission_classes = [IsSuperUser]
+    permission_classes = [CanRestoreDatabase]
 
     def post(self, request):
         uploaded_file = request.FILES.get("file")

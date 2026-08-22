@@ -1,0 +1,20 @@
+{
+  "testId": "d295f716-4dbd-45c8-8476-fae33021f903",
+  "status": "blocked",
+  "startedAt": "2026-08-16T01:42:54.569Z",
+  "finishedAt": "2026-08-16T01:52:24.669Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786845144411866//tmp/4aae0b1f-0d01-4ce1-8f1b-a26ad8534d65/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_155b2bfa8a9164da",
+  "runIdIfAvailable": "f4e768ed-30a0-4e09-9528-019ce530ad26",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 23,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be completed because the application is offline and the required location field is not accessible on the item detail view.\n\nObservations:\n- A persistent offline banner is visible: 'سرور در دسترس نیست' and the UI indicates changes are queued for sync.\n- The item detail shows counted amount = 100.000 and note 'شمارش دقیق انجام شد', but no editable location input is present.\n- Attempts to save returned the UI to the list …",
+  "apiOutput": null,
+  "trace": null
+}

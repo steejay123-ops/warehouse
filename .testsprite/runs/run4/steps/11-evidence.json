@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 11,
+    "summary": "Step 11 'Search the page for any success/confirmation text such as 'ارسال' or 'با موفقیت' to verify the item was submitted' passed.",
+    "path": "steps/11-snapshot.html"
+  }
+]

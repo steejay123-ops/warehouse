@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 23,
+    "summary": "Step 23 'Expected the app not to display the offline banner so a save confirmation toast could appear.' failed. Error: TEST BLOCKED\n\nThe test could not be completed because the application is offline and the required location field is not accessible on the item detail view.\n\nObservations:\n- A persistent offline banner is visible: 'سرور در دسترس نیست' and the UI indicates changes are queued for sync.\n- The item detail shows counted amount = 100.000 and note 'شمارش دقیق انجام شد', but no editable location input is present.\n- Attempts to save returned the UI to the list without any visible success toast, so server-confirmed save could not be verified.",
+    "path": "steps/23-snapshot.html"
+  }
+]

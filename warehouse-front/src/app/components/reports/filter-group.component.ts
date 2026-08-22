@@ -22,49 +22,50 @@ import { FilterValueComponent } from './filter-value.component';
   standalone: true,
   imports: [CommonModule, FormsModule, FilterValueComponent],
   template: `
-    <div class="rounded-xl border p-2.5 space-y-2"
+    <div class="rounded-2xl border p-3 space-y-2.5 shadow-2xs transition-all"
          [class.border-rose-300]="group.not"
          [class.border-indigo-200]="!group.not && group.op === 'AND'"
-         [class.bg-indigo-50/30]="group.op === 'AND'"
+         [class.bg-indigo-50/20]="group.op === 'AND'"
          [class.border-amber-200]="!group.not && group.op === 'OR'"
-         [class.bg-amber-50/30]="group.op === 'OR'">
+         [class.bg-amber-50/20]="group.op === 'OR'">
 
       <div class="flex items-center gap-2 flex-wrap">
-        <div class="flex rounded-lg overflow-hidden border border-slate-200 bg-white">
+        <div class="flex rounded-xl overflow-hidden border border-slate-200 bg-white shadow-2xs">
           <button type="button" (click)="setOp('AND')"
-                  class="px-2.5 py-1 text-[10px] font-black transition-colors"
+                  class="px-3 py-1 text-[11px] font-black transition-colors cursor-pointer"
                   [class.bg-indigo-600]="group.op === 'AND'" [class.text-white]="group.op === 'AND'"
-                  [class.text-slate-500]="group.op !== 'AND'">و (AND)</button>
+                  [class.text-slate-600]="group.op !== 'AND'">و (AND)</button>
           <button type="button" (click)="setOp('OR')"
-                  class="px-2.5 py-1 text-[10px] font-black transition-colors"
+                  class="px-3 py-1 text-[11px] font-black transition-colors cursor-pointer"
                   [class.bg-amber-500]="group.op === 'OR'" [class.text-white]="group.op === 'OR'"
-                  [class.text-slate-500]="group.op !== 'OR'">یا (OR)</button>
+                  [class.text-slate-600]="group.op !== 'OR'">یا (OR)</button>
         </div>
 
         <button type="button" (click)="toggleNot(group)"
                 title="نقیض کل گروه — ردیف‌هایی که این شرایط را ندارند"
-                class="px-2.5 py-1 text-[10px] font-black rounded-lg border transition-colors"
+                class="px-2.5 py-1 text-[11px] font-black rounded-xl border transition-all cursor-pointer"
                 [class.bg-rose-600]="group.not" [class.text-white]="group.not"
                 [class.border-rose-600]="group.not"
-                [class.bg-white]="!group.not" [class.text-slate-500]="!group.not"
-                [class.border-slate-200]="!group.not">جز (NOT)</button>
+                [class.bg-white]="!group.not" [class.text-slate-600]="!group.not"
+                [class.border-slate-200]="!group.not">نقیض گروه (NOT)</button>
 
         <button type="button" (click)="addCondition()" [disabled]="totalConditions >= 60"
-                title="{{ totalConditions >= 60 ? 'حداکثر ۶۰ شرط مجاز است' : '' }}"
-                class="text-[10px] font-bold text-indigo-600 bg-white border border-indigo-200 rounded-lg px-2 py-1 transition-colors"
-                [class.hover:text-indigo-800]="totalConditions < 60"
+                title="{{ totalConditions >= 60 ? 'حداکثر ۶۰ شرط مجاز است' : 'افزودن یک شرط جدید' }}"
+                class="text-[11px] font-bold text-indigo-600 bg-white border border-indigo-200 rounded-xl px-2.5 py-1 transition-all cursor-pointer shadow-2xs hover:bg-indigo-50"
                 [class.opacity-40]="totalConditions >= 60" [class.cursor-not-allowed]="totalConditions >= 60">
           + شرط
         </button>
         @if (depth < maxDepth) {
           <button type="button" (click)="addGroup()"
-                  class="text-[10px] font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                  title="افزودن زیرمجموعه شروط با منطق جداگانه"
+                  class="text-[11px] font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl px-2.5 py-1 transition-all cursor-pointer shadow-2xs hover:bg-slate-50">
             + گروه تودرتو
           </button>
         }
         @if (depth > 0) {
           <button type="button" (click)="removeSelf.emit()"
-                  class="text-[10px] font-bold text-rose-500 hover:text-rose-700 mr-auto">
+                  title="حذف این گروه و تمام شروط درون آن"
+                  class="text-[11px] font-bold text-rose-500 hover:text-rose-700 mr-auto transition-colors cursor-pointer">
             حذف گروه ✕
           </button>
         }
@@ -81,30 +82,30 @@ import { FilterValueComponent } from './filter-value.component';
             (removeSelf)="removeChild($index)"
             (changed)="changed.emit()" />
         } @else {
-          <div class="flex items-center gap-2 flex-wrap bg-white rounded-lg border p-2"
+          <div class="flex items-center gap-2 flex-wrap bg-white rounded-xl border p-2 shadow-2xs transition-all"
                [class.border-rose-300]="asCond(child).not"
                [class.border-slate-200]="!asCond(child).not">
             <!-- نقیض شرط -->
             <button type="button" (click)="toggleNot(asCond(child))"
-                    title="نقیض شرط"
-                    class="w-6 h-6 shrink-0 text-xs font-black rounded-lg border transition-colors"
+                    title="نقیض این شرط (NOT)"
+                    class="h-7 px-2 shrink-0 text-xs font-black rounded-lg border transition-all cursor-pointer"
                     [class.bg-rose-600]="asCond(child).not" [class.text-white]="asCond(child).not"
                     [class.border-rose-600]="asCond(child).not"
-                    [class.bg-white]="!asCond(child).not" [class.text-slate-400]="!asCond(child).not"
-                    [class.border-slate-200]="!asCond(child).not">!</button>
+                    [class.bg-slate-50]="!asCond(child).not" [class.text-slate-400]="!asCond(child).not"
+                    [class.border-slate-200]="!asCond(child).not">NOT</button>
 
             <!-- فیلد -->
             <select [ngModel]="asCond(child).field" (ngModelChange)="setField(asCond(child), $event)"
-                    class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36">
-              <option value="" disabled>فیلد…</option>
+                    class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs custom-select">
+              <option value="" disabled>انتخاب فیلد…</option>
               @for (f of fields; track f.key) {
-                <option [value]="f.key">{{ f.label }}</option>
+                <option [value]="f.key" [title]="f.key">{{ f.label }}</option>
               }
             </select>
 
             <!-- اپراتور -->
             <select [ngModel]="asCond(child).operator" (ngModelChange)="setOperator(asCond(child), $event)"
-                    class="text-xs px-2 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400">
+                    class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 bg-white shadow-2xs custom-select">
               @for (op of operatorsFor(asCond(child).field); track op) {
                 <option [value]="op">{{ opLabel(op) }}</option>
               }
@@ -118,13 +119,14 @@ import { FilterValueComponent } from './filter-value.component';
               (valueChange)="setValue(asCond(child), $event)" />
 
             <button type="button" (click)="removeChild($index)"
-                    class="text-rose-400 hover:text-rose-600 mr-auto text-xs font-bold px-1">✕</button>
+                    title="حذف این شرط"
+                    class="text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md p-1 mr-auto text-xs font-bold transition-colors cursor-pointer">✕</button>
           </div>
         }
       }
 
       @if (!group.children.length) {
-        <div class="text-[10px] text-slate-400 py-1 text-center">شرطی تعریف نشده — دکمه «+ شرط» را بزنید</div>
+        <div class="text-xs text-slate-400 py-1.5 text-center">شرطی تعریف نشده — برای اعمال فیلتر روی «+ شرط» کلیک کنید</div>
       }
     </div>
   `,

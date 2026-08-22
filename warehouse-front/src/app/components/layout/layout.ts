@@ -1,9 +1,10 @@
-import { Component, OnInit, OnDestroy, computed, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, ChangeDetectorRef, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { filter, Subscription } from 'rxjs';
+import { SwUpdate } from '@angular/service-worker';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthStore } from '../../core/stores/auth.store';
 import { StateService } from '../../services/state.service';
@@ -18,10 +19,11 @@ import { DeepSyncModalComponent } from '../../shared/components/deep-sync-modal/
 import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
+import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal],
+  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
@@ -122,8 +124,8 @@ export class Layout implements OnInit, OnDestroy {
       category: 'counting',
       categoryLabel: 'انبارگردانی',
       categoryColor: 'emerald',
-      title: 'تب استخر کالاها',
-      description: 'سوئیچ سریع به فهرست استخر آزاد کالاها',
+      title: 'تب مخزن کالاها',
+      description: 'سوئیچ سریع به فهرست مخزن آزاد کالاها',
       keys: ['Alt', '2'],
       altKeys: null,
     },
@@ -339,6 +341,57 @@ export class Layout implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  private swUpdate = inject(SwUpdate);
+  isCheckingAppUpdate = false;
+
+  /**
+   * بروزرسانی دستی نسخه برنامه (فرانت‌اند / PWA)
+   * استعلام آنی از سرویس‌ورکر، فعال‌سازی فوری نسخه و رفرش تمیز صفحه
+   */
+  async onManualAppUpdate() {
+    if (this.isCheckingAppUpdate) return;
+    this.isCheckingAppUpdate = true;
+    this.cdr.detectChanges();
+
+    try {
+      this.toast.show('info', 'در حال استعلام آخرین نسخه برنامه از سرور...');
+
+      if (this.swUpdate.isEnabled) {
+        const updateFound = await this.swUpdate.checkForUpdate();
+        if (updateFound) {
+          this.toast.show('success', 'نسخه جدید دریافت شد! در حال بارگذاری مجدد...');
+          await this.swUpdate.activateUpdate();
+          setTimeout(() => {
+            window.location.reload();
+          }, 600);
+          return;
+        }
+      }
+
+      // بروزرسانی دستی ثبتی‌های سرویس‌ورکر مرورگر در صورت وجود
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.update();
+        }
+      }
+
+      this.toast.show('success', 'برنامه به آخرین نسخه بروزرسانی شد.');
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
+    } catch (err: any) {
+      console.error('Manual app update failed', err);
+      this.toast.show('error', 'خطا در بررسی بروزرسانی: ' + (err?.message || 'سرور پاسخگو نیست'));
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } finally {
+      this.isCheckingAppUpdate = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   isAvatarModalOpen = false;
   isSavingAvatar = false;
 
@@ -418,7 +471,7 @@ export class Layout implements OnInit, OnDestroy {
     {id:'supervisor', label:'کارتابل سرپرست', icon:'check-square', permission: 'view_sys_supervisor'},
     {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
     {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
-    {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_sys_export'},
+    {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'}
   ];
@@ -433,9 +486,8 @@ export class Layout implements OnInit, OnDestroy {
     {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
     {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
 
-    {id:'feeding', label:'مدیریت و تغذیه MT26/49', icon:'database', permission: 'view_wh_feeding'},
-    {id:'export', label:'صدور فایل برای تغذیه', icon:'download', permission: 'view_wh_export'},
-    {id:'audit', label:'رهگیری تغییرات (Audit Trail)', icon:'file-text', permission: 'view_wh_audit'},
+    {id:'feeding', label:'مدیریت و تغذیه MT26/49 (به‌زودی)', icon:'database', permission: 'view_wh_feeding'},
+    {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'wh-settings', label:'تنظیمات انبار', icon:'settings', permission: 'view_wh_settings'}
   ];
@@ -739,7 +791,16 @@ export class Layout implements OnInit, OnDestroy {
     }
   }
 
-  toggleSyncErrors() {
+  openSyncErrorsFromBadge() {
+    this.isSyncErrorsOpen = true;
+    this.loadSyncErrors();
+    this.cdr.detectChanges();
+  }
+
+  toggleSyncErrors(event?: MouseEvent) {
+    if (event) {
+      event.stopPropagation();
+    }
     this.isSyncErrorsOpen = !this.isSyncErrorsOpen;
     if (this.isSyncErrorsOpen) {
       this.loadSyncErrors();
@@ -818,6 +879,9 @@ export class Layout implements OnInit, OnDestroy {
     // Filter items based on permissions
     return items.filter(item => {
       if (isAdmin) return true;
+      if (item.id === 'audit') {
+        return userPerms.includes('view_wh_audit') || userPerms.includes('perm_sys_logs');
+      }
       return userPerms.includes(item.permission);
     });
   });
@@ -943,7 +1007,7 @@ export class Layout implements OnInit, OnDestroy {
       labels: 'لیبل‌زن هوشمند',
       docs: 'انبار',
       'id-cards': 'صدور کارت پرسنلی و گیت‌پاس',
-      feeding: 'تغذیه سامانه MT',
+      feeding: 'مدیریت و تغذیه MT26/49 (به‌زودی)',
       settings: 'تنظیمات',
       counter: 'کارتابل انبارگردان',
       customs: 'کارتابل مالی',
@@ -951,9 +1015,9 @@ export class Layout implements OnInit, OnDestroy {
       'manager-review': 'بررسی نهایی رکوردها',
       'label-designer': 'طراحی و کانفیگ لیبل/QR',
       audit: 'رهگیری تغییرات',
-      export: 'صدور فایل برای تغذیه',
       'wh-settings': 'تنظیمات انبار',
-      'count-tracking': 'پیگیری وضعیت شمارش'
+      'count-tracking': 'پیگیری وضعیت شمارش',
+      reports: 'گزارش‌ساز پویا'
     };
     this.currentTitle = titles[tab] || tab;
   }

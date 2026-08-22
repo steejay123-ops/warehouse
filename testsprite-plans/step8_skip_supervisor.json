@@ -1,0 +1,29 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Manager Review — Verify item with skip_supervisor in cartable",
+  "description": "Manager logs in with test_manager and verifies TS-ITEM-003 (dispatched with skip_supervisor) directly in manager review.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_manager into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "In the warehouse selection dropdown or filter, select the option representing all warehouses or WH-TESTSPRITE"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item TS-ITEM-003 or task list is loaded and visible in manager review"
+    }
+  ]
+}

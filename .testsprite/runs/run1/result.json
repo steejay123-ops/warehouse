@@ -1,0 +1,20 @@
+{
+  "testId": "d295f716-4dbd-45c8-8476-fae33021f903",
+  "status": "blocked",
+  "startedAt": "2026-08-16T01:40:24.369Z",
+  "finishedAt": "2026-08-16T01:41:10.038Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786844469686996//tmp/a2c3ff87-6dac-4130-a420-33472a19ae94/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_bfbb6eb68b937c0c",
+  "runIdIfAvailable": "9b563ca2-160c-4e7b-99c4-4f919f766003",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 2,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the application host is unreachable due to a server/host error.\n\nObservations:\n- The site returned a Cloudflare \"Bad gateway\" (502) diagnostic page when loading https://app.farsalish.ir.\n- The Cloudflare page shows the host (app.farsalish.ir) status as \"Error\" (Host Error), blocking access to the application and its login page.\n- Only Cloudflare diagnostic UI was present; no application login form or UI elemen…",
+  "apiOutput": null,
+  "trace": null
+}

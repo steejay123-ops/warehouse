@@ -65,11 +65,23 @@ class Command(BaseCommand):
 
     def _recover_orphans(self):
         cutoff = timezone.now() - timezone.timedelta(minutes=ORPHAN_MINUTES)
-        n = ReportExportJob.objects.filter(
+        orphans = list(ReportExportJob.objects.filter(
             status='running', heartbeat_at__lt=cutoff,
-        ).update(status='pending', progress=0, heartbeat_at=None)
-        if n:
-            self.stdout.write(self.style.WARNING(f'{n} job یتیم به صف برگشت.'))
+        ))
+        for job in orphans:
+            job.attempts += 1
+            if job.attempts >= 3:
+                job.status = 'failed'
+                job.error_message = 'پردازش بیش از حد مجاز متوقف شد (تسک مسموم).'
+                job.finished_at = timezone.now()
+                job.save(update_fields=['attempts', 'status', 'error_message', 'finished_at'])
+                self.stdout.write(self.style.ERROR(f'job #{job.pk} به دلیل رسیدن به سقف تلاش ({job.attempts}) متوقف شد.'))
+            else:
+                job.status = 'pending'
+                job.progress = 0
+                job.heartbeat_at = None
+                job.save(update_fields=['attempts', 'status', 'progress', 'heartbeat_at'])
+                self.stdout.write(self.style.WARNING(f'job #{job.pk} یتیم (تلاش {job.attempts}/3) به صف برگشت.'))
 
     def _claim(self):
         with transaction.atomic():

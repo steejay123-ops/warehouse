@@ -8,6 +8,7 @@ export interface Permission {
   id: number;
   name: string;
   codename: string;
+  is_sensitive?: boolean;
 }
 
 export interface Role {

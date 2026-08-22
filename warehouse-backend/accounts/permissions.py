@@ -66,3 +66,147 @@ class IsSuperUser(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
+class CanManageDatabaseBackup(permissions.BasePermission):
+    """
+    Allows access to users who can manage, create, list, and verify backups.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_sys_backup_manage') or
+            request.user.has_perm('accounts.perm_sys_backup_restore')
+        )
+
+
+class CanRestoreDatabase(permissions.BasePermission):
+    """
+    Allows access ONLY to users who have critical restore permission.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_sys_backup_restore')
+        )
+
+
+class CanExportAuditLogs(permissions.BasePermission):
+    """
+    Allows exporting/archiving audit logs.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_sys_audit_export') or
+            request.user.has_perm('accounts.perm_sys_purge_logs') or
+            request.user.has_perm('accounts.perm_sys_logs')
+        )
+
+
+class CanPurgeAuditLogs(permissions.BasePermission):
+    """
+    Allows critical permanent purging of audit logs.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_sys_purge_logs')
+        )
+
+
+class CanRollbackSingle(permissions.BasePermission):
+    """
+    Allows reverting single records/fields.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_rollback_single') or
+            request.user.has_perm('accounts.perm_rollback_bulk') or
+            request.user.has_perm('accounts.perm_rollback_data')
+        )
+
+
+class CanRollbackBulk(permissions.BasePermission):
+    """
+    Allows critical batch rollback of transactions across time ranges.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_rollback_bulk') or
+            request.user.has_perm('accounts.perm_rollback_data')
+        )
+
+
+class CanRestoreDeleted(permissions.BasePermission):
+    """
+    Allows restoring soft-deleted records.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_restore_deleted') or
+            request.user.has_perm('accounts.perm_rollback_single') or
+            request.user.has_perm('accounts.perm_rollback_bulk') or
+            request.user.has_perm('accounts.perm_rollback_data')
+        )
+
+
+class CanApproveDocuments(permissions.BasePermission):
+    """
+    Allows approving, rejecting, and signing financial/shipping documents.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_doc_approve_action') or
+            request.user.has_perm('accounts.can_act_as_doc_supervisor') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanApproveFeeds(permissions.BasePermission):
+    """
+    Allows approving and applying feeding/customs records.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_feed_approve_action') or
+            request.user.has_perm('accounts.can_act_as_supervisor') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanFinalizeInventory(permissions.BasePermission):
+    """
+    Allows final approval and closing of inventory counts/discrepancies.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_inventory_finalize') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )

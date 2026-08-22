@@ -10,31 +10,71 @@ class Command(BaseCommand):
         content_type = ContentType.objects.get_for_model(CustomUser)
         
         permissions = [
-            # System
-            {'codename': 'perm_sys_settings', 'name': 'دسترسی به تنظیمات کلان سیستم'},
+            # System Tabs (منوی اصلی)
+            {'codename': 'view_sys_dashboard', 'name': 'داشبورد مانیتورینگ کلی'},
+            {'codename': 'view_sys_users', 'name': 'مدیریت کاربران و نقش‌ها'},
+            {'codename': 'view_sys_projects', 'name': 'مدیریت انبارها و پروژه‌ها'},
+            {'codename': 'view_sys_id_cards', 'name': 'صدور کارت پرسنلی'},
+            {'codename': 'view_sys_counter', 'name': 'میزکار شمارش کور'},
+            {'codename': 'view_sys_supervisor', 'name': 'کارتابل سرپرست شمارش'},
+            {'codename': 'view_sys_manager_review', 'name': 'بررسی نهایی مدیر'},
+            {'codename': 'view_sys_export', 'name': 'صدور فایل تغذیه'},
+            {'codename': 'view_sys_recounts', 'name': 'بررسی مغایرت و بازشماری'},
+            {'codename': 'view_sys_settings', 'name': 'تنظیمات سیستم'},
+            {'codename': 'view_sys_reports', 'name': 'گزارش‌ساز'},
+            {'codename': 'perm_sys_settings', 'name': 'تنظیمات کلان سیستم'},
             {'codename': 'perm_sys_logs', 'name': 'مشاهده لاگ‌های امنیتی (Audit)'},
-            # Warehouse
+            
+            # Warehouse Tabs (منوی انبار)
+            {'codename': 'view_wh_dashboard', 'name': 'داشبورد انبار'},
+            {'codename': 'view_wh_docs', 'name': 'مدیریت کالا (انبار)'},
+            {'codename': 'view_wh_dispatch', 'name': 'تخصیص کالا (انبار)'},
+            {'codename': 'view_wh_customs', 'name': 'فیلدهای مالی و گمرکی (انبار)'},
+            {'codename': 'view_wh_doc_approvals', 'name': 'تاییدات سرپرست اسناد (انبار)'},
+            {'codename': 'view_wh_feeding', 'name': 'مدیریت و تغذیه MT (انبار)'},
+            {'codename': 'view_wh_feed_approvals', 'name': 'تاییدات سرپرست تغذیه (انبار)'},
+            {'codename': 'view_wh_labels', 'name': 'چاپ مجدد و اسکن لیبل (انبار)'},
+            {'codename': 'view_wh_label_designer', 'name': 'طراحی و کانفیگ لیبل (انبار)'},
+            {'codename': 'view_wh_audit', 'name': 'رهگیری تغییرات و ممیزی (انبار)'},
+            {'codename': 'view_wh_settings', 'name': 'تنظیمات انبار'},
             {'codename': 'perm_wh_create', 'name': 'تعریف کارگاه/انبار جدید'},
             {'codename': 'perm_wh_edit', 'name': 'ویرایش مشخصات انبارها'},
             {'codename': 'perm_wh_freeze', 'name': 'فریز کردن و توقف عملیات انبار'},
-            # Records
+            
+            # Records (سایر)
             {'codename': 'perm_rec_import', 'name': 'تزریق و آپلود فایل پایه (Excel)'},
             {'codename': 'perm_rec_dispatch', 'name': 'تخصیص رکورد به شمارشگر میدانی'},
             {'codename': 'perm_rec_label', 'name': 'صدور دستور چاپ لیبل و QR Code'},
             {'codename': 'perm_rec_recount', 'name': 'صدور دستور بازشماری (مغایرت)'},
-            # Users
             {'codename': 'perm_usr_add', 'name': 'ثبت پرسنل جدید'},
             {'codename': 'perm_usr_edit', 'name': 'ویرایش پرونده پرسنلی'},
             {'codename': 'perm_usr_role', 'name': 'تغییر ساختار سازمانی و نقش‌ها'},
-            # Operations (Phase 5 RBAC)
-            {'codename': 'can_act_as_counter', 'name': 'مجوز دریافت کار و انبارگردانی میدانی'},
-            {'codename': 'can_act_as_supervisor', 'name': 'مجوز کارتابل سرپرست (تأیید مغایرت‌ها)'},
-            {'codename': 'can_act_as_manager', 'name': 'مجوز کارتابل مدیر (تأیید نهایی)'},
-            {'codename': 'can_act_as_doc_worker', 'name': 'مجوز کارتابل کارشناس اسناد'},
-            {'codename': 'can_act_as_doc_supervisor', 'name': 'مجوز کارتابل سرپرست اسناد'},
+
+            # Operations / Workflow (فرآیندی و کارتابل‌ها)
+            {'codename': 'can_act_as_counter', 'name': 'شمارنده و انبارگردانی میدانی'},
+            {'codename': 'can_act_as_supervisor', 'name': 'سرپرست شمارش (تایید مغایرت‌ها)'},
+            {'codename': 'can_act_as_manager', 'name': 'مدیر انبار (تایید نهایی)'},
+            {'codename': 'can_act_as_doc_worker', 'name': 'کارشناس اسناد مالی'},
+            {'codename': 'perm_doc_approve_action', 'name': 'تایید، رد و ثبت امضای اسناد'},
+            {'codename': 'perm_feed_approve_action', 'name': 'تایید و اعمال فیدهای تغذیه/گمرکی'},
+            {'codename': 'perm_inventory_finalize', 'name': 'تایید نهایی و بستن دوره‌های انبارگردانی'},
+
+            # Sensitive & Critical (حساس و بحرانی)
+            {'codename': 'perm_rollback_data', 'name': 'بازگردانی و احیای جامع داده‌ها'},
+            {'codename': 'perm_rollback_single', 'name': 'بازگردانی تکی یک فیلد یا سند'},
+            {'codename': 'perm_rollback_bulk', 'name': 'بازگردانی گروهی و زمانی تراکنش‌ها'},
+            {'codename': 'perm_restore_deleted', 'name': 'احیای داده‌های حذف‌شده'},
+            {'codename': 'perm_sys_backup_manage', 'name': 'ایجاد و مدیریت فایل‌های پشتیبان'},
+            {'codename': 'perm_sys_backup_restore', 'name': 'بازیابی پایگاه داده'},
+            {'codename': 'perm_sys_audit_export', 'name': 'خروجی گرفتن و آرشیو لاگ‌های ممیزی'},
+            {'codename': 'perm_sys_purge_logs', 'name': 'پاکسازی و حذف قطعی لاگ‌های ممیزی'},
+            {'codename': 'perm_sys_hard_delete', 'name': 'حذف فیزیکی و قطعی داده‌ها'},
+            {'codename': 'perm_sys_emergency_freeze', 'name': 'فریز اضطراری و قفل سراسری انبارها'},
+            {'codename': 'perm_sys_factory_reset', 'name': 'بازنشانی مقادیر اولیه و ریست سیستم'},
         ]
 
-        count = 0
+        created_count = 0
+        updated_count = 0
         for p in permissions:
             perm, created = Permission.objects.get_or_create(
                 codename=p['codename'],
@@ -42,6 +82,11 @@ class Command(BaseCommand):
                 defaults={'name': p['name']}
             )
             if created:
-                count += 1
+                created_count += 1
+            else:
+                if perm.name != p['name']:
+                    perm.name = p['name']
+                    perm.save()
+                    updated_count += 1
 
-        self.stdout.write(self.style.SUCCESS(f'Successfully seeded {count} new custom permissions.'))
+        self.stdout.write(self.style.SUCCESS(f'Successfully processed permissions: {created_count} created, {updated_count} updated.'))

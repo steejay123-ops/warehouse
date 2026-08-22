@@ -8,20 +8,40 @@
       
       <!-- Mobile UX Header -->
       <header class="mb-4 flex items-center justify-between gap-3 relative z-40">
-        <!-- Warehouse Selector -->
-        <div class="flex-1 max-w-[200px]">
-          <app-warehouse-selector
-            *ngIf="!authStore.isWarehouseContext()"
-            [allowAll]="true"
-            [projects]="state.appState.projects"
-            [activeId]="authStore.activeWarehouseId()"
-            (changed)="onWarehouseChanged($event)"
-          ></app-warehouse-selector>
+        <!-- Title & Icon -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          </div>
+          <div class="min-w-0">
+            <h1 class="font-black text-slate-800 text-sm md:text-base leading-tight truncate">کارتابل مالی و مدارک</h1>
+            <span class="text-[10px] text-slate-400 font-bold">ثبت و بررسی اسناد مالی کالاها</span>
+          </div>
         </div>
-        
+
         <div class="flex items-center gap-2">
+          <!-- Warehouse Selector -->
+          <div class="w-36 sm:w-44">
+            <app-warehouse-selector
+              *ngIf="!authStore.isWarehouseContext()"
+              [allowAll]="true"
+              [projects]="state.appState.projects"
+              [activeId]="authStore.activeWarehouseId()"
+              (changed)="onWarehouseChanged($event)"
+            ></app-warehouse-selector>
+          </div>
+          <!-- Barcode Scanner Trigger Button -->
+          <button (click)="scanner.openCamera()" class="btn-icon-square btn-icon-indigo" title="اسکن بارکد با دوربین" aria-label="اسکن دوربین">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+              <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+              <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+              <path d="M3 17v2a2 2 0 0 0 2 2h2"></path>
+              <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+          </button>
           <!-- Export Excel Button -->
-          <button (click)="openExportModal()" class="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm" title="خروجی اکسل">
+          <button (click)="openExportModal()" class="btn-icon-square btn-icon-emerald" title="خروجی و دانلود اکسل کارتابل مالی" aria-label="خروجی اکسل">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
@@ -29,14 +49,13 @@
             </svg>
           </button>
           <!-- Refresh Button -->
-          <button (click)="refreshCurrentTab()" class="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm" title="بروزرسانی">
+          <button (click)="refreshCurrentTab()" class="btn-icon-square btn-icon-indigo" title="بروزرسانی کارتابل مالی و گمرک" aria-label="بروزرسانی">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" [class.animate-spin]="isLoading">
               <polyline points="23 4 23 10 17 10"></polyline>
               <polyline points="1 20 1 14 7 14"></polyline>
               <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
             </svg>
           </button>
-          <app-offline-pending-badge />
         </div>
       </header>
 
@@ -53,7 +72,7 @@
           تسک‌های من
         </button>
         <button (click)="setTab('pool')" [class.border-indigo-600]="currentTab === 'pool'" [class.text-indigo-600]="currentTab === 'pool'" class="px-4 py-3 border-b-2 border-transparent font-bold text-sm transition-colors text-slate-500 hover:text-slate-800 flex items-center gap-1">
-          <span>استخر کالاها</span>
+          <span>مخزن اسناد</span>
           <span *ngIf="poolTasks.length > 0" class="bg-indigo-100 text-indigo-700 text-xs px-2 py-0.5 rounded-full font-bold">{{poolTasks.length}}</span>
         </button>
       </div>
@@ -113,7 +132,7 @@
                 (click)="submitSelected()" 
                 [disabled]="isSaving"
                 type="button"
-                class="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-md transition-all">
+                class="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-black shadow-md transition-all">
                 <svg *ngIf="!isSaving" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 <div *ngIf="isSaving" class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 <span>{{ isSaving ? 'در حال ارسال...' : 'ارسال به سرپرست' }}</span>
@@ -215,7 +234,7 @@
               </button>
             </div>
 
-            <!-- Date Filters & Smart Sort Row -->
+            <!-- Date & Location Filters & Smart Sort Row -->
             <div class="flex items-center justify-between gap-2 relative">
               <!-- Date Chips (Scrollable on small screens) -->
               <div class="flex gap-1.5 items-center overflow-x-auto scrollbar-hide flex-1 py-0.5">
@@ -223,6 +242,16 @@
                 <button (click)="setDateFilter('today')" [ngClass]="dateFilter === 'today' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-indigo-50/70 text-indigo-700 border-indigo-100'" class="px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors border">امروز</button>
                 <button (click)="setDateFilter('yesterday')" [ngClass]="dateFilter === 'yesterday' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-indigo-50/70 text-indigo-700 border-indigo-100'" class="px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors border">دیروز</button>
                 <button (click)="setDateFilter('week')" [ngClass]="dateFilter === 'week' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-indigo-50/70 text-indigo-700 border-indigo-100'" class="px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors border">این هفته</button>
+                
+                <!-- Quick Location Dropdown -->
+                <select 
+                  *ngIf="availableLocations.length > 0"
+                  [ngModel]="locationFilter"
+                  (ngModelChange)="setLocationFilter($event)"
+                  class="bg-white text-slate-700 border border-slate-200/90 rounded-lg px-2 py-1 text-[10px] font-bold shadow-xs focus:outline-none focus:border-indigo-500 cursor-pointer">
+                  <option value="all">همه لوکیشن‌ها</option>
+                  <option *ngFor="let loc of availableLocations" [value]="loc">لوکیشن {{ loc }}</option>
+                </select>
               </div>
 
               <!-- Smart Sort Dropdown Component -->
@@ -416,7 +445,8 @@
                 'border-sky-400 ring-1 ring-sky-400/30 bg-sky-50/40': task._offlinePending,
                 'border-emerald-500 ring-1 ring-emerald-500/20 bg-emerald-50/10': !task._offlinePending && (task.status === 'DOC_PROCESSED' || task.status === 'DOC_MANAGER_REVIEW' || task.status === 'DOC_FINAL_APPROVED'),
                 'border-indigo-500 ring-1 ring-indigo-500/20 bg-indigo-50/10': !task._offlinePending && task.status === 'PENDING_DOC' && hasDocData(task),
-                'border-rose-500 ring-1 ring-rose-500/20 bg-rose-50/10': !task._offlinePending && (task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED'),
+                'border-amber-500 ring-1 ring-amber-500/20 bg-amber-50/10': !task._offlinePending && (task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED') && hasDocData(task),
+                'border-rose-500 ring-1 ring-rose-500/20 bg-rose-50/10': !task._offlinePending && (task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED') && !hasDocData(task),
                 'border-slate-200 hover:border-indigo-300': !task._offlinePending && task.status === 'PENDING_DOC' && !hasDocData(task)
               }">
 
@@ -445,21 +475,34 @@
                           'bg-blue-100 text-blue-700': task.status === 'DOC_MANAGER_REVIEW',
                           'bg-purple-100 text-purple-700': task.status === 'DOC_FINAL_APPROVED',
                           'bg-indigo-100 text-indigo-700 border border-indigo-200': task.status === 'PENDING_DOC' && hasDocData(task),
-                          'bg-rose-100 text-rose-700 border border-rose-200': task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED',
+                          'bg-amber-100 text-amber-700 border border-amber-200': (task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED') && hasDocData(task),
+                          'bg-rose-100 text-rose-700 border border-rose-200': (task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED') && !hasDocData(task),
                           'bg-slate-100 text-slate-600': task.status === 'PENDING_DOC' && !hasDocData(task)
                         }">
                      <span *ngIf="task.status === 'PENDING_DOC' && !hasDocData(task)">در انتظار</span>
                      <span *ngIf="task.status === 'PENDING_DOC' && hasDocData(task)">آماده ارسال</span>
-                     <span *ngIf="task.status === 'DOC_SUPERVISOR_REJECTED'">برگشت خورده (سرپرست)</span>
-                     <span *ngIf="task.status === 'DOC_MANAGER_REJECTED'">برگشت خورده (مدیر)</span>
+                     <span *ngIf="(task.status === 'DOC_SUPERVISOR_REJECTED' || task.status === 'DOC_MANAGER_REJECTED') && hasDocData(task)">اصلاح‌شده (پیش‌نویس)</span>
+                     <span *ngIf="task.status === 'DOC_SUPERVISOR_REJECTED' && !hasDocData(task)">برگشت خورده (سرپرست)</span>
+                     <span *ngIf="task.status === 'DOC_MANAGER_REJECTED' && !hasDocData(task)">برگشت خورده (مدیر)</span>
                      <span *ngIf="task.status === 'DOC_PROCESSED'">ارسال به سرپرست</span>
                      <span *ngIf="task.status === 'DOC_MANAGER_REVIEW'">در حال بررسی مدیر</span>
                      <span *ngIf="task.status === 'DOC_FINAL_APPROVED'">تایید نهایی</span>
                   </div>
 
+                  <!-- دکمه سریع ارسال مستقیم به سرپرست در لیست -->
+                  <button 
+                    *ngIf="isTaskReady(task) && !isReadOnly(task)"
+                    type="button"
+                    (click)="quickSubmitTask(task, $event)"
+                    title="ارسال مستقیم به سرپرست"
+                    class="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-[11px] font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    <span>ارسال</span>
+                  </button>
+
                   <!-- دکمه سریع بازگشت به وضعیت قبل در لیست -->
                   <button 
-                    *ngIf="task.status === 'PENDING_DOC' && hasDocData(task) && !isReadOnly(task)"
+                    *ngIf="hasDocData(task) && !isReadOnly(task)"
                     type="button"
                     (click)="revertTaskStatus(task, $event)"
                     title="لغو پیش‌نویس و بازگرداندن به وضعیت قبل"
@@ -477,7 +520,7 @@
                 </svg>
                 <span class="font-bold text-slate-700 truncate">
                   انبار: {{ task.item_details?.warehouse_name || 'نامشخص' }}
-                  <span *ngIf="task.item_details?.new_location" class="font-normal text-slate-400 mr-1">| لوکیشن: {{ task.item_details?.new_location }}</span>
+                  <span *ngIf="task.item_details?.new_location || task.item_details?.old_location" class="font-normal text-slate-400 mr-1">| لوکیشن: {{ task.item_details?.new_location || task.item_details?.old_location }}</span>
                 </span>
               </div>
 
@@ -557,7 +600,7 @@
               [indeterminate]="isPoolIndeterminate()"
               (change)="toggleSelectAllPool()"
               class="w-4 h-4 rounded accent-indigo-600 cursor-pointer" />
-            <span>انتخاب همه اقلام استخر ({{ filteredPoolTasks.length }})</span>
+            <span>انتخاب همه اقلام مخزن ({{ filteredPoolTasks.length }})</span>
           </label>
           <span class="text-[11px] text-slate-400 font-medium">کالاهای موجود برای تحویل</span>
         </div>
@@ -567,15 +610,30 @@
           <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
         </div>
 
-        <!-- Pool Empty State -->
+        <!-- Pool Empty State (No items in pool at all) -->
         <div *ngIf="!isLoading && poolTasks.length === 0" class="text-center py-16 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="text-slate-400">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
             </svg>
           </div>
-          <h3 class="text-slate-800 font-bold mb-1">استخر خالی است</h3>
-          <p class="text-slate-500 text-xs">هیچ کالایی برای بررسی اسناد در استخر عمومی وجود ندارد.</p>
+          <h3 class="text-slate-800 font-bold mb-1">مخزن کالاها خالی است</h3>
+          <p class="text-slate-500 text-xs">هیچ کالایی برای بررسی اسناد در مخزن عمومی وجود ندارد.</p>
+        </div>
+
+        <!-- Pool Filtered Empty State (Items exist but filter/search matched nothing) -->
+        <div *ngIf="!isLoading && poolTasks.length > 0 && filteredPoolTasks.length === 0" class="text-center py-12 bg-white rounded-2xl border border-slate-200 shadow-sm mb-4">
+          <div class="w-12 h-12 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <h3 class="text-slate-800 font-bold text-sm mb-1">هیچ کالایی با فیلترهای فعلی در مخزن یافت نشد</h3>
+          <p class="text-slate-500 text-xs mb-3">عبارت جستجو یا فیلترهای تاریخ و لوکیشن را تغییر دهید.</p>
+          <button (click)="clearSearch(); setLocationFilter('all'); setDateFilter('all')" class="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl transition-colors cursor-pointer">
+            پاک کردن جستجو و فیلترها
+          </button>
         </div>
 
         <!-- Pool List (Modern Single Column Cards matching Counter) -->
@@ -608,9 +666,13 @@
 
                   <!-- Metadata Row -->
                   <div class="flex items-center gap-3 text-[11px] text-slate-500 border-t border-slate-100 pt-2 flex-wrap">
-                    <div *ngIf="task.item_details?.new_location" class="flex items-center gap-1">
+                    <div *ngIf="task.item_details?.new_location || task.item_details?.old_location" class="flex items-center gap-1">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-500 shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                      <span class="font-bold text-slate-700">لوکیشن: {{ task.item_details?.new_location }}</span>
+                      <span class="font-bold text-slate-700">لوکیشن: {{ task.item_details?.new_location || task.item_details?.old_location }}</span>
+                    </div>
+                    <div *ngIf="task.item_details?.unit" class="flex items-center gap-1">
+                      <span class="text-slate-400">واحد:</span>
+                      <span class="font-bold text-slate-700">{{ task.item_details?.unit }}</span>
                     </div>
                     <div *ngIf="task.item_details?.po" class="flex items-center gap-1">
                       <span class="text-slate-400">PO:</span>
@@ -677,16 +739,40 @@
           <div class="text-[10px] text-slate-400 font-mono mb-1" dir="ltr" style="text-align: right;">{{ selectedTask.item_details?.fa_unic_code }}</div>
           <h2 class="text-base font-black text-slate-800 leading-snug mb-4">{{ selectedTask.item_details?.description }}</h2>
 
-          <!-- Dynamic Visible Info Fields Grid -->
-          <div *ngIf="visibleInfoFields.length > 0" class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200" dir="rtl">
-            <div *ngFor="let f of visibleInfoFields" class="flex flex-col" [class.col-span-2]="f.key === 'new_location' || f.key === 'scope_discipline'">
-              <span class="text-slate-400 font-bold text-[10px] mb-1 truncate">{{ getFieldLabel(f) }}</span>
-              <span *ngIf="f.key === 'new_location'" class="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 w-fit">
-                {{ getFieldDisplayValue(f, selectedTask.item_details) }}
-              </span>
-              <span *ngIf="f.key !== 'new_location'" class="font-bold text-slate-800 break-words">
-                {{ getFieldDisplayValue(f, selectedTask.item_details) }}
-              </span>
+          <!-- Primary & Dynamic Info Fields Grid -->
+          <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200" dir="rtl">
+            <div *ngIf="visibleInfoFields.length > 0" class="contents">
+              <div *ngFor="let f of visibleInfoFields; trackBy: trackByFieldKey" class="flex flex-col" [class.col-span-2]="f.key === 'new_location' || f.key === 'scope_discipline'">
+                <span class="text-slate-400 font-bold text-[10px] mb-1 truncate">{{ getFieldLabel(f) }}</span>
+                <span *ngIf="f.key === 'new_location'" class="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 w-fit">
+                  {{ getFieldDisplayValue(f, selectedTask.item_details) }}
+                </span>
+                <span *ngIf="f.key !== 'new_location'" class="font-bold text-slate-800 break-words">
+                  {{ getFieldDisplayValue(f, selectedTask.item_details) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Fallback Base Info Grid if visibleInfoFields is empty -->
+            <div *ngIf="visibleInfoFields.length === 0" class="contents">
+              <div class="flex flex-col">
+                <span class="text-slate-400 font-bold text-[10px] mb-1">کد یکتا</span>
+                <span class="font-mono font-bold text-slate-800" dir="ltr">{{ selectedTask.item_details?.fa_unic_code || '-' }}</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-slate-400 font-bold text-[10px] mb-1">لوکیشن</span>
+                <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 w-fit">
+                  {{ selectedTask.item_details?.new_location || selectedTask.item_details?.old_location || '-' }}
+                </span>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-slate-400 font-bold text-[10px] mb-1">شماره سفارش (PO)</span>
+                <span class="font-mono font-bold text-slate-800" dir="ltr">{{ selectedTask.item_details?.po || '-' }}</span>
+              </div>
+              <div class="flex flex-col">
+                <span class="text-slate-400 font-bold text-[10px] mb-1">انبار</span>
+                <span class="font-bold text-slate-800">{{ selectedTask.item_details?.warehouse_name || '-' }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -699,7 +785,7 @@
           </h3>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div *ngFor="let ef of editableFormFields" class="space-y-1" [class.sm:col-span-2]="ef.data_type === 'textarea' || ef.key === 'folder_address'">
+            <div *ngFor="let ef of editableFormFields; trackBy: trackByFieldKey" class="space-y-1" [class.sm:col-span-2]="ef.data_type === 'textarea' || ef.key === 'folder_address'">
               <label class="block text-[11px] font-bold text-slate-700">
                 {{ getFieldLabel(ef) }}
               </label>
@@ -749,6 +835,7 @@
               <input 
                 *ngIf="ef.data_type === 'number' && !isFinancialField(ef.key) && ef.key !== 'invoice_type' && ef.key !== 'currency'"
                 type="number" 
+                step="any"
                 [(ngModel)]="editableValues[ef.key]"
                 [disabled]="isReadOnly(selectedTask)"
                 class="w-full text-xs font-semibold border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all disabled:bg-slate-50 disabled:text-slate-500"
@@ -810,67 +897,85 @@
         </div>
 
         <!-- Document History Timeline (if available) -->
-        <div *ngIf="selectedTask.history && selectedTask.history.length > 0" class="mb-6 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <div *ngIf="financialCanViewHistory && selectedTask.history && selectedTask.history.length > 0" class="mb-6 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
           <h4 class="text-xs font-black text-slate-700 flex items-center gap-1.5">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             تاریخچه اقدامات و وضعیت‌ها
           </h4>
-          <div class="space-y-2 border-r-2 border-slate-200 pr-3 mr-2">
-            <div *ngFor="let h of selectedTask.history" class="relative text-xs">
-              <div class="absolute -right-[19px] top-1 w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-white"></div>
+          <div class="space-y-3 border-r-2 border-slate-200 pr-3 mr-2">
+            <div *ngFor="let h of selectedTask.history; trackBy: trackByHistoryId; let i = index" class="relative text-xs">
+              <div class="absolute -right-[19px] top-1 w-2.5 h-2.5 rounded-full ring-4 ring-white"
+                   [ngClass]="{
+                     'bg-emerald-600': h.action_type === 'DOC_FINAL_APPROVED' || h.action_type === 'DOC_SUPERVISOR_APPROVED',
+                     'bg-rose-600': h.action_type === 'DOC_SUPERVISOR_REJECTED' || h.action_type === 'DOC_MANAGER_REJECTED' || h.action_type === 'CANCELLED',
+                     'bg-blue-600': h.action_type === 'DOC_PROCESSED' || h.action_type === 'DOC_MANAGER_REVIEW',
+                     'bg-indigo-600': h.action_type === 'CLAIMED' || h.action_type === 'DISPATCHED'
+                   }"></div>
               <div class="flex items-center justify-between text-[11px] text-slate-400 mb-0.5">
                 <span class="font-bold text-slate-700">{{ h.action_by_name || 'کاربر' }}</span>
-                <span dir="ltr">{{ h.created_at | date:'yyyy/MM/dd HH:mm' }}</span>
+                <span dir="ltr">{{ h.created_at | persianDate:'short-time' }}</span>
               </div>
               <p class="font-bold text-slate-800">{{ getActionTypeLabel(h.action_type) }}</p>
-              <p *ngIf="h.note" class="bg-slate-50 p-2 rounded-lg text-slate-600 mt-1 border border-slate-100 text-[11px]">{{ h.note }}</p>
+              <p *ngIf="canViewRecordNote(i) && h.note" class="bg-slate-50 p-2 rounded-lg text-slate-600 mt-1 border border-slate-100 text-[11px]">{{ h.note }}</p>
+              <p *ngIf="!canViewRecordNote(i) && h.note" class="bg-amber-50/60 p-2 rounded-lg text-amber-700/80 mt-1 border border-amber-200/50 text-[11px] flex items-center gap-1.5"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> 🔒 یادداشت قبلی پنهان شده است</p>
             </div>
           </div>
         </div>
 
-      </div>
-
-      <!-- Action Buttons (Exact Match to Counter Layout) -->
-      <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/95 backdrop-blur-md border-t border-slate-200 z-50 md:static md:bg-transparent md:border-none md:p-6 md:mt-auto">
-        <div *ngIf="!isReadOnly(selectedTask)" class="flex flex-col sm:flex-row items-center gap-2.5 max-w-7xl mx-auto w-full">
-          
-          <!-- Direct Submit Button (Emerald Green like Counter) -->
+        <!-- Action Buttons (Ergonomic 2-Row Layout on Mobile, Single Row on Desktop) -->
+        <div *ngIf="!isReadOnly(selectedTask)" class="mt-8 pt-5 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <!-- Primary Direct Submit Button (Emerald Green - Full Width on Mobile, Flexible on Desktop) -->
           <button 
             type="button"
             (click)="submitCurrentTask()" 
             [disabled]="isSaving"
-            class="w-full flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white rounded-2xl py-3.5 px-4 font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer">
+            class="w-full sm:flex-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white rounded-2xl py-3.5 px-4 font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer order-1">
             <svg *ngIf="!isSaving" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             <div *ngIf="isSaving" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             <span>{{ isSaving ? 'در حال ارسال...' : 'ثبت و ارسال به سرپرست' }}</span>
           </button>
 
-          <!-- Save Draft Button (Indigo like Counter) -->
-          <button 
-            type="button"
-            (click)="saveDraft(true)" 
-            [disabled]="isSaving"
-            class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white rounded-2xl py-3.5 px-4 font-bold text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-            <span>ذخیره پیش‌نویس</span>
-          </button>
+          <!-- Secondary Actions Container (Side-by-side 50/50 on Mobile, Inline on Desktop) -->
+          <div class="flex items-center gap-2.5 w-full sm:w-auto order-2">
+            <!-- Save Draft Button (Indigo) -->
+            <button 
+              type="button"
+              (click)="saveDraft(true)" 
+              [disabled]="isSaving"
+              class="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white rounded-2xl py-3.5 px-4 font-bold text-xs sm:text-sm shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              <span>ذخیره پیش‌نویس</span>
+            </button>
 
-          <!-- Cancel / Close Detail Button (انصراف) -->
-          <button 
-            type="button"
-            (click)="closeDetail()" 
-            [disabled]="isSaving"
-            class="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-2xl py-3.5 px-4 font-bold text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer">
-            انصراف
-          </button>
+            <!-- Cancel / Close Detail Button (انصراف) -->
+            <button 
+              type="button"
+              (click)="closeDetail()" 
+              [disabled]="isSaving"
+              class="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 rounded-2xl py-3.5 px-4 font-bold text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-center">
+              انصراف
+            </button>
+          </div>
 
+          <!-- Revert Button (Rose - Secondary Action on Mobile/Desktop if Draft Exists) -->
+          <button 
+            *ngIf="selectedTask.status === 'PENDING_DOC' && hasDocData(selectedTask)"
+            type="button"
+            (click)="revertTaskStatus(selectedTask)" 
+            [disabled]="isSaving"
+            class="w-full sm:w-auto bg-rose-50 hover:bg-rose-100 text-rose-700 active:scale-95 disabled:opacity-50 rounded-2xl py-3 px-4 font-bold text-xs sm:text-sm border border-rose-200 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer order-3"
+            title="حذف پیش‌نویس و بازگرداندن کالا به وضعیت پیشین">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+            <span>بازگشت به وضعیت قبل</span>
+          </button>
         </div>
 
-        <div *ngIf="isReadOnly(selectedTask)" class="max-w-7xl mx-auto w-full">
+        <div *ngIf="isReadOnly(selectedTask)" class="mt-8 pt-5 border-t border-slate-200">
           <button type="button" (click)="closeDetail(true)" class="w-full bg-slate-700 hover:bg-slate-800 text-white rounded-2xl py-3.5 px-4 font-bold text-sm shadow-md transition-transform active:scale-95 cursor-pointer">
             بازگشت به لیست
           </button>
         </div>
+
       </div>
 
     </div>
@@ -950,7 +1055,7 @@
         <div *ngIf="exportColumnScope === 'custom'" class="mt-3 p-3 bg-slate-50 rounded-2xl border border-slate-200">
           <p class="text-xs font-bold text-slate-600 mb-2">ستون‌های مورد نظر را انتخاب کنید:</p>
           <div class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pl-1">
-            <label *ngFor="let col of availableExportColumns" class="flex items-center gap-2 cursor-pointer group p-1 hover:bg-white rounded-lg transition-colors">
+            <label *ngFor="let col of availableExportColumns; trackBy: trackByColKey" class="flex items-center gap-2 cursor-pointer group p-1 hover:bg-white rounded-lg transition-colors">
               <input type="checkbox" 
                      [checked]="selectedExportColumns.has(col.key)" 
                      (change)="selectedExportColumns.has(col.key) ? selectedExportColumns.delete(col.key) : selectedExportColumns.add(col.key)" 
@@ -1088,7 +1193,7 @@
           هیچ کالایی با فیلتر انتخابی یافت نشد.
         </div>
 
-        <div *ngFor="let row of filteredScanRows; let idx = index" 
+        <div *ngFor="let row of filteredScanRows; trackBy: trackByScanRow; let idx = index" 
              class="p-3 rounded-2xl border transition-all text-xs"
              [class.border-emerald-200]="row.status === 'ready'"
              [class.bg-emerald-50/20]="row.status === 'ready'"

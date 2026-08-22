@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 9,
+    "summary": "Step 9 'Expected the page to contain a success message saying 'ارسال به سرپرست'. Please show a confirmation toast or text after submission.' failed. Error: TEST FAILURE\n\nNo success notification appeared after clicking the 'ثبت و ارسال به سرپرست' button.\n\nObservations:\n- TS-ITEM-001 detail was opened and the counted quantity (100.000) is visible.\n- The 'ثبت و ارسال به سرپرست' button was clicked, but no toast or confirmation text containing 'با موفقیت' or 'ارسال به سرپرست' was observed.\n- Searching the page for common success phrases ('با موفقیت', 'ارسال به سرپرست', 'ارسال شد') returned 0 matches; the page instead shows 'تمامی اقلام دست‌نخورده شمرده شدند!' which does not confirm submission.",
+    "path": "steps/09-snapshot.html"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "testId": "df6bbb0e-b981-459e-8cfc-e4ebe43d82e7",
+  "status": "failed",
+  "startedAt": "2026-08-16T02:35:34.053Z",
+  "finishedAt": "2026-08-16T02:39:28.422Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786847965188794//tmp/f9ee98dc-820d-46a6-a7c4-25a54e47b5f6/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_e096b8c1cc3cbeb7",
+  "runIdIfAvailable": "b59ff2af-5580-41f4-b11a-c642078758b5",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 9,
+  "failureKind": "assertion",
+  "verdict": "failed",
+  "executionStatus": "completed",
+  "summary": "Failed (assertion) on step 9: TEST FAILURE\n\nNo success notification appeared after clicking the 'ثبت و ارسال به سرپرست' button.\n\nObservations:\n- TS-ITEM-001 detail was opened and the counted quantity (100.000) is visible.\n- The 'ثبت و ارسال به سرپرست' button was clicked, but no toast or confirmation text containing 'با موفقیت' or 'ارسال به سرپرست' was observed.\n- Searching the page for common success phrases ('با موفقیت', 'ارسال به سرپرست', 'ارسال شد') returned 0 matches; the page instead shows…",
+  "apiOutput": null,
+  "trace": null
+}

@@ -1,0 +1,20 @@
+{
+  "testId": "f0ae5ba6-d71f-4470-97a8-64e0814d9561",
+  "status": "blocked",
+  "startedAt": "2026-08-16T02:29:34.401Z",
+  "finishedAt": "2026-08-16T02:31:15.920Z",
+  "videoUrl": "https://testsprite-videos.s3.us-east-1.amazonaws.com/24a83488-e081-7000-656a-2db6dfc25dcc/1786847475718449//tmp/db2efb4b-dfa1-4cdc-a1e5-112c32e45e07/result.webm",
+  "failureAnalysisUrl": null,
+  "snapshotId": "snap_d99fd7e2cb276fd4",
+  "runIdIfAvailable": "a0d33e2b-314d-4351-aab3-ea0bc72c0f80",
+  "codeVersion": "v1",
+  "targetUrl": "https://app.farsalish.ir",
+  "targetUrlSource": "run",
+  "failedStepIndex": 5,
+  "failureKind": null,
+  "verdict": "blocked",
+  "executionStatus": "completed",
+  "summary": "Blocked before a verdict could be produced: TEST BLOCKED\n\nThe test could not be run — the application cannot be reached and the login submit action is not available.\n\nObservations:\n- The login page displays a server connectivity/unavailable message (e.g., 'در حال ارتباط با سرور...' / 'سرور در دسترس نیست').\n- The username is filled as 'test_counter' and the password field appears filled, but no login/submit button is present or clickable.\n- Without a working login (backend unreachable), it is no…",
+  "apiOutput": null,
+  "trace": null
+}

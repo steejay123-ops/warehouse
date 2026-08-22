@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 5,
+    "summary": "Step 5 'Click the 'بررسی نهایی مدیر' button to open the manager review cartable' passed.",
+    "path": "steps/05-snapshot.html"
+  }
+]

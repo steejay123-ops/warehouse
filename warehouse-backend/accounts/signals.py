@@ -1,0 +1,159 @@
+import logging
+from django.db import transaction
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+from .models import AuditLog, UserLoginLog
+
+logger = logging.getLogger(__name__)
+
+
+def serialize_audit_log_data(instance):
+    """
+    سریالایز ایمن و سریع رکورد لاگ ممیزی جهت ارسال به وب‌سوکت
+    """
+    try:
+        from .serializers import AuditLogListSerializer
+        return AuditLogListSerializer(instance).data
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error serializing audit log {getattr(instance, 'id', None)}: {e}")
+        return {
+            'id': instance.id,
+            'actor_username': instance.actor_username,
+            'actor_name': instance.actor_name,
+            'user_display': instance.actor_name or instance.actor_username or 'سیستم',
+            'warehouse': instance.warehouse_id,
+            'module': instance.module,
+            'action': instance.action,
+            'severity': instance.severity,
+            'target_model': instance.target_model,
+            'target_object_id': instance.target_object_id,
+            'target_repr': instance.target_repr,
+            'has_diff': bool(instance.before_state or instance.after_state),
+            'ip_address': instance.ip_address,
+            'created_at': instance.created_at.isoformat() if instance.created_at else None,
+        }
+
+
+def serialize_login_log_data(instance):
+    """
+    سریالایز ایمن رکورد تاریخچه ورود کاربر جهت ارسال به وب‌سوکت
+    """
+    try:
+        from .serializers import UserLoginLogSerializer
+        return UserLoginLogSerializer(instance).data
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error serializing login log {getattr(instance, 'id', None)}: {e}")
+        return {
+            'id': instance.id,
+            'username_attempted': instance.username_attempted,
+            'user_display': instance.username_attempted,
+            'ip_address': instance.ip_address,
+            'status': instance.status,
+            'failure_reason': instance.failure_reason,
+            'created_at': instance.created_at.isoformat() if instance.created_at else None,
+        }
+
+
+def broadcast_audit_log_created(log_id, warehouse_id, log_data, message=None):
+    """
+    ارسال بلادرنگ رویداد ایجاد لاگ ممیزی به کانال وب‌سوکت سراسری
+    """
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            payload = {
+                'type': 'send_notification',
+                'type_str': 'audit_log_created',
+                'message': message or 'ثبت لاگ ممیزی جدید در سامانه',
+                'log_id': log_id,
+                'log': log_data,
+            }
+            if warehouse_id is not None:
+                payload['warehouse_id'] = warehouse_id
+
+            async_to_sync(channel_layer.group_send)(
+                'global_notifications',
+                payload
+            )
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error broadcasting audit_log_created: {e}")
+
+
+def broadcast_login_log_created(login_id, login_data, message=None):
+    """
+    ارسال بلادرنگ رویداد ثبت ورود/خروج به کانال وب‌سوکت سراسری
+    """
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            payload = {
+                'type': 'send_notification',
+                'type_str': 'login_log_created',
+                'message': message or 'ثبت رویداد ورود کاربر در سامانه',
+                'login_id': login_id,
+                'login_log': login_data,
+            }
+            async_to_sync(channel_layer.group_send)(
+                'global_notifications',
+                payload
+            )
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error broadcasting login_log_created: {e}")
+
+
+@receiver(post_save, sender=AuditLog)
+def audit_log_post_save(sender, instance, created, **kwargs):
+    """
+    سیگنال پس از ایجاد رکورد ممیزی — همراه با تضمین commit تراکنش (Transaction Safety)
+    """
+    if not created:
+        return
+
+    try:
+        log_data = serialize_audit_log_data(instance)
+        log_id = instance.id
+        wh_id = instance.warehouse_id
+        action_name = instance.get_action_display() if hasattr(instance, 'get_action_display') else instance.action
+        mod_name = instance.get_module_display() if hasattr(instance, 'get_module_display') else instance.module
+        msg = f"ثبت رویداد ممیزی: {action_name} در {mod_name}"
+
+        def send_broadcast():
+            broadcast_audit_log_created(
+                log_id=log_id,
+                warehouse_id=wh_id,
+                log_data=log_data,
+                message=msg
+            )
+
+        transaction.on_commit(send_broadcast)
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error in audit_log_post_save signal: {e}")
+
+
+@receiver(post_save, sender=UserLoginLog)
+def login_log_post_save(sender, instance, created, **kwargs):
+    """
+    سیگنال پس از ثبت ورود/خروج کاربر
+    """
+    if not created:
+        return
+
+    try:
+        login_data = serialize_login_log_data(instance)
+        login_id = instance.id
+        status_name = instance.get_status_display() if hasattr(instance, 'get_status_display') else instance.status
+        msg = f"ثبت لاگ ورود: {instance.username_attempted} ({status_name})"
+
+        def send_broadcast():
+            broadcast_login_log_created(
+                login_id=login_id,
+                login_data=login_data,
+                message=msg
+            )
+
+        transaction.on_commit(send_broadcast)
+    except Exception as e:
+        logger.warning(f"[WebSocket] Error in login_log_post_save signal: {e}")

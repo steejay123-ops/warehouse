@@ -141,6 +141,36 @@ def _map_model_field(f):
     return None
 
 
+COMMON_FIELD_LABELS = {
+    'id': 'شناسه',
+    'created_at': 'تاریخ ایجاد',
+    'updated_at': 'تاریخ ویرایش',
+    'created_by': 'ایجادکننده',
+    'modified_by': 'ویرایش‌کننده',
+    'username': 'نام کاربری',
+    'first_name': 'نام',
+    'last_name': 'نام خانوادگی',
+    'phone_number': 'شماره تلفن',
+    'operational_zone': 'منطقه عملیاتی',
+    'is_active': 'وضعیت فعال',
+    'date_joined': 'تاریخ عضویت',
+    'assigned_warehouses_count': 'تعداد انبارهای مجاز',
+    'status': 'وضعیت',
+    'action_type': 'نوع اقدام',
+    'note': 'توضیحات',
+    'file_name': 'نام فایل',
+}
+
+
+def _clean_persian_label(name: str, label: str) -> str:
+    import re
+    if not label or label.lower() == name.lower() or label == 'ID':
+        return COMMON_FIELD_LABELS.get(name, label or name)
+    # حذف هرگونه پسوند یا توضیحات انگلیسی داخل پرانتز
+    cleaned = re.sub(r'\s*\([A-Za-z0-9_\-\s]+\)', '', label).strip()
+    return cleaned or COMMON_FIELD_LABELS.get(name, label)
+
+
 def _auto_fields(model, exclude=(), include=None, sensitive_keys=()):
     """
     تولید خودکار FieldDef از فیلدهای مستقیم مدل (الگوی export_columns).
@@ -155,7 +185,8 @@ def _auto_fields(model, exclude=(), include=None, sensitive_keys=()):
         ftype = _map_model_field(f)
         if ftype is None:
             continue
-        label = str(getattr(f, 'verbose_name', '') or f.name)
+        raw_label = str(getattr(f, 'verbose_name', '') or f.name)
+        label = _clean_persian_label(f.name, raw_label)
         choices = tuple(c[0] for c in f.choices) if getattr(f, 'choices', None) else None
         out[f.name] = FieldDef(
             key=f.name, source=f.name, label=label, type=ftype,
@@ -168,9 +199,10 @@ def _auto_fields(model, exclude=(), include=None, sensitive_keys=()):
 
 def _person_name_annotation(prefix):
     """نام کامل شخص از روی FK کاربر — الگوی CountTaskSerializer.get_counter_name"""
-    def factory():
+    def factory(base_prefix=None):
+        p = f'{base_prefix}__{prefix}' if base_prefix else prefix
         return Concat(
-            F(f'{prefix}__first_name'), Value(' '), F(f'{prefix}__last_name'),
+            F(f'{p}__first_name'), Value(' '), F(f'{p}__last_name'),
         )
     return factory
 
@@ -260,28 +292,32 @@ def _dynamic_item_fields(warehouse_id):
         name = d.name
 
         if d.field_type == 'number':
-            def factory(n=name):
+            def factory(n=name, base_prefix=None):
+                target_field = f'{base_prefix}__dynamic_data' if base_prefix else 'dynamic_data'
                 return Cast(
-                    KeyTextTransform(n, 'dynamic_data'),
+                    KeyTextTransform(n, target_field),
                     DecimalField(max_digits=20, decimal_places=4),
                 )
             ftype, aggregatable = 'number', True
         elif d.field_type == 'date':
-            def factory(n=name):
-                return Cast(KeyTextTransform(n, 'dynamic_data'), DateField())
+            def factory(n=name, base_prefix=None):
+                target_field = f'{base_prefix}__dynamic_data' if base_prefix else 'dynamic_data'
+                return Cast(KeyTextTransform(n, target_field), DateField())
             ftype, aggregatable = 'date', False
         elif d.field_type == 'boolean':
-            def factory(n=name):
-                return KeyTextTransform(n, 'dynamic_data')
+            def factory(n=name, base_prefix=None):
+                target_field = f'{base_prefix}__dynamic_data' if base_prefix else 'dynamic_data'
+                return KeyTextTransform(n, target_field)
             # مقدار bool در JSON به‌صورت متن 'true'/'false' استخراج می‌شود
             ftype, aggregatable = 'text', False
         else:
-            def factory(n=name):
-                return KeyTextTransform(n, 'dynamic_data')
+            def factory(n=name, base_prefix=None):
+                target_field = f'{base_prefix}__dynamic_data' if base_prefix else 'dynamic_data'
+                return KeyTextTransform(n, target_field)
             ftype, aggregatable = 'text', False
 
         out[key] = FieldDef(
-            key=key, source=key, label=f'{d.label} (پویا)', type=ftype,
+            key=key, source=key, label=d.label, type=ftype,
             aggregatable=aggregatable, annotation=factory,
         )
     return out
@@ -403,7 +439,10 @@ def _build_registry():
                     key='assigned_warehouses_count', source='assigned_warehouses_count',
                     label='تعداد انبارهای تخصیص‌یافته', type='number',
                     groupable=False, aggregatable=False,
-                    annotation=lambda: Count('assigned_warehouses', distinct=True),
+                    annotation=lambda base_prefix=None: Count(
+                        f'{base_prefix}__assigned_warehouses' if base_prefix else 'assigned_warehouses',
+                        distinct=True,
+                    ),
                 ),
             },
         ),

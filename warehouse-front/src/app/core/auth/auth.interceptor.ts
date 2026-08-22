@@ -32,8 +32,9 @@ export const authInterceptor: HttpInterceptorFn = (
     return next(req);
   }
 
-  // اگر request مربوط به login یا refresh باشد، توکن نمی‌خواهد
-  if (req.url.includes('/auth/login') || req.url.includes('/auth/refresh')) {
+  // اگر request مربوط به login یا refresh باشد، توکن نمی‌خواهد (به جز login-logs)
+  const isAuthBypass = /\/auth\/(login|refresh)(\/|\?|$)/.test(req.url) && !req.url.includes('login-logs');
+  if (isAuthBypass) {
     return next(req);
   }
 

@@ -57,6 +57,7 @@ class ReportExportJob(models.Model):
     spec = models.JSONField(default=dict, verbose_name="تعریف گزارش")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="وضعیت")
     progress = models.PositiveSmallIntegerField(default=0, verbose_name="درصد پیشرفت")
+    attempts = models.PositiveSmallIntegerField(default=0, verbose_name="تعداد تلاش")
     # نبض job در حین پردازش — .update() مدل auto_now را trigger نمی‌کند، پس صریحاً touch می‌شود
     heartbeat_at = models.DateTimeField(null=True, blank=True, verbose_name="آخرین نبض پردازش")
     total_rows = models.PositiveIntegerField(default=0, verbose_name="تعداد کل ردیف‌ها")

@@ -9,6 +9,7 @@ import { ConfigApiService } from '../../core/api/config-api.service';
 import { OfflineSyncService } from '../../core/services/offline-sync.service';
 import { NetworkStatusService, ConnectionState } from '../../core/services/network-status.service';
 import { Subscription } from 'rxjs';
+import { detectClientDeviceModel } from '../../core/utils/device-detector';
 @Component({
   selector: 'app-login',
   imports: [CommonModule, FormsModule],
@@ -106,7 +107,7 @@ export class Login implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  handleLogin() {
+  async handleLogin() {
     const trimmedUsername = this.username ? this.username.trim() : '';
     if (!trimmedUsername || !this.password) {
       this.loginErrorMessage = 'لطفاً نام کاربری و رمز عبور را وارد کنید.';
@@ -116,7 +117,9 @@ export class Login implements OnInit, OnDestroy {
     this.isLoggingIn = true;
     this.loginErrorMessage = null;
 
-    this.auth.login(trimmedUsername, this.password).subscribe({
+    const deviceModel = await detectClientDeviceModel();
+
+    this.auth.login(trimmedUsername, this.password, deviceModel).subscribe({
       next: () => {
         this.isLoggingIn = false;
         

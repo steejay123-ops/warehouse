@@ -88,11 +88,16 @@ export interface PageEvent {
             <ng-content select="[table-actions]"></ng-content>
 
             <div class="flex items-center gap-1.5 text-xs text-slate-500 border-r border-slate-200 pr-4">
-              <span class="font-bold text-slate-700">{{ totalCount }}</span>
+              <span class="font-bold text-slate-700">{{ totalCount | number }}</span>
               <span>{{ itemLabel }}</span>
-              @if (selectedCount > 0) {
-                <span class="bg-indigo-500/10 text-indigo-600 px-2 py-0.5 rounded-full font-bold text-[10px] mr-1">
-                  {{ selectedCount }} انتخاب شده
+              @if (selectionMode === 'all') {
+                <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full font-black text-[10px] mr-1 flex items-center gap-1.5 shadow-sm">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  تمامی {{ totalCount | number }} رکورد فیلترشده (کل دیتابیس)
+                </span>
+              } @else if (selectionMode === 'page' || selectedCount > 0) {
+                <span class="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-full font-black text-[10px] mr-1 shadow-sm">
+                  {{ selectedCount | number }} رکورد (صفحه جاری)
                 </span>
               }
             </div>
@@ -235,12 +240,19 @@ export interface PageEvent {
             <tr>
               @if (selectable) {
                 <th class="px-3 py-3 w-10 text-center">
-                  <input
-                    type="checkbox"
-                    [checked]="isAllSelected"
-                    (change)="toggleSelectAll($event)"
-                    class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                  />
+                  <button
+                    type="button"
+                    (click)="cycleMasterSelection($event)"
+                    class="w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer mx-auto shadow-sm active:scale-95"
+                    [ngClass]="{
+                      'bg-white border-slate-300 hover:border-slate-400': selectionMode === 'none' && !isAllSelected,
+                      'bg-indigo-600 border-indigo-600 text-white': selectionMode === 'page' || (selectionMode === 'none' && isAllSelected),
+                      'bg-emerald-600 border-emerald-600 text-white ring-2 ring-emerald-400 ring-offset-1': selectionMode === 'all'
+                    }"
+                    [title]="selectionMode === 'none' ? 'کلیک ۱: انتخاب این صفحه' : selectionMode === 'page' ? 'کلیک ۲: انتخاب تمام رکوردهای فیلترشده (کل دیتابیس)' : 'کلیک ۳: لغو کامل انتخاب'">
+                    <svg *ngIf="selectionMode === 'page' || (selectionMode === 'none' && isAllSelected)" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <svg *ngIf="selectionMode === 'all'" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5"><polyline points="18 6 7 17 2 12"></polyline><polyline points="22 10 14.5 17.5 13 16"></polyline></svg>
+                  </button>
                 </th>
               }
               @if (showRowNumber) {
@@ -328,29 +340,29 @@ export interface PageEvent {
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="flex-shrink-0 mr-1"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                           </button>
                           @if (activeFilterDropdown === col.key) {
-                            <div class="absolute top-full right-0 mt-1 w-52 bg-white border border-slate-200 shadow-xl rounded-xl z-[60] p-2 text-right flex flex-col gap-1 max-h-[400px] overflow-y-auto">
+                            <div class="absolute top-full right-0 mt-1 w-64 bg-white border border-slate-200 shadow-2xl rounded-2xl z-[70] p-3 text-right flex flex-col gap-1.5 overflow-visible">
                               @if (!showCustomDateRange) {
                                 <div class="flex flex-wrap gap-1 mb-2 pb-2 border-b border-slate-100">
-                                  <button (click)="applyDateFilter(col.key, '', 'همه')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="!filters[col.key]" [class.text-indigo-600]="!filters[col.key]" [class.text-slate-600]="filters[col.key]">همه</button>
-                                  <button (click)="applyDateFilter(col.key, '1h', '۱ ساعت')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="filters[col.key] === '۱ ساعت'" [class.text-indigo-600]="filters[col.key] === '۱ ساعت'" [class.text-slate-600]="filters[col.key] !== '۱ ساعت'">۱ ساعت</button>
-                                  <button (click)="applyDateFilter(col.key, '3h', '۳ ساعت')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="filters[col.key] === '۳ ساعت'" [class.text-indigo-600]="filters[col.key] === '۳ ساعت'" [class.text-slate-600]="filters[col.key] !== '۳ ساعت'">۳ ساعت</button>
-                                  <button (click)="applyDateFilter(col.key, '6h', '۶ ساعت')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="filters[col.key] === '۶ ساعت'" [class.text-indigo-600]="filters[col.key] === '۶ ساعت'" [class.text-slate-600]="filters[col.key] !== '۶ ساعت'">۶ ساعت</button>
-                                  <button (click)="applyDateFilter(col.key, 'today', 'امروز')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="filters[col.key] === 'امروز'" [class.text-indigo-600]="filters[col.key] === 'امروز'" [class.text-slate-600]="filters[col.key] !== 'امروز'">امروز</button>
-                                  <button (click)="applyDateFilter(col.key, 'yesterday', 'دیروز')" class="text-[9px] font-bold px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50" [class.bg-indigo-50]="filters[col.key] === 'دیروز'" [class.text-indigo-600]="filters[col.key] === 'دیروز'" [class.text-slate-600]="filters[col.key] !== 'دیروز'">دیروز</button>
+                                  <button (click)="applyDateFilter(col.key, '', 'همه')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="!filters[col.key]" [class.text-indigo-600]="!filters[col.key]" [class.text-slate-600]="filters[col.key]">همه</button>
+                                  <button (click)="applyDateFilter(col.key, '1h', '۱ ساعت')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="filters[col.key] === '۱ ساعت'" [class.text-indigo-600]="filters[col.key] === '۱ ساعت'" [class.text-slate-600]="filters[col.key] !== '۱ ساعت'">۱ ساعت</button>
+                                  <button (click)="applyDateFilter(col.key, '3h', '۳ ساعت')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="filters[col.key] === '۳ ساعت'" [class.text-indigo-600]="filters[col.key] === '۳ ساعت'" [class.text-slate-600]="filters[col.key] !== '۳ ساعت'">۳ ساعت</button>
+                                  <button (click)="applyDateFilter(col.key, '6h', '۶ ساعت')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="filters[col.key] === '۶ ساعت'" [class.text-indigo-600]="filters[col.key] === '۶ ساعت'" [class.text-slate-600]="filters[col.key] !== '۶ ساعت'">۶ ساعت</button>
+                                  <button (click)="applyDateFilter(col.key, 'today', 'امروز')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="filters[col.key] === 'امروز'" [class.text-indigo-600]="filters[col.key] === 'امروز'" [class.text-slate-600]="filters[col.key] !== 'امروز'">امروز</button>
+                                  <button (click)="applyDateFilter(col.key, 'yesterday', 'دیروز')" class="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" [class.bg-indigo-50]="filters[col.key] === 'دیروز'" [class.text-indigo-600]="filters[col.key] === 'دیروز'" [class.text-slate-600]="filters[col.key] !== 'دیروز'">دیروز</button>
                                 </div>
                                 <div class="text-[10px] font-bold text-slate-500 mb-1">یا بازه دلخواه:</div>
                               }
                               <div class="text-[10px] font-bold text-slate-600 mb-1">از تاریخ:</div>
-                              <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="customDateStart = $event.gregorian">
-                                <input type="text" [formControl]="customDateStartControl" class="w-full text-[10px] px-2 py-1 rounded border border-slate-200 focus:border-indigo-400 outline-none mb-1" placeholder="انتخاب تاریخ">
+                              <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="customDateStart = $event.gregorian" class="w-full relative block">
+                                <input type="text" [formControl]="customDateStartControl" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:border-indigo-400 outline-none mb-1 shadow-2xs" placeholder="انتخاب تاریخ">
                               </ng-persian-datepicker>
                               <div class="text-[10px] font-bold text-slate-600 mb-1">تا تاریخ:</div>
-                              <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="customDateEnd = $event.gregorian">
-                                <input type="text" [formControl]="customDateEndControl" class="w-full text-[10px] px-2 py-1 rounded border border-slate-200 focus:border-indigo-400 outline-none mb-2" placeholder="انتخاب تاریخ">
+                              <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="customDateEnd = $event.gregorian" class="w-full relative block">
+                                <input type="text" [formControl]="customDateEndControl" class="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:border-indigo-400 outline-none mb-2 shadow-2xs" placeholder="انتخاب تاریخ">
                               </ng-persian-datepicker>
-                              <div class="flex items-center gap-1">
-                                <button (click)="applyCustomDateRange(col.key)" class="flex-1 bg-indigo-600 text-white text-[10px] font-bold py-1 rounded hover:bg-indigo-700">اعمال</button>
-                                <button (click)="clearCustomDateRange(col.key)" class="flex-1 bg-slate-100 text-rose-600 text-[10px] font-bold py-1 rounded hover:bg-rose-50">پاک کردن</button>
+                              <div class="flex items-center gap-1.5 pt-1">
+                                <button (click)="applyCustomDateRange(col.key)" class="flex-1 bg-indigo-600 text-white text-xs font-bold py-1.5 rounded-lg hover:bg-indigo-700 transition-colors shadow-xs">اعمال</button>
+                                <button (click)="clearCustomDateRange(col.key)" class="flex-1 bg-slate-100 text-rose-600 text-xs font-bold py-1.5 rounded-lg hover:bg-rose-50 transition-colors">پاک کردن</button>
                               </div>
                             </div>
                             <div class="fixed inset-0 z-[55]" (click)="activeFilterDropdown = null; showCustomDateRange = false"></div>
@@ -596,6 +608,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   @Input() hasActions = false;
   @Input() trackByKey = 'id';
   @Input() selectedIds: Set<any> = new Set();
+  @Input() selectionMode: 'none' | 'page' | 'all' = 'none';
   @Input() visibleColumns: string[] | null = null; // If null, all columns are visible
   @Input() filters: Record<string, string> = {};
   @Input() isLoading = false;
@@ -617,6 +630,7 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
   @Output() searchChanged = new EventEmitter<string>();
   @Output() pageChanged = new EventEmitter<PageEvent>();
   @Output() selectionChanged = new EventEmitter<Set<any>>();
+  @Output() selectionModeChange = new EventEmitter<'none' | 'page' | 'all'>();
   @Output() filtersCleared = new EventEmitter<void>();
   @Output() visibleColumnsChanged = new EventEmitter<string[]>();
   @Output() bulkUpdate = new EventEmitter<any[]>();
@@ -1226,16 +1240,37 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  toggleSelectAll(event: Event): void {
-    const checked = (event.target as HTMLInputElement).checked;
-    const newSet = new Set(this.selectedIds);
-    if (checked) {
+  cycleMasterSelection(event?: Event): void {
+    if (event) event.preventDefault();
+    if (!this.selectable) return;
+
+    if (this.selectionMode === 'none') {
+      // کلیک اول: انتخاب رکوردهای صفحه جاری
+      this.selectionMode = 'page';
+      const newSet = new Set(this.selectedIds);
       this.data.forEach((row) => newSet.add(this.getRowKey(row)));
+      this.selectedIds = newSet;
+      this.selectionModeChange.emit('page');
+      this.selectionChanged.emit(newSet);
+    } else if (this.selectionMode === 'page') {
+      // کلیک دوم: انتخاب تمام رکوردهای فیلترشده در کل دیتابیس
+      this.selectionMode = 'all';
+      const newSet = new Set(this.selectedIds);
+      this.data.forEach((row) => newSet.add(this.getRowKey(row)));
+      this.selectedIds = newSet;
+      this.selectionModeChange.emit('all');
+      this.selectionChanged.emit(newSet);
     } else {
-      this.data.forEach((row) => newSet.delete(this.getRowKey(row)));
+      // کلیک سوم: لغو کامل انتخاب‌ها
+      this.selectionMode = 'none';
+      this.selectedIds = new Set();
+      this.selectionModeChange.emit('none');
+      this.selectionChanged.emit(this.selectedIds);
     }
-    this.selectedIds = newSet;
-    this.selectionChanged.emit(newSet);
+  }
+
+  toggleSelectAll(event: Event): void {
+    this.cycleMasterSelection(event);
   }
 
   toggleRowSelection(row: any, event: Event): void {
@@ -1245,6 +1280,10 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
       newSet.add(this.getRowKey(row));
     } else {
       newSet.delete(this.getRowKey(row));
+      if (this.selectionMode === 'all') {
+        this.selectionMode = 'page';
+        this.selectionModeChange.emit('page');
+      }
     }
     this.selectedIds = newSet;
     this.selectionChanged.emit(newSet);

@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 2,
+    "summary": "Step 2 'Expected the application to be reachable so a success toast indicating the draft quantity is saved could appear.' failed. Error: TEST BLOCKED\n\nThe test could not be run — the application host is unreachable due to a server/host error.\n\nObservations:\n- The site returned a Cloudflare \"Bad gateway\" (502) diagnostic page when loading https://app.farsalish.ir.\n- The Cloudflare page shows the host (app.farsalish.ir) status as \"Error\" (Host Error), blocking access to the application and its login page.\n- Only Cloudflare diagnostic UI was present; no application login form or UI elements were reachable to perform the requested steps.",
+    "path": "steps/02-snapshot.html"
+  }
+]

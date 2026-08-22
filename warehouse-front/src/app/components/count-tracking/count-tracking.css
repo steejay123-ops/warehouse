@@ -1,0 +1,9 @@
+@keyframes pulse-flash {
+  0% { background-color: rgba(99, 102, 241, 0.25); }
+  50% { background-color: rgba(99, 102, 241, 0.08); }
+  100% { background-color: transparent; }
+}
+
+.status-updated-flash {
+  animation: pulse-flash 2.5s ease-out;
+}

@@ -1,6 +1,9 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subject, Subscription } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ReportApiService } from '../../core/api/report-api.service';
 import { AuthStore } from '../../core/stores/auth.store';
@@ -14,6 +17,9 @@ import {
   ReportJoinSpec,
   ReportTemplate,
   ReportFieldMeta,
+  ReportSavedState,
+  parseReportFromQueryParams,
+  serializeReportToQueryParams,
 } from '../../core/models/report.model';
 import { ToastService } from '../../shared/components/toast/toast.component';
 import {
@@ -38,17 +44,24 @@ import { ReportChartComponent } from './report-chart.component';
   imports: [
     CommonModule, FormsModule, DataTableComponent, TableColumnDirective,
     FilterGroupComponent, SavedReportsComponent, ExportProgressComponent,
-    ReportChartComponent,
+    ReportChartComponent
   ],
   providers: [ReportStore],
   templateUrl: './reports.html',
 })
-export class Reports implements OnInit {
+export class Reports implements OnInit, OnDestroy {
   readonly store = inject(ReportStore);
   private reportApi = inject(ReportApiService);
   private warehouseHttp = inject(WarehouseHttpService);
   private toast = inject(ToastService);
   private authStore = inject(AuthStore);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+
+  private readonly DRAFT_STORAGE_KEY = 'warehouse_report_builder_draft';
+  private stateSubject$ = new Subject<void>();
+  private stateSub?: Subscription;
+  private isRestoring = false;
 
   // ─── انبارها برای فیلدهای پویا/scope ───
   warehouses = signal<{ id: number; name: string }[]>([]);
@@ -82,6 +95,22 @@ export class Reports implements OnInit {
   saveDescription = '';
   saveIsPublic = false;
 
+  // ─── مودال راهنمای جامع ───
+  isHelpModalOpen = signal(false);
+  activeHelpTab = signal<'scenarios' | 'steps' | 'joins' | 'export'>('scenarios');
+
+  openHelpModal(): void {
+    this.isHelpModalOpen.set(true);
+  }
+
+  closeHelpModal(): void {
+    this.isHelpModalOpen.set(false);
+  }
+
+  setHelpTab(tab: 'scenarios' | 'steps' | 'joins' | 'export'): void {
+    this.activeHelpTab.set(tab);
+  }
+
   // ─── job خروجی بزرگ ───
   exportJobId = signal<number | null>(null);
   exportTotalRows = signal(0);
@@ -110,25 +139,131 @@ export class Reports implements OnInit {
       next: (list) => this.warehouses.set(list.map((w) => ({ id: w.id, name: w.name }))),
       error: () => {},
     });
-    // در کانتکست انبار، انبار فعال پیش‌فرض شود
-    const active = this.authStore.activeWarehouseId();
-    if (typeof active === 'number') this.store.setWarehouse(active);
+
+    // سابسکریپشن همگام‌سازی بلادرنگ Debounced با URL و LocalStorage
+    this.stateSub = this.stateSubject$.pipe(debounceTime(300)).subscribe(() => {
+      if (this.isRestoring) return;
+      const currentState = this.store.serializeState(this.filterRoot, this.tableDensity());
+      if (currentState && currentState.entity) {
+        try {
+          localStorage.setItem(this.DRAFT_STORAGE_KEY, JSON.stringify(currentState));
+        } catch {}
+        const qp = serializeReportToQueryParams(currentState);
+        this.router.navigate([], { relativeTo: this.route, queryParams: qp, replaceUrl: true });
+      } else {
+        try {
+          localStorage.removeItem(this.DRAFT_STORAGE_KEY);
+        } catch {}
+        this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+      }
+    });
+
+    // بررسی پارامترهای اولیه URL یا بازیابی پیش‌نویس از LocalStorage
+    const params = this.route.snapshot.queryParams;
+    let initialState = parseReportFromQueryParams(params);
+
+    if (!initialState) {
+      try {
+        const savedDraft = localStorage.getItem(this.DRAFT_STORAGE_KEY);
+        if (savedDraft) {
+          const parsed = JSON.parse(savedDraft);
+          initialState = parseReportFromQueryParams(parsed) || (parsed?.entity ? parsed : null);
+        }
+      } catch {}
+    }
+
+    if (initialState && initialState.entity) {
+      this.restoreStateAndRun(initialState);
+    } else {
+      // در کانتکست انبار، انبار فعال پیش‌فرض شود
+      const active = this.authStore.activeWarehouseId();
+      if (typeof active === 'number') this.store.setWarehouse(active);
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stateSub?.unsubscribe();
+  }
+
+  /** بازیابی کامل وضعیت و اجرای خودکار (Auto-Run) */
+  restoreStateAndRun(state: ReportSavedState): void {
+    this.isRestoring = true;
+    if (state.filters) {
+      this.filterRoot = JSON.parse(JSON.stringify(state.filters));
+    } else {
+      this.filterRoot = { op: 'AND', children: [] };
+    }
+    if (state.density) {
+      this.tableDensity.set(state.density);
+    }
+
+    this._joinTargetFields.set(new Map());
+
+    this.store.applySavedState(state, (res) => {
+      // لود فیلدهای مقصدهای JOIN
+      if (state.joins && state.joins.length) {
+        const joinsMeta = res.joins ?? [];
+        for (const jspec of state.joins) {
+          const jm = joinsMeta.find((j) => j.key === jspec.to);
+          if (jm) this._loadJoinTargetFields(jm);
+        }
+      }
+
+      setTimeout(() => {
+        this.isRestoring = false;
+        // اجرای خودکار در صورت وجود موجودیت معتبر
+        if (this.store.entityKey()) {
+          const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
+          this.store.run(snapshot.children.length ? snapshot : null, true);
+        }
+        this.notifyStateChanged();
+      }, 50);
+    });
+  }
+
+  notifyStateChanged(): void {
+    if (this.isRestoring) return;
+    this.stateSubject$.next();
+  }
+
+  onFilterChanged(): void {
+    this.notifyStateChanged();
+  }
+
+  resetReport(): void {
+    this.isRestoring = true;
+    try {
+      localStorage.removeItem(this.DRAFT_STORAGE_KEY);
+    } catch {}
+    this.filterRoot = { op: 'AND', children: [] };
+    this.store.selectEntity(null);
+    this.tableDensity.set('standard');
+    this._joinTargetFields.set(new Map());
+    this.router.navigate(['/reports'], { queryParams: {}, replaceUrl: true }).then(() => {
+      this.isRestoring = false;
+      const active = this.authStore.activeWarehouseId();
+      if (typeof active === 'number') this.store.setWarehouse(active);
+      this.toast.success('فرم گزارش با موفقیت بازنشانی شد.');
+    });
   }
 
   // ------------------------------------------------------------ entity/fields
   onEntityChange(key: string): void {
     this.filterRoot = { op: 'AND', children: [] };
     this.store.selectEntity(key || null);
+    this.notifyStateChanged();
   }
 
   onWarehouseChange(v: number | null): void {
     this.store.setWarehouse(v ?? null);
+    this.notifyStateChanged();
   }
 
   toggleField(key: string): void {
     this.store.selectedFields.update((arr) =>
       arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key],
     );
+    this.notifyStateChanged();
   }
 
   moveField(key: string, dir: -1 | 1): void {
@@ -140,6 +275,19 @@ export class Reports implements OnInit {
       [copy[i], copy[j]] = [copy[j], copy[i]];
       return copy;
     });
+    this.notifyStateChanged();
+  }
+
+  removeSelectedField(key: string): void {
+    this.store.selectedFields.update((arr) => arr.filter((k) => k !== key));
+    this.notifyStateChanged();
+  }
+
+  getFieldLabel(key: string): string {
+    const baseField = this.store.fieldByKey().get(key);
+    if (baseField) return baseField.label;
+    const found = this.allSelectableFields().find((f) => f.key === key);
+    return found?.label || key;
   }
 
   // ─────────────────────────── JOINها ───────────────────────────
@@ -169,6 +317,7 @@ export class Reports implements OnInit {
         this.toast.info('به دلیل اضافه شدن جدول چندمقداری، توابع تجمیع فیلدهای پایه برای جلوگیری از محاسبه اشتباه، به صورت خودکار به شمارش (Count) تغییر یافتند.');
       }
     }
+    this.notifyStateChanged();
   }
 
   removeJoin(joinKey: string): void {
@@ -182,6 +331,7 @@ export class Reports implements OnInit {
       next.delete(alias);
       return next;
     });
+    this.notifyStateChanged();
   }
 
   clearJoinSelections(alias: string): void {
@@ -209,6 +359,7 @@ export class Reports implements OnInit {
     this.store.joins.update((arr) =>
       arr.map((j) => (j.to === joinKey ? { ...j, type } : j))
     );
+    this.notifyStateChanged();
   }
 
   /** فیلدهای مقصد هر JOIN — بارگذاری‌شده از API */
@@ -271,6 +422,7 @@ export class Reports implements OnInit {
     this.store.selectedFields.update((arr) =>
       arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key]
     );
+    this.notifyStateChanged();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -287,6 +439,7 @@ export class Reports implements OnInit {
       }
     }
     this.store.pruneAggDependents();
+    this.notifyStateChanged();
   }
 
   addAggregation(): void {
@@ -297,6 +450,7 @@ export class Reports implements OnInit {
       ...arr,
       { field: target.key, fn: numeric ? 'sum' : 'count', alias: '' },
     ]);
+    this.notifyStateChanged();
   }
 
   isFieldCountOnly(fieldKey: string): boolean {
@@ -313,6 +467,21 @@ export class Reports implements OnInit {
     return !fd.aggregatable;
   }
 
+  // ── تراکم جدول خروجی ──
+  readonly tableDensity = signal<'compact' | 'standard'>('standard');
+  setTableDensity(d: 'compact' | 'standard') {
+    this.tableDensity.set(d);
+    this.notifyStateChanged();
+  }
+
+  // ── اعتبارسنجی تداخل نام مستعار (Alias Conflict) ──
+  isRowAliasConflict(alias: string | undefined, currentIndex: number): boolean {
+    if (!alias || !alias.trim()) return false;
+    const clean = alias.trim();
+    const aggs = this.store.aggregations();
+    return aggs.some((a, idx) => idx !== currentIndex && a.alias?.trim() === clean);
+  }
+
   updateAggregation(index: number, patch: Partial<{ field: string; fn: AggFn; alias: string }>): void {
     if (patch.field) this.checkAndSwitchManyJoin(patch.field);
     this.store.aggregations.update((arr) =>
@@ -327,11 +496,13 @@ export class Reports implements OnInit {
       })
     );
     this.store.pruneAggDependents();
+    this.notifyStateChanged();
   }
 
   removeAggregation(index: number): void {
     this.store.aggregations.update((arr) => arr.filter((_, i) => i !== index));
     this.store.pruneAggDependents();
+    this.notifyStateChanged();
   }
 
   aggregatableFields() {
@@ -371,6 +542,7 @@ export class Reports implements OnInit {
     const alias = this.store.aggAliases()[0];
     if (!alias) return;
     this.store.having.update((arr) => [...arr, { alias, operator: 'gte', value: null }]);
+    this.notifyStateChanged();
   }
 
   updateHaving(index: number, patch: Partial<{ alias: string; operator: HavingOperator; value: unknown }>): void {
@@ -383,6 +555,7 @@ export class Reports implements OnInit {
         return next;
       }),
     );
+    this.notifyStateChanged();
   }
 
   updateHavingBetween(index: number, pos: 0 | 1, v: unknown): void {
@@ -394,10 +567,12 @@ export class Reports implements OnInit {
         return { ...h, value: pair };
       }),
     );
+    this.notifyStateChanged();
   }
 
   removeHaving(index: number): void {
     this.store.having.update((arr) => arr.filter((_, i) => i !== index));
+    this.notifyStateChanged();
   }
 
   havingBetweenVal(value: unknown, pos: 0 | 1): unknown {
@@ -419,11 +594,13 @@ export class Reports implements OnInit {
     if (!next.y && this.store.aggAliases().length === 1) next.y = this.store.aggAliases()[0];
     this.store.chart.set(next);
     if (this.chartReady() && this.store.hasRun()) this.store.fetchChartRows();
+    this.notifyStateChanged();
   }
 
   clearChart(): void {
     this.store.chart.set(null);
     this.store.chartRows.set([]);
+    this.notifyStateChanged();
   }
 
   chartXLabel(): string {
@@ -450,14 +627,10 @@ export class Reports implements OnInit {
     return this.countTotalConditions(this.filterRoot);
   }
 
-  runReport(): void {
-    if (this.store.isOffline()) {
-      this.toast.warning('گزارش‌گیری فقط در حالت آنلاین در دسترس است.');
-      return;
-    }
+  private validateReportSpec(): boolean {
     if (!this.store.grouped() && this.store.selectedFields().length === 0) {
       this.toast.warning('لطفاً حداقل یک فیلد برای نمایش در گزارش انتخاب کنید.');
-      return;
+      return false;
     }
     // جلوگیری از HAVING با مقدار خالی (#6)
     const invalidHaving = this.store.having().some((h) => {
@@ -468,7 +641,7 @@ export class Reports implements OnInit {
     });
     if (invalidHaving) {
       this.toast.warning('لطفاً مقدار همه شرط‌های «HAVING» را وارد کنید.');
-      return;
+      return false;
     }
     // جلوگیری از فیلترهای ناقص
     let hasInvalidFilter = false;
@@ -476,7 +649,9 @@ export class Reports implements OnInit {
       if (node.op) {
         node.children?.forEach(checkFilters);
       } else {
-        if (node.operator === 'between' && (!Array.isArray(node.value) || node.value[0] === null || node.value[1] === null)) {
+        if (!node.field) {
+          hasInvalidFilter = true;
+        } else if (node.operator === 'between' && (!Array.isArray(node.value) || node.value[0] === null || node.value[1] === null)) {
           hasInvalidFilter = true;
         } else if (node.operator === 'in' && (!Array.isArray(node.value) || node.value.length === 0)) {
           hasInvalidFilter = true;
@@ -486,23 +661,36 @@ export class Reports implements OnInit {
     checkFilters(this.filterRoot);
     if (hasInvalidFilter) {
       this.toast.warning('لطفاً مقدار همه فیلترها را کامل وارد کنید (مخصوصاً فیلترهای بازه و لیستی).');
-      return;
+      return false;
     }
 
     // جلوگیری از alias تکراری در تجمیع (#4)
     if (this.hasAliasConflict()) {
       this.toast.warning('دو تجمیع با نام مستعار یکسان وجود دارد — لطفاً نام مستعار دستی وارد کنید.');
+      return false;
+    }
+    return true;
+  }
+
+  runReport(): void {
+    if (this.store.isOffline()) {
+      this.toast.warning('گزارش‌گیری فقط در حالت آنلاین در دسترس است.');
+      return;
+    }
+    if (!this.validateReportSpec()) {
       return;
     }
     this.store.page.set(1);
     const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
     this.store.run(snapshot.children.length ? snapshot : null, true);
+    this.notifyStateChanged();
   }
 
   onPageChanged(e: PageEvent): void {
     this.store.page.set(e.page);
     this.store.pageSize.set(e.pageSize);
     this.store.run();
+    this.notifyStateChanged();
   }
 
   onSortChanged(s: SortState): void {
@@ -513,6 +701,7 @@ export class Reports implements OnInit {
     }
     this.store.page.set(1);
     this.store.run(undefined, true);
+    this.notifyStateChanged();
   }
 
   // ------------------------------------------------------------ Excel / PDF
@@ -528,6 +717,9 @@ export class Reports implements OnInit {
     const label = format === 'pdf' ? 'PDF' : 'Excel';
     if (this.store.isOffline()) {
       this.toast.warning(`خروجی ${label} فقط در حالت آنلاین در دسترس است.`);
+      return;
+    }
+    if (!this.validateReportSpec()) {
       return;
     }
     // سینک فیلتر UI — export همیشه با وضعیت فعلی UI باشد، نه آخرین «اجرا» (#2)
@@ -568,8 +760,13 @@ export class Reports implements OnInit {
         let msg = `خطا در تولید خروجی ${label}.`;
         try {
           if (e?.error instanceof Blob) {
-            const j = JSON.parse(await e.error.text());
-            msg = j.error || j.detail || msg;
+            const txt = await e.error.text();
+            try {
+              const j = JSON.parse(txt);
+              msg = j.error || j.detail || msg;
+            } catch {
+              if (txt && txt.length < 200) msg = txt;
+            }
           } else {
             msg = this.store.msg(e);
           }
@@ -625,19 +822,21 @@ export class Reports implements OnInit {
   }
 
   loadTemplate(t: ReportTemplate): void {
-    this.store.applyTemplate(t);
     this.filterRoot = t.spec.filters
       ? JSON.parse(JSON.stringify(t.spec.filters))
       : { op: 'AND', children: [] };
-    // بارگذاری فیلدهای مقصد JOINهای ذخیره‌شده در قالب
+    // بارگذاری فیلدهای مقصد JOINهای ذخیره‌شده در قالب پس از رسیدن متادیتای فیلدها
     this._joinTargetFields.set(new Map());
-    if (t.spec.joins?.length) {
-      const joinsMeta = this.store.joinsMeta();
-      for (const jspec of t.spec.joins) {
-        const jm = joinsMeta.find((j) => j.key === jspec.to);
-        if (jm) this._loadJoinTargetFields(jm);
+    this.store.applyTemplate(t, (res) => {
+      if (t.spec.joins?.length) {
+        const joinsMeta = res.joins ?? [];
+        for (const jspec of t.spec.joins) {
+          const jm = joinsMeta.find((j) => j.key === jspec.to);
+          if (jm) this._loadJoinTargetFields(jm);
+        }
       }
-    }
+      this.notifyStateChanged();
+    });
   }
 
   deleteTemplate(t: ReportTemplate): void {

@@ -29,32 +29,64 @@ class CustomUser(AbstractUser):
 
     class Meta:
         permissions = [
-            # System Tabs
-            ("view_sys_dashboard", "دسترسی به تب داشبورد مانیتورینگ کلی"),
-            ("view_sys_users", "دسترسی به تب مدیریت کاربران"),
-            ("view_sys_projects", "دسترسی به تب مدیریت انبارها"),
-            ("view_sys_id_cards", "دسترسی به تب صدور کارت پرسنلی"),
-            ("view_sys_counter", "دسترسی به تب میزکار شمارش کور"),
-            ("view_sys_supervisor", "دسترسی به تب کارتابل سرپرست شمارش"),
-            ("view_sys_manager_review", "دسترسی به تب بررسی نهایی مدیر"),
-            ("view_sys_export", "دسترسی به تب صدور فایل تغذیه"),
-            ("view_sys_recounts", "دسترسی به تب بررسی مغایرت و بازشماری"),
-            ("view_sys_settings", "دسترسی به تب تنظیمات سیستم"),
-            ("view_sys_reports", "دسترسی به تب گزارش‌ساز"),
+            # System Tabs (منوی اصلی)
+            ("view_sys_dashboard", "داشبورد مانیتورینگ کلی"),
+            ("view_sys_users", "مدیریت کاربران و نقش‌ها"),
+            ("view_sys_projects", "مدیریت انبارها و پروژه‌ها"),
+            ("view_sys_id_cards", "صدور کارت پرسنلی"),
+            ("view_sys_counter", "میزکار شمارش کور"),
+            ("view_sys_supervisor", "کارتابل سرپرست شمارش"),
+            ("view_sys_manager_review", "بررسی نهایی مدیر"),
+            ("view_sys_export", "صدور فایل تغذیه"),
+            ("view_sys_recounts", "بررسی مغایرت و بازشماری"),
+            ("view_sys_settings", "تنظیمات سیستم"),
+            ("view_sys_reports", "گزارش‌ساز"),
             
-            # Warehouse Tabs
-            ("view_wh_dashboard", "دسترسی به تب داشبورد انبار"),
-            ("view_wh_docs", "دسترسی به تب مدیریت کالا (انبار)"),
-            ("view_wh_dispatch", "دسترسی به تب تخصیص کالا (انبار)"),
-            ("view_wh_customs", "دسترسی به تب فیلدهای مالی/گمرکی (انبار)"),
-            ("view_wh_doc_approvals", "دسترسی به تب تاییدات سرپرست (انبار)"),
-            ("view_wh_feeding", "دسترسی به تب مدیریت و تغذیه MT (انبار)"),
-            ("view_wh_feed_approvals", "دسترسی به تب تاییدات سرپرست تغذیه (انبار)"),
-            ("view_wh_labels", "دسترسی به تب چاپ مجدد و اسکن لیبل (انبار)"),
-            ("view_wh_label_designer", "دسترسی به تب طراحی و کانفیگ لیبل (انبار)"),
-            ("view_wh_audit", "دسترسی به تب رهگیری تغییرات (انبار)"),
-            ("view_wh_settings", "دسترسی به تب تنظیمات انبار"),
+            # Warehouse Tabs (منوی انبار)
+            ("view_wh_dashboard", "داشبورد انبار"),
+            ("view_wh_docs", "مدیریت کالا (انبار)"),
+            ("view_wh_dispatch", "تخصیص کالا (انبار)"),
+            ("view_wh_customs", "فیلدهای مالی و گمرکی (انبار)"),
+            ("view_wh_doc_approvals", "تاییدات سرپرست اسناد (انبار)"),
+            ("view_wh_feeding", "مدیریت و تغذیه MT (انبار)"),
+            ("view_wh_feed_approvals", "تاییدات سرپرست تغذیه (انبار)"),
+            ("view_wh_labels", "چاپ مجدد و اسکن لیبل (انبار)"),
+            ("view_wh_label_designer", "طراحی و کانفیگ لیبل (انبار)"),
+            ("view_wh_audit", "رهگیری تغییرات و ممیزی (انبار)"),
+            ("view_wh_settings", "تنظیمات انبار"),
+
+            # Operational Approval & Action Permissions (فرآیندی و کارتابل‌ها)
+            ("perm_doc_approve_action", "تایید، رد و ثبت امضای اسناد"),
+            ("perm_feed_approve_action", "تایید و اعمال فیدهای تغذیه/گمرکی"),
+            ("perm_inventory_finalize", "تایید نهایی و بستن دوره‌های انبارگردانی"),
+
+            # Sensitive & Critical Permissions (حساس و بحرانی)
+            ("perm_rollback_data", "بازگردانی و احیای جامع داده‌ها"),
+            ("perm_rollback_single", "بازگردانی تکی یک فیلد یا سند"),
+            ("perm_rollback_bulk", "بازگردانی گروهی و زمانی تراکنش‌ها"),
+            ("perm_restore_deleted", "احیای داده‌های حذف‌شده"),
+            ("perm_sys_backup_manage", "ایجاد و مدیریت فایل‌های پشتیبان"),
+            ("perm_sys_backup_restore", "بازیابی پایگاه داده"),
+            ("perm_sys_audit_export", "خروجی گرفتن و آرشیو لاگ‌های ممیزی"),
+            ("perm_sys_purge_logs", "پاکسازی و حذف قطعی لاگ‌های ممیزی"),
+            ("perm_sys_hard_delete", "حذف فیزیکی و قطعی داده‌ها"),
+            ("perm_sys_emergency_freeze", "فریز اضطراری و قفل سراسری انبارها"),
+            ("perm_sys_factory_reset", "بازنشانی مقادیر اولیه و ریست سیستم"),
         ]
+
+SENSITIVE_PERMISSION_CODENAMES = {
+    'perm_rollback_data',
+    'perm_rollback_single',
+    'perm_rollback_bulk',
+    'perm_restore_deleted',
+    'perm_sys_backup_manage',
+    'perm_sys_backup_restore',
+    'perm_sys_audit_export',
+    'perm_sys_purge_logs',
+    'perm_sys_hard_delete',
+    'perm_sys_emergency_freeze',
+    'perm_sys_factory_reset',
+}
 
 
 class CustomRole(Group):
@@ -111,3 +143,125 @@ class UserTableViewState(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.table_name} - {self.view_name}"
+
+
+class UserLoginLog(models.Model):
+    """
+    ثبت تاریخچه ورود و نشست‌های امنیتی کاربران (User Login & Security History)
+    """
+    STATUS_CHOICES = [
+        ('SUCCESS', 'ورود موفق'),
+        ('DAILY_ACTIVE', 'حضور روزانه'),
+        ('FAILED_CREDENTIALS', 'کلمه عبور نادرست'),
+        ('FAILED_LOCKED', 'مسدود شده توسط سیستم ضدنفوذ'),
+        ('FAILED_INACTIVE', 'حساب کاربری غیرفعال'),
+        ('LOGOUT', 'خروج امن'),
+    ]
+
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='login_logs', verbose_name="کاربر"
+    )
+    username_attempted = models.CharField(max_length=150, verbose_name="نام کاربری ورودی", db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="آدرس آی‌پی", db_index=True)
+    user_agent = models.TextField(null=True, blank=True, verbose_name="مشخصات مرورگر/دستگاه")
+    device_model = models.CharField(max_length=150, null=True, blank=True, verbose_name="مدل دستگاه/سخت‌افزار", db_index=True)
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='SUCCESS', verbose_name="وضعیت ورود", db_index=True)
+    failure_reason = models.CharField(max_length=255, null=True, blank=True, verbose_name="علت شکست")
+    metadata = models.JSONField(default=dict, blank=True, verbose_name="متادیتای تکمیلی")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="زمان رویداد")
+
+    class Meta:
+        verbose_name = "لاگ ورود کاربر"
+        verbose_name_plural = "لاگ‌های ورود کاربران"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['ip_address', 'created_at']),
+            models.Index(fields=['device_model', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.username_attempted} - {self.get_status_display()} ({self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''})"
+
+
+class AuditLog(models.Model):
+    """
+    ثبت ممیزی عملیات و تغییرات داده‌های سیستم (Audit Trail)
+    """
+    MODULE_CHOICES = [
+        ('docs', 'مدیریت کالا (انبار)'),
+        ('dispatch', 'تخصیص کالا (انبار)'),
+        ('customs', 'فیلدهای مالی/گمرکی (انبار)'),
+        ('feeding', 'تغذیه سامانه‌های MT (انبار)'),
+        ('labels', 'لیبلینگ و بارکد (انبار)'),
+        ('counter', 'میزکار شمارش کور'),
+        ('supervisor', 'کارتابل سرپرست شمارش'),
+        ('manager', 'بررسی نهایی مدیر'),
+        ('users', 'کاربران و نقش‌ها'),
+        ('warehouses', 'مدیریت انبارها'),
+        ('settings', 'تنظیمات سیستم و انبار'),
+        ('system', 'رویدادهای سیستمی'),
+    ]
+
+    ACTION_CHOICES = [
+        ('CREATE', 'ایجاد رکورد'),
+        ('UPDATE', 'ویرایش رکورد'),
+        ('DELETE', 'حذف رکورد'),
+        ('BULK_UPDATE', 'ویرایش گروهی'),
+        ('APPROVE', 'تایید سرپرست'),
+        ('REJECT', 'رد درخواست'),
+        ('RECOUNT', 'دستور بازشماری'),
+        ('PRINT', 'چاپ لیبل / گزارش'),
+        ('EXPORT', 'خروجی اکسل/CSV'),
+        ('IMPORT', 'تزریق / ایمپورت داده'),
+        ('ROLLBACK', 'بازگردانی اطلاعات'),
+    ]
+
+    SEVERITY_CHOICES = [
+        ('info', 'عادی (اطلاع‌رسانی)'),
+        ('warning', 'هشدار (تغییرات محدود/حساس)'),
+        ('critical', 'بحرانی (حذف داده / تغییر دسترسی‌ها)'),
+    ]
+
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='audit_logs', verbose_name="کاربر اقدام‌کننده"
+    )
+    actor_username = models.CharField(max_length=150, null=True, blank=True, verbose_name="نام کاربری اقدام‌کننده در زمان رویداد")
+    actor_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="نام و نام خانوادگی اقدام‌کننده در زمان رویداد")
+    warehouse = models.ForeignKey(
+        'warehouses.Warehouse', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='audit_logs', verbose_name="انبار مرتبط"
+    )
+    module = models.CharField(max_length=50, choices=MODULE_CHOICES, default='system', verbose_name="ماژول", db_index=True)
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES, default='UPDATE', verbose_name="نوع عملیات", db_index=True)
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='info', verbose_name="سطح اهمیت", db_index=True)
+    
+    target_model = models.CharField(max_length=100, null=True, blank=True, verbose_name="مدل هدف", db_index=True)
+    target_object_id = models.CharField(max_length=100, null=True, blank=True, verbose_name="شناسه رکورد هدف", db_index=True)
+    target_repr = models.CharField(max_length=255, null=True, blank=True, verbose_name="شرح رکورد هدف")
+    
+    before_state = models.JSONField(null=True, blank=True, verbose_name="وضعیت قبل از تغییر")
+    after_state = models.JSONField(null=True, blank=True, verbose_name="وضعیت بعد از تغییر")
+    details = models.JSONField(default=dict, blank=True, verbose_name="جزئیات و توضیحات رویداد")
+    
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="آدرس آی‌پی")
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="زمان ثبت رویداد")
+
+    class Meta:
+        verbose_name = "لاگ ممیزی عملیات"
+        verbose_name_plural = "لاگ‌های ممیزی عملیات"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['module', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+            models.Index(fields=['severity', 'created_at']),
+            models.Index(fields=['warehouse', 'created_at']),
+            models.Index(fields=['user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"[{self.get_module_display()}] {self.get_action_display()} - {self.target_repr or self.target_object_id} ({self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''})"
+

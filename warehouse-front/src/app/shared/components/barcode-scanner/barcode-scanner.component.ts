@@ -8,20 +8,62 @@ import {
   AfterViewInit,
   OnDestroy,
   ChangeDetectorRef,
+  OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ToastService } from '../toast/toast.component';
 
+export type ScannerCameraPreset = 'adaptive' | 'ultra' | 'high' | 'balanced' | 'lite' | 'custom';
+
+export interface ScannerQualityConfig {
+  preset: ScannerCameraPreset;
+  resolution: '2k_1440p' | '1080p' | '720p' | '480p';
+  roiSize: number; // پیکسل کادر کراپ
+  intervalMs: number; // فرکانس حلقه اسکن
+  tryHarder: boolean;
+}
+
+export const SCANNER_PRESET_CONFIGS: Record<Exclude<ScannerCameraPreset, 'custom'>, ScannerQualityConfig> = {
+  adaptive: {
+    preset: 'adaptive',
+    resolution: '2k_1440p',
+    roiSize: 850,
+    intervalMs: 60,
+    tryHarder: true,
+  },
+  ultra: {
+    preset: 'ultra',
+    resolution: '2k_1440p',
+    roiSize: 850,
+    intervalMs: 60,
+    tryHarder: true,
+  },
+  high: {
+    preset: 'high',
+    resolution: '1080p',
+    roiSize: 700,
+    intervalMs: 80,
+    tryHarder: true,
+  },
+  balanced: {
+    preset: 'balanced',
+    resolution: '720p',
+    roiSize: 600,
+    intervalMs: 100,
+    tryHarder: false,
+  },
+  lite: {
+    preset: 'lite',
+    resolution: '480p',
+    roiSize: 400,
+    intervalMs: 150,
+    tryHarder: false,
+  },
+};
+
 /**
- * ورودی اسکنر بارکد پیشرفته (موتور کراپ هوشمند کادر هدف + مانیتورینگ زنده)
- *
- * قابلیت‌ها:
- * - موتور پردازش پیوسته کادر هدف (Precision Viewfinder Engine): استخراج متمرکز فریم از کادر هدف روی کانواس بهینه‌شده
- * - دیکود هم‌زمان با دو موتور: BarcodeDetector بومی روی کانواس + BrowserQRCodeReader اختصاصی ZXing با TRY_HARDER
- * - حل قطعی مشکل عدم خوانده شدن در گوشی‌های مختلف و کدهای فوق‌العاده متراکم و فشرده
- * - پنل عیب‌یابی تعاملی (Diagnostic HUD) با دکمه کپی لاگ
- * - کنترل سخت‌افزاری چراغ‌قوه (Torch) و زوم سخت‌افزاری (1x, 2x)
+ * ورودی اسکنر بارکد پیشرفته (موتور کراپ هوشمند کادر هدف + سوییچ خودکار تطبیقی + مانیتورینگ زنده)
  */
 @Component({
   selector: 'app-barcode-scanner',
@@ -88,30 +130,30 @@ import { ToastService } from '../toast/toast.component';
     >
       <!-- هدر کنترل‌های دوربین -->
       <div
-        class="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/90 via-black/50 to-transparent"
+        class="absolute top-0 inset-x-0 z-20 flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-b from-black/90 via-black/60 to-transparent"
         style="padding-top: calc(0.75rem + env(safe-area-inset-top));"
       >
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <!-- دکمه چراغ‌قوه (Torch) -->
           <button
             *ngIf="torchAvailable"
             type="button"
             (click)="toggleTorch()"
-            class="p-2.5 rounded-full transition-all flex items-center justify-center shadow-md backdrop-blur-md"
+            class="p-2 sm:p-2.5 rounded-full transition-all flex items-center justify-center shadow-md backdrop-blur-md"
             [ngClass]="torchActive ? 'bg-amber-400 text-slate-900 shadow-amber-400/30' : 'bg-white/20 text-white hover:bg-white/30'"
             title="روشن/خاموش کردن چراغ‌قوه"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
             </svg>
           </button>
 
           <!-- دکمه‌های زوم سریع -->
-          <div *ngIf="zoomAvailable && maxZoom >= 2" class="flex items-center bg-white/20 backdrop-blur-md rounded-full p-1 border border-white/10">
+          <div *ngIf="zoomAvailable && maxZoom >= 2" class="flex items-center bg-white/20 backdrop-blur-md rounded-full p-0.5 sm:p-1 border border-white/10">
             <button
               type="button"
               (click)="setZoom(1)"
-              class="px-2.5 py-1 text-xs font-bold rounded-full transition-colors"
+              class="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-full transition-colors"
               [ngClass]="currentZoom <= 1.2 ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'"
             >
               1X
@@ -119,22 +161,140 @@ import { ToastService } from '../toast/toast.component';
             <button
               type="button"
               (click)="setZoom(2)"
-              class="px-2.5 py-1 text-xs font-bold rounded-full transition-colors"
+              class="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-bold rounded-full transition-colors"
               [ngClass]="currentZoom > 1.2 ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'"
             >
               2X
             </button>
           </div>
 
+          <!-- دکمه انتخاب کیفیت دوربین -->
+          <div class="relative">
+            <button
+              type="button"
+              (click)="toggleQualityMenu()"
+              class="px-2.5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold transition-all backdrop-blur-md border shadow-md flex items-center gap-1"
+              [ngClass]="hasLocalOverride ? 'bg-indigo-600/90 text-white border-indigo-400 shadow-indigo-500/30' : 'bg-white/20 text-white/95 border-white/20 hover:bg-white/30'"
+              title="تنظیم کیفیت اسکنر"
+            >
+              <span>{{ activePresetBadge }}</span>
+              <svg class="w-3 h-3 transition-transform" [ngClass]="showQualityMenu ? 'rotate-180' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            <!-- منوی کشویی انتخاب کیفیت دوربین -->
+            <div
+              *ngIf="showQualityMenu"
+              class="absolute top-full right-0 mt-2 w-64 sm:w-72 bg-slate-900/95 border border-white/20 rounded-2xl p-2 shadow-2xl backdrop-blur-xl z-50 text-right animate-fadeIn"
+            >
+              <div class="px-2.5 py-1.5 border-b border-white/10 flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-200">کیفیت اسکنر دوربین</span>
+                <span class="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  محافظ هوشمند فعال
+                </span>
+              </div>
+
+              <div class="py-1 space-y-1">
+                <!-- گزینه ۱: هوشمند خودکار -->
+                <button
+                  type="button"
+                  (click)="selectPreset('adaptive')"
+                  class="w-full px-2.5 py-2 rounded-xl text-right flex items-center justify-between transition-colors"
+                  [ngClass]="activePreset === 'adaptive' ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-slate-300'"
+                >
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold flex items-center gap-1">
+                      <span>⚡ هوشمند خودکار (Adaptive)</span>
+                    </span>
+                    <span class="text-[10px] opacity-80">شروع از 2K با تنظیم خودکار در صورت لگ</span>
+                  </div>
+                  <svg *ngIf="activePreset === 'adaptive'" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+
+                <!-- گزینه ۲: فوق‌العاده Ultra 2K -->
+                <button
+                  type="button"
+                  (click)="selectPreset('ultra')"
+                  class="w-full px-2.5 py-2 rounded-xl text-right flex items-center justify-between transition-colors"
+                  [ngClass]="activePreset === 'ultra' ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-slate-300'"
+                >
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold flex items-center gap-1">
+                      <span>🎯 فوق‌العاده / حداکثر دقت (Ultra 2K)</span>
+                    </span>
+                    <span class="text-[10px] opacity-80">1440p/2K + کدهای فوق‌العاده ریز و متراکم</span>
+                  </div>
+                  <svg *ngIf="activePreset === 'ultra'" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+
+                <!-- گزینه ۳: کیفیت بالا High 1080p -->
+                <button
+                  type="button"
+                  (click)="selectPreset('high')"
+                  class="w-full px-2.5 py-2 rounded-xl text-right flex items-center justify-between transition-colors"
+                  [ngClass]="activePreset === 'high' ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-slate-300'"
+                >
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold">💎 کیفیت بالا (High 1080p)</span>
+                    <span class="text-[10px] opacity-80">رزولوشن 1080p برای گوشی‌های مدرن</span>
+                  </div>
+                  <svg *ngIf="activePreset === 'high'" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+
+                <!-- گزینه ۴: متعادل Balanced 720p -->
+                <button
+                  type="button"
+                  (click)="selectPreset('balanced')"
+                  class="w-full px-2.5 py-2 rounded-xl text-right flex items-center justify-between transition-colors"
+                  [ngClass]="activePreset === 'balanced' ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-slate-300'"
+                >
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold">⚖️ متعادل و روان (Balanced 720p)</span>
+                    <span class="text-[10px] opacity-80">رزولوشن 720p سریع و سبک</span>
+                  </div>
+                  <svg *ngIf="activePreset === 'balanced'" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+
+                <!-- گزینه ۵: اقتصادی Lite 480p -->
+                <button
+                  type="button"
+                  (click)="selectPreset('lite')"
+                  class="w-full px-2.5 py-2 rounded-xl text-right flex items-center justify-between transition-colors"
+                  [ngClass]="activePreset === 'lite' ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-slate-300'"
+                >
+                  <div class="flex flex-col">
+                    <span class="text-xs font-bold">🔋 سبک و اقتصادی (Lite 480p)</span>
+                    <span class="text-[10px] opacity-80">مصرف حداقلی باتری برای گوشی‌های ضعیف</span>
+                  </div>
+                  <svg *ngIf="activePreset === 'lite'" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+              </div>
+
+              <!-- بازگشت به پیش‌فرض دیتابیس -->
+              <div *ngIf="hasLocalOverride" class="pt-2 mt-1 border-t border-white/10">
+                <button
+                  type="button"
+                  (click)="resetToSystemDefault()"
+                  class="w-full py-1.5 px-2 bg-white/10 hover:bg-white/20 text-slate-200 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  <span>بازگشت به پیش‌فرض انبار/سیستم</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- دکمه دیباگ HUD -->
           <button
             type="button"
             (click)="toggleDebugHud()"
-            class="px-3 py-1.5 rounded-full text-xs font-mono font-bold transition-all backdrop-blur-md border shadow-md flex items-center gap-1.5"
+            class="px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-mono font-bold transition-all backdrop-blur-md border shadow-md flex items-center gap-1"
             [ngClass]="showDebugHud ? 'bg-emerald-500/90 text-white border-emerald-400 shadow-emerald-500/30' : 'bg-white/20 text-white/90 border-white/20 hover:bg-white/30'"
           >
-            <span class="w-2 h-2 rounded-full" [ngClass]="showDebugHud ? 'bg-white animate-ping' : 'bg-emerald-400'"></span>
-            دیباگ HUD
+            <span class="w-1.5 h-1.5 rounded-full" [ngClass]="showDebugHud ? 'bg-white animate-ping' : 'bg-emerald-400'"></span>
+            HUD
           </button>
         </div>
 
@@ -142,10 +302,10 @@ import { ToastService } from '../toast/toast.component';
         <button
           type="button"
           (click)="closeCamera()"
-          class="p-2.5 bg-white/20 text-white hover:bg-white/30 rounded-full transition-all backdrop-blur-md shadow-md"
+          class="p-2 sm:p-2.5 bg-white/20 text-white hover:bg-white/30 rounded-full transition-all backdrop-blur-md shadow-md shrink-0 mr-2"
           title="بستن"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
@@ -174,6 +334,24 @@ import { ToastService } from '../toast/toast.component';
         </div>
       </div>
 
+      <!-- بنر موقت سوییچ خودکار تطبیقی (Adaptive Feedback Toast) -->
+      <div
+        *ngIf="adaptiveNotification"
+        class="absolute top-20 inset-x-4 z-40 bg-indigo-900/90 text-white border border-indigo-400/40 backdrop-blur-xl px-4 py-2.5 rounded-2xl shadow-2xl flex items-center justify-between text-xs font-semibold animate-fadeIn"
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-amber-300 text-base">⚡</span>
+          <span>{{ adaptiveNotification }}</span>
+        </div>
+        <button
+          type="button"
+          (click)="adaptiveNotification = null"
+          class="text-white/60 hover:text-white p-1"
+        >
+          ✕
+        </button>
+      </div>
+
       <!-- پنل مانیتورینگ و دیباگ زنده (HUD) -->
       <div
         *ngIf="showDebugHud"
@@ -193,17 +371,19 @@ import { ToastService } from '../toast/toast.component';
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
-            <span>کپی گزارش دیباگ</span>
+            <span>کپی گزارش</span>
           </button>
         </div>
 
         <div class="grid grid-cols-2 gap-x-2 gap-y-1">
           <div><span class="text-slate-400">Stream:</span> <span class="text-amber-300 font-bold">{{ debugInfo.videoRes }}</span></div>
           <div><span class="text-slate-400">Crop Area:</span> <span class="text-emerald-300 font-bold">{{ debugInfo.cropRes }}</span></div>
+          <div><span class="text-slate-400">Preset:</span> <span class="text-indigo-300 font-bold">{{ activePreset }} ({{ currentEffectiveConfig.resolution }})</span></div>
+          <div><span class="text-slate-400">FPS / Latency:</span> <span class="text-emerald-400 font-bold">{{ debugInfo.fps }} fps / {{ debugInfo.lastLatencyMs }}ms</span></div>
           <div><span class="text-slate-400">Native Pass:</span> <span class="text-sky-300">{{ debugInfo.nativeFrames }} frames</span></div>
           <div><span class="text-slate-400">ZXing Pass:</span> <span class="text-purple-300">{{ debugInfo.zxingFrames }} frames</span></div>
+          <div><span class="text-slate-400">Adaptive:</span> <span class="text-amber-300">{{ debugInfo.adaptiveStatus }}</span></div>
           <div><span class="text-slate-400">Focus:</span> <span class="text-slate-300">{{ debugInfo.focusMode }}</span></div>
-          <div><span class="text-slate-400">FPS:</span> <span class="text-emerald-400 font-bold">{{ debugInfo.fps }}</span></div>
         </div>
 
         <div class="mt-2 pt-2 border-t border-white/10 text-[10px]">
@@ -218,7 +398,7 @@ import { ToastService } from '../toast/toast.component';
         style="padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));"
       >
         <p class="text-white/90 text-xs font-semibold bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 shadow-lg">
-          کد دوبعدی (QR / DataMatrix) را مقابل کادر بگیرید
+          کد دوبعدی (QR / DataMatrix) یا بارکد خطی را مقابل کادر بگیرید
         </p>
         <button
           type="button"
@@ -231,7 +411,7 @@ import { ToastService } from '../toast/toast.component';
     </div>
   `,
 })
-export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
+export class BarcodeScannerComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() placeholder = 'اسکن بارکد یا ورود کد کالا...';
   @Input() autofocus = false;
   @Input() disabled = false;
@@ -239,6 +419,13 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
   @Input() headless = false;
   /** بازه نادیده‌گرفتن اسکن تکراری (میلی‌ثانیه) */
   @Input() duplicateWindowMs = 2000;
+
+  /** تنظیمات سرور/انبار (در صورت ارائه) */
+  @Input() serverPreset?: string;
+  @Input() serverCustomResolution?: string;
+  @Input() serverCustomIntervalMs?: number;
+  @Input() serverCustomRoiSize?: number;
+  @Input() serverCustomTryHarder?: boolean;
 
   /** کد نرمال‌شده اسکن/تایپ‌شده */
   @Output() scanned = new EventEmitter<string>();
@@ -249,7 +436,10 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
   value = '';
   cameraOpen = false;
   manualKeyboard = false;
-  showDebugHud = false; // پیش‌فرض بسته برای داشتن محیط کاربری تمیز
+  showDebugHud = false;
+  showQualityMenu = false;
+  adaptiveNotification: string | null = null;
+  private notifTimer: any = null;
 
   // وضعیت‌های سخت‌افزاری دوربین
   torchAvailable = false;
@@ -258,6 +448,14 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
   minZoom = 1;
   maxZoom = 1;
   currentZoom = 1;
+
+  // کلیدهای حافظه محلی
+  private static readonly STORAGE_KEY_PRESET = 'wh_scanner_camera_preset';
+
+  // پروفایل فعال جاری و پیکربندی اجرایی
+  activePreset: ScannerCameraPreset = 'adaptive';
+  currentEffectiveConfig: ScannerQualityConfig = { ...SCANNER_PRESET_CONFIGS.adaptive };
+  hasLocalOverride = false;
 
   // اطلاعات مانیتورینگ زنده (Debug Info)
   debugInfo = {
@@ -274,6 +472,8 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     focusMode: 'N/A',
     zoomRange: '1x',
     fps: 0,
+    lastLatencyMs: 0,
+    adaptiveStatus: 'Always-On Guardian Active',
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
   };
 
@@ -293,19 +493,17 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
   private frameCounter = 0;
   private fpsTimer: any = null;
 
-  /**
-   * قیدهای اپتیمال تصویر: رزولوشن ۱۰۸۰p با سقف شناور ۲K (۱۴۴۰p)
-   */
-  private static readonly VIDEO_CONSTRAINTS: MediaStreamConstraints = {
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920, max: 2560 },
-      height: { ideal: 1080, max: 1440 },
-    },
-    audio: false,
-  };
+  // ناظر تطبیقی افت فریم و تاخیر (Always-On Adaptive Performance Observer)
+  private consecutiveSlowFrames = 0;
+  private consecutiveLowFpsSeconds = 0;
+  private adaptiveDowngradeStep = 0; // ۰: بدون سوییچ، ۱: فاز اول، ۲: فاز دوم
+  private streamStartTime = 0; // زمان شروع استریم جهت محاسبه مهلت اولیه (Grace Period)
 
   constructor(private toast: ToastService, private cdr: ChangeDetectorRef) {}
+
+  ngOnInit(): void {
+    this.initPresetFromStorageOrServer();
+  }
 
   ngAfterViewInit(): void {
     if (this.autofocus) this.focusInput();
@@ -313,6 +511,7 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.closeCamera();
+    if (this.notifTimer) clearTimeout(this.notifTimer);
   }
 
   /** تبدیل ارقام فارسی/عربی به لاتین + حذف کاراکترهای اضافه */
@@ -321,6 +520,91 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     s = s.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
     s = s.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
     return s.replace(/\s+/g, ' ').trim();
+  }
+
+  get activePresetBadge(): string {
+    switch (this.activePreset) {
+      case 'adaptive':
+        return '⚡ هوشمند';
+      case 'ultra':
+        return '🎯 فوق‌العاده';
+      case 'high':
+        return '💎 بالا';
+      case 'balanced':
+        return '⚖️ متعادل';
+      case 'lite':
+        return '🔋 اقتصادی';
+      default:
+        return '⚙️ سفارشی';
+    }
+  }
+
+  private initPresetFromStorageOrServer(): void {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const stored = localStorage.getItem(BarcodeScannerComponent.STORAGE_KEY_PRESET) as ScannerCameraPreset;
+        if (stored && ['adaptive', 'ultra', 'high', 'balanced', 'lite'].includes(stored)) {
+          this.activePreset = stored;
+          this.hasLocalOverride = true;
+          this.currentEffectiveConfig = { ...SCANNER_PRESET_CONFIGS[stored as Exclude<ScannerCameraPreset, 'custom'>] };
+          return;
+        }
+      }
+    } catch {}
+
+    const serverVal = (this.serverPreset as ScannerCameraPreset) || 'adaptive';
+    this.activePreset = ['adaptive', 'ultra', 'high', 'balanced', 'lite'].includes(serverVal) ? serverVal : 'adaptive';
+    this.hasLocalOverride = false;
+    this.currentEffectiveConfig = { ...SCANNER_PRESET_CONFIGS[this.activePreset as Exclude<ScannerCameraPreset, 'custom'>] };
+  }
+
+  toggleQualityMenu(): void {
+    this.showQualityMenu = !this.showQualityMenu;
+    this.cdr.detectChanges();
+  }
+
+  selectPreset(preset: Exclude<ScannerCameraPreset, 'custom'>): void {
+    this.activePreset = preset;
+    this.hasLocalOverride = true;
+    try {
+      localStorage.setItem(BarcodeScannerComponent.STORAGE_KEY_PRESET, preset);
+    } catch {}
+
+    this.currentEffectiveConfig = { ...SCANNER_PRESET_CONFIGS[preset] };
+    this.adaptiveDowngradeStep = 0;
+    this.consecutiveSlowFrames = 0;
+    this.consecutiveLowFpsSeconds = 0;
+    this.showQualityMenu = false;
+    this.showAdaptiveToast(`کیفیت اسکنر به حالت «${this.activePresetBadge}» تنظیم شد.`);
+
+    if (this.cameraOpen) {
+      // اعمال آنی روی کانواس و فرکانس اسکن
+      this.reconfigureActiveSession();
+    }
+    this.cdr.detectChanges();
+  }
+
+  resetToSystemDefault(): void {
+    try {
+      localStorage.removeItem(BarcodeScannerComponent.STORAGE_KEY_PRESET);
+    } catch {}
+    this.hasLocalOverride = false;
+    this.initPresetFromStorageOrServer();
+    this.showQualityMenu = false;
+    this.showAdaptiveToast(`تنظیمات کیفیت به پیش‌فرض سیستم/انبار (${this.activePresetBadge}) بازگشت.`);
+    if (this.cameraOpen) {
+      this.reconfigureActiveSession();
+    }
+    this.cdr.detectChanges();
+  }
+
+  private showAdaptiveToast(msg: string): void {
+    this.adaptiveNotification = msg;
+    if (this.notifTimer) clearTimeout(this.notifTimer);
+    this.notifTimer = setTimeout(() => {
+      this.adaptiveNotification = null;
+      this.cdr.detectChanges();
+    }, 3500);
   }
 
   focusInput(): void {
@@ -360,6 +644,48 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
   //  موتور پردازش پیوسته کادر هدف (Precision Viewfinder Engine)
   // ════════════════════════════════════════════
 
+  private static getMediaConstraints(resolution: string): MediaStreamConstraints {
+    switch (resolution) {
+      case '2k_1440p':
+        return {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920, max: 2560 },
+            height: { ideal: 1080, max: 1440 },
+          },
+          audio: false,
+        };
+      case '1080p':
+        return {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        };
+      case '720p':
+        return {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        };
+      case '480p':
+      default:
+        return {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
+        };
+    }
+  }
+
   async openCamera(): Promise<void> {
     if (this.cameraOpen) return;
     this.cameraOpen = true;
@@ -370,6 +696,11 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     this.debugInfo.fps = 0;
     this.debugInfo.lastNativeStatus = 'Starting...';
     this.debugInfo.lastZxingStatus = 'Starting...';
+    this.debugInfo.adaptiveStatus = 'Always-On Guardian Active';
+    this.consecutiveSlowFrames = 0;
+    this.consecutiveLowFpsSeconds = 0;
+    this.adaptiveDowngradeStep = 0;
+    this.showQualityMenu = false;
     this.cdr.detectChanges();
 
     await Promise.resolve();
@@ -381,11 +712,12 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     }
 
     try {
-      // ۱. راه‌اندازی استریم ویدیو با رزولوشن ۱۰۸۰p
+      // ۱. راه‌اندازی استریم ویدیو بر اساس رزولوشن پروفایل فعال
+      const constraints = BarcodeScannerComponent.getMediaConstraints(this.currentEffectiveConfig.resolution);
       try {
-        this.mediaStream = await navigator.mediaDevices.getUserMedia(BarcodeScannerComponent.VIDEO_CONSTRAINTS);
+        this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (constraintErr) {
-        console.warn('[BarcodeScanner] فال‌بک به قیدهای ساده دوربین:', constraintErr);
+        console.warn('[BarcodeScanner] قیدهای رزولوشن رد شد، فال‌بک به تنظیمات استاندارد:', constraintErr);
         this.mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' } },
           audio: false,
@@ -400,10 +732,12 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
       video.autoplay = true;
       await video.play();
 
-      // ۲. مقداردهی اولیه دیکودرها و کانواس کراپ
+      this.streamStartTime = performance.now();
+
+      // ۲. مقداردهی اولیه دیکودرها و کانواس کراپ متناسب با پروفایل
       await this.initDecoders();
 
-      // ۳. راه‌اندازی حلقه اسکن فوق‌سریع کادر هدف
+      // ۳. راه‌اندازی حلقه اسکن و ناظر عملکرد تطبیقی
       this.startPrecisionScanLoop(video);
     } catch (err: any) {
       this.closeCamera();
@@ -455,6 +789,7 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     this.torchAvailable = false;
     this.torchActive = false;
     this.zoomAvailable = false;
+    this.showQualityMenu = false;
     this.cdr.detectChanges();
   }
 
@@ -476,17 +811,21 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
       this.debugInfo.nativeSupported = false;
     }
 
-    // ب) آماده‌سازی موتورهای تخصصی ZXing با TRY_HARDER
+    // ب) آماده‌سازی موتورهای تخصصی ZXing متناسب با پروفایل
     try {
       const [{ BrowserQRCodeReader, BrowserMultiFormatReader }, { DecodeHintType, BarcodeFormat }] =
         await Promise.all([import('@zxing/browser'), import('@zxing/library')]);
 
       const qrHints = new Map<any, any>();
-      qrHints.set(DecodeHintType.TRY_HARDER, true);
+      if (this.currentEffectiveConfig.tryHarder) {
+        qrHints.set(DecodeHintType.TRY_HARDER, true);
+      }
       this.zxingQrReader = new BrowserQRCodeReader(qrHints);
 
       const multiHints = new Map<any, any>();
-      multiHints.set(DecodeHintType.TRY_HARDER, true);
+      if (this.currentEffectiveConfig.tryHarder) {
+        multiHints.set(DecodeHintType.TRY_HARDER, true);
+      }
       multiHints.set(DecodeHintType.POSSIBLE_FORMATS, [
         BarcodeFormat.QR_CODE,
         BarcodeFormat.DATA_MATRIX,
@@ -496,38 +835,119 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
         BarcodeFormat.EAN_13,
       ]);
       this.zxingMultiReader = new BrowserMultiFormatReader(multiHints);
-      this.debugInfo.lastZxingStatus = 'Engine Ready (TRY_HARDER Active)';
+      this.debugInfo.lastZxingStatus = `Engine Ready (${this.currentEffectiveConfig.tryHarder ? 'TRY_HARDER Active' : 'Fast Mode'})`;
     } catch (e: any) {
       this.debugInfo.lastZxingStatus = `ZXing Load Error: ${e?.message || e}`;
     }
 
-    // ج) ساخت بستر کانواس کراپ کادر هدف (رزولوشن متمرکز ۸۵۰×۸۵۰)
+    // ج) ساخت بستر کانواس کراپ کادر هدف متناسب با ابعاد ROI پروفایل
+    const roi = this.currentEffectiveConfig.roiSize || 850;
     this.cropCanvas = document.createElement('canvas');
-    this.cropCanvas.width = 850;
-    this.cropCanvas.height = 850;
+    this.cropCanvas.width = roi;
+    this.cropCanvas.height = roi;
     this.cropCtx = this.cropCanvas.getContext('2d', { willReadFrequently: true });
-    this.debugInfo.cropRes = '850x850 (High-Density ROI)';
+    this.debugInfo.cropRes = `${roi}x${roi} (ROI)`;
   }
 
-  /** اجرای حلقه اسکن بلادرنگ روی کادر مرکزی ویدیو */
+  /** بازتنظیم پویای نشست اسکن فعال در صورت تغییر پروفایل یا سوییچ هوشمند */
+  private reconfigureActiveSession(): void {
+    const roi = this.currentEffectiveConfig.roiSize || 850;
+    if (this.cropCanvas) {
+      this.cropCanvas.width = roi;
+      this.cropCanvas.height = roi;
+      this.cropCtx = this.cropCanvas.getContext('2d', { willReadFrequently: true });
+    }
+    this.debugInfo.cropRes = `${roi}x${roi} (ROI)`;
+
+    const video = this.videoRef?.nativeElement;
+    if (video && this.scanLoopTimer) {
+      clearInterval(this.scanLoopTimer);
+      this.startPrecisionScanLoop(video);
+    }
+  }
+
+  /**
+   * موتور سوییچ هوشمند همواره‌فعال (Always-On Adaptive Auto-Degrade)
+   * در صورت تشخیص لگ، فریز یا افت فریم شدید در هر گوشی، به کیفیت سبک‌تر شیفت می‌دهد
+   */
+  private triggerAdaptiveFallback(reason: string): void {
+    if (this.currentEffectiveConfig.preset === 'lite') {
+      // پایین‌ترین حالت ممکن رسیده است
+      return;
+    }
+
+    this.adaptiveDowngradeStep++;
+    let targetPreset: Exclude<ScannerCameraPreset, 'custom'> = 'balanced';
+
+    if (this.activePreset === 'ultra' || this.activePreset === 'adaptive') {
+      targetPreset = this.adaptiveDowngradeStep === 1 ? 'high' : 'balanced';
+    } else if (this.activePreset === 'high') {
+      targetPreset = 'balanced';
+    } else if (this.activePreset === 'balanced') {
+      targetPreset = 'lite';
+    }
+
+    console.warn(`[BarcodeScanner Adaptive Guardian] فعال‌سازی سوییچ هوشمند به دلیل: ${reason} -> شیفت به ${targetPreset}`);
+
+    this.currentEffectiveConfig = { ...SCANNER_PRESET_CONFIGS[targetPreset] };
+    this.debugInfo.adaptiveStatus = `Active Fallback -> ${targetPreset} (${reason})`;
+    this.reconfigureActiveSession();
+
+    this.showAdaptiveToast('⚡ بهینه‌سازی خودکار: کیفیت اسکنر جهت عملکرد روان‌تر بهینه شد.');
+
+    // در صورتی که کاربر در حالت هوشمند بود، پروفایل پایدار در حافظه گوشی ذخیره شود
+    if (this.activePreset === 'adaptive') {
+      try {
+        localStorage.setItem(BarcodeScannerComponent.STORAGE_KEY_PRESET, targetPreset);
+        this.activePreset = targetPreset;
+        this.hasLocalOverride = true;
+      } catch {}
+    }
+
+    this.consecutiveSlowFrames = 0;
+    this.consecutiveLowFpsSeconds = 0;
+    this.cdr.detectChanges();
+  }
+
+  /** اجرای حلقه اسکن بلادرنگ با ناظر هوشمند عملکرد */
   private startPrecisionScanLoop(video: HTMLVideoElement): void {
     let busy = false;
     this.frameCounter = 0;
+    const intervalMs = this.currentEffectiveConfig.intervalMs || 60;
 
-    // تایمر محاسبه FPS
+    // تایمر محاسبه FPS و ناظر سلامت استریم
+    if (this.fpsTimer) clearInterval(this.fpsTimer);
     this.fpsTimer = setInterval(() => {
       this.debugInfo.fps = this.frameCounter;
-      this.frameCounter = 0;
-      if (video) {
+      const elapsedSinceStart = performance.now() - this.streamStartTime;
+      const isWarmingUp = elapsedSinceStart < 4000; // ۴ ثانیه مهلت اولیه گرم‌شدن سنسور و کامپایل JIT
+
+      if (this.cameraOpen && video) {
         this.debugInfo.videoRes = `${video.videoWidth || 0}x${video.videoHeight || 0}`;
+
+        if (!isWarmingUp) {
+          // ناظر FPS: اگر فریم‌ریت بیش از ۴ ثانیه متوالی زیر ۴ فریم در ثانیه بود
+          if (this.frameCounter < 4 && video.readyState >= 2) {
+            this.consecutiveLowFpsSeconds++;
+            if (this.consecutiveLowFpsSeconds >= 4) {
+              this.triggerAdaptiveFallback(`افت مداوم فریم‌ریت (${this.frameCounter} FPS)`);
+            }
+          } else {
+            this.consecutiveLowFpsSeconds = 0;
+          }
+        } else {
+          this.consecutiveLowFpsSeconds = 0;
+        }
       }
+      this.frameCounter = 0;
       this.cdr.detectChanges();
     }, 1000);
 
-    // حلقه اسکن با فرکانس بالا (هر ۶۰ میلی‌ثانیه)
+    // حلقه اسکن
     this.scanLoopTimer = setInterval(async () => {
       if (busy || !this.cameraOpen || video.readyState < 2 || !this.cropCanvas || !this.cropCtx) return;
       busy = true;
+      const startTime = performance.now();
       this.frameCounter++;
 
       const vw = video.videoWidth;
@@ -537,14 +957,14 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
         return;
       }
 
-      // محاسبه مختصات دقیق کادر مربع مرکزی
-      // ۷۵٪ بعد کوچکتر تصویر (بزرگترین کادر هدف بدون نویز محیط)
+      // محاسبه کادر هدف (۷۵٪ بعد کوچکتر)
       const cropSize = Math.round(Math.min(vw, vh) * 0.75);
       const sx = Math.round((vw - cropSize) / 2);
       const sy = Math.round((vh - cropSize) / 2);
+      const targetRoi = this.cropCanvas.width;
 
-      // استخراج کادر هدف و رسم با کیفیت بالا روی کانواس ۸۵۰×۸۵۰
-      this.cropCtx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, 850, 850);
+      // رسم کادر هدف روی کانواس بهینه‌شده
+      this.cropCtx.drawImage(video, sx, sy, cropSize, cropSize, 0, 0, targetRoi, targetRoi);
 
       // ۱. پاس اول: موتور بومی BarcodeDetector روی کانواس کراپ‌شده
       if (this.nativeDetector) {
@@ -576,7 +996,6 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
             return;
           }
         } catch (e: any) {
-          // در صورت عدم یافتن الگو در این فریم، خطا را نرمال کن
           this.debugInfo.lastZxingStatus = 'Searching (Refining Grid)';
         }
       }
@@ -594,8 +1013,27 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
         } catch {}
       }
 
+      // ناظر زمان پردازش فریم (Frame Processing Latency Observer)
+      const frameDuration = performance.now() - startTime;
+      this.debugInfo.lastLatencyMs = Math.round(frameDuration);
+      const elapsedSinceStart = performance.now() - this.streamStartTime;
+      const isWarmingUp = elapsedSinceStart < 4000;
+
+      if (!isWarmingUp) {
+        if (frameDuration > 170) {
+          this.consecutiveSlowFrames++;
+          if (this.consecutiveSlowFrames >= 18) {
+            this.triggerAdaptiveFallback(`تاخیر مداوم پردازش (${Math.round(frameDuration)}ms)`);
+          }
+        } else {
+          if (this.consecutiveSlowFrames > 0) this.consecutiveSlowFrames--;
+        }
+      } else {
+        this.consecutiveSlowFrames = 0;
+      }
+
       busy = false;
-    }, 60);
+    }, intervalMs);
   }
 
   private onCameraDecoded(text: string): void {
@@ -705,9 +1143,12 @@ export class BarcodeScannerComponent implements AfterViewInit, OnDestroy {
     const report = `
 === BARCODE SCANNER DIAGNOSTIC REPORT ===
 Timestamp: ${new Date().toISOString()}
+Active Preset: ${this.activePreset} (Effective: ${this.currentEffectiveConfig.resolution}, ROI: ${this.currentEffectiveConfig.roiSize}px, Interval: ${this.currentEffectiveConfig.intervalMs}ms)
+Has Device Override: ${this.hasLocalOverride}
+Adaptive Status: ${this.debugInfo.adaptiveStatus}
 Video Resolution: ${this.debugInfo.videoRes}
 Crop Area: ${this.debugInfo.cropRes}
-FPS: ${this.debugInfo.fps}
+FPS / Latency: ${this.debugInfo.fps} FPS / ${this.debugInfo.lastLatencyMs}ms
 Track Label: ${this.debugInfo.trackLabel}
 Focus Mode: ${this.debugInfo.focusMode}
 Zoom: ${this.debugInfo.zoomRange} (Current: ${this.currentZoom}x)

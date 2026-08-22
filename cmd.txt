@@ -1,3 +1,5 @@
+
+
 cd "e:\warehouse project\warehouse-backend"
 .\venv\Scripts\python manage.py runserver 8000
 
@@ -27,6 +29,9 @@ npx cloudflared tunnel route dns warehouse app.farsalish.ir
 
 clear
 npx cloudflared tunnel run --url http://localhost:4200 warehouse
+
+npx cloudflared tunnel run --protocol http2 --url http://localhost:4200 warehouse
+
 
 
 clear
@@ -124,3 +129,28 @@ npm cache clean --force
 npx ruflo@latest mcp start
 
 omniroute
+
+
+
+پلاگین rtl کلد دسکتاپ
+irm raw.githubusercontent.com/shraga100/claude-desktop-rtl-patch/main/install.ps1 | iex
+
+پاک کردن برنامه های گیر کرده
+Stop-Process -Name WindowsTerminal -Force -ErrorAction SilentlyContinue
+
+اجرای محیط توسعه
+.\dev-env.bat
+
+.\dev-internal.bat
+
+
+کش انتیگرویتی
+C:\Users\Payandeh\AppData\Roaming\Antigravity\Code Cache
+C:\Users\Payandeh\AppData\Roaming\Antigravity\Cache
+
+
+
+
+طرح را به چند فاز تبدیل کن. با در نظر گرفتن موارد زیر 
+1.با جزئیات کامل
+2.فاز بندی طوری باشد که تا فاز قبلی چک نشود فاز بعدی شروع نشود. 

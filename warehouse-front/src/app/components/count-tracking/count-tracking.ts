@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
@@ -15,28 +15,35 @@ import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
 import { WebSocketService } from '../../core/http/websocket.service';
 import { OfflineSyncService } from '../../core/services/offline-sync.service';
+import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
 
 @Component({
   selector: 'app-count-tracking',
   standalone: true,
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, WarehouseSelectorComponent],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, WarehouseSelectorComponent, BarcodeScannerComponent],
   templateUrl: './count-tracking.html',
   styleUrl: './count-tracking.css'
 })
 export class CountTracking implements OnInit, OnDestroy {
+  @ViewChild(BarcodeScannerComponent) scanner?: BarcodeScannerComponent;
+
   tasks: any[] = [];
   filteredTasks: any[] = [];
   isLoading = true;
   showCompleted = false;
+  savedShowCompletedState = false;
   selectedTaskIds: Set<number> = new Set();
 
-  // ─── Mini Dashboard ───
+  // ─── Mini Dashboard & Discrepancy KPIs ───
   statTotal = 0;
   statCounted = 0;
   statDiscrepancy = 0;
+  statShortage = 0;
+  statSurplus = 0;
   statApproved = 0;
 
-  // ─── فیلتر مغایرت ───
+  // ─── فیلتر مغایرت و وضعیت سریع ───
+  discrepancyFilter: 'all' | 'counted' | 'discrepancy' | 'shortage' | 'surplus' | 'approved' = 'all';
   showOnlyDiscrepancies = false;
 
   // ─── WebSocket & SWR ───
@@ -231,12 +238,9 @@ export class CountTracking implements OnInit, OnDestroy {
 
   toggleCompleted() {
     this.showCompleted = !this.showCompleted;
+    this.savedShowCompletedState = this.showCompleted;
     this.selectedTaskIds = new Set();
-    this.router.navigate([], {
-      queryParams: { discrepancies: this.showOnlyDiscrepancies || null, page: 1 },
-      queryParamsHandling: 'merge',
-      replaceUrl: true
-    });
+    this.applyFilters();
   }
 
   loadTasks(showLoading = true, preserveState = false) {
@@ -246,7 +250,7 @@ export class CountTracking implements OnInit, OnDestroy {
     if (showLoading) {
       this.isLoading = true;
     }
-    const params: any = { as_role: 'tracking', show_completed: this.showCompleted, page_size: 1000 };
+    const params: any = { as_role: 'tracking', show_completed: true, page_size: 1000 };
     const whId = this.authStore.activeWarehouseId();
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;
@@ -302,9 +306,22 @@ export class CountTracking implements OnInit, OnDestroy {
     const filters = this.tableFilters;
 
     this.filteredTasks = this.tasks.filter(t => {
-      // ── فیلتر مغایرت ──
-      if (this.showOnlyDiscrepancies) {
-        if (t._discrepancy === null || t._discrepancy === 0) return false;
+      // ── فیلتر عدم نمایش اقلام تأیید نهایی در حالت عادی ──
+      if (!this.showCompleted && this.discrepancyFilter !== 'approved') {
+        if (t.status === 'FINAL_APPROVED') return false;
+      }
+
+      // ── فیلتر مغایرت و وضعیت تفکیکی ──
+      if (this.discrepancyFilter === 'discrepancy' || (this.showOnlyDiscrepancies && this.discrepancyFilter === 'all')) {
+        if (t._discrepancy === null || Math.abs(t._discrepancy) <= 0.0001) return false;
+      } else if (this.discrepancyFilter === 'shortage') {
+        if (t._discrepancy === null || t._discrepancy >= -0.0001) return false;
+      } else if (this.discrepancyFilter === 'surplus') {
+        if (t._discrepancy === null || t._discrepancy <= 0.0001) return false;
+      } else if (this.discrepancyFilter === 'counted') {
+        if (t.status === 'PENDING_COUNT') return false;
+      } else if (this.discrepancyFilter === 'approved') {
+        if (t.status !== 'FINAL_APPROVED') return false;
       }
 
       // ── جستجوی سراسری ──
@@ -414,15 +431,50 @@ export class CountTracking implements OnInit, OnDestroy {
   computeStats() {
     this.statTotal = this.tasks.length;
     this.statCounted = this.tasks.filter(t => t.status !== 'PENDING_COUNT').length;
-    this.statDiscrepancy = this.tasks.filter(t => t._discrepancy !== null && t._discrepancy !== 0).length;
+    this.statDiscrepancy = this.tasks.filter(t => t._discrepancy !== null && Math.abs(t._discrepancy) > 0.0001).length;
+    this.statShortage = this.tasks.filter(t => t._discrepancy !== null && t._discrepancy < -0.0001).length;
+    this.statSurplus = this.tasks.filter(t => t._discrepancy !== null && t._discrepancy > 0.0001).length;
     this.statApproved = this.tasks.filter(t => t.status === 'FINAL_APPROVED').length;
   }
 
-  // ── فیلتر فقط مغایرت‌ها ──
-  toggleDiscrepancyFilter() {
-    this.showOnlyDiscrepancies = !this.showOnlyDiscrepancies;
+  // ── اعمال فیلتر سریع مغایرت، کسری، مازاد یا وضعیت ──
+  setDiscrepancyFilter(type: 'all' | 'counted' | 'discrepancy' | 'shortage' | 'surplus' | 'approved') {
+    const wasApproved = this.discrepancyFilter === 'approved';
+    const isApproved = type === 'approved';
+
+    if (this.discrepancyFilter === type) {
+      this.discrepancyFilter = 'all';
+      this.showOnlyDiscrepancies = false;
+      if (wasApproved) {
+        this.showCompleted = this.savedShowCompletedState;
+      }
+    } else {
+      if (isApproved && !wasApproved) {
+        this.savedShowCompletedState = this.showCompleted;
+        this.showCompleted = true;
+      } else if (!isApproved && wasApproved) {
+        this.showCompleted = this.savedShowCompletedState;
+      }
+      this.discrepancyFilter = type;
+      this.showOnlyDiscrepancies = (type === 'discrepancy' || type === 'shortage' || type === 'surplus');
+    }
     this.currentPage = 1;
     this.applyFilters();
+  }
+
+  get eligibleGreenTasksCount(): number {
+    return this.filteredTasks.filter(t =>
+      t.status === 'MANAGER_REVIEW' && t._discrepancy !== null && Math.abs(t._discrepancy) < 0.0001
+    ).length;
+  }
+
+  // ── فیلتر فقط مغایرت‌ها (سازگاری با دکمه قبلی) ──
+  toggleDiscrepancyFilter() {
+    if (this.discrepancyFilter === 'discrepancy') {
+      this.setDiscrepancyFilter('all');
+    } else {
+      this.setDiscrepancyFilter('discrepancy');
+    }
   }
 
   // ── سورت کلاینت‌ساید ──
@@ -700,14 +752,14 @@ export class CountTracking implements OnInit, OnDestroy {
   getStatusClass(status: string): string {
     const classMap: Record<string, string> = {
       'PENDING_COUNT': 'bg-slate-100 text-slate-700 border-slate-200',
-      'INITIAL_COUNT': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-      'COUNTED': 'bg-amber-100 text-amber-700 border-amber-200',
-      'MANAGER_REVIEW': 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200',
-      'SUPERVISOR_REJECTED': 'bg-rose-100 text-rose-700 border-rose-200',
-      'MANAGER_REJECTED': 'bg-rose-100 text-rose-700 border-rose-200',
-      'FINAL_APPROVED': 'bg-emerald-100 text-emerald-700 border-emerald-200'
+      'INITIAL_COUNT': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      'COUNTED': 'bg-amber-50 text-amber-700 border-amber-200',
+      'MANAGER_REVIEW': 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+      'SUPERVISOR_REJECTED': 'bg-rose-50 text-rose-700 border-rose-200',
+      'MANAGER_REJECTED': 'bg-rose-50 text-rose-700 border-rose-200',
+      'FINAL_APPROVED': 'bg-emerald-50 text-emerald-700 border-emerald-200'
     };
-    return 'px-2 py-0.5 rounded-full text-[10px] font-bold border ' + (classMap[status] || 'bg-slate-50 text-slate-800');
+    return 'px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center shadow-2xs ' + (classMap[status] || 'bg-slate-50 text-slate-800');
   }
 
   getBalanceColorClass(row: any): string {
@@ -726,8 +778,8 @@ export class CountTracking implements OnInit, OnDestroy {
        diffPercent = Math.abs((counted - system) / system) * 100;
     }
 
-    if (diffPercent < 5) return 'text-yellow-500';
-    if (diffPercent <= 20) return 'text-orange-500';
+    if (diffPercent < 5) return 'text-amber-600'; // کنتراست بالا برای مقادیر زیر ۵ درصد
+    if (diffPercent <= 20) return 'text-orange-600';
     return 'text-rose-600'; // بیشتر از ۲۰٪
   }
 
@@ -904,4 +956,15 @@ export class CountTracking implements OnInit, OnDestroy {
       }
     });
   }
+
+  // ─── اسکن بارکد دوربین ───
+  onBarcodeScanned(barcode: string) {
+    if (!barcode) return;
+    const clean = barcode.trim();
+    this.tableSearch = clean;
+    this.currentPage = 1;
+    this.applyFilters();
+    this.toast.show('info', `فیلتر بر اساس بارکد: ${clean}`);
+  }
 }
+

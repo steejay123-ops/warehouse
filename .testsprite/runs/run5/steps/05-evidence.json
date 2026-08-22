@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 5,
+    "summary": "Step 5 'Expected the login username field to be hidden after successful submission.' failed. Error: TEST BLOCKED\n\nThe test could not be run — the UI cannot reach the backend server, preventing login and subsequent steps.\n\nObservations:\n- The login page displays 'در حال ارتباط با سرور...' (connecting to server) and the visible message 'سرور در دسترس نیست' (server is not available).\n- After entering credentials and clicking 'ورود به سامانه', the interface remains in the connecting state and no dashboard, item list, or error page that would allow retrying the workflow appears.",
+    "path": "steps/05-snapshot.html"
+  }
+]

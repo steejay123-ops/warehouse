@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "snapshot",
+    "stepIndex": 22,
+    "summary": "Step 22 'Open the item 'کالای آزمایشی ۱ - مسیر استاندارد شمارش' (TS-ITEM-001) to view its detail and inspect for location input, counted quantity, note, and the 'ثبت موقت (آماده ارسال)' button' passed.",
+    "path": "steps/22-snapshot.html"
+  }
+]

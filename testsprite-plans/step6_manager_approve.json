@@ -1,0 +1,37 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Manager Review — Final approve counted items",
+  "description": "Manager logs in with test_manager, selects TS-ITEM-001 in manager review, and executes final approval.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_manager into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Locate the item TS-ITEM-001 in the manager review list and select its checkbox"
+    },
+    {
+      "type": "action",
+      "description": "Click the final approve button labelled تایید نهایی موارد انتخابی in the action bar"
+    },
+    {
+      "type": "action",
+      "description": "Click the confirm button in the confirmation dialog"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item TS-ITEM-001 is approved and no longer in pending manager review"
+    }
+  ]
+}

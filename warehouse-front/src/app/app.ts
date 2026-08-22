@@ -38,6 +38,7 @@ export class App {
     effect(() => {
       if (this.auth.isLoggedIn()) {
         this.ws.connect();
+        this.auth.sendDailyHeartbeat();
       } else {
         this.ws.disconnect();
       }

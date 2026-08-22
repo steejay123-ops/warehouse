@@ -142,10 +142,24 @@ class ReportEngine:
             target_fields = target_cfg.allowed_fields(self.user, self.warehouse_id)
             for fkey, fd in target_fields.items():
                 prefixed_key = f'{alias}.{fkey}'
-                # مسیر ORM: از طریق FilteredRelation
                 fr_alias = f'{alias}_fr'
-                orm_source = f'{fr_alias}__{fd.source}'
                 from .registry import FieldDef
+                if fd.annotation is not None:
+                    # فیلد محاسباتی مقصد: نام انوتیشن در ORM نباید دارای __ باشد
+                    orm_source = f'{fr_alias}_{fd.source}'.replace('__', '_')
+                    def make_joined_ann(orig_ann=fd.annotation, fr=fr_alias):
+                        def _ann(base_prefix=None):
+                            target_base = f'{base_prefix}__{fr}' if base_prefix else fr
+                            try:
+                                return orig_ann(base_prefix=target_base)
+                            except TypeError:
+                                return orig_ann()
+                        return _ann
+                    joined_ann = make_joined_ann()
+                else:
+                    orm_source = f'{fr_alias}__{fd.source}'
+                    joined_ann = None
+
                 self.fields[prefixed_key] = FieldDef(
                     key=prefixed_key,
                     source=orm_source,
@@ -155,12 +169,15 @@ class ReportEngine:
                     sensitive=fd.sensitive,
                     groupable=fd.groupable,
                     aggregatable=fd.aggregatable,
-                    annotation=None,   # annotationهای مقصد جداگانه handle می‌شوند
+                    annotation=joined_ann,
                 )
 
     def _build_join_scope_q(self, jd, alias):
         """شرط انبار برای FilteredRelation — در سطح ON نه WHERE."""
         if not jd.warehouse_path:
+            return Q()
+        # اگر مسیر انبار از طریق مدل پایه باشد، مدل پایه قبلاً در _scope_queryset فیلتر شده است
+        if jd.path_to_base and (jd.warehouse_path.startswith(f'{jd.path_to_base}__') or jd.warehouse_path == jd.path_to_base):
             return Q()
         scope_q = Q()
         if not self.user.is_superuser:
@@ -481,18 +498,16 @@ class ReportEngine:
             if self._join_types.get(alias) == 'inner':
                 qs = qs.filter(**{f'{fr_alias}__isnull': False})
 
-        # annotationهای موردنیاز (پویا/محاسباتی برای فیلدهای پایه) — قبل از فیلتر
+        # annotationهای موردنیاز (پویا/محاسباتی برای فیلدهای پایه و JOIN) — قبل از فیلتر
         referenced = set(field_keys) | set(group_by)
         referenced |= {fd.key for _, _, fd in agg_specs}
         referenced |= self._filter_field_keys(spec.get('filters'))
         referenced |= {s.get('field') for s in sort if isinstance(s, dict)}
         annotations = {}
         for k in referenced:
-            if '.' in k:  # فیلدهای JOIN پیشوند‌دار ← annotation جداگانه لازم ندارند
-                continue
             fd = self.fields.get(k)
             if fd is not None and fd.annotation is not None:
-                annotations[fd.key] = fd.annotation()
+                annotations[fd.source] = fd.annotation()
         if annotations:
             qs = qs.annotate(**annotations)
 
@@ -538,15 +553,15 @@ class ReportEngine:
                     coerced = self._having_value(alias, value)
                     qs = qs.filter(**{f'{alias}{OPERATOR_LOOKUPS[op]}': coerced})
             columns = (
-                [{'key': gd.key, 'label': gd.label, 'type': gd.type} for gd in group_defs]
-                + [{'key': alias, 'label': self._agg_label(fn, fd), 'type': 'number'}
+                [{'key': gd.key, 'label': gd.label, 'type': gd.type, 'source': gd.source} for gd in group_defs]
+                + [{'key': alias, 'label': self._agg_label(fn, fd), 'type': 'number', 'source': alias}
                    for alias, fn, fd in agg_specs]
             )
             sortable = {gd.key for gd in group_defs} | used_aliases
         else:
             sources = [self.fields[k].source for k in field_keys]
             columns = [
-                {'key': k, 'label': self.fields[k].label, 'type': self.fields[k].type}
+                {'key': k, 'label': self.fields[k].label, 'type': self.fields[k].type, 'source': self.fields[k].source}
                 for k in field_keys
             ]
             sortable = set(field_keys)
@@ -575,6 +590,12 @@ class ReportEngine:
                         if alias_pk not in sources:
                             sources.append(alias_pk)
                         order.append(alias_pk)
+                # در حالت distinct پایگاه‌داده PostgreSQL نیازمند تطابق دقیق نام ستون‌هاست
+                order = ['id' if o == 'pk' else ('-id' if o == '-pk' else o) for o in order]
+                for ord_item in order:
+                    clean_ord = ord_item.lstrip('-')
+                    if clean_ord not in sources:
+                        sources.append(clean_ord)
                 qs = qs.values(*sources).distinct()
             else:
                 qs = qs.values(*sources)
@@ -640,7 +661,8 @@ class ReportEngine:
                 'مقادیر آن فیلد را اصلاح کنید یا فیلترش را بردارید.'
             )
 
-        rows = [_jsonable(r) for r in rows]
+        source_to_key = {c.get('source', c['key']): c['key'] for c in columns}
+        rows = [_jsonable(r, source_to_key) for r in rows]
         result = {
             'columns': columns,
             'count': total,
@@ -663,13 +685,14 @@ class ReportEngine:
         return qs, columns, total
 
 
-def _jsonable(row):
+def _jsonable(row, source_to_key=None):
     out = {}
     for k, v in row.items():
+        out_key = source_to_key.get(k, k) if source_to_key else k
         if isinstance(v, Decimal):
-            out[k] = str(v)
+            out[out_key] = str(v)
         elif hasattr(v, 'isoformat'):
-            out[k] = v.isoformat()
+            out[out_key] = v.isoformat()
         else:
-            out[k] = v
+            out[out_key] = v
     return out

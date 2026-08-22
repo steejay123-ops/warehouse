@@ -15,6 +15,7 @@ import {
   ReportHaving,
   ReportJoinMeta,
   ReportJoinSpec,
+  ReportSavedState,
   ReportSort,
   ReportSpec,
   ReportTemplate,
@@ -98,7 +99,7 @@ export class ReportStore {
 
   /** aliasهای معتبر تجمیع — منبع گزینه‌های HAVING و محور Y نمودار */
   readonly aggAliases = computed(() =>
-    this.aggregations().map((a) => a.alias || `${a.fn}_${a.field}`.replace(/__/g, '_')),
+    this.aggregations().map((a) => a.alias || `${a.fn}_${(a.field || '').replace(/\./g, '_')}`.replace(/__/g, '_')),
   );
 
   // ─── نتیجه ───
@@ -120,6 +121,9 @@ export class ReportStore {
 
   // ------------------------------------------------------------------ actions
   refreshAll(): void {
+    if (this.isOffline()) {
+      return;
+    }
     this.isRefreshing.set(true);
     let doneCount = 0;
     const checkDone = () => {
@@ -130,8 +134,15 @@ export class ReportStore {
     };
 
     this.api.getEntities().subscribe({
-      next: (list) => this.entities.set(list),
-      error: (e) => this.error.set(this.msg(e)),
+      next: (list) => {
+        this.entities.set(list);
+        this.error.set(null);
+      },
+      error: (e) => {
+        if (!this.isOffline()) {
+          this.error.set(this.msg(e));
+        }
+      },
     }).add(checkDone);
 
     this.api.getTemplates().subscribe({
@@ -141,9 +152,19 @@ export class ReportStore {
   }
 
   loadEntities(): void {
+    if (this.isOffline()) {
+      return;
+    }
     this.api.getEntities().subscribe({
-      next: (list) => this.entities.set(list),
-      error: (e) => this.error.set(this.msg(e)),
+      next: (list) => {
+        this.entities.set(list);
+        this.error.set(null);
+      },
+      error: (e) => {
+        if (!this.isOffline()) {
+          this.error.set(this.msg(e));
+        }
+      },
     });
   }
 
@@ -176,7 +197,7 @@ export class ReportStore {
     if (this.entityKey()) this.loadFields();
   }
 
-  loadFields(): void {
+  loadFields(onLoaded?: (res: EntityFieldsResponse) => void): void {
     const key = this.entityKey();
     if (!key) return;
     this.fieldsLoading.set(true);
@@ -202,6 +223,7 @@ export class ReportStore {
           arr.filter((a) => valid.has(a.field) || (a.field.includes('.') && activeAliases.has(a.field.split('.')[0])))
         );
         this.pruneAggDependents();
+        onLoaded?.(res);
       },
       error: (e) => {
         this._fieldsReq = null;
@@ -317,7 +339,7 @@ export class ReportStore {
   }
 
   /** بارگذاری قالب ذخیره‌شده در سازنده */
-  applyTemplate(t: ReportTemplate): void {
+  applyTemplate(t: ReportTemplate, onLoaded?: (res: EntityFieldsResponse) => void): void {
     this.activeTemplate.set(t);
     this.entityKey.set(t.entity);
     const wId = t.spec.warehouse_id !== undefined ? t.spec.warehouse_id : (t.warehouse ?? null);
@@ -337,7 +359,54 @@ export class ReportStore {
     this.chartRows.set([]);
     this.hasRun.set(false);
     this.error.set(null);
-    this.loadFields();
+    this.loadFields(onLoaded);
+  }
+
+  /** تبدیل وضعیت سیگنال‌های فعلی استور به ساختار قابل ذخیره در URL و LocalStorage */
+  serializeState(filterRoot?: FilterGroup | null, density?: 'compact' | 'standard'): ReportSavedState | null {
+    const entity = this.entityKey();
+    if (!entity) return null;
+    const state: ReportSavedState = { entity };
+    if (this.warehouseId() !== null) state.warehouse_id = this.warehouseId();
+    if (this.selectedFields().length) state.fields = this.selectedFields();
+    if (this.joins().length) state.joins = this.joins();
+    if (this.groupBy().length) state.group_by = this.groupBy();
+    if (this.aggregations().length) state.aggregations = this.aggregations();
+    if (this.having().length) state.having = this.having();
+    if (this.sort().length) state.sort = this.sort();
+    if (this.chart()) state.chart = this.chart();
+    if (this.page() > 1) state.page = this.page();
+    if (this.pageSize() !== 50) state.pageSize = this.pageSize();
+    if (density) state.density = density;
+
+    const f = filterRoot !== undefined ? filterRoot : this.filters();
+    if (f && f.children && f.children.length) state.filters = f;
+
+    return state;
+  }
+
+  /** بازیابی وضعیت ذخیره‌شده از URL یا LocalStorage در استور */
+  applySavedState(state: ReportSavedState, onLoaded?: (res: EntityFieldsResponse) => void): void {
+    this.activeTemplate.set(null);
+    this.entityKey.set(state.entity);
+    this.warehouseId.set(state.warehouse_id ?? null);
+    this.joins.set(state.joins ?? []);
+    this.selectedFields.set(state.fields ?? []);
+    this.groupBy.set(state.group_by ?? []);
+    this.aggregations.set(state.aggregations ?? []);
+    this.having.set(state.having ?? []);
+    this.sort.set(state.sort ?? []);
+    this.filters.set(state.filters ?? null);
+    this.chart.set(state.chart ?? null);
+    this.page.set(state.page ?? 1);
+    this.pageSize.set(state.pageSize ?? 50);
+    this.rows.set([]);
+    this.columns.set([]);
+    this.count.set(0);
+    this.chartRows.set([]);
+    this.hasRun.set(false);
+    this.error.set(null);
+    this.loadFields(onLoaded);
   }
 
   /** پیام خطای قابل نمایش — status 0 یعنی آفلاین/سرور در دسترس نیست */

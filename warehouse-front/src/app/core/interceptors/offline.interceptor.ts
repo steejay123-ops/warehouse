@@ -220,8 +220,8 @@ export const offlineInterceptor: HttpInterceptorFn = (
                       // ادغام با رکوردهای صف آفلاین
                       const freshMerged = await mergeWithQueue(event.body, req.url);
                       // اطلاع‌رسانی به کل برنامه جهت به‌روزرسانی زنده و هایلایت انیمیشنی
-                      syncService.notifyDataUpdated(req.url, freshMerged);
-                      console.log(`[OfflineInterceptor] 🔄 داده‌های جدید پس‌زمینه دریافت و منتشر شد: ${req.url}`);
+                      syncService.notifyDataUpdated(req.urlWithParams || req.url, freshMerged);
+                      console.log(`[OfflineInterceptor] 🔄 داده‌های جدید پس‌زمینه دریافت و منتشر شد: ${req.urlWithParams || req.url}`);
                     }
                   });
               }

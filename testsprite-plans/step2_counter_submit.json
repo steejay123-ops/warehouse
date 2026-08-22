@@ -1,0 +1,33 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Counter Dashboard — Submit counted task to supervisor",
+  "description": "Counter logs in with test_counter and submits the counted task TS-ITEM-001 to the supervisor cartable.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_counter into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Click on the item row with code TS-ITEM-001 to open its detail view"
+    },
+    {
+      "type": "action",
+      "description": "Click the submit button labelled ثبت و ارسال به سرپرست"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that a success toast or notification appears indicating the item has been submitted to the supervisor"
+    }
+  ]
+}

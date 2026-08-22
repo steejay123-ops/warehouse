@@ -22,6 +22,7 @@ import { CountTaskStore } from '../../../core/services/count-task-store';
 import { offlineDb } from '../../../core/services/offline-db';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
 import { BarcodeScannerComponent } from '../../../shared/components/barcode-scanner/barcode-scanner.component';
+import { PersianDatePipe } from '../../../shared/pipes/persian-date.pipe';
 import { WebSocketService } from '../../../core/http/websocket.service';
 import { 
   FieldPermissionConfig, 
@@ -31,7 +32,7 @@ import {
 @Component({
   selector: 'app-counter-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent],
+  imports: [CommonModule, FormsModule, PersianDatePipe, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent],
   templateUrl: './counter-dashboard.html',
   styleUrl: './counter-dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -39,6 +40,7 @@ import {
 export class CounterDashboard implements OnInit {
   tasks: CountTask[] = [];
   poolTasks: CountTask[] = [];
+  filteredPoolTasks: CountTask[] = [];
   isLoading = true;
   selectedTask: CountTask | null = null;
   selectedTasks = new Set<number>();
@@ -49,6 +51,9 @@ export class CounterDashboard implements OnInit {
   // Detail view state
   countedBalanceStr: string = '';
   counterNote: string = '';
+  isHistoryOpen: boolean = false;
+  counterCanViewHistory: boolean = true;
+  counterCanViewPreviousNotes: boolean = true;
 
   // ── Dynamic Field Permissions State ────────────────────────────────────────
   fieldConfigs: FieldPermissionConfig[] = [];
@@ -65,7 +70,9 @@ export class CounterDashboard implements OnInit {
 
   // New Filters & Defaults
   dateFilter: 'today' | 'yesterday' | 'week' | 'all' = 'all';
-  statusFilter: 'pending' | 'initial' | 'completed' | 'recount' | 'all' = 'all';
+  statusFilter: 'pending' | 'initial' | 'completed' | 'recount' | 'all' = 'pending';
+  locationFilter: string = 'all';
+  availableLocations: string[] = [];
   searchQuery: string = '';
   searchSubject = new Subject<string>();
   private initialLoadDone = false;
@@ -90,6 +97,8 @@ export class CounterDashboard implements OnInit {
   private pushSub?: Subscription;
   private pullSub?: Subscription;
   private wsSub?: Subscription;
+  private wsDebounceSub?: Subscription;
+  private wsUpdateSubject = new Subject<any>();
   private routerSub?: Subscription;
   private swrSub?: Subscription;
   private offlineSync = OfflineSyncService.getInstance();
@@ -105,6 +114,7 @@ export class CounterDashboard implements OnInit {
   exportColumnScope: 'all_db' | 'visible' | 'custom' = 'all_db';
   selectedExportColumns: Set<string> = new Set();
   isExporting = false;
+  isDownloadingTemplate = false;
   exportSubscription?: Subscription;
   availableExportColumns: {key: string, label: string}[] = [];
 
@@ -163,12 +173,22 @@ export class CounterDashboard implements OnInit {
       }
     });
 
+    this.wsDebounceSub = this.wsUpdateSubject.pipe(debounceTime(600)).subscribe(() => {
+      this.refreshCurrentTab();
+    });
+
     this.wsService.connect();
     this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
       if (data.type === 'count_task_update' || data.event === 'count_task_update') {
-        this.refreshCurrentTab();
-        if (this.currentTab !== 'pool') {
-          this.fetchPoolTasksSilently();
+        if (data.warehouse_id && this.activeWarehouseId && Number(data.warehouse_id) !== this.activeWarehouseId) {
+          return;
+        }
+        if (data.task && data.task.id) {
+          this.updateCountTaskInPlace(data.task);
+        } else if (data.task_id) {
+          this.fetchSingleCountTask(data.task_id);
+        } else {
+          this.wsUpdateSubject.next(data);
         }
       }
     });
@@ -186,8 +206,14 @@ export class CounterDashboard implements OnInit {
       if (isCounterUrl && data) {
         const freshList = Array.isArray(data) ? data : data.results || [];
         if (freshList.length > 0 && this.currentTab === 'my-tasks' && !this.selectedTask) {
-          this.trackUpdates(this.tasks, freshList);
-          this.tasks = freshList;
+          // ادغام امن داده‌ها با حفظ پیش‌نویس‌های محلی دارای _offlinePending
+          const offlinePendingMap = new Map(this.tasks.filter(t => t._offlinePending).map(t => [t.id || t.sync_id, t]));
+          const mergedList = freshList.map((serverTask: CountTask) => {
+            const pendingTask = offlinePendingMap.get(serverTask.id) || (serverTask.sync_id ? offlinePendingMap.get(serverTask.sync_id) : undefined);
+            return pendingTask ? { ...serverTask, ...pendingTask } : serverTask;
+          });
+          this.trackUpdates(this.tasks, mergedList);
+          this.tasks = mergedList;
           this.applyFilters();
           this.cdr.detectChanges();
           console.log('[CounterDashboard] ⚡ داده‌های انبارگردان با استعلام پس‌زمینه SWR به‌روزرسانی شد.');
@@ -200,13 +226,113 @@ export class CounterDashboard implements OnInit {
     this.pushSub?.unsubscribe();
     this.pullSub?.unsubscribe();
     this.wsSub?.unsubscribe();
+    this.wsDebounceSub?.unsubscribe();
     this.routerSub?.unsubscribe();
     this.swrSub?.unsubscribe();
+    this.searchSubject.complete();
+    if (this.flashTimeout) clearTimeout(this.flashTimeout);
   }
 
   refreshCurrentTab() {
     if (this.currentTab === 'my-tasks') this.loadTasks(false);
     else if (this.currentTab === 'pool') this.loadPoolTasks(false);
+  }
+
+  private triggerFlash(id: number) {
+    this.updatedTaskIds.add(id);
+    if (this.flashTimeout) clearTimeout(this.flashTimeout);
+    this.flashTimeout = setTimeout(() => {
+      this.updatedTaskIds.clear();
+      this.cdr.detectChanges();
+    }, 4000);
+  }
+
+  updateCountTaskInPlace(taskData: any) {
+    if (!taskData || !taskData.id) return;
+    const id = taskData.id;
+
+    if (taskData._deleted) {
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.poolTasks = this.poolTasks.filter(t => t.id !== id);
+      this.selectedTasks.delete(id);
+      this.selectedPoolTasks.delete(id);
+      if (this.selectedTask?.id === id) {
+        this.selectedTask = null;
+      }
+      this.applyFilters();
+      this.cdr.detectChanges();
+      if (this.localFirst) {
+        if (taskData.sync_id) {
+          offlineDb.countTasks.delete(taskData.sync_id).catch(() => {});
+        } else {
+          offlineDb.countTasks.where('id').equals(id).delete().catch(() => {});
+        }
+      }
+      return;
+    }
+
+    const currentUserId = this.currentUserId;
+    const isMyTask = currentUserId !== null && (
+      taskData.counter === currentUserId ||
+      (taskData.counter && typeof taskData.counter === 'object' && taskData.counter.id === currentUserId) ||
+      taskData.counter_id === currentUserId
+    );
+    const isPoolTask = (taskData.counter === null || taskData.counter === undefined) && taskData.status === 'PENDING_COUNT';
+
+    if (isMyTask) {
+      const idx = this.tasks.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        const pendingState = this.tasks[idx]._offlinePending ? { _offlinePending: true } : {};
+        this.tasks[idx] = { ...this.tasks[idx], ...taskData, ...pendingState };
+      } else {
+        this.tasks = [taskData, ...this.tasks];
+      }
+      this.poolTasks = this.poolTasks.filter(t => t.id !== id);
+      this.selectedPoolTasks.delete(id);
+      if (this.selectedTask && this.selectedTask.id === id) {
+        this.selectedTask = { ...this.selectedTask, ...taskData };
+      }
+      this.triggerFlash(id);
+    } else if (isPoolTask) {
+      const idx = this.poolTasks.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        this.poolTasks[idx] = { ...this.poolTasks[idx], ...taskData };
+      } else {
+        this.poolTasks = [taskData, ...this.poolTasks];
+      }
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.selectedTasks.delete(id);
+      if (this.selectedTask?.id === id) {
+        this.selectedTask = null;
+      }
+      this.triggerFlash(id);
+    } else {
+      this.tasks = this.tasks.filter(t => t.id !== id);
+      this.poolTasks = this.poolTasks.filter(t => t.id !== id);
+      this.selectedTasks.delete(id);
+      this.selectedPoolTasks.delete(id);
+      if (this.selectedTask?.id === id) {
+        this.selectedTask = null;
+      }
+    }
+
+    this.applyFilters();
+    this.cdr.detectChanges();
+
+    if (this.localFirst && taskData.sync_id) {
+      offlineDb.countTasks.put(taskData).catch(() => {});
+    }
+  }
+
+  fetchSingleCountTask(taskId: number) {
+    this.countTaskApi.getById(String(taskId)).subscribe({
+      next: (task) => {
+        if (task) this.updateCountTaskInPlace(task);
+      },
+      error: () => {
+        this.wsUpdateSubject.next(taskId);
+      }
+    });
   }
 
   private trackUpdates(oldList: any[], newList: any[]) {
@@ -247,10 +373,17 @@ export class CounterDashboard implements OnInit {
     const yesterday = today - 86400000;
     const week = today - 7 * 86400000;
 
-    const query = (this.searchQuery || '').toLowerCase().trim();
-    const normQuery = this.normalizeDigits(query);
+    const query = (this.searchQuery || '').trim();
 
-    // فیلتر اولیه بر اساس زمان و متن جستجو جهت شمارش زنده چیپ‌ها
+    // استخراج لیست لوکیشن‌های موجود برای فیلتر سریع
+    const locSet = new Set<string>();
+    this.tasks.forEach(t => {
+      const loc = (t.item_details?.new_location || t.item_details?.old_location || '').trim();
+      if (loc) locSet.add(loc);
+    });
+    this.availableLocations = Array.from(locSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    // فیلتر اولیه بر اساس زمان، لوکیشن و متن جستجو جهت شمارش زنده چیپ‌ها
     const matchesSearchAndDate = (t: CountTask) => {
       // Date Filter: مقایسه با آخرین زمان فعالیت (updated_at) یا زمان ایجاد
       let matchDate = true;
@@ -263,14 +396,35 @@ export class CounterDashboard implements OnInit {
       }
       if (!matchDate) return false;
 
+      // Location Filter
+      if (this.locationFilter !== 'all') {
+        const itemLoc = (t.item_details?.new_location || t.item_details?.old_location || '').trim();
+        if (itemLoc !== this.locationFilter) return false;
+      }
+
       // Search Filter
       if (query) {
-        return (t.item_details?.fa_unic_code?.toLowerCase().includes(query) || false) || 
-               (t.item_details?.fa_unic_code?.toLowerCase().includes(normQuery) || false) ||
-               (t.item_details?.description?.toLowerCase().includes(query) || false) ||
-               (t.item_details?.po?.toLowerCase().includes(query) || false) ||
-               (t.item_details?.new_location?.toLowerCase().includes(query) || false) ||
-               (t.item_details?.old_location?.toLowerCase().includes(query) || false);
+        const cleanQuery = this.normalizeText(query);
+        const enConvertedQuery = this.normalizeText(this.convertPersianKeyboardToEnglish(query));
+        
+        const checkMatch = (val: any) => {
+          if (!val) return false;
+          const cleanVal = this.normalizeText(val);
+          return cleanVal.includes(cleanQuery) || (enConvertedQuery.length >= 2 && cleanVal.includes(enConvertedQuery));
+        };
+
+        const item = t.item_details;
+        return (
+          checkMatch(item?.fa_unic_code) ||
+          checkMatch(item?.item_no) ||
+          checkMatch(item?.description) ||
+          checkMatch(item?.po) ||
+          checkMatch(item?.new_location) ||
+          checkMatch(item?.old_location) ||
+          checkMatch(item?.plpkitem) ||
+          checkMatch(item?.pl) ||
+          checkMatch(item?.pk_number)
+        );
       }
       return true;
     };
@@ -294,6 +448,35 @@ export class CounterDashboard implements OnInit {
       return true;
     });
 
+    // فیلتر کردن اقلام استخر کالاها بر اساس جستجو
+    if (query) {
+      const cleanQuery = this.normalizeText(query);
+      const enConvertedQuery = this.normalizeText(this.convertPersianKeyboardToEnglish(query));
+      
+      const checkMatch = (val: any) => {
+        if (!val) return false;
+        const cleanVal = this.normalizeText(val);
+        return cleanVal.includes(cleanQuery) || (enConvertedQuery.length >= 2 && cleanVal.includes(enConvertedQuery));
+      };
+
+      this.filteredPoolTasks = this.poolTasks.filter(t => {
+        const item = t.item_details;
+        return (
+          checkMatch(item?.fa_unic_code) ||
+          checkMatch(item?.item_no) ||
+          checkMatch(item?.description) ||
+          checkMatch(item?.po) ||
+          checkMatch(item?.new_location) ||
+          checkMatch(item?.old_location) ||
+          checkMatch(item?.plpkitem) ||
+          checkMatch(item?.pl) ||
+          checkMatch(item?.pk_number)
+        );
+      });
+    } else {
+      this.filteredPoolTasks = [...this.poolTasks];
+    }
+
     // Apply Smart Sorting
     this.filteredTasks.sort((a, b) => {
       let result = 0;
@@ -313,19 +496,19 @@ export class CounterDashboard implements OnInit {
         const isRecountA = (a.status === 'SUPERVISOR_REJECTED' || a.status === 'MANAGER_REJECTED') ? 0 : 1;
         const isRecountB = (b.status === 'SUPERVISOR_REJECTED' || b.status === 'MANAGER_REJECTED') ? 0 : 1;
         if (isRecountA !== isRecountB) {
-          result = isRecountA - isRecountB;
-        } else {
-          const locA = a.item_details?.new_location || '';
-          const locB = b.item_details?.new_location || '';
-          result = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+          return isRecountA - isRecountB;
         }
+        const locA = a.item_details?.new_location || a.item_details?.old_location || '';
+        const locB = b.item_details?.new_location || b.item_details?.old_location || '';
+        const locCompare = locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
+        return this.sortDirection === 'asc' ? locCompare : -locCompare;
       } else if (this.sortField === 'code') {
         const codeA = a.item_details?.fa_unic_code || '';
         const codeB = b.item_details?.fa_unic_code || '';
         result = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
       } else if (this.sortField === 'title') {
-        const titleA = a.item_details?.description || '';
-        const titleB = b.item_details?.description || '';
+        const titleA = (a.item_details?.description || '').replace(/^[آأإ]/, 'ا');
+        const titleB = (b.item_details?.description || '').replace(/^[آأإ]/, 'ا');
         result = titleA.localeCompare(titleB, 'fa', { sensitivity: 'base' });
       }
 
@@ -333,8 +516,28 @@ export class CounterDashboard implements OnInit {
     });
   }
 
+  private normalizeText(str: any): string {
+    if (str === null || str === undefined) return '';
+    return this.normalizeDigits(String(str))
+      .toLowerCase()
+      .replace(/[ي]/g, 'ی')
+      .replace(/[ك]/g, 'ک')
+      .replace(/[آأإ]/g, 'ا')
+      .replace(/[ة]/g, 'ه')
+      .trim();
+  }
+
+  setLocationFilter(loc: string) {
+    this.locationFilter = loc;
+    this.selectedTasks.clear();
+    this.applyFilters();
+    this.updateUrlState();
+    this.cdr.detectChanges();
+  }
+
   setDateFilter(filter: 'today' | 'yesterday' | 'week' | 'all') {
     this.dateFilter = filter;
+    this.selectedTasks.clear();
     this.applyFilters();
     this.updateUrlState();
     this.cdr.detectChanges();
@@ -342,6 +545,7 @@ export class CounterDashboard implements OnInit {
 
   setStatusFilter(filter: 'pending' | 'initial' | 'completed' | 'recount' | 'all') {
     this.statusFilter = filter;
+    this.selectedTasks.clear();
     this.applyFilters();
     this.updateUrlState();
     this.cdr.detectChanges();
@@ -400,6 +604,14 @@ export class CounterDashboard implements OnInit {
     return task.id ?? (task as any)._offlineId ?? index;
   }
 
+  trackByFieldKey(index: number, field: FieldPermissionConfig): string {
+    return field.key;
+  }
+
+  trackByColKey(index: number, col: any): string {
+    return col.key;
+  }
+
   /**
    * Local-First: خواندن فوری از Dexie (حتی آفلاین) — سپس Pull دلتا در پس‌زمینه.
    */
@@ -420,6 +632,7 @@ export class CounterDashboard implements OnInit {
         const newPoolTasks = await this.store.getPoolTasks(whId);
         this.trackUpdates(this.poolTasks, newPoolTasks);
         this.poolTasks = newPoolTasks;
+        this.applyFilters();
       }
     } catch (e) {
       console.error('[CounterDashboard] خطا در خواندن از Dexie:', e);
@@ -490,6 +703,7 @@ export class CounterDashboard implements OnInit {
         const newPoolTasks = Array.isArray(res) ? res : (res.results || []);
         this.trackUpdates(this.poolTasks, newPoolTasks);
         this.poolTasks = newPoolTasks;
+        this.applyFilters();
         this.isLoading = false;
         this.cdr.detectChanges();
       },
@@ -509,6 +723,7 @@ export class CounterDashboard implements OnInit {
       q: this.searchQuery ? this.searchQuery : null,
       status: this.statusFilter !== 'pending' ? this.statusFilter : null,
       date: this.dateFilter !== 'all' ? this.dateFilter : null,
+      loc: this.locationFilter !== 'all' ? this.locationFilter : null,
       sort: this.sortField !== 'updated_at' ? this.sortField : null,
       sortDir: this.sortDirection !== defaultSortDir ? this.sortDirection : null
     };
@@ -541,6 +756,10 @@ export class CounterDashboard implements OnInit {
     const date = params['date'];
     const validDates = ['all', 'today', 'yesterday', 'week'];
     this.dateFilter = validDates.includes(date) ? (date as any) : 'all';
+
+    // Location Filter
+    const loc = params['loc'];
+    this.locationFilter = loc || 'all';
 
     // 4. Sort Field
     const sort = params['sort'];
@@ -630,6 +849,23 @@ export class CounterDashboard implements OnInit {
     return str.split('').map(char => faToEn[char] || faToEn[char.toLowerCase()] || char).join('');
   }
 
+  isAllPoolSelected(): boolean {
+    return this.filteredPoolTasks.length > 0 && this.selectedPoolTasks.size === this.filteredPoolTasks.length;
+  }
+
+  isPoolIndeterminate(): boolean {
+    return this.selectedPoolTasks.size > 0 && this.selectedPoolTasks.size < this.filteredPoolTasks.length;
+  }
+
+  toggleSelectAllPool() {
+    if (this.isAllPoolSelected()) {
+      this.selectedPoolTasks.clear();
+    } else {
+      this.filteredPoolTasks.forEach(t => this.selectedPoolTasks.add(t.id));
+    }
+    this.cdr.detectChanges();
+  }
+
   togglePoolSelection(taskId: number) {
     if (this.selectedPoolTasks.has(taskId)) {
       this.selectedPoolTasks.delete(taskId);
@@ -642,6 +878,11 @@ export class CounterDashboard implements OnInit {
   async claimSelectedTasks() {
     if (this.selectedPoolTasks.size === 0) return;
     
+    if (!navigator.onLine) {
+      this.toast.error('به عهده گرفتن کالا از مخزن نیاز به اتصال اینترنت دارد');
+      return;
+    }
+
     const payload = {
       task_ids: Array.from(this.selectedPoolTasks),
       as_role: 'counter'
@@ -661,6 +902,7 @@ export class CounterDashboard implements OnInit {
         if (this.localFirst) {
           await this.store.refresh(this.activeWarehouseId!);
         }
+        this.loadPoolTasks(false);
         this.setTab('my-tasks');
       },
       error: (err) => {
@@ -675,7 +917,11 @@ export class CounterDashboard implements OnInit {
   // ════════════════════════════════════════════
 
   async onBarcodeScanned(code: string) {
-    if (this.scanBusy || this.selectedTask) return;
+    if (this.scanBusy) return;
+    if (this.selectedTask) {
+      this.toast.info('فرم جزئیات یک کالا در حال حاضر باز است. لطفاً ابتدا فرم را ذخیره یا ببندید.');
+      return;
+    }
     this.scanBusy = true;
     try {
       const rawQ = (code || '').trim().toLowerCase();
@@ -749,7 +995,16 @@ export class CounterDashboard implements OnInit {
   }
 
   fetchPoolTasksSilently() {
+    if (this.localFirst && this.activeWarehouseId) {
+      this.store.getPoolTasks(this.activeWarehouseId).then(tasks => {
+        this.trackUpdates(this.poolTasks, tasks);
+        this.poolTasks = tasks;
+        this.cdr.detectChanges();
+      }).catch(err => console.warn('[CounterDashboard] Silent local pool fetch error:', err));
+      return;
+    }
     this.fetchPoolTasks().then(tasks => {
+      this.trackUpdates(this.poolTasks, tasks);
       this.poolTasks = tasks;
       this.cdr.detectChanges();
     });
@@ -846,10 +1101,14 @@ export class CounterDashboard implements OnInit {
         next: (res: any) => {
           const savedPerms = res?.field_permissions_counter?.value;
           this.fieldConfigs = mergeFieldPermissions(savedPerms, this.dynamicFieldsList);
+          this.counterCanViewHistory = res?.counter_can_view_history?.value ?? true;
+          this.counterCanViewPreviousNotes = res?.counter_can_view_previous_notes?.value ?? true;
           this.cdr.detectChanges();
         },
         error: () => {
           this.fieldConfigs = mergeFieldPermissions(null, this.dynamicFieldsList);
+          this.counterCanViewHistory = true;
+          this.counterCanViewPreviousNotes = true;
           this.cdr.detectChanges();
         }
       });
@@ -858,14 +1117,23 @@ export class CounterDashboard implements OnInit {
         next: (res: any) => {
           const savedPerms = res?.field_permissions_counter;
           this.fieldConfigs = mergeFieldPermissions(savedPerms, this.dynamicFieldsList);
+          this.counterCanViewHistory = res?.counter_can_view_history ?? true;
+          this.counterCanViewPreviousNotes = res?.counter_can_view_previous_notes ?? true;
           this.cdr.detectChanges();
         },
         error: () => {
           this.fieldConfigs = mergeFieldPermissions(null, this.dynamicFieldsList);
+          this.counterCanViewHistory = true;
+          this.counterCanViewPreviousNotes = true;
           this.cdr.detectChanges();
         }
       });
     }
+  }
+
+  canViewRecordNote(index: number): boolean {
+    if (this.counterCanViewPreviousNotes) return true;
+    return index === 0;
   }
 
   get visibleInfoFields(): FieldPermissionConfig[] {
@@ -905,9 +1173,19 @@ export class CounterDashboard implements OnInit {
     return String(val);
   }
 
+  isFieldVisible(key: string): boolean {
+    const cfg = this.fieldConfigs.find(f => f.key === key);
+    return cfg ? !!cfg.visible : true;
+  }
+
   isReadOnly(task: CountTask | null): boolean {
     if (!task) return false;
     return task.status !== 'PENDING_COUNT' && task.status !== 'INITIAL_COUNT' && task.status !== 'SUPERVISOR_REJECTED' && task.status !== 'MANAGER_REJECTED';
+  }
+
+  isTaskSelectable(task: CountTask | null): boolean {
+    if (!task) return false;
+    return (task.status === 'INITIAL_COUNT' || (task.status === 'PENDING_COUNT' && task.counted_balance !== null && task.counted_balance !== undefined)) && !this.isReadOnly(task);
   }
 
   getActionTypeLabel(actionType: string): string {
@@ -916,9 +1194,9 @@ export class CounterDashboard implements OnInit {
       'INITIAL_COUNT': 'آماده ارسال (ثبت موقت)',
       'COUNTED': 'شمارش شده (ارسال به سرپرست)',
       'SUPERVISOR_APPROVED': 'تایید سرپرست',
-      'SUPERVISOR_REJECTED': 'رد شده توسط سرپرست (نیاز به بازشماری)',
+      'SUPERVISOR_REJECTED': 'بررسی مجدد (سرپرست)',
       'MANAGER_REVIEW': 'در حال بررسی مدیر',
-      'MANAGER_REJECTED': 'رد شده توسط مدیر',
+      'MANAGER_REJECTED': 'بررسی مجدد (مدیر)',
       'FINAL_APPROVED': 'تایید نهایی',
       'CLAIMED': 'به عهده گرفته شده',
       'DISPATCHED': 'تخصیص اولیه'
@@ -933,7 +1211,7 @@ export class CounterDashboard implements OnInit {
   initialTouchX = 0;
 
   onTaskPressStart(task: CountTask, event: PointerEvent) {
-    if (this.isReadOnly(task) || task.counted_balance === null) return;
+    if (this.isReadOnly(task) || task.counted_balance === null || task.counted_balance === undefined) return;
     this.initialTouchY = event.clientY;
     this.initialTouchX = event.clientX;
     
@@ -976,12 +1254,14 @@ export class CounterDashboard implements OnInit {
     
     // اگر در حالت انتخاب گروهی هستیم، مانع باز شدن ناخواسته Detail می‌شویم
     if (this.selectedTasks.size > 0) {
-      if (!this.isReadOnly(task) && task.counted_balance !== null) {
+      if (!this.isReadOnly(task) && (task.status === 'INITIAL_COUNT' || (task.status === 'PENDING_COUNT' && task.counted_balance !== null && task.counted_balance !== undefined))) {
         if (this.selectedTasks.has(task.id)) {
           this.selectedTasks.delete(task.id);
         } else {
           this.selectedTasks.add(task.id);
         }
+      } else {
+        this.toast.info('این کالا هنوز شمرده نشده یا قابل انتخاب گروهی نیست');
       }
       this.cdr.detectChanges();
       return;
@@ -993,6 +1273,14 @@ export class CounterDashboard implements OnInit {
 
   openDetail(task: CountTask) {
     this.selectedTask = task;
+    this.isHistoryOpen = false;
+    if (task.history && task.history.length > 1) {
+      task.history = task.history.slice().sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        return timeB - timeA;
+      });
+    }
     this.countedBalanceStr = (task.counted_balance !== null && task.counted_balance !== undefined) ? String(task.counted_balance) : '';
     this.counterNote = task.counter_note || '';
 
@@ -1020,8 +1308,59 @@ export class CounterDashboard implements OnInit {
     this.cdr.detectChanges();
   }
 
+  /** تغییر سریع مقدار شمارش‌شده با دکمه‌های استپر */
+  stepQty(delta: number) {
+    if (!this.selectedTask || this.isReadOnly(this.selectedTask)) return;
+    const cur = Number(this.normalizeDigits(this.countedBalanceStr)) || 0;
+    const updated = Math.max(0, cur + delta);
+    this.countedBalanceStr = String(updated);
+    this.cdr.detectChanges();
+  }
+
+  /** بررسی وجود تغییرات ذخیره‌نشده در فرم جزئیات */
+  hasUnsavedChanges(): boolean {
+    if (!this.selectedTask) return false;
+    const origVal = (this.selectedTask.counted_balance !== null && this.selectedTask.counted_balance !== undefined) ? String(this.selectedTask.counted_balance) : '';
+    const curVal = this.normalizeDigits(this.countedBalanceStr).trim();
+    if (curVal !== origVal && (curVal !== '' || origVal !== '')) return true;
+
+    const origNote = (this.selectedTask.counter_note || '').trim();
+    const curNote = (this.counterNote || '').trim();
+    if (curNote !== origNote) return true;
+
+    const item: any = this.selectedTask.item_details || {};
+    for (const f of this.editableFormFields) {
+      const curFieldVal = this.editableValues[f.key];
+      if (f.is_dynamic) {
+        const realKey = f.key.replace(/^dyn_/, '');
+        const oldVal = item.dynamic_data?.[realKey];
+        if (curFieldVal !== oldVal && (curFieldVal !== '' || (oldVal !== null && oldVal !== undefined))) return true;
+      } else {
+        const oldVal = item[f.key];
+        if (curFieldVal !== oldVal && (curFieldVal !== '' || (oldVal !== null && oldVal !== undefined))) return true;
+      }
+    }
+    return false;
+  }
+
+  /** بستن فرم با گارد محافظت از تغییرات */
+  async closeDetailWithGuard() {
+    if (this.hasUnsavedChanges() && !this.isReadOnly(this.selectedTask)) {
+      const confirmed = await this.confirmDialog.open({
+        title: 'تغییرات ذخیره‌نشده',
+        message: 'شما مقادیری را تغییر داده‌اید اما ذخیره نکرده‌اید. آیا مایل به بستن فرم و نادیده گرفتن تغییرات هستید؟',
+        confirmText: 'بله، خروج بدون ذخیره',
+        cancelText: 'ادامه ویرایش',
+        type: 'warning'
+      });
+      if (!confirmed) return;
+    }
+    this.closeDetail();
+  }
+
   closeDetail() {
     this.selectedTask = null;
+    this.isHistoryOpen = false;
     this.editableValues = {};
     this.cdr.detectChanges();
   }
@@ -1046,7 +1385,7 @@ export class CounterDashboard implements OnInit {
       }
       if (this.selectedTask) {
         event.preventDefault();
-        this.closeDetail();
+        this.closeDetailWithGuard();
         return;
       }
     }
@@ -1146,7 +1485,12 @@ export class CounterDashboard implements OnInit {
     } else {
       if (task.status === 'INITIAL_COUNT') {
         if (task.history && task.history.length > 0) {
-          const prevRecord = task.history.find(h => h.action_type === 'SUPERVISOR_REJECTED' || h.action_type === 'MANAGER_REJECTED' || h.action_type === 'PENDING_COUNT');
+          const sortedHistory = task.history.slice().sort((a, b) => {
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+            return timeB - timeA;
+          });
+          const prevRecord = sortedHistory.find(h => h.action_type === 'SUPERVISOR_REJECTED' || h.action_type === 'MANAGER_REJECTED' || h.action_type === 'PENDING_COUNT');
           if (prevRecord) {
             newStatus = prevRecord.action_type as CountTaskStatus;
           } else if (task.manager_note) {
@@ -1231,31 +1575,36 @@ export class CounterDashboard implements OnInit {
     let previousStatus: CountTaskStatus = 'PENDING_COUNT';
     let statusLabel = 'در انتظار شمارش';
     if (task.history && task.history.length > 0) {
-      const prevRecord = task.history.find(h => h.action_type === 'SUPERVISOR_REJECTED' || h.action_type === 'MANAGER_REJECTED' || h.action_type === 'PENDING_COUNT');
+      const sortedHistory = task.history.slice().sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.id || 0);
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.id || 0);
+        return timeB - timeA;
+      });
+      const prevRecord = sortedHistory.find(h => h.action_type === 'SUPERVISOR_REJECTED' || h.action_type === 'MANAGER_REJECTED' || h.action_type === 'PENDING_COUNT');
       if (prevRecord) {
         if (prevRecord.action_type === 'SUPERVISOR_REJECTED') {
           previousStatus = 'SUPERVISOR_REJECTED';
-          statusLabel = 'مغایرت و بازشماری (سرپرست)';
+          statusLabel = 'بررسی مجدد (سرپرست)';
         } else if (prevRecord.action_type === 'MANAGER_REJECTED') {
           previousStatus = 'MANAGER_REJECTED';
-          statusLabel = 'مغایرت و بازشماری (مدیر)';
+          statusLabel = 'بررسی مجدد (مدیر)';
         } else {
           previousStatus = 'PENDING_COUNT';
           statusLabel = 'در انتظار شمارش';
         }
       } else if (task.manager_note) {
         previousStatus = 'MANAGER_REJECTED';
-        statusLabel = 'مغایرت و بازشماری';
+        statusLabel = 'بررسی مجدد';
       } else if (task.supervisor_note) {
         previousStatus = 'SUPERVISOR_REJECTED';
-        statusLabel = 'مغایرت و بازشماری';
+        statusLabel = 'بررسی مجدد';
       }
     } else if (task.manager_note) {
       previousStatus = 'MANAGER_REJECTED';
-      statusLabel = 'مغایرت و بازشماری';
+      statusLabel = 'بررسی مجدد';
     } else if (task.supervisor_note) {
       previousStatus = 'SUPERVISOR_REJECTED';
-      statusLabel = 'مغایرت و بازشماری';
+      statusLabel = 'بررسی مجدد';
     }
 
     const confirmed = await this.confirmDialog.open({
@@ -1273,6 +1622,17 @@ export class CounterDashboard implements OnInit {
       status: previousStatus
     };
 
+    const revertHistoryRecord: CountTaskHistory = {
+      id: Date.now(),
+      task: task.id,
+      action_by: this.auth.user()?.id || null,
+      action_by_name: this.auth.user()?.first_name ? `${this.auth.user()?.first_name} ${this.auth.user()?.last_name}`.trim() : (this.auth.user()?.username || 'شما'),
+      action_type: previousStatus,
+      counted_balance: null,
+      note: 'لغو پیش‌نویس شمارش',
+      created_at: new Date().toISOString()
+    };
+
     // اگر در مودال جزئیات باز است، فیلدهای لوکال را هم ریست کنیم
     if (this.selectedTask && this.selectedTask.id === task.id) {
       this.countedBalanceStr = '';
@@ -1285,6 +1645,8 @@ export class CounterDashboard implements OnInit {
       try {
         await this.store.saveDraft(task, payload, this.currentUserId!);
         Object.assign(task, payload, { _offlinePending: true });
+        if (!task.history) task.history = [];
+        task.history = [revertHistoryRecord, ...task.history];
         this.applyFilters();
         this.toast.success(`کالا به وضعیت «${statusLabel}» بازگردانده شد`);
         if (this.selectedTask && this.selectedTask.id === task.id) {
@@ -1301,6 +1663,8 @@ export class CounterDashboard implements OnInit {
     this.countTaskApi.update(task.id, payload).subscribe({
       next: (res) => {
         Object.assign(task, res);
+        if (!task.history) task.history = [];
+        task.history = [revertHistoryRecord, ...task.history];
         this.applyFilters();
         this.toast.success(`کالا به وضعیت «${statusLabel}» بازگردانده شد`);
         if (this.selectedTask && this.selectedTask.id === task.id) {
@@ -1340,6 +1704,7 @@ export class CounterDashboard implements OnInit {
     this.cdr.detectChanges();
 
     const task = this.selectedTask;
+    const targetStatus: CountTaskStatus = task.skip_supervisor ? 'MANAGER_REVIEW' : 'COUNTED';
     const draftPayload: any = {
       counted_balance: rawVal,
       counter_note: this.counterNote,
@@ -1351,20 +1716,22 @@ export class CounterDashboard implements OnInit {
       task: task.id,
       action_by: this.auth.user()?.id || null,
       action_by_name: this.auth.user()?.first_name ? `${this.auth.user()?.first_name} ${this.auth.user()?.last_name}`.trim() : (this.auth.user()?.username || 'شما'),
-      action_type: task.skip_supervisor ? 'MANAGER_REVIEW' : 'COUNTED',
+      action_type: targetStatus,
       counted_balance: rawVal,
       note: this.counterNote || null,
       created_at: new Date().toISOString()
     };
 
-    if (this.localFirst && task.sync_id) {
+    if (this.localFirst) {
       try {
         await this.store.saveDraft(task, draftPayload, this.currentUserId!);
-        Object.assign(task, draftPayload, { _offlinePending: true });
+        await this.store.submitTasks([task], this.currentUserId!);
+        Object.assign(task, { ...draftPayload, status: targetStatus, _offlinePending: true });
         if (!task.history) task.history = [];
         task.history = [submitHistoryRecord, ...task.history];
         await this.saveExtraEditedFields(task);
-        await this.store.submitTasks([task], this.currentUserId!);
+        this.selectedTasks.delete(task.id);
+        this.applyFilters();
         this.toast.success(task.skip_supervisor ? 'کالا با موفقیت مستقیم به مدیر ارسال شد' : 'کالا با موفقیت به سرپرست ارسال شد');
         this.isSubmitting = false;
         this.closeDetail();
@@ -1381,11 +1748,6 @@ export class CounterDashboard implements OnInit {
     // حالت سرور-محور (Online)
     this.countTaskApi.update(task.id, draftPayload).subscribe({
       next: async (updatedTask) => {
-        Object.assign(task, updatedTask);
-        if (!task.history) task.history = [];
-        task.history = [submitHistoryRecord, ...task.history];
-        await this.saveExtraEditedFields(task);
-
         const whId = this.state.appState.activeWarehouseId;
         const submitPayload: any = { task_ids: [task.id] };
         if (whId && whId !== 'ALL' && whId !== -1) {
@@ -1393,13 +1755,21 @@ export class CounterDashboard implements OnInit {
         }
 
         this.countTaskApi.bulkSubmit(submitPayload).subscribe({
-          next: (res) => {
+          next: async (res) => {
+            Object.assign(task, updatedTask, { status: targetStatus });
+            if (!task.history) task.history = [];
+            task.history = [submitHistoryRecord, ...task.history];
+            await this.saveExtraEditedFields(task);
+            this.selectedTasks.delete(task.id);
+            this.applyFilters();
             this.toast.success(res.message || (task.skip_supervisor ? 'کالا با موفقیت مستقیم به مدیر ارسال شد' : 'کالا با موفقیت به سرپرست ارسال شد'));
             this.isSubmitting = false;
             this.closeDetail();
             this.loadTasks(false);
           },
           error: () => {
+            Object.assign(task, updatedTask);
+            this.applyFilters();
             this.toast.error(task.skip_supervisor ? 'خطا در ارسال مستقیم به مدیر' : 'خطا در ارسال به سرپرست');
             this.isSubmitting = false;
             this.cdr.detectChanges();
@@ -1409,6 +1779,76 @@ export class CounterDashboard implements OnInit {
       error: () => {
         this.toast.error('خطا در ثبت اطلاعات');
         this.isSubmitting = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** ارسال سریع تک‌کلیکه یک کالا مستقیم از روی کارت آماده ارسال */
+  async quickSubmitTask(task: CountTask, event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.isReadOnly(task) || task.counted_balance === null || task.counted_balance === undefined) {
+      this.toast.error('این کالا مقدار شمارش‌شده معتبر ندارد');
+      return;
+    }
+
+    const confirmed = await this.confirmDialog.open({
+      title: 'ارسال سریع به سرپرست',
+      message: `آیا از ارسال کالای «${task.item_details?.description || task.item_details?.fa_unic_code}» با مقدار شمارش‌شده ${task.counted_balance} به سرپرست اطمینان دارید؟`,
+      confirmText: 'بله، ارسال کن',
+      cancelText: 'انصراف',
+      type: 'info'
+    });
+    if (!confirmed) return;
+
+    const targetStatus: CountTaskStatus = task.skip_supervisor ? 'MANAGER_REVIEW' : 'COUNTED';
+    const submitHistoryRecord: CountTaskHistory = {
+      id: Date.now(),
+      task: task.id,
+      action_by: this.auth.user()?.id || null,
+      action_by_name: this.auth.user()?.first_name ? `${this.auth.user()?.first_name} ${this.auth.user()?.last_name}`.trim() : (this.auth.user()?.username || 'شما'),
+      action_type: targetStatus,
+      counted_balance: String(task.counted_balance),
+      note: task.counter_note || null,
+      created_at: new Date().toISOString()
+    };
+
+    if (this.localFirst) {
+      try {
+        await this.store.submitTasks([task], this.currentUserId!);
+        Object.assign(task, { status: targetStatus, _offlinePending: true });
+        if (!task.history) task.history = [];
+        task.history = [submitHistoryRecord, ...task.history];
+        this.selectedTasks.delete(task.id);
+        this.applyFilters();
+        this.toast.success(task.skip_supervisor ? 'کالا با موفقیت به مدیر ارسال شد' : 'کالا با موفقیت به سرپرست ارسال شد');
+        this.readFromLocal(false);
+      } catch (e) {
+        console.error('[CounterDashboard] خطا در ارسال سریع محلی:', e);
+        this.toast.error('خطا در ارسال اطلاعات');
+      }
+      return;
+    }
+
+    const whId = this.state.appState.activeWarehouseId;
+    const submitPayload: any = { task_ids: [task.id] };
+    if (whId && whId !== 'ALL' && whId !== -1) {
+      submitPayload.warehouse_id = whId;
+    }
+
+    this.countTaskApi.bulkSubmit(submitPayload).subscribe({
+      next: (res) => {
+        Object.assign(task, { status: targetStatus });
+        if (!task.history) task.history = [];
+        task.history = [submitHistoryRecord, ...task.history];
+        this.selectedTasks.delete(task.id);
+        this.applyFilters();
+        this.toast.success(res.message || (task.skip_supervisor ? 'کالا با موفقیت به مدیر ارسال شد' : 'کالا با موفقیت به سرپرست ارسال شد'));
+        this.loadTasks(false);
+      },
+      error: () => {
+        this.toast.error('خطا در ارسال سریع به سرپرست');
         this.cdr.detectChanges();
       }
     });
@@ -1517,7 +1957,7 @@ export class CounterDashboard implements OnInit {
   }
 
   toggleAll() {
-    const readyTasks = this.filteredTasks.filter(t => t.counted_balance !== null && !this.isReadOnly(t));
+    const readyTasks = this.filteredTasks.filter(t => (t.status === 'INITIAL_COUNT' || (t.status === 'PENDING_COUNT' && t.counted_balance !== null && t.counted_balance !== undefined)) && !this.isReadOnly(t));
     if (this.selectedTasks.size === readyTasks.length && readyTasks.length > 0) {
       this.selectedTasks.clear();
     } else {
@@ -1558,7 +1998,7 @@ export class CounterDashboard implements OnInit {
       this.cdr.detectChanges();
 
       if (this.localFirst) {
-        const eligible = this.pendingTasks.filter(t => t.counted_balance !== null);
+        const eligible = this.pendingTasks.filter(t => t.status === 'INITIAL_COUNT' || (t.status === 'PENDING_COUNT' && t.counted_balance !== null && t.counted_balance !== undefined));
         const toSubmit = isPartial
           ? eligible.filter(t => this.selectedTasks.has(t.id))
           : eligible;
@@ -1577,8 +2017,9 @@ export class CounterDashboard implements OnInit {
         return;
       }
 
+      const eligible = this.pendingTasks.filter(t => t.status === 'INITIAL_COUNT' || (t.status === 'PENDING_COUNT' && t.counted_balance !== null && t.counted_balance !== undefined));
       const whId = this.state.appState.activeWarehouseId;
-      const payload: any = isPartial ? { task_ids: Array.from(this.selectedTasks) } : {};
+      const payload: any = isPartial ? { task_ids: Array.from(this.selectedTasks) } : { task_ids: eligible.map(t => t.id) };
       if (whId && whId !== 'ALL' && whId !== -1) {
         payload.warehouse_id = whId;
       }
@@ -1658,6 +2099,17 @@ export class CounterDashboard implements OnInit {
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;
     }
+    if (this.exportDataScope !== 'selected') {
+      if (this.statusFilter && this.statusFilter !== 'all') {
+        params.status = this.statusFilter;
+      }
+      if (this.dateFilter && this.dateFilter !== 'all') {
+        params.date = this.dateFilter;
+      }
+      if (this.searchQuery && this.searchQuery.trim()) {
+        params.q = this.searchQuery.trim();
+      }
+    }
 
     this.exportSubscription = this.countTaskApi.exportExcel({ ...payload, ...params }).subscribe({
       next: (blob) => {
@@ -1683,6 +2135,38 @@ export class CounterDashboard implements OnInit {
         console.error('Export error:', err);
         this.toast.error('خطا در دریافت فایل خروجی');
         this.isExporting = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  downloadSampleTemplate() {
+    if (this.isDownloadingTemplate) return;
+    this.isDownloadingTemplate = true;
+    const whId = this.state.appState.activeWarehouseId;
+    this.countTaskApi.downloadTemplate(whId).subscribe({
+      next: (blob) => {
+        try {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Counter_Template_${new Date().getTime()}.xlsx`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          this.toast.success('قالب اکسل نمونه با موفقیت دانلود شد.');
+        } catch (e) {
+          console.error('Template download error', e);
+          this.toast.error('خطا در دانلود فایل نمونه');
+        }
+        this.isDownloadingTemplate = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Template download error:', err);
+        this.toast.error('خطا در دریافت فایل نمونه از سرور');
+        this.isDownloadingTemplate = false;
         this.cdr.detectChanges();
       }
     });

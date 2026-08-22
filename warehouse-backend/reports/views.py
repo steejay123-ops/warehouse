@@ -118,9 +118,7 @@ class ExportReportView(APIView):
     - xlsx (پیش‌فرض) تا SYNC_ROW_LIMIT ردیف: فایل همان لحظه برمی‌گردد.
     - xlsx بزرگ‌تر: job پس‌زمینه ساخته می‌شود و 202 {job_id} برمی‌گردد.
     """
-    permission_classes = [
-        IsAuthenticated, ReportsMenuAccess, require_menu_access('view_sys_export'),
-    ]
+    permission_classes = [IsAuthenticated, ReportsMenuAccess]
 
     def post(self, request):
         try:

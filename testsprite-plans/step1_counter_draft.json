@@ -1,0 +1,41 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Counter Dashboard — Enter count, note, and save draft",
+  "description": "Counter logs in with test_counter, opens item TS-ITEM-001, inputs counted balance 100, sets note and location, and saves draft.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_counter into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Click on the item row with code TS-ITEM-001 to open its detail view"
+    },
+    {
+      "type": "action",
+      "description": "Enter 100 into the counted quantity input field"
+    },
+    {
+      "type": "action",
+      "description": "Enter شمارش دقیق انجام شد into the counter note input field"
+    },
+    {
+      "type": "action",
+      "description": "Click the Save Draft button labelled ذخیره موقت"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item details or table reflects the saved count of 100"
+    }
+  ]
+}

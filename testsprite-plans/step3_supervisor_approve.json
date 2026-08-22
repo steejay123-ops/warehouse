@@ -1,0 +1,33 @@
+{
+  "projectId": "1f6c07ba-e8f1-4733-8656-a8ef3a56efee",
+  "type": "frontend",
+  "name": "Supervisor Dashboard — Approve counted task to manager review",
+  "description": "Supervisor logs in with test_supervisor, views submitted item TS-ITEM-001, and approves it to forward to manager review.",
+  "priority": "p0",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Navigate to the login page at /login"
+    },
+    {
+      "type": "action",
+      "description": "Enter test_supervisor into the username field and Test@123456 into the password field"
+    },
+    {
+      "type": "action",
+      "description": "Click the login submit button"
+    },
+    {
+      "type": "action",
+      "description": "Locate the item TS-ITEM-001 in the supervisor cartable and select its checkbox or click approve"
+    },
+    {
+      "type": "action",
+      "description": "Click the confirmation button to confirm approval and send to manager"
+    },
+    {
+      "type": "assertion",
+      "description": "Verify that the item TS-ITEM-001 is approved and forwarded to manager review"
+    }
+  ]
+}

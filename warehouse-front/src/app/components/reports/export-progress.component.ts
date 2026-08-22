@@ -59,6 +59,7 @@ export class ExportProgressComponent implements OnInit, OnDestroy {
   job: ReportExportJob | null = null;
   downloading = false;
   private sub: Subscription | null = null;
+  private consecutiveErrors = 0;
 
   ngOnInit(): void {
     this.poll();
@@ -79,8 +80,32 @@ export class ExportProgressComponent implements OnInit, OnDestroy {
 
   private poll(): void {
     this.api.getExportJob(this.jobId).subscribe({
-      next: (j) => (this.job = j),
-      error: () => {}, // خطای گذرا — poll بعدی دوباره تلاش می‌کند
+      next: (j) => {
+        this.consecutiveErrors = 0;
+        this.job = j;
+        if (j.status === 'done' || j.status === 'failed') {
+          this.sub?.unsubscribe();
+          this.sub = null;
+        }
+      },
+      error: (err) => {
+        this.consecutiveErrors++;
+        if (this.consecutiveErrors >= 3 || err?.status === 404) {
+          this.sub?.unsubscribe();
+          this.sub = null;
+          if (!this.job) {
+            this.job = {
+              id: this.jobId,
+              status: 'failed',
+              error_message: 'ارتباط با سرور برای دریافت وضعیت خروجی قطع شد.',
+              progress: 0,
+              report_name: '',
+              created_at: '',
+              total_rows: this.totalRows,
+            } as any;
+          }
+        }
+      },
     });
   }
 

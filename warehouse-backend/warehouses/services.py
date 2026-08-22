@@ -7,7 +7,6 @@ DEFAULT_SETTINGS = {
     'require_doc_supervisor_approval': True,
     'blind_counting': 'blind',
     'default_conflict_strategy': 'ignore',
-    'default_tag_status': 'عدم نیاز به چاپ',
     'system_version': '1.0',
     'offline_sync_interval_minutes': 15,
     'offline_cache_ttl_minutes': 60,
@@ -15,6 +14,15 @@ DEFAULT_SETTINGS = {
     'field_permissions_doc': {},
     'scanner_row_delimiter': ';',
     'scanner_col_delimiter': '|',
+    'counter_can_view_history': True,
+    'counter_can_view_previous_notes': True,
+    'financial_can_view_history': True,
+    'financial_can_view_previous_notes': True,
+    'scanner_camera_preset': 'adaptive',
+    'scanner_custom_resolution': '1080p',
+    'scanner_custom_interval_ms': 60,
+    'scanner_custom_roi_size': 850,
+    'scanner_custom_try_harder': True,
 }
 
 SETTINGS_CACHE_TTL = 3600  # 1 hour

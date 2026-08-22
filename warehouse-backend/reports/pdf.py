@@ -161,13 +161,19 @@ def sync_pdf_response(qs, columns, total, filename='report.pdf', report_name='گ
     header = [Paragraph(_rtl(c['label']), header_style) for c in cols]
 
     data = [header]
-    keys = [c['key'] for c in cols]
     for row in qs.iterator(chunk_size=500):
         cells = []
-        for k in keys:
-            text, needs_rtl = _cell_text(row.get(k))
+        for c in cols:
+            source_key = c.get('source') or c['key']
+            text, needs_rtl = _cell_text(row.get(source_key))
             cells.append(Paragraph(_rtl(text) if needs_rtl else text, cell_style))
         data.append(cells)
+
+    row_count = len(data) - 1
+    if row_count == 0:
+        empty_text = Paragraph(_rtl('هیچ داده‌ای برای این گزارش یافت نشد.'), cell_style)
+        empty_cells = [empty_text] + ['' for _ in range(len(cols) - 1)]
+        data.append(empty_cells)
 
     page_size = landscape(A4)
     margin = 12 * mm
@@ -175,16 +181,23 @@ def sync_pdf_response(qs, columns, total, filename='report.pdf', report_name='گ
     col_w = avail / len(cols)
 
     table = LongTable(data, colWidths=[col_w] * len(cols), repeatRows=1)
-    table.setStyle(TableStyle([
+    style_commands = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F1F5F9')]),
         ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CBD5E1')),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 3),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ('LEFTPADDING', (0, 0), (-1, -1), 2),
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
-    ]))
+    ]
+    if row_count > 0:
+        style_commands.append(
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F1F5F9')])
+        )
+    else:
+        style_commands.append(('SPAN', (0, 1), (-1, 1)))
+        style_commands.append(('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#F8FAFC')))
+    table.setStyle(TableStyle(style_commands))
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -192,7 +205,6 @@ def sync_pdf_response(qs, columns, total, filename='report.pdf', report_name='گ
         leftMargin=margin, rightMargin=margin, topMargin=margin, bottomMargin=margin,
         title=report_name,
     )
-    row_count = len(data) - 1
     doc.build([
         Paragraph(_rtl(report_name), title_style),
         Paragraph(_rtl(f'{_jalali_now_str()} — {row_count:,} ردیف'), subtitle_style),

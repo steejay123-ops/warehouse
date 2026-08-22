@@ -11,3 +11,5 @@ export * from './api-response.model';
 export * from './count-task.model';
 export * from './dynamic-field.model';
 export * from './report.model';
+export * from './doc-task.model';
+export * from './cartable.model';

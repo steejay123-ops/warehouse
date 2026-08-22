@@ -13,7 +13,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import CustomUser
-from inventory.models import Item, ItemFieldDefinition
+from inventory.models import CountTask, Item, ItemFieldDefinition
 from warehouses.models import SystemSetting, Warehouse
 
 from .engine import ReportEngine, ReportError
@@ -25,8 +25,11 @@ def _perm(codename):
     return Permission.objects.get(codename=codename, content_type__app_label='accounts')
 
 
-def make_user(username, perms=(), superuser=False, warehouses=()):
-    u = CustomUser.objects.create_user(username=username, password='x', is_superuser=superuser)
+def make_user(username, perms=(), superuser=False, warehouses=(), first_name='', last_name=''):
+    u = CustomUser.objects.create_user(
+        username=username, password='x', is_superuser=superuser,
+        first_name=first_name, last_name=last_name,
+    )
     for c in perms:
         u.user_permissions.add(_perm(c))
     for w in warehouses:
@@ -44,6 +47,9 @@ class BaseReportTest(TestCase):
         # شمارش کور را برای این تست‌ها خاموش کن (پیش‌فرض سیستم blind است)
         SystemSetting.objects.create(key='blind_counting', value='normal', warehouse=None)
 
+        cls.counter_user = make_user('counter1', first_name='علی', last_name='رضایی')
+        cls.supervisor_user = make_user('super1', first_name='محمد', last_name='محمدی')
+
         cls.i1 = Item.objects.create(
             warehouse=cls.wh1, fa_unic_code='FA-001', description='پیچ فولادی',
             vendor='زیمنس', inventory=Decimal('10'), dynamic_data={'coating': '5.5'},
@@ -60,9 +66,18 @@ class BaseReportTest(TestCase):
             warehouse=cls.wh1, name='coating', label='پوشش', field_type='number',
         )
 
+        cls.ct1 = CountTask.objects.create(
+            item=cls.i1, counter=cls.counter_user, supervisor=cls.supervisor_user,
+            status='COUNTED', counted_balance=Decimal('10'),
+        )
+        cls.ct2 = CountTask.objects.create(
+            item=cls.i2, counter=cls.counter_user, supervisor=cls.supervisor_user,
+            status='PENDING_COUNT', counted_balance=None,
+        )
+
         cls.admin = make_user('admin', superuser=True)
         cls.viewer = make_user(
-            'viewer', perms=('view_sys_reports', 'view_wh_docs'), warehouses=(cls.wh1,),
+            'viewer', perms=('view_sys_reports', 'view_wh_docs', 'view_sys_supervisor'), warehouses=(cls.wh1,),
         )
         cls.no_access = make_user('noaccess', perms=('view_sys_reports',))
 
@@ -325,12 +340,20 @@ class ApiTests(BaseReportTest):
         }, format='json')
         self.assertEqual(r.status_code, 400)
 
-    def test_export_requires_export_perm(self):
-        self.client.force_authenticate(self.viewer)  # view_sys_export ندارد
+    def test_export_requires_reports_perm(self):
+        user_without_reports = make_user('noreports', perms=('view_wh_docs',))
+        self.client.force_authenticate(user_without_reports)
         r = self.client.post('/api/reports/export/', {
             'entity': 'items', 'fields': ['fa_unic_code'],
         }, format='json')
         self.assertEqual(r.status_code, 403)
+
+        # کاربری که دسترسی گزارش‌ساز دارد، می‌تواند خروجی بگیرد
+        self.client.force_authenticate(self.viewer)
+        r = self.client.post('/api/reports/export/', {
+            'entity': 'items', 'fields': ['fa_unic_code'],
+        }, format='json')
+        self.assertEqual(r.status_code, 200)
 
     def test_export_sync_small(self):
         self.client.force_authenticate(self.admin)
@@ -419,6 +442,20 @@ class ExcelStyleTests(BaseReportTest):
         self.assertEqual(ws.auto_filter.ref, 'A3:B6')
         self.assertTrue(ws.sheet_view.rightToLeft)
 
+    def test_excel_with_joined_fields(self):
+        r = self.client.post('/api/reports/export/', {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'inner', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code', 'count_tasks.status'],
+            'warehouse_id': self.wh1.id,
+            'report_name': 'گزارش پیوندی',
+        }, format='json')
+        self.assertEqual(r.status_code, 200)
+        ws = openpyxl.load_workbook(io.BytesIO(r.content))['Report']
+        self.assertEqual(ws['B3'].value, 'count_tasks.status')
+        # بررسی وجود مقدار در ردیف داده (ردیف ۴)
+        self.assertIn(ws['B4'].value, ['COUNTED', 'PENDING_COUNT'])
+
 
 class PdfExportTests(BaseReportTest):
     def setUp(self):
@@ -455,6 +492,25 @@ class PdfExportTests(BaseReportTest):
         }
         r = self.client.post('/api/reports/export/', spec, format='json')
         self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.content.startswith(b'%PDF'))
+
+    def test_pdf_zero_rows(self):
+        spec = self._spec(filters={'field': 'vendor', 'operator': 'eq', 'value': 'NON_EXISTENT'})
+        r = self.client.post('/api/reports/export/', spec, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
+        self.assertTrue(r.content.startswith(b'%PDF'))
+
+    def test_pdf_with_joined_fields(self):
+        spec = {
+            'entity': 'items', 'format': 'pdf', 'report_name': 'اقلام و تسک‌ها',
+            'joins': [{'to': 'count_tasks', 'type': 'inner', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code', 'count_tasks.status'],
+            'warehouse_id': self.wh1.id,
+        }
+        r = self.client.post('/api/reports/export/', spec, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')
         self.assertTrue(r.content.startswith(b'%PDF'))
 
 
@@ -521,3 +577,64 @@ class ExportWorkerTests(BaseReportTest):
         self.assertEqual(stale_running.status, 'failed')
         # با worker زنده، صف pending سالم است و failed نمی‌شود
         self.assertEqual(queued.status, 'pending')
+
+    def test_orphan_poison_pill_fails_after_max_attempts(self):
+        from .management.commands.run_export_worker import Command
+        old = timezone.now() - timezone.timedelta(minutes=10)
+        poison = ReportExportJob.objects.create(
+            owner=self.admin, spec=self.SPEC, status='running',
+            heartbeat_at=old, attempts=2,
+        )
+        import io
+        Command(stdout=io.StringIO())._recover_orphans()
+        poison.refresh_from_db()
+        self.assertEqual(poison.status, 'failed')
+        self.assertEqual(poison.attempts, 3)
+        self.assertIn('مسموم', poison.error_message)
+
+
+class JoinQueryTests(BaseReportTest):
+    def test_join_output_key_mapping(self):
+        """کلیدهای ستون پیوندی در دیکشنری خروجی باید با فرمت کلاینت (count_tasks.status) باشند."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'inner', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code', 'count_tasks.status'],
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res['count'], 2)
+        row = res['rows'][0]
+        self.assertIn('fa_unic_code', row)
+        self.assertIn('count_tasks.status', row)
+        self.assertNotIn('count_tasks_fr__status', row)
+
+    def test_join_calculated_annotation(self):
+        """فیلد محاسباتی counter_name روی جدول پیوندی بدون خطای FieldError کار کند و نام شخص را بسازد."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'inner', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code', 'count_tasks.counter_name', 'count_tasks.supervisor_name'],
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res['count'], 2)
+        row = res['rows'][0]
+        self.assertIn('count_tasks.counter_name', row)
+        self.assertEqual(row['count_tasks.counter_name'], 'علی رضایی')
+        self.assertEqual(row['count_tasks.supervisor_name'], 'محمد محمدی')
+
+    def test_join_filter_and_sort(self):
+        """فیلتر و مرتب‌سازی روی ستون‌های پیوندی به درستی کار کند."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code', 'count_tasks.status'],
+            'filters': {'field': 'count_tasks.status', 'operator': 'eq', 'value': 'COUNTED'},
+            'sort': [{'field': 'fa_unic_code', 'dir': 'asc'}],
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res['count'], 1)
+        self.assertEqual(res['rows'][0]['fa_unic_code'], 'FA-001')
+        self.assertEqual(res['rows'][0]['count_tasks.status'], 'COUNTED')
+

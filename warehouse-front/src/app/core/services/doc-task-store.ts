@@ -93,13 +93,17 @@ export class DocTaskStore {
     changes: Partial<DocTask>,
     userId: number
   ): Promise<void> {
-    if (!task.sync_id) throw new Error('sync_id missing');
+    const syncId = task.sync_id || (task as any)._offlineId;
+    if (!syncId && !task.id) throw new Error('Task identifier (sync_id or id) missing');
 
-    await offlineDb.docTasks.update(task.sync_id, {
-      ...changes,
-      _offlinePending: true,
-    });
+    if (syncId) {
+      await offlineDb.docTasks.update(syncId, {
+        ...changes,
+        _offlinePending: true,
+      });
+    }
 
+    const entitySyncId = syncId || `temp_${task.id}`;
     await this.sync.enqueue(
       'PATCH',
       `${environment.apiUrl}/inventory/doc-tasks/${task.id}/`,
@@ -107,7 +111,7 @@ export class DocTaskStore {
       {
         userId,
         entityType: 'doc_task',
-        entitySyncId: task.sync_id,
+        entitySyncId,
         baseUpdatedAt: task.updated_at,
       }
     );
@@ -119,7 +123,7 @@ export class DocTaskStore {
    * ارسال گروهی تسک‌های بررسی‌شده.
    * وضعیت محلی خوش‌بینانه بر اساس skip_supervisor به DOC_MANAGER_REVIEW یا DOC_PROCESSED تبدیل می‌شود.
    */
-  async submitTasks(tasks: DocTask[], userId: number): Promise<void> {
+  async submitTasks(tasks: DocTask[], userId: number, warehouseId?: number): Promise<void> {
     const withSyncId = tasks.filter((t) => t.sync_id);
     for (const t of withSyncId) {
       const nextStatus = t.skip_supervisor ? 'DOC_MANAGER_REVIEW' : 'DOC_PROCESSED';
@@ -129,13 +133,16 @@ export class DocTaskStore {
       });
     }
 
+    const payload: any = {
+      task_ids: tasks.map((t) => t.id).filter((id) => !!id),
+      sync_ids: withSyncId.map((t) => t.sync_id),
+    };
+    if (warehouseId) payload.warehouse_id = warehouseId;
+
     await this.sync.enqueue(
       'POST',
       `${environment.apiUrl}/inventory/doc-tasks/bulk_submit/`,
-      {
-        task_ids: tasks.map((t) => t.id).filter((id) => !!id),
-        sync_ids: withSyncId.map((t) => t.sync_id),
-      },
+      payload,
       { userId, entityType: 'doc_task_bulk' }
     );
 

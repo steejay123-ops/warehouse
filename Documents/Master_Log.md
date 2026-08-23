@@ -1,3 +1,7 @@
+- [Report Builder Template Load And Execution Fix Completed](Report_Builder_Template_Load_And_Execution_Fix/walkthrough_Report_Builder_Template_Load_And_Execution_Fix.md)
+- [Report Builder Template Load And Execution Fix Planned](Report_Builder_Template_Load_And_Execution_Fix/implementation_plan_Report_Builder_Template_Load_And_Execution_Fix.md)
+- [Audit Trail Comprehensive Remediation Completed](Audit_Trail_Comprehensive_Remediation_Plan/walkthrough_audit_trail_remediation.md)
+- [Audit Trail Comprehensive Remediation Planned](Audit_Trail_Comprehensive_Remediation_Plan/implementation_plan_audit_trail_remediation.md)
 - [Tabs And Sync Inbox Refinements Planned](Tabs_And_Sync_Inbox_Refinements/implementation_plan_tabs_and_sync_inbox_refinements.md)
 - [Learned Patterns and Engineering Invariants Completed](Learned_Patterns_And_Engineering_Rules/walkthrough_learned_patterns.md)
 - [Learned Patterns and Engineering Invariants Planned](Learned_Patterns_And_Engineering_Rules/implementation_plan_learned_patterns.md)
@@ -113,3 +117,4 @@
 - [Counter History & Notes Visibility Settings Completed](Counter_History_Visibility_Settings/walkthrough_counter_history_visibility.md)
 - [Customs/Financial Cartable 26 Comprehensive Fixes Completed](Customs_Financial_Cartable_26_Fixes/walkthrough_customs_26_fixes.md)
 - [Browser E2E Comprehensive Testing (10 Scenarios & Guardian Agents) Completed](Browser_E2E_Comprehensive_Testing/walkthrough.md)
+- [Audit Backend Logic Remediation & Full Coverage Completed](Audit_Backend_Logic_Remediation/walkthrough.md)

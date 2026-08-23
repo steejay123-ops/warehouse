@@ -225,6 +225,19 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         user.requires_password_change = False
         user.password_changed_at = timezone.now()
         user.save()
+
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=user,
+            module='users',
+            action='UPDATE',
+            severity='warning',
+            target_model='CustomUser',
+            target_object_id=user.id,
+            target_repr=f"تغییر رمز عبور کاربر {user.username}",
+            details={'reason': 'تغییر کلمه عبور توسط خود کاربر'},
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
         
         return Response({'success': True, 'message': 'رمز عبور با موفقیت تغییر یافت.'})
 
@@ -236,6 +249,19 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         user.requires_password_change = True
         user.password_changed_at = timezone.now()
         user.save()
+
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=request.user,
+            module='users',
+            action='UPDATE',
+            severity='warning',
+            target_model='CustomUser',
+            target_object_id=user.id,
+            target_repr=f"بازنشانی رمز عبور کاربر {user.username} توسط مدیر",
+            details={'target_user_id': user.id, 'target_username': user.username},
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
             
         return Response({'success': True, 'message': 'رمز عبور با موفقیت به مقدار پیش‌فرض تغییر یافت و کاربر باید دوباره لاگین کند.'})
 
@@ -381,6 +407,18 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             created_count += 1
 
         total_rows = created_count + updated_count + len(result['errors'])
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=request.user,
+            module='users',
+            action='IMPORT',
+            severity='info',
+            target_model='CustomUser',
+            target_repr=f"بارگذاری اکسل پرسنل ({created_count} ایجاد، {updated_count} ویرایش)",
+            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(result['errors'])},
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
+
         return Response({
             'success': True,
             'summary': {
@@ -475,13 +513,54 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         permissions = serializer.validated_data.get('permissions', [])
         self._check_sensitive_permissions(permissions)
-        super().perform_create(serializer)
+        instance = serializer.save()
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=self.request.user,
+            module='users',
+            action='CREATE',
+            severity='info',
+            target_model='CustomRole',
+            target_object_id=instance.id,
+            target_repr=f"ایجاد نقش {instance.title or instance.name}",
+            details={'role_name': instance.name, 'title': instance.title, 'permissions_count': len(permissions)},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
 
     def perform_update(self, serializer):
         permissions = serializer.validated_data.get('permissions', None)
         if permissions is not None:
             self._check_sensitive_permissions(permissions)
-        super().perform_update(serializer)
+        instance = serializer.save()
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=self.request.user,
+            module='users',
+            action='UPDATE',
+            severity='info',
+            target_model='CustomRole',
+            target_object_id=instance.id,
+            target_repr=f"ویرایش نقش {instance.title or instance.name}",
+            details={'role_name': instance.name, 'title': instance.title},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
+
+    def perform_destroy(self, instance):
+        role_id = instance.id
+        role_repr = f"حذف نقش {instance.title or instance.name}"
+        super().perform_destroy(instance)
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=self.request.user,
+            module='users',
+            action='DELETE',
+            severity='warning',
+            target_model='CustomRole',
+            target_object_id=role_id,
+            target_repr=role_repr,
+            details={'role_id': role_id},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
 
     # ── Excel Import/Export Actions ──────────────────────────────────
     @action(detail=False, methods=['get'])
@@ -555,6 +634,18 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     info['role'].save()
 
         total_rows = created_count + updated_count + len(result['errors'])
+        from .audit_utils import log_audit_event
+        log_audit_event(
+            user=request.user,
+            module='users',
+            action='IMPORT',
+            severity='info',
+            target_model='CustomRole',
+            target_repr=f"بارگذاری اکسل نقش‌ها ({created_count} ایجاد، {updated_count} ویرایش)",
+            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(result['errors'])},
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
+
         return Response({
             'success': True,
             'summary': {
@@ -799,7 +890,11 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         status = params.get('status')
         if status:
-            qs = qs.filter(status=status)
+            s_clean = str(status).strip().upper()
+            if s_clean == 'FAILED':
+                qs = qs.filter(status__startswith='FAILED')
+            else:
+                qs = qs.filter(status=s_clean)
 
         ip_address = params.get('ip_address')
         if ip_address:
@@ -880,6 +975,7 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
         ).exists()
         
         if not already_logged_today:
+            from .middleware import get_client_ip
             device_model = request.data.get('device_model') or request.headers.get('Sec-Ch-Ua-Model')
             log_login_event(
                 username=user.username,
@@ -917,7 +1013,11 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(username_attempted__icontains=username)
             status_val = data.get('status')
             if status_val:
-                qs = qs.filter(status=status_val)
+                s_clean = str(status_val).strip().upper()
+                if s_clean == 'FAILED':
+                    qs = qs.filter(status__startswith='FAILED')
+                else:
+                    qs = qs.filter(status=s_clean)
             ip_address = data.get('ip_address')
             if ip_address:
                 qs = qs.filter(ip_address__icontains=ip_address)
@@ -1114,6 +1214,117 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
     def export_csv(self, request):
         return self.export_excel(request)
 
+    @action(detail=False, methods=['post'])
+    def purge(self, request):
+        """
+        پاکسازی تاریخچه ورود کاربران توسط مدیر سیستم بر اساس فیلترهای زمانی و وضعیت
+        """
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated and (
+            user.is_superuser or
+            user.has_perm('accounts.perm_sys_purge_logs')
+        )):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("تنها مدیر ارشد سامانه یا کاربران دارای مجوز اختصاصی پاکسازی لاگ‌ها (perm_sys_purge_logs) مجاز به حذف لاگ‌های ورود هستند.")
+
+        data = request.data or {}
+        dry_run = data.get('dry_run') in (True, 'true', '1', 1)
+        
+        qs = UserLoginLog.objects.all()
+
+        from_date = _parse_query_date(data.get('from_date'), is_end_of_day=False)
+        if from_date:
+            qs = qs.filter(created_at__gte=from_date)
+
+        to_date = _parse_query_date(data.get('to_date'), is_end_of_day=True)
+        if to_date:
+            qs = qs.filter(created_at__lte=to_date)
+
+        status_val = data.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+
+        username = data.get('username')
+        if username:
+            qs = qs.filter(username_attempted__icontains=username)
+
+        days = data.get('days')
+        if days and str(days).isdigit():
+            cutoff = now() - timedelta(days=int(days))
+            qs = qs.filter(created_at__lt=cutoff)
+
+        count = qs.count()
+
+        if dry_run:
+            return Response({
+                'success': True,
+                'dry_run': True,
+                'count': count,
+                'message': f"{count} رکورد لاگ ورود کاربران منطبق با شرایط انتخابی برای پاکسازی است."
+            })
+
+        confirm_text = str(data.get('confirm_text', '')).strip()
+        if confirm_text != 'PURGE_LOGIN_LOGS_CONFIRM':
+            return Response({
+                'success': False,
+                'error': 'جهت پاکسازی قطعی تاریخچه ورود، عبارت تاییدیه امنیتی PURGE_LOGIN_LOGS_CONFIRM باید به صورت دقیق وارد شود.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if count == 0:
+            return Response({
+                'success': True,
+                'purged_count': 0,
+                'message': 'هیچ رکوردی منطبق با فیلترهای انتخابی یافت نشد.'
+            })
+
+        batch_size = 5000
+        while True:
+            batch_ids = list(qs.values_list('id', flat=True)[:batch_size])
+            if not batch_ids:
+                break
+            UserLoginLog.objects.filter(id__in=batch_ids).delete()
+            if len(batch_ids) < batch_size:
+                break
+
+        from .audit_utils import log_audit_event
+        desc_parts = []
+        if from_date:
+            desc_parts.append(f"از: {from_date.strftime('%Y-%m-%d')}")
+        if to_date:
+            desc_parts.append(f"تا: {to_date.strftime('%Y-%m-%d')}")
+        if status_val:
+            desc_parts.append(f"وضعیت: {status_val}")
+        if username:
+            desc_parts.append(f"کاربر: {username}")
+        if days:
+            desc_parts.append(f"قدیمی‌تر از {days} روز")
+        criteria_str = ' | '.join(desc_parts) if desc_parts else 'کلیه لاگ‌های ورود'
+
+        log_audit_event(
+            user=user,
+            module='system',
+            action='DELETE',
+            severity='critical',
+            details={
+                'description': f"پاکسازی قطعی {count} رکورد از لاگ‌های ورود کاربران ({criteria_str})",
+                'purged_count': count,
+                'filters': {
+                    'from_date': str(from_date) if from_date else None,
+                    'to_date': str(to_date) if to_date else None,
+                    'status': status_val,
+                    'username': username,
+                    'days': days
+                }
+            },
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
+
+        return Response({
+            'success': True,
+            'purged_count': count,
+            'message': f"{count} رکورد تاریخچه ورود با موفقیت پاکسازی شد."
+        })
+
     @action(detail=False, methods=['get'])
     def locked_users(self, request):
         user = getattr(request, 'user', None)
@@ -1243,7 +1454,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             qs = qs.filter(severity=severity)
 
         warehouse_id = params.get('warehouse')
-        if warehouse_id:
+        if warehouse_id and str(warehouse_id).strip().upper() != 'ALL':
             qs = qs.filter(warehouse_id=warehouse_id)
 
         user_id = params.get('user')
@@ -1277,19 +1488,28 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     def stats(self, request):
         from django.db.models import Count, Q
         now_time = now()
+        today_start = now_time.replace(hour=0, minute=0, second=0, microsecond=0)
         last_24h = now_time - timedelta(hours=24)
 
         base_qs = self.filter_queryset(self.get_queryset())
-        
+        total_logs = base_qs.count()
+        logs_24h = base_qs.filter(created_at__gte=last_24h).count()
+        critical_24h = base_qs.filter(created_at__gte=last_24h, severity='critical').count()
+        rollbacks_24h = base_qs.filter(created_at__gte=last_24h, action='ROLLBACK').count()
+
         aggregates = base_qs.aggregate(
             total_all_time=Count('id'),
-            audits_24h=Count('id', filter=Q(created_at__gte=last_24h)),
-            critical_count=Count('id', filter=Q(severity='critical')),
-            warning_count=Count('id', filter=Q(severity='warning')),
+            critical_all_time=Count('id', filter=Q(severity='critical')),
+            warning_all_time=Count('id', filter=Q(severity='warning')),
+            rollbacks_all_time=Count('id', filter=Q(action='ROLLBACK'))
         )
 
+        warning_24h = base_qs.filter(created_at__gte=last_24h, severity='warning').count()
+
         module_breakdown = dict(
-            base_qs.values_list('module').annotate(c=Count('id'))
+            base_qs.filter(created_at__gte=last_24h)
+            .values_list('module')
+            .annotate(c=Count('id'))
         )
 
         login_total = UserLoginLog.objects.count()
@@ -1298,9 +1518,16 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         return Response({
             'total_all_time': aggregates['total_all_time'] or 0,
-            'audits_24h': aggregates['audits_24h'] or 0,
-            'critical_count': aggregates['critical_count'] or 0,
-            'warning_count': aggregates['warning_count'] or 0,
+            'critical_all_time': aggregates['critical_all_time'] or 0,
+            'warning_all_time': aggregates['warning_all_time'] or 0,
+            'rollbacks_all_time': aggregates['rollbacks_all_time'] or 0,
+            'logs_24h': logs_24h,
+            'audits_24h': logs_24h,
+            'critical_24h': critical_24h,
+            'critical_count': critical_24h,
+            'warning_24h': warning_24h,
+            'warning_count': warning_24h,
+            'rollbacks_24h': rollbacks_24h,
             'module_breakdown': module_breakdown,
             'storage': storage_info
         })
@@ -1363,30 +1590,42 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         all_cols_def = [
             ('index', 'ردیف', 8),
             ('id', 'شناسه', 10),
-            ('user', 'کاربر اقدام‌کننده', 24),
-            ('actor_username', 'نام کاربری', 18),
+            ('user', 'کاربر عامل', 22),
             ('warehouse', 'انبار', 18),
             ('module', 'ماژول', 18),
             ('action', 'نوع عملیات', 16),
             ('severity', 'سطح اهمیت', 14),
-            ('target_repr', 'رکورد هدف', 26),
-            ('target_object_id', 'شناسه رکورد', 14),
+            ('target_repr', 'موجودیت هدف', 25),
+            ('target_object_id', 'شناسه سند', 14),
+            ('changes_summary', 'خلاصه تغییرات', 35),
             ('ip_address', 'آدرس آی‌پی', 18),
-            ('changes_summary', 'خلاصه تغییرات (Diff)', 30),
             ('created_at', 'تاریخ و زمان', 22),
         ]
 
-        req_cols = data.get('columns')
+        col_alias_map = {
+            'user_display': 'user',
+            'actor_username': 'user',
+            'warehouse_name': 'warehouse',
+            'module_display': 'module',
+            'action_display': 'action',
+            'target': 'target_repr',
+            'object_id': 'target_object_id',
+            'changes': 'changes_summary',
+            'ip': 'ip_address',
+            'date': 'created_at',
+            'timestamp': 'created_at'
+        }
+
+        req_cols = data.get('columns') or request.query_params.get('columns')
         if req_cols:
             if isinstance(req_cols, str):
                 req_cols = [c.strip() for c in req_cols.split(',') if c.strip()]
-            selected_cols = [c for c in all_cols_def if c[0] in req_cols]
+            normalized_cols = set([col_alias_map.get(c, c) for c in req_cols])
+            selected_cols = [c for c in all_cols_def if c[0] in normalized_cols or (c[0] == 'index' and ('index' in normalized_cols or 'radif' in normalized_cols))]
             if not selected_cols:
                 selected_cols = all_cols_def
         else:
             selected_cols = all_cols_def
-
-        format_type = str(data.get('file_format') or data.get('export_format') or data.get('format', 'xlsx')).lower().strip()
 
         def _get_changes_summary(item):
             if not item.before_state and not item.after_state:
@@ -1402,47 +1641,66 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                     diffs.append(f"{k}: {old_v} ➔ {new_v}")
             return ' | '.join(diffs) if diffs else "بدون تغییر داده‌ای"
 
-        if format_type == 'csv':
-            output = StringIO()
+        # اگر درخواست CSV باشد
+        is_csv = (
+            request.query_params.get('format') == 'csv' or
+            request.query_params.get('file_format') == 'csv' or
+            data.get('file_format') == 'csv' or
+            data.get('format') == 'csv' or
+            request.path.endswith('export_csv')
+        )
+        if is_csv:
+            import csv
+            import io
+            output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow([c[1] for c in selected_cols])  # ردیف ۱: عنوان فارسی
-            writer.writerow([c[0] for c in selected_cols])  # ردیف ۲: نام فیلد دیتابیس
+            # سطر ۱: عناوین فارسی
+            writer.writerow([c[1] for c in selected_cols])
+            # سطر ۲: نام‌های دیتابیسی
+            writer.writerow([c[0] for c in selected_cols])
+
             for idx, item in enumerate(qs, 1):
-                user_name = f"{item.user.first_name} {item.user.last_name}".strip() if item.user else (item.actor_name or item.actor_username or "سیستم")
-                user_username = item.user.username if item.user else (item.actor_username or 'System')
-                wh_name = item.warehouse.name if item.warehouse else "—"
+                if item.user:
+                    u_full = f"{item.user.first_name} {item.user.last_name}".strip()
+                    user_display = u_full if u_full else item.user.username
+                elif item.actor_name:
+                    user_display = f"{item.actor_name} (سابق)"
+                elif item.actor_username:
+                    user_display = f"{item.actor_username} (سابق)"
+                else:
+                    user_display = "سیستم"
+
+                wh_name = item.warehouse.name if item.warehouse else "عمومی / سیستم"
                 row_vals = []
                 for col_key, _, _ in selected_cols:
                     if col_key == 'index':
                         row_vals.append(idx)
                     elif col_key == 'id':
                         row_vals.append(item.id)
-                    elif col_key == 'user':
-                        row_vals.append(f"{user_name} ({user_username})")
-                    elif col_key == 'actor_username':
-                        row_vals.append(user_username)
-                    elif col_key == 'warehouse':
+                    elif col_key in ('user', 'user_display'):
+                        row_vals.append(user_display)
+                    elif col_key in ('warehouse', 'warehouse_name'):
                         row_vals.append(wh_name)
-                    elif col_key == 'module':
-                        row_vals.append(item.get_module_display())
-                    elif col_key == 'action':
-                        row_vals.append(item.get_action_display())
+                    elif col_key in ('module', 'module_display'):
+                        row_vals.append(item.get_module_display() if hasattr(item, 'get_module_display') else item.module)
+                    elif col_key in ('action', 'action_display'):
+                        row_vals.append(item.get_action_display() if hasattr(item, 'get_action_display') else item.action)
                     elif col_key == 'severity':
-                        row_vals.append(item.get_severity_display())
+                        row_vals.append(item.get_severity_display() if hasattr(item, 'get_severity_display') else item.severity)
                     elif col_key == 'target_repr':
-                        row_vals.append(item.target_repr or item.target_object_id or "—")
+                        row_vals.append(item.target_repr or "—")
                     elif col_key == 'target_object_id':
                         row_vals.append(item.target_object_id or "—")
-                    elif col_key == 'ip_address':
-                        row_vals.append(item.ip_address or "—")
                     elif col_key == 'changes_summary':
                         row_vals.append(_get_changes_summary(item))
+                    elif col_key == 'ip_address':
+                        row_vals.append(item.ip_address or "—")
                     elif col_key == 'created_at':
                         row_vals.append(format_shamsi_datetime(item.created_at))
                 writer.writerow(row_vals)
 
             response = HttpResponse(output.getvalue().encode('utf-8-sig'), content_type='text/csv; charset=utf-8')
-            response['Content-Disposition'] = 'attachment; filename="audit_trail_report.csv"'
+            response['Content-Disposition'] = 'attachment; filename="audit_logs_report.csv"'
             return response
 
         import openpyxl
@@ -1451,7 +1709,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "گزارش ممیزی تغییرات"
+        ws.title = "گزارش رهگیری تغییرات"
         ws.views.sheetView[0].rightToLeft = True
 
         header_font = Font(name='Tahoma', size=10, bold=True, color='FFFFFF')
@@ -1473,23 +1731,19 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             bottom=Side(style='thin', color='E2E8F0')
         )
 
-        # ردیف ۱: عناوین فارسی
-        header_titles = [c[1] for c in selected_cols]
-        ws.append(header_titles)
+        # سطر ۱: عناوین نمایشی فارسی
         ws.row_dimensions[1].height = 28
-        for col_idx in range(1, len(selected_cols) + 1):
-            cell = ws.cell(row=1, column=col_idx)
+        for col_idx, (_, persian_title, _) in enumerate(selected_cols, 1):
+            cell = ws.cell(row=1, column=col_idx, value=persian_title)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = header_align
             cell.border = thin_border
 
-        # ردیف ۲: نام‌های دیتابیسی ستون‌ها
-        db_keys = [c[0] for c in selected_cols]
-        ws.append(db_keys)
+        # سطر ۲: کلیدهای سیستمی لاتین
         ws.row_dimensions[2].height = 20
-        for col_idx in range(1, len(selected_cols) + 1):
-            cell = ws.cell(row=2, column=col_idx)
+        for col_idx, (col_key, _, _) in enumerate(selected_cols, 1):
+            cell = ws.cell(row=2, column=col_idx, value=col_key)
             cell.font = key_font
             cell.fill = key_fill
             cell.alignment = key_align
@@ -1497,35 +1751,42 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         # سطرهای داده از ردیف ۳
         for idx, item in enumerate(qs, 1):
-            user_name = f"{item.user.first_name} {item.user.last_name}".strip() if item.user else (item.actor_name or item.actor_username or "سیستم")
-            user_username = item.user.username if item.user else (item.actor_username or 'System')
-            wh_name = item.warehouse.name if item.warehouse else "—"
+            if item.user:
+                u_full = f"{item.user.first_name} {item.user.last_name}".strip()
+                user_display = u_full if u_full else item.user.username
+            elif item.actor_name:
+                user_display = f"{item.actor_name} (سابق)"
+            elif item.actor_username:
+                user_display = f"{item.actor_username} (سابق)"
+            else:
+                user_display = "سیستم"
+
+            wh_name = item.warehouse.name if item.warehouse else "عمومی / سیستم"
             row_vals = []
             for col_key, _, _ in selected_cols:
                 if col_key == 'index':
                     row_vals.append(idx)
                 elif col_key == 'id':
                     row_vals.append(item.id)
-                elif col_key == 'user':
-                    row_vals.append(f"{user_name} ({user_username})")
-                elif col_key == 'actor_username':
-                    row_vals.append(user_username)
-                elif col_key == 'warehouse':
+                elif col_key in ('user', 'user_display'):
+                    row_vals.append(user_display)
+                elif col_key in ('warehouse', 'warehouse_name'):
                     row_vals.append(wh_name)
-                elif col_key == 'module':
-                    row_vals.append(item.get_module_display())
-                elif col_key == 'action':
-                    row_vals.append(item.get_action_display())
+                elif col_key in ('module', 'module_display'):
+                    row_vals.append(item.get_module_display() if hasattr(item, 'get_module_display') else item.module)
+                elif col_key in ('action', 'action_display'):
+                    row_vals.append(item.get_action_display() if hasattr(item, 'get_action_display') else item.action)
                 elif col_key == 'severity':
-                    row_vals.append(item.get_severity_display())
+                    row_vals.append(item.get_severity_display() if hasattr(item, 'get_severity_display') else item.severity)
                 elif col_key == 'target_repr':
-                    row_vals.append(item.target_repr or item.target_object_id or "—")
+                    row_vals.append(item.target_repr or "—")
                 elif col_key == 'target_object_id':
                     row_vals.append(item.target_object_id or "—")
+                elif col_key == 'changes_summary':
+                    summary_txt = _get_changes_summary(item)
+                    row_vals.append(summary_txt[:1000] if len(summary_txt) > 1000 else summary_txt)
                 elif col_key == 'ip_address':
                     row_vals.append(item.ip_address or "—")
-                elif col_key == 'changes_summary':
-                    row_vals.append(_get_changes_summary(item))
                 elif col_key == 'created_at':
                     row_vals.append(format_shamsi_datetime(item.created_at))
 
@@ -1540,7 +1801,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 c.border = thin_border
                 if is_zebra:
                     c.fill = zebra_fill
-                if col_key in ('user', 'target_repr', 'changes_summary'):
+                if col_key in ('user_display', 'warehouse_name', 'target_repr', 'changes_summary'):
                     c.alignment = data_align_right
                 else:
                     c.alignment = data_align_center
@@ -1559,7 +1820,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             buf.getvalue(),
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
-        response['Content-Disposition'] = 'attachment; filename="audit_trail_report.xlsx"'
+        response['Content-Disposition'] = 'attachment; filename="audit_logs_report.xlsx"'
         return response
 
     @action(detail=False, methods=['get'])
@@ -1626,7 +1887,14 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 'message': 'هیچ رکوردی منطبق با فیلترهای انتخابی یافت نشد.'
             })
 
-        qs.delete()
+        batch_size = 5000
+        while True:
+            batch_ids = list(qs.values_list('id', flat=True)[:batch_size])
+            if not batch_ids:
+                break
+            AuditLog.objects.filter(id__in=batch_ids).delete()
+            if len(batch_ids) < batch_size:
+                break
 
         from .audit_utils import log_audit_event
         desc_parts = []
@@ -1644,7 +1912,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         log_audit_event(
             user=user,
-            module='SYSTEM',
+            module='system',
             action='DELETE',
             severity='critical',
             details={
@@ -1733,10 +2001,11 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         success_count = 0
         errors = []
         
+        allowed_qs = self.get_queryset()
         for lid in log_ids:
-            log_item = AuditLog.objects.filter(id=lid).first()
+            log_item = allowed_qs.filter(id=lid).first()
             if not log_item:
-                errors.append(f"لاگ #{lid} یافت نشد.")
+                errors.append(f"لاگ #{lid} یافت نشد یا در قلمرو انبار مجاز شما قرار ندارد.")
                 continue
             res = revert_log_entry(log_item, user=request.user, reason=reason, ip_address=ip_address)
             if res.get('success'):

@@ -46,13 +46,23 @@ def serialize_login_log_data(instance):
         return UserLoginLogSerializer(instance).data
     except Exception as e:
         logger.warning(f"[WebSocket] Error serializing login log {getattr(instance, 'id', None)}: {e}")
+        u_display = instance.username_attempted
+        if getattr(instance, 'user', None):
+            u_full = f"{instance.user.first_name} {instance.user.last_name}".strip()
+            u_display = u_full if u_full else instance.user.username
+
         return {
             'id': instance.id,
+            'user': getattr(instance, 'user_id', None),
             'username_attempted': instance.username_attempted,
-            'user_display': instance.username_attempted,
+            'user_display': u_display,
             'ip_address': instance.ip_address,
+            'user_agent': getattr(instance, 'user_agent', None),
+            'device_model': getattr(instance, 'device_model', None),
             'status': instance.status,
+            'status_display': instance.get_status_display() if hasattr(instance, 'get_status_display') else instance.status,
             'failure_reason': instance.failure_reason,
+            'metadata': getattr(instance, 'metadata', {}) or {},
             'created_at': instance.created_at.isoformat() if instance.created_at else None,
         }
 

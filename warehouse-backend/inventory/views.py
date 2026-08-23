@@ -110,12 +110,42 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
         ).first()
         if tombstone:
             serializer.instance = tombstone
-            serializer.save(created_by=self.request.user, is_deleted=False)
+            instance = serializer.save(created_by=self.request.user, is_deleted=False)
         else:
-            serializer.save(created_by=self.request.user)
+            instance = serializer.save(created_by=self.request.user)
+
+        from accounts.audit_utils import log_audit_event
+        log_audit_event(
+            user=self.request.user,
+            warehouse=instance.warehouse,
+            module='warehouses',
+            action='CREATE',
+            severity='info',
+            target_model='ItemFieldDefinition',
+            target_object_id=instance.id,
+            target_repr=f"تعریف فیلد پویا «{instance.label or instance.name}» در انبار {instance.warehouse.name if instance.warehouse else '—'}",
+            details={'name': instance.name, 'label': instance.label, 'field_type': instance.field_type},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
 
     def perform_destroy(self, instance):
+        from accounts.audit_utils import log_audit_event
+        wh = instance.warehouse
+        f_repr = f"حذف فیلد پویا «{instance.label or instance.name}»"
+        f_id = instance.id
         instance.soft_delete()
+        log_audit_event(
+            user=self.request.user,
+            warehouse=wh,
+            module='warehouses',
+            action='DELETE',
+            severity='warning',
+            target_model='ItemFieldDefinition',
+            target_object_id=f_id,
+            target_repr=f_repr,
+            details={'field_id': f_id},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
 
     def perform_update(self, serializer):
         old_instance = self.get_object()
@@ -137,6 +167,20 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
                 for item in items_to_update:
                     item.updated_at = now  # bulk_update سیگنال auto_now را رد می‌کند
                 Item.objects.bulk_update(items_to_update, ['dynamic_data', 'updated_at'])
+
+        from accounts.audit_utils import log_audit_event
+        log_audit_event(
+            user=self.request.user,
+            warehouse=new_instance.warehouse,
+            module='warehouses',
+            action='UPDATE',
+            severity='info',
+            target_model='ItemFieldDefinition',
+            target_object_id=new_instance.id,
+            target_repr=f"ویرایش فیلد پویا «{new_instance.label or new_instance.name}»",
+            details={'name': new_instance.name, 'label': new_instance.label, 'old_name': old_name},
+            ip_address=getattr(self.request, 'META', {}).get('REMOTE_ADDR')
+        )
 
     @action(detail=False, methods=['post'])
     def copy_from_warehouse(self, request):
@@ -186,6 +230,19 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
 
                 if new_fields:
                     ItemFieldDefinition.objects.bulk_create(new_fields)
+
+                from accounts.audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    warehouse_id=target_warehouse_id,
+                    module='warehouses',
+                    action='CREATE',
+                    severity='info',
+                    target_model='ItemFieldDefinition',
+                    target_repr=f"کپی {len(new_fields) + resurrected} فیلد پویا از انبار #{source_warehouse_id} به #{target_warehouse_id}",
+                    details={'source_warehouse_id': source_warehouse_id, 'target_warehouse_id': target_warehouse_id, 'copied_count': len(new_fields) + resurrected},
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
 
                 return Response({'message': f'{len(new_fields) + resurrected} فیلد با موفقیت کپی شد.'}, status=200)
         except Exception as e:
@@ -582,6 +639,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     item.modified_by = request.user
                 update_fields.update(['updated_at', 'modified_by'])
                 Item.objects.bulk_update(items_to_update, list(update_fields))
+
+                from accounts.audit_utils import log_audit_event
+                first_item = items_to_update[0] if items_to_update else None
+                log_audit_event(
+                    user=request.user,
+                    warehouse=getattr(first_item, 'warehouse', None) if first_item else None,
+                    module='docs',
+                    action='BULK_UPDATE',
+                    severity='info',
+                    target_model='Item',
+                    target_repr=f"ویرایش دسته‌ای {len(items_to_update)} کالا",
+                    details={
+                        'updated_count': len(items_to_update),
+                        'fields_modified': list(update_fields),
+                        'item_ids': [item.id for item in items_to_update[:50]]
+                    },
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
             
             return Response({"success": f"Updated {len(items_to_update)} items"})
         except Exception as e:
@@ -807,6 +882,29 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             if doc_tasks_to_create:
                 DocTask.objects.bulk_create(doc_tasks_to_create)
                 broadcast_doc_task_update()
+
+        from accounts.audit_utils import log_audit_event
+        log_audit_event(
+            user=request.user,
+            warehouse=getattr(first_item, 'warehouse', None) if first_item else None,
+            module='dispatch',
+            action='UPDATE',
+            severity='info',
+            target_model='Item',
+            target_repr=f"تخصیص و ارجاع گروهی {len(items_list)} کالا",
+            details={
+                'items_count': len(items_list),
+                'field_status': field_status,
+                'doc_status': doc_status,
+                'field_assignee': str(counter_user) if counter_user else update_data.get('field_assignee'),
+                'supervisor_assignee': str(supervisor_user) if supervisor_user else ('عدم نیاز' if skip_supervisor else None),
+                'manager_assignee': str(manager_user) if manager_user else None,
+                'doc_assignee': str(doc_worker_user) if doc_worker_user else update_data.get('doc_assignee'),
+                'doc_supervisor_assignee': str(doc_supervisor_user) if doc_supervisor_user else ('عدم نیاز' if doc_skip_supervisor else None),
+                'doc_manager_assignee': str(doc_manager_user) if doc_manager_user else None,
+            },
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
             
         return Response({'status': 'success', 'updated': len(items_list)})
 
@@ -1347,6 +1445,32 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             hr.import_log = log_record
                         ImportHistory.objects.bulk_create(history_records)
 
+                        # ثبت لاگ کلان ممیزی برای بارگذاری اکسل
+                        try:
+                            from accounts.audit_utils import log_audit_event
+                            from django.contrib.auth import get_user_model
+                            actor = get_user_model().objects.filter(id=user_id).first() if user_id else None
+                            log_audit_event(
+                                user=actor,
+                                warehouse_id=target_warehouse_id if 'target_warehouse_id' in locals() and target_warehouse_id else None,
+                                module='docs',
+                                action='IMPORT',
+                                severity='info',
+                                target_model='Item',
+                                target_repr=f"بارگذاری اکسل کالاها ({original_file_name})",
+                                details={
+                                    'import_id': import_id,
+                                    'file_name': original_file_name,
+                                    'records_created': created,
+                                    'records_updated': updated,
+                                    'records_skipped': skipped,
+                                    'records_failed': failed,
+                                    'conflict_strategy': conflict_strategy
+                                }
+                            )
+                        except Exception as log_err:
+                            logger.warning(f"Failed to log audit event for excel import: {log_err}")
+
                         # Save the colored log workbook
                         if import_id:
                             out_file_path = os.path.join(tempfile.gettempdir(), f"import_log_{import_id}.xlsx")
@@ -1464,6 +1588,23 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             
                 import_log.is_reverted = True
                 import_log.save()
+
+                from accounts.audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    warehouse=import_log.warehouse,
+                    module='docs',
+                    action='ROLLBACK',
+                    severity='warning',
+                    target_model='Item',
+                    target_repr=f"بازگردانی بارگذاری اکسل ({import_log.file_name})",
+                    details={
+                        'import_id': import_id,
+                        'file_name': import_log.file_name,
+                        'affected_records': len(histories)
+                    },
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
                 
             return Response({'status': 'success', 'msg': 'فرآیند با موفقیت بازگردانی شد.', 'affected_records': len(histories)})
         except Exception as e:
@@ -1512,6 +1653,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 
                 import_log.records_created = items_deleted # Store count here
                 import_log.save()
+
+                from accounts.audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    warehouse_id=warehouse_id,
+                    module='docs',
+                    action='DELETE',
+                    severity='critical',
+                    target_model='Warehouse',
+                    target_object_id=warehouse_id,
+                    target_repr=f"پاکسازی کامل داده‌های انبار #{warehouse_id}",
+                    details={
+                        'operation': 'CLEAR_WAREHOUSE_DATA',
+                        'items_deleted': items_deleted,
+                        'import_id': import_id
+                    },
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
                 
             return Response({'status': 'success', 'msg': f'{items_deleted} رکورد با موفقیت حذف شدند.', 'import_id': import_id})
         except Exception as e:
@@ -1623,6 +1782,23 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 
                 import_log.records_created = items_deleted # Store count in this field for history
                 import_log.save()
+
+                from accounts.audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    warehouse_id=warehouse_id,
+                    module='docs',
+                    action='DELETE',
+                    severity='critical',
+                    target_model='Item',
+                    target_repr=f"حذف گروهی {items_deleted} کالا از فایل اکسل ({file_obj.name})",
+                    details={
+                        'file_name': file_obj.name,
+                        'items_deleted': items_deleted,
+                        'import_id': import_id
+                    },
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
                 
             return Response({'status': 'success', 'msg': f'{items_deleted} رکورد با موفقیت از انبار حذف شدند.', 'import_id': import_id})
         except Exception as e:
@@ -1779,7 +1955,13 @@ class CountTaskViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by')
+        from django.db.models import Prefetch
+        from .models import CountTaskHistory
+        queryset = CountTask.objects.all().select_related(
+            'item', 'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
+        ).prefetch_related(
+            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by'))
+        )
         
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
@@ -2614,7 +2796,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
 
         # داده‌ها
         row_idx = 2
-        for task in queryset.select_related('item', 'item__warehouse', 'counter', 'supervisor', 'assigned_manager').iterator():
+        for task in queryset.select_related('item', 'item__warehouse', 'counter', 'supervisor', 'assigned_manager').iterator(chunk_size=500):
             row_data = [str(get_cell(task, k)) for k in selected_keys]
             ws.append(row_data)
             

@@ -208,6 +208,18 @@ class SettingsViewSet(viewsets.ViewSet):
                     )
                     clear_setting_cache(key, None)
 
+            from accounts.audit_utils import log_audit_event
+            log_audit_event(
+                user=request.user,
+                module='settings',
+                action='UPDATE',
+                severity='warning',
+                target_model='SystemSetting',
+                target_repr='تغییر تنظیمات سراسری سیستم',
+                details={'updated_keys': list(data.keys())},
+                ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+            )
+
             return Response({'status': 'success'})
 
     @action(detail=False, methods=['get', 'post', 'delete'], url_path='warehouse/(?P<warehouse_id>[^/.]+)')
@@ -259,6 +271,19 @@ class SettingsViewSet(viewsets.ViewSet):
                     )
                     clear_setting_cache(key, warehouse.id)
 
+            from accounts.audit_utils import log_audit_event
+            log_audit_event(
+                user=request.user,
+                warehouse=warehouse,
+                module='settings',
+                action='UPDATE',
+                severity='warning',
+                target_model='SystemSetting',
+                target_repr=f"تغییر تنظیمات انبار {warehouse.name}",
+                details={'warehouse_id': warehouse.id, 'updated_keys': list(data.keys())},
+                ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+            )
+
             return Response({'status': 'success'})
 
         elif request.method == 'DELETE':
@@ -273,6 +298,19 @@ class SettingsViewSet(viewsets.ViewSet):
                 SystemSetting.objects.filter(warehouse_id=warehouse.id, key__in=keys).delete()
                 for k in keys:
                     clear_setting_cache(k, warehouse.id)
+
+            from accounts.audit_utils import log_audit_event
+            log_audit_event(
+                user=request.user,
+                warehouse=warehouse,
+                module='settings',
+                action='DELETE',
+                severity='warning',
+                target_model='SystemSetting',
+                target_repr=f"حذف تنظیمات سفارشی انبار {warehouse.name}",
+                details={'warehouse_id': warehouse.id, 'deleted_keys': keys},
+                ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+            )
 
             return Response({'status': 'success'})
 

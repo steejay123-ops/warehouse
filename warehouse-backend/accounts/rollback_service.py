@@ -4,7 +4,7 @@ from django.db import transaction
 from django.forms.models import model_to_dict
 from django.utils import timezone
 from .models import AuditLog
-from .audit_utils import log_audit_event, sanitize_sensitive_data, calculate_model_diff
+from .audit_utils import log_audit_event, sanitize_sensitive_data, calculate_model_diff, SENSITIVE_KEYS
 
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, date
@@ -15,8 +15,24 @@ logger = logging.getLogger(__name__)
 # فیلدهایی که در هنگام بازگردانی نباید مستقیماً رونویسی شوند
 EXCLUDED_REVERT_FIELDS = {
     'id', 'pk', 'password', 'created_at', 'updated_at', 'last_login',
-    'date_joined', 'created_by', 'modified_by', 'groups', 'user_permissions'
+    'date_joined', 'created_by', 'modified_by', 'groups', 'user_permissions',
+    'is_superuser', 'is_staff'
 }
+
+def is_masked_or_sensitive(field_name, val):
+    """
+    بررسی اینکه آیا مقدار ذخیره‌شده در لاگ ماسک‌شده (مانند ********) یا کلید فوق حساس است
+    تا از بازنویسی مقادیر ستاره‌دار روی داده‌های دیتابیس جلوگیری شود.
+    """
+    if val is None:
+        return False
+    str_val = str(val).strip()
+    if '****' in str_val or str_val == '********':
+        return True
+    field_lower = str(field_name).lower()
+    if any(k in field_lower for k in SENSITIVE_KEYS) and ('*' in str_val or str_val == ''):
+        return True
+    return False
 
 def normalize_for_comparison(val):
     """
@@ -155,21 +171,22 @@ def get_model_class(model_name):
     return None
 
 
-def get_instance_for_model(model_cls, object_id):
+def get_instance_for_model(model_cls, object_id, for_update=False):
     """
-    یافتن رکورد در دیتابیس (با پشتیبانی از رکوردهای حذف نرم)
+    یافتن رکورد در دیتابیس (با پشتیبانی از رکوردهای حذف نرم و قفل بدبینانه سطری)
     """
     if not model_cls or not object_id:
         return None
 
-    # اگر منیجر all_objects برای سافت دلیت موجود باشد
     if hasattr(model_cls, 'all_objects'):
-        instance = model_cls.all_objects.filter(pk=object_id).first()
-        if instance:
-            return instance
+        qs = model_cls.all_objects.filter(pk=object_id)
+    else:
+        qs = model_cls.objects.filter(pk=object_id)
 
-    # جستجوی عادی
-    return model_cls.objects.filter(pk=object_id).first()
+    if for_update and transaction.get_connection().in_atomic_block:
+        qs = qs.select_for_update()
+
+    return qs.first()
 
 
 def get_revert_preview(log_entry):
@@ -247,7 +264,7 @@ def get_revert_preview(log_entry):
 
         # بررسی فیلد به فیلد وضعیت فعلی با مقادیر بعد و قبل لاگ
         for field_name, old_val in before_state.items():
-            if field_name in EXCLUDED_REVERT_FIELDS:
+            if field_name in EXCLUDED_REVERT_FIELDS or is_masked_or_sensitive(field_name, old_val):
                 continue
 
             current_val = getattr(instance, field_name, None)
@@ -301,7 +318,7 @@ def get_revert_preview(log_entry):
             }
 
         for field_name, old_val in before_state.items():
-            if field_name in EXCLUDED_REVERT_FIELDS:
+            if field_name in EXCLUDED_REVERT_FIELDS or is_masked_or_sensitive(field_name, old_val):
                 continue
             changes.append({
                 'field': field_name,
@@ -368,66 +385,22 @@ def revert_log_entry(log_entry, user, reason=None, ip_address=None):
         }
 
     model_cls = get_model_class(log_entry.target_model)
-    instance = get_instance_for_model(model_cls, log_entry.target_object_id)
     before_state = log_entry.before_state or {}
 
-    with transaction.atomic():
-        rollback_log = None
-        
-        # ۱. بازگردانی ویرایش (UPDATE)
-        if log_entry.action in ('UPDATE', 'BULK_UPDATE'):
-            live_before = model_to_dict(instance, exclude=['photo']) if hasattr(instance, '_meta') else {}
+    try:
+        with transaction.atomic():
+            instance = get_instance_for_model(model_cls, log_entry.target_object_id, for_update=True)
+            if not instance and log_entry.action in ('UPDATE', 'BULK_UPDATE'):
+                return {'success': False, 'error': 'رکورد هدف در حال حاضر در پایگاه داده وجود ندارد (احتمالاً پیش از این حذف شده است).'}
+
+            rollback_log = None
             
-            for field_name, old_val in before_state.items():
-                if field_name in EXCLUDED_REVERT_FIELDS:
-                    continue
-                if hasattr(instance, field_name):
-                    try:
-                        coerced_val = coerce_field_value(model_cls, field_name, old_val)
-                        field_obj = model_cls._meta.get_field(field_name) if hasattr(model_cls, '_meta') else None
-                        if field_obj and field_obj.is_relation and field_obj.many_to_one:
-                            if hasattr(coerced_val, 'pk'):
-                                setattr(instance, field_name, coerced_val)
-                            else:
-                                pk_val = int(old_val) if (isinstance(old_val, int) or (isinstance(old_val, str) and old_val.isdigit())) else old_val
-                                setattr(instance, f"{field_name}_id", pk_val)
-                        else:
-                            setattr(instance, field_name, coerced_val)
-                    except Exception as e:
-                        logger.warning(f"Field coerce fallback for {field_name}: {e}")
-                        setattr(instance, field_name, old_val)
-
-            setattr(instance, '_is_rollback_operation', True)
-            instance.save()
-            live_after = model_to_dict(instance, exclude=['photo']) if hasattr(instance, '_meta') else {}
-            diff_b, diff_a = calculate_model_diff(live_before, live_after)
-
-            rollback_log = log_audit_event(
-                module=log_entry.module,
-                action='ROLLBACK',
-                severity='warning',
-                target_model=log_entry.target_model,
-                target_object_id=instance.id,
-                target_repr=f"بازگردانی: {log_entry.target_repr or str(instance)}",
-                user=user,
-                warehouse=getattr(instance, 'warehouse', None) or log_entry.warehouse,
-                before_state=diff_b or live_before,
-                after_state=diff_a or live_after,
-                details={
-                    'reverted_from_log_id': log_entry.id,
-                    'original_action': log_entry.action,
-                    'reason': reason or 'بازگردانی داده به نسخه پیشین توسط مدیر'
-                },
-                ip_address=ip_address
-            )
-
-        # ۲. بازگردانی حذف (DELETE)
-        elif log_entry.action == 'DELETE':
-            if instance and hasattr(instance, 'is_deleted'):
-                # احیای سافت‌دلیت
-                instance.is_deleted = False
+            # ۱. بازگردانی ویرایش (UPDATE)
+            if log_entry.action in ('UPDATE', 'BULK_UPDATE'):
+                live_before = model_to_dict(instance, exclude=['photo']) if hasattr(instance, '_meta') else {}
+                
                 for field_name, old_val in before_state.items():
-                    if field_name in EXCLUDED_REVERT_FIELDS:
+                    if field_name in EXCLUDED_REVERT_FIELDS or is_masked_or_sensitive(field_name, old_val):
                         continue
                     if hasattr(instance, field_name):
                         try:
@@ -442,80 +415,134 @@ def revert_log_entry(log_entry, user, reason=None, ip_address=None):
                             else:
                                 setattr(instance, field_name, coerced_val)
                         except Exception as e:
-                            logger.warning(f"Field restore fallback for {field_name}: {e}")
+                            logger.warning(f"Field coerce fallback for {field_name}: {e}")
                             setattr(instance, field_name, old_val)
+
                 setattr(instance, '_is_rollback_operation', True)
                 instance.save()
-            else:
-                # ایجاد مجدد رکورد در جدول
-                create_kwargs = {}
-                for field_name, old_val in before_state.items():
-                    if field_name in ('id', 'pk', 'password', 'photo'):
-                        continue
-                    if hasattr(model_cls, field_name):
-                        coerced_val = coerce_field_value(model_cls, field_name, old_val)
-                        field_obj = model_cls._meta.get_field(field_name) if hasattr(model_cls, '_meta') else None
-                        if field_obj and field_obj.is_relation and field_obj.many_to_one:
-                            if hasattr(coerced_val, 'pk'):
-                                create_kwargs[field_name] = coerced_val
-                            else:
-                                pk_val = int(old_val) if (isinstance(old_val, int) or (isinstance(old_val, str) and old_val.isdigit())) else old_val
-                                create_kwargs[f"{field_name}_id"] = pk_val
-                        else:
-                            create_kwargs[field_name] = coerced_val
-                instance = model_cls.objects.create(**create_kwargs)
+                live_after = model_to_dict(instance, exclude=['photo']) if hasattr(instance, '_meta') else {}
+                diff_b, diff_a = calculate_model_diff(live_before, live_after)
 
-            rollback_log = log_audit_event(
-                module=log_entry.module,
-                action='ROLLBACK',
-                severity='warning',
-                target_model=log_entry.target_model,
-                target_object_id=instance.id,
-                target_repr=f"احیا و بازگردانی: {log_entry.target_repr or str(instance)}",
-                user=user,
-                warehouse=getattr(instance, 'warehouse', None) or log_entry.warehouse,
-                before_state={'status': 'حذف شده'},
-                after_state=before_state,
-                details={
-                    'reverted_from_log_id': log_entry.id,
-                    'original_action': log_entry.action,
-                    'reason': reason or 'احیای رکورد حذف شده توسط مدیر'
-                },
-                ip_address=ip_address
-            )
+                rollback_log = log_audit_event(
+                    module=log_entry.module,
+                    action='ROLLBACK',
+                    severity='warning',
+                    target_model=log_entry.target_model,
+                    target_object_id=instance.id,
+                    target_repr=f"بازگردانی: {log_entry.target_repr or str(instance)}",
+                    user=user,
+                    warehouse=getattr(instance, 'warehouse', None) or log_entry.warehouse,
+                    before_state=diff_b or live_before,
+                    after_state=diff_a or live_after,
+                    details={
+                        'reverted_from_log_id': log_entry.id,
+                        'original_action': log_entry.action,
+                        'reason': reason or 'بازگردانی داده به نسخه پیشین توسط مدیر'
+                    },
+                    ip_address=ip_address
+                )
 
-        # ۳. بازگردانی ایجاد (CREATE)
-        elif log_entry.action == 'CREATE':
-            if instance:
-                if hasattr(instance, 'is_deleted'):
-                    instance.is_deleted = True
+            # ۲. بازگردانی حذف (DELETE)
+            elif log_entry.action == 'DELETE':
+                if instance and hasattr(instance, 'is_deleted'):
+                    # احیای سافت‌دلیت
+                    instance.is_deleted = False
+                    for field_name, old_val in before_state.items():
+                        if field_name in EXCLUDED_REVERT_FIELDS or is_masked_or_sensitive(field_name, old_val):
+                            continue
+                        if hasattr(instance, field_name):
+                            try:
+                                coerced_val = coerce_field_value(model_cls, field_name, old_val)
+                                field_obj = model_cls._meta.get_field(field_name) if hasattr(model_cls, '_meta') else None
+                                if field_obj and field_obj.is_relation and field_obj.many_to_one:
+                                    if hasattr(coerced_val, 'pk'):
+                                        setattr(instance, field_name, coerced_val)
+                                    else:
+                                        pk_val = int(old_val) if (isinstance(old_val, int) or (isinstance(old_val, str) and old_val.isdigit())) else old_val
+                                        setattr(instance, f"{field_name}_id", pk_val)
+                                else:
+                                    setattr(instance, field_name, coerced_val)
+                            except Exception as e:
+                                logger.warning(f"Field restore fallback for {field_name}: {e}")
+                                setattr(instance, field_name, old_val)
+                    setattr(instance, '_is_rollback_operation', True)
                     instance.save()
                 else:
-                    instance.delete()
+                    # ایجاد مجدد رکورد در جدول
+                    create_kwargs = {}
+                    for field_name, old_val in before_state.items():
+                        if field_name in ('id', 'pk', 'password', 'photo') or is_masked_or_sensitive(field_name, old_val):
+                            continue
+                        if hasattr(model_cls, field_name):
+                            coerced_val = coerce_field_value(model_cls, field_name, old_val)
+                            field_obj = model_cls._meta.get_field(field_name) if hasattr(model_cls, '_meta') else None
+                            if field_obj and field_obj.is_relation and field_obj.many_to_one:
+                                if hasattr(coerced_val, 'pk'):
+                                    create_kwargs[field_name] = coerced_val
+                                else:
+                                    pk_val = int(old_val) if (isinstance(old_val, int) or (isinstance(old_val, str) and old_val.isdigit())) else old_val
+                                    create_kwargs[f"{field_name}_id"] = pk_val
+                            else:
+                                create_kwargs[field_name] = coerced_val
+                    instance = model_cls.objects.create(**create_kwargs)
 
-            rollback_log = log_audit_event(
-                module=log_entry.module,
-                action='ROLLBACK',
-                severity='warning',
-                target_model=log_entry.target_model,
-                target_object_id=log_entry.target_object_id,
-                target_repr=f"حذف رکوردی که در لاگ #{log_entry.id} ساخته شده بود",
-                user=user,
-                warehouse=log_entry.warehouse,
-                before_state=log_entry.after_state,
-                after_state={'status': 'حذف شده'},
-                details={
-                    'reverted_from_log_id': log_entry.id,
-                    'original_action': log_entry.action,
-                    'reason': reason or 'لغو رکورد ایجاد شده توسط مدیر'
-                },
-                ip_address=ip_address
-            )
+                rollback_log = log_audit_event(
+                    module=log_entry.module,
+                    action='ROLLBACK',
+                    severity='warning',
+                    target_model=log_entry.target_model,
+                    target_object_id=instance.id,
+                    target_repr=f"احیا و بازگردانی: {log_entry.target_repr or str(instance)}",
+                    user=user,
+                    warehouse=getattr(instance, 'warehouse', None) or log_entry.warehouse,
+                    before_state={'status': 'حذف شده'},
+                    after_state=before_state,
+                    details={
+                        'reverted_from_log_id': log_entry.id,
+                        'original_action': log_entry.action,
+                        'reason': reason or 'احیای رکورد حذف شده توسط مدیر'
+                    },
+                    ip_address=ip_address
+                )
 
+            # ۳. بازگردانی ایجاد (CREATE)
+            elif log_entry.action == 'CREATE':
+                if instance:
+                    if hasattr(instance, 'is_deleted'):
+                        instance.is_deleted = True
+                        instance.save()
+                    else:
+                        instance.delete()
+
+                rollback_log = log_audit_event(
+                    module=log_entry.module,
+                    action='ROLLBACK',
+                    severity='warning',
+                    target_model=log_entry.target_model,
+                    target_object_id=log_entry.target_object_id,
+                    target_repr=f"حذف رکوردی که در لاگ #{log_entry.id} ساخته شده بود",
+                    user=user,
+                    warehouse=log_entry.warehouse,
+                    before_state=log_entry.after_state,
+                    after_state={'status': 'حذف شده'},
+                    details={
+                        'reverted_from_log_id': log_entry.id,
+                        'original_action': log_entry.action,
+                        'reason': reason or 'لغو رکورد ایجاد شده توسط مدیر'
+                    },
+                    ip_address=ip_address
+                )
+
+            return {
+                'success': True,
+                'message': f"عملیات لاگ #{log_entry.id} با موفقیت بازگردانی شد.",
+                'rollback_log_id': rollback_log.id if rollback_log else None
+            }
+    except Exception as e:
+        logger.error(f"Error reverting audit log #{getattr(log_entry, 'id', 'unknown')}: {e}", exc_info=True)
         return {
-            'success': True,
-            'message': f"عملیات لاگ #{log_entry.id} با موفقیت بازگردانی شد.",
-            'rollback_log_id': rollback_log.id if rollback_log else None
+            'success': False,
+            'error': f"خطا در اجرای بازگردانی داده: {str(e)}"
         }
 
 
@@ -583,7 +610,7 @@ def preview_point_in_time_rollback(target_datetime, warehouse_id=None, module=No
         
         record_changes = []
         for field_name, old_val in original_before.items():
-            if field_name in EXCLUDED_REVERT_FIELDS:
+            if field_name in EXCLUDED_REVERT_FIELDS or is_masked_or_sensitive(field_name, old_val):
                 continue
             cur_val = getattr(instance, field_name, None) if instance else 'حذف شده'
             
@@ -664,11 +691,23 @@ def execute_point_in_time_rollback(target_datetime, user, warehouse_id=None, mod
 
     with transaction.atomic():
         for log_entry in logs_list:
-            res = revert_log_entry(log_entry, user=user, reason=f"بازگردانی به تاریخ {target_datetime}: {reason or 'عملیات زنجیره‌ای'}", ip_address=ip_address)
-            if res.get('success'):
-                success_count += 1
-            else:
-                errors.append(f"لاگ #{log_entry.id} ({log_entry.target_repr}): {res.get('error')}")
+            sid = transaction.savepoint()
+            try:
+                res = revert_log_entry(
+                    log_entry,
+                    user=user,
+                    reason=f"بازگردانی به تاریخ {target_datetime}: {reason or 'عملیات زنجیره‌ای'}",
+                    ip_address=ip_address
+                )
+                if res.get('success'):
+                    success_count += 1
+                    transaction.savepoint_commit(sid)
+                else:
+                    transaction.savepoint_rollback(sid)
+                    errors.append(f"لاگ #{log_entry.id} ({log_entry.target_repr}): {res.get('error')}")
+            except Exception as e:
+                transaction.savepoint_rollback(sid)
+                errors.append(f"خطای سیستمی در لاگ #{log_entry.id}: {str(e)}")
 
         if errors and success_count == 0:
             transaction.set_rollback(True)
@@ -678,9 +717,9 @@ def execute_point_in_time_rollback(target_datetime, user, warehouse_id=None, mod
                 'errors': errors
             }
 
-        # ثبت لاگ کلان سیستمی برای رویداد Point-in-Time Rollback
+        # ثبت لاگ کلان سیستمی برای رویداد Point-in-Time Rollback با حروف کوچک 'system'
         log_audit_event(
-            module='SYSTEM',
+            module='system',
             action='ROLLBACK',
             severity='critical',
             target_repr=f"بازگردانی جامع سیستم به تاریخ {target_datetime}",

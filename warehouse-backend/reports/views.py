@@ -109,6 +109,10 @@ class RunReportView(APIView):
             return Response(engine.run())
         except ReportError as e:
             return _error_response(e)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception('Report execution failed: %s', e)
+            return Response({'error': f'خطا در اجرای گزارش: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExportReportView(APIView):
@@ -145,6 +149,10 @@ class ExportReportView(APIView):
             )
         except ReportError as e:
             return _error_response(e)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception('Report export failed: %s', e)
+            return Response({'error': f'خطا در ایجاد خروجی گزارش: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class ExportJobListView(APIView):

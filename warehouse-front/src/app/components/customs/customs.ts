@@ -2257,7 +2257,7 @@ export class Customs implements OnInit, OnDestroy {
       payload.columns_list = this.fieldConfigs.filter(f => f.visible).map(f => f.key);
     }
     
-    const params: any = { as_role: 'doc_worker', page_size: 100000 };
+    const params: any = { as_role: 'doc_worker' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;

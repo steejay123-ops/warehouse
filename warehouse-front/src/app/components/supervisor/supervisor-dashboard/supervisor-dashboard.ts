@@ -1993,7 +1993,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       payload.columns_list = Array.from(this.selectedExportColumns);
     }
     
-    const params: any = { as_role: role, page_size: 100000 };
+    const params: any = { as_role: role };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;

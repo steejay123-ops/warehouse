@@ -2094,7 +2094,7 @@ export class CounterDashboard implements OnInit {
       payload.columns_list = this.fieldConfigs.filter(f => f.visible).map(f => f.key);
     }
     
-    const params: any = { as_role: 'counter', page_size: 100000 };
+    const params: any = { as_role: 'counter' };
     const whId = this.state.appState.activeWarehouseId;
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;

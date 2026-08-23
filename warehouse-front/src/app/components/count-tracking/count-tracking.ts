@@ -10,6 +10,7 @@ import { ToastService } from '../../services/toast.service';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { StateService } from '../../services/state.service';
 import { AuthStore } from '../../core/stores/auth.store';
+import { AuthService } from '../../core/auth/auth.service';
 import { DataTableComponent, TableColumnDirective, SortState } from '../../shared/components/data-table/data-table.component';
 import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
@@ -120,6 +121,25 @@ export class CountTracking implements OnInit, OnDestroy {
   flashTimeout: any;
 
   public authStore = inject(AuthStore);
+  public authService = inject(AuthService);
+
+  get canFinalizeOrManage(): boolean {
+    const perms = this.authService.userPermissions();
+    return perms.includes('admin_all') ||
+           perms.includes('perm_inventory_finalize') ||
+           perms.includes('can_act_as_manager') ||
+           perms.includes('view_sys_manager_review');
+  }
+
+  get canCancelAllocation(): boolean {
+    const perms = this.authService.userPermissions();
+    return perms.includes('admin_all') ||
+           perms.includes('perm_inventory_finalize') ||
+           perms.includes('can_act_as_manager') ||
+           perms.includes('view_sys_manager_review') ||
+           perms.includes('can_act_as_supervisor') ||
+           perms.includes('view_sys_supervisor');
+  }
 
   constructor(
     private countTaskApi: CountTaskApiService,
@@ -153,6 +173,12 @@ export class CountTracking implements OnInit, OnDestroy {
     this.wsService.connect();
     this.wsSub = this.wsService.notifications$.subscribe((data: any) => {
       if (data.type === 'count_task_update' || data.event === 'count_task_update') {
+        const activeWh = this.authStore.activeWarehouseId();
+        if (data.warehouse_id && activeWh && activeWh !== 'ALL' && activeWh !== -1) {
+          if (String(data.warehouse_id) !== String(activeWh)) {
+            return;
+          }
+        }
         if (data.task && data.task.id) {
           this.updateTaskInPlace(data.task);
         } else if (data.task_id) {
@@ -196,6 +222,19 @@ export class CountTracking implements OnInit, OnDestroy {
     if (this.flashTimeout) clearTimeout(this.flashTimeout);
   }
 
+  /** محاسبه متمرکز و یکپارچه موجودی سیستم بر اساس bal4miv > inventory > balance */
+  getSystemBalance(itemDetails: any): number | null {
+    if (!itemDetails) return null;
+    const raw = itemDetails.bal4miv !== undefined && itemDetails.bal4miv !== null && String(itemDetails.bal4miv).trim() !== ''
+      ? itemDetails.bal4miv
+      : (itemDetails.inventory !== undefined && itemDetails.inventory !== null && String(itemDetails.inventory).trim() !== ''
+          ? itemDetails.inventory
+          : itemDetails.balance);
+    if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+    const num = parseFloat(raw);
+    return isNaN(num) ? null : num;
+  }
+
   /** پیش‌پردازش و محاسبه یکباره فیلدهای سنگین یک تسک */
   preprocessTask(t: any): any {
     t._computed_manager_name = this.getManagerName(t);
@@ -203,11 +242,9 @@ export class CountTracking implements OnInit, OnDestroy {
     t._computed_supervisor_dur = this.getStageDuration(t, 'supervisor');
     t._computed_manager_dur = this.getStageDuration(t, 'manager');
     const counted = parseFloat(t.counted_balance);
-    const rawSystem = t.item_details?.bal4miv !== undefined && t.item_details?.bal4miv !== null 
-      ? t.item_details?.bal4miv 
-      : t.item_details?.inventory;
-    const system = (rawSystem !== undefined && rawSystem !== null) ? parseFloat(rawSystem) : NaN;
-    t._discrepancy = (!isNaN(counted) && !isNaN(system)) ? (counted - system) : null;
+    const system = this.getSystemBalance(t.item_details);
+    t._system_balance = system;
+    t._discrepancy = (!isNaN(counted) && system !== null) ? (counted - system) : null;
     return t;
   }
 
@@ -220,6 +257,17 @@ export class CountTracking implements OnInit, OnDestroy {
   updateTaskInPlace(taskData: any) {
     if (!taskData || !taskData.id) return;
     const idx = this.tasks.findIndex((t: any) => t.id === taskData.id);
+    if (taskData._deleted || taskData.is_deleted) {
+      if (idx !== -1) {
+        this.tasks.splice(idx, 1);
+        this.selectedTaskIds.delete(taskData.id);
+        this.computeStats();
+        this.buildFilterOptions();
+        this.applyFilters();
+        this.cdr.detectChanges();
+      }
+      return;
+    }
     if (idx !== -1) {
       const merged = { ...this.tasks[idx], ...taskData };
       this.tasks[idx] = this.preprocessTask(merged);
@@ -262,7 +310,7 @@ export class CountTracking implements OnInit, OnDestroy {
     if (showLoading) {
       this.isLoading = true;
     }
-    const params: any = { as_role: 'tracking', show_completed: true, page_size: 1000 };
+    const params: any = { as_role: 'tracking', show_completed: true, page_size: 5000 };
     const whId = this.authStore.activeWarehouseId();
     if (whId && whId !== 'ALL' && whId !== -1) {
       params.warehouse_id = whId;
@@ -313,8 +361,21 @@ export class CountTracking implements OnInit, OnDestroy {
     }
   }
 
+  /** نرمال‌سازی حروف فارسی و عربی جهت جستجوی دقیق */
+  normalizeText(val: any): string {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/[\u064A\u0649]/g, 'ی')
+      .replace(/[\u0643]/g, 'ک')
+      .replace(/[\u0622\u0623\u0625]/g, 'ا')
+      .replace(/[\u0629]/g, 'ه')
+      .replace(/[\u200C\u200B]/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
   applyFilters() {
-    const globalQ = this.tableSearch?.toLowerCase() || '';
+    const globalQ = this.tableSearch?.trim() || '';
     const filters = this.tableFilters;
 
     this.filteredTasks = this.tasks.filter(t => {
@@ -336,17 +397,22 @@ export class CountTracking implements OnInit, OnDestroy {
         if (t.status !== 'FINAL_APPROVED') return false;
       }
 
-      // ── جستجوی سراسری ──
+      // ── جستجوی سراسری با نرمال‌سازی حروف ──
       if (globalQ) {
+        const normQ = this.normalizeText(globalQ);
         const haystack = [
           t.item_details?.fa_unic_code,
           t.item_details?.description,
+          t.item_details?.item_no,
+          t.item_details?.po,
+          t.item_details?.new_location,
+          t.item_details?.old_location,
           t.counter_name,
           t.supervisor_name,
           t._computed_manager_name,
           t.item_details?.warehouse_name
-        ].filter(Boolean).map((v: any) => String(v)).join(' ').toLowerCase();
-        if (!haystack.includes(globalQ)) return false;
+        ].filter(Boolean).map((v: any) => this.normalizeText(v)).join(' ');
+        if (!haystack.includes(normQ)) return false;
       }
 
       // ── فیلتر چک‌باکسی ستون‌ها ──
@@ -404,35 +470,35 @@ export class CountTracking implements OnInit, OnDestroy {
         if (t.counted_balance === null || Number(t.counted_balance) > Number(filters['counted_balance_max'])) return false;
       }
 
-      // ── فیلترهای متنی سرستون (_search) ──
+      // ── فیلترهای متنی سرستون (_search) با نرمال‌سازی ──
       if (filters['warehouse_name_search']) {
-        const q = filters['warehouse_name_search'].toLowerCase();
-        if (!(t.item_details?.warehouse_name || '').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['warehouse_name_search']);
+        if (!this.normalizeText(t.item_details?.warehouse_name || '').includes(q)) return false;
       }
       if (filters['counter_search']) {
-        const q = filters['counter_search'].toLowerCase();
-        if (!(t.counter_name || 'نامشخص').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['counter_search']);
+        if (!this.normalizeText(t.counter_name || 'نامشخص').includes(q)) return false;
       }
       if (filters['supervisor_search']) {
-        const q = filters['supervisor_search'].toLowerCase();
-        if (!(t.supervisor_name || 'ندارد').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['supervisor_search']);
+        if (!this.normalizeText(t.supervisor_name || 'ندارد').includes(q)) return false;
       }
       if (filters['manager_search']) {
-        const q = filters['manager_search'].toLowerCase();
-        if (!(t._computed_manager_name || '').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['manager_search']);
+        if (!this.normalizeText(t._computed_manager_name || '').includes(q)) return false;
       }
       if (filters['status_search']) {
-        const q = filters['status_search'].toLowerCase();
-        if (!this.getStatusName(t.status).toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['status_search']);
+        if (!this.normalizeText(this.getStatusName(t.status)).includes(q)) return false;
       }
       // فیلترهای متنی ساده (کد کالا و شرح کالا)
       if (filters['fa_unic_code']) {
-        const q = filters['fa_unic_code'].toLowerCase();
-        if (!String(t.item_details?.fa_unic_code || '').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['fa_unic_code']);
+        if (!this.normalizeText(t.item_details?.fa_unic_code || '').includes(q)) return false;
       }
       if (filters['description']) {
-        const q = filters['description'].toLowerCase();
-        if (!(t.item_details?.description || '').toLowerCase().includes(q)) return false;
+        const q = this.normalizeText(filters['description']);
+        if (!this.normalizeText(t.item_details?.description || '').includes(q)) return false;
       }
 
       return true;
@@ -470,6 +536,7 @@ export class CountTracking implements OnInit, OnDestroy {
       this.discrepancyFilter = type;
       this.showOnlyDiscrepancies = (type === 'discrepancy' || type === 'shortage' || type === 'surplus');
     }
+    this.selectedTaskIds.clear();
     this.currentPage = 1;
     this.applyFilters();
   }
@@ -657,7 +724,7 @@ export class CountTracking implements OnInit, OnDestroy {
       return;
     }
 
-    let msg = `آیا از لغو تخصیص و برگرداندن ${eligibleIds.length} رکورد به لیست در انتظار شمارش اطمینان دارید؟`;
+    let msg = `آیا از لغو تخصیص و بازگرداندن ${eligibleIds.length} رکورد به استخر تخصیص کالا اطمینان دارید؟`;
     if (ineligibleCount > 0) {
       msg += `\n(${ineligibleCount} رکورد به دلیل وضعیت نامعتبر نادیده گرفته می‌شود.)`;
     }
@@ -671,17 +738,11 @@ export class CountTracking implements OnInit, OnDestroy {
     });
 
     if (confirmed) {
-      // اعمال به‌روزرسانی خوش‌بینانه (Optimistic Update)
-      for (const t of this.tasks) {
-        if (eligibleIds.includes(t.id)) {
-          t.status = 'PENDING_COUNT';
-          t.counter = null;
-          t.counter_name = null;
-          t._offlinePending = true;
-          this.updatedTaskIds.add(t.id);
-        }
+      // اعمال به‌روزرسانی خوش‌بینانه و حذف از لیست جاری پیگیری
+      this.tasks = this.tasks.filter(t => !eligibleIds.includes(t.id));
+      for (const id of eligibleIds) {
+        this.selectedTaskIds.delete(id);
       }
-      this.selectedTaskIds.clear();
       this.computeStats();
       this.applyFilters();
       this.cdr.detectChanges();
@@ -712,19 +773,15 @@ export class CountTracking implements OnInit, OnDestroy {
 
     const confirmed = await this.confirmDialog.open({
       title: 'لغو تخصیص',
-      message: `آیا از لغو تخصیص کالای ${task.item_details?.fa_unic_code || ''} اطمینان دارید؟`,
+      message: `آیا از لغو تخصیص کالای ${task.item_details?.fa_unic_code || ''} و بازگرداندن به استخر کالا اطمینان دارید؟`,
       confirmText: 'بله، لغو تخصیص',
       cancelText: 'انصراف',
       type: 'warning'
     });
 
     if (confirmed) {
-      // اعمال به‌روزرسانی خوش‌بینانه (Optimistic Update)
-      task.status = 'PENDING_COUNT';
-      task.counter = null;
-      task.counter_name = null;
-      task._offlinePending = true;
-      this.updatedTaskIds.add(task.id);
+      // اعمال به‌روزرسانی خوش‌بینانه و حذف از لیست جاری
+      this.tasks = this.tasks.filter(t => t.id !== task.id);
       this.selectedTaskIds.delete(task.id);
       this.computeStats();
       this.applyFilters();
@@ -776,23 +833,23 @@ export class CountTracking implements OnInit, OnDestroy {
 
   getBalanceColorClass(row: any): string {
     const counted = parseFloat(row.counted_balance);
-    const system = parseFloat(row.item_details?.inventory);
+    const system = this.getSystemBalance(row.item_details);
     
-    if (isNaN(counted) || isNaN(system)) return 'text-slate-800'; // پیش‌فرض
+    if (isNaN(counted) || system === null) return 'text-slate-800 font-bold';
     
-    if (counted === system) return 'text-emerald-600'; // بدون مغایرت (سبز)
+    if (Math.abs(counted - system) < 0.0001) return 'text-emerald-600 font-bold';
     
     // محاسبه درصد مغایرت
     let diffPercent = 0;
     if (system === 0) {
-       diffPercent = 100; // جلوگیری از تقسیم بر صفر
+       diffPercent = 100;
     } else {
        diffPercent = Math.abs((counted - system) / system) * 100;
     }
 
-    if (diffPercent < 5) return 'text-amber-600'; // کنتراست بالا برای مقادیر زیر ۵ درصد
-    if (diffPercent <= 20) return 'text-orange-600';
-    return 'text-rose-600'; // بیشتر از ۲۰٪
+    if (diffPercent < 5) return 'text-amber-600 font-bold';
+    if (diffPercent <= 20) return 'text-orange-600 font-bold';
+    return 'text-rose-600 font-bold';
   }
 
   formatDuration(diffMs: number): string {
@@ -874,7 +931,7 @@ export class CountTracking implements OnInit, OnDestroy {
     if (task.assigned_manager_name) return task.assigned_manager_name;
     if (task.history && task.history.length > 0) {
       const sortedHistory = [...task.history].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      const managerAction = sortedHistory.find(h => h.action_type === 'MANAGER_REVIEW' || h.action_type === 'FINAL_APPROVED' || h.action_type === 'MANAGER_REJECTED');
+      const managerAction = sortedHistory.find(h => h.action_type === 'FINAL_APPROVED' || h.action_type === 'MANAGER_REJECTED');
       if (managerAction && managerAction.action_by_name) {
         return managerAction.action_by_name;
       }
@@ -1076,8 +1133,13 @@ export class CountTracking implements OnInit, OnDestroy {
       timestamps: number[];
     }>();
 
+    let unassignedCount = 0;
     for (const t of allTasks) {
-      const name = t.counter_name || 'استخر عمومی (تخصیص‌نیافته)';
+      if (!t.counter_name) {
+        unassignedCount++;
+        continue;
+      }
+      const name = t.counter_name;
       if (!counterMap.has(name)) {
         counterMap.set(name, {
           name,
@@ -1095,7 +1157,6 @@ export class CountTracking implements OnInit, OnDestroy {
           entry.discrepancies++;
         }
         if (t.updated_at) entry.timestamps.push(new Date(t.updated_at).getTime());
-        if (t.created_at) entry.timestamps.push(new Date(t.created_at).getTime());
       }
     }
 
@@ -1106,11 +1167,23 @@ export class CountTracking implements OnInit, OnDestroy {
 
       let itemsPerHour = 0;
       if (c.counted > 0 && c.timestamps.length >= 2) {
-        const minTime = Math.min(...c.timestamps);
-        const maxTime = Math.max(...c.timestamps);
-        const hoursDiff = (maxTime - minTime) / (1000 * 60 * 60);
-        const effectiveHours = Math.max(hoursDiff, 0.25);
-        itemsPerHour = Math.round((c.counted / effectiveHours) * 10) / 10;
+        const sortedTs = [...c.timestamps].sort((a, b) => a - b);
+        let sessionStart = sortedTs[0];
+        let sessionEnd = sortedTs[0];
+        let totalMs = 0;
+        for (let i = 1; i < sortedTs.length; i++) {
+          const diff = sortedTs[i] - sortedTs[i - 1];
+          if (diff <= 2 * 60 * 60 * 1000) {
+            sessionEnd = sortedTs[i];
+          } else {
+            totalMs += Math.max(sessionEnd - sessionStart, 15 * 60 * 1000);
+            sessionStart = sortedTs[i];
+            sessionEnd = sortedTs[i];
+          }
+        }
+        totalMs += Math.max(sessionEnd - sessionStart, 15 * 60 * 1000);
+        const effectiveHours = totalMs / (1000 * 60 * 60);
+        itemsPerHour = effectiveHours > 0 ? Math.round((c.counted / effectiveHours) * 10) / 10 : c.counted;
       } else if (c.counted > 0) {
         itemsPerHour = c.counted;
       }
@@ -1177,16 +1250,17 @@ export class CountTracking implements OnInit, OnDestroy {
     const totalDiscrepancies = this.statDiscrepancy;
     const overallProgress = totalTasks > 0 ? Math.round((totalCounted / totalTasks) * 100) : 0;
     const overallAccuracy = totalCounted > 0 ? Math.round(((totalCounted - totalDiscrepancies) / totalCounted) * 100) : 100;
-    const topCounter = this.counterStats.find(c => c.name !== 'استخر عمومی (تخصیص‌نیافته)' && c.counted >= 3) || this.counterStats[0];
+    const topCounter = this.counterStats.find(c => c.counted >= 3) || this.counterStats[0];
 
     this.overviewStats = {
       totalTasks,
+      unassignedTasks: unassignedCount,
       totalCounted,
       totalApproved: this.statApproved,
       totalDiscrepancies,
       overallProgress,
       overallAccuracy,
-      activeCountersCount: this.counterStats.filter(c => c.name !== 'استخر عمومی (تخصیص‌نیافته)').length,
+      activeCountersCount: this.counterStats.filter(c => c.counted > 0).length,
       activeSupervisorsCount: this.supervisorStats.length,
       topCounterName: topCounter?.name || '-',
       topCounterSpeed: topCounter?.itemsPerHour || 0

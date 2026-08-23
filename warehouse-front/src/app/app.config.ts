@@ -1,4 +1,4 @@
-import { ApplicationConfig, provideZoneChangeDetection, provideBrowserGlobalErrorListeners, isDevMode, provideAppInitializer } from '@angular/core';
+import { ApplicationConfig, provideZoneChangeDetection, provideBrowserGlobalErrorListeners, isDevMode, provideAppInitializer, ErrorHandler } from '@angular/core';
 import { provideRouter, RouteReuseStrategy } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideServiceWorker } from '@angular/service-worker';
@@ -6,6 +6,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
 import { errorInterceptor } from './core/error/error.interceptor';
+import { GlobalErrorHandler } from './core/error/global-error-handler';
 import { offlineInterceptor } from './core/interceptors/offline.interceptor';
 import { CustomRouteReuseStrategy } from './core/strategies/custom-route-reuse-strategy';
 import { OfflineSyncService } from './core/services/offline-sync.service';
@@ -18,6 +19,7 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(
       withInterceptors([authInterceptor, errorInterceptor, offlineInterceptor])
     ),
+    { provide: ErrorHandler, useClass: GlobalErrorHandler },
     { provide: RouteReuseStrategy, useClass: CustomRouteReuseStrategy },
     provideServiceWorker('ngsw-worker.js', {
       // 'registerWhenStable:30000' یعنی تا پایدار شدن برنامه (حداکثر ۳۰ ثانیه)

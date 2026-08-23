@@ -120,9 +120,12 @@ export class OfflineSyncService {
   private _liveDataUpdates$ = new Subject<{ url: string; data: any; timestamp: number }>();
   readonly liveDataUpdates$ = this._liveDataUpdates$.asObservable();
 
-  /** انتشار تغییرات داده‌ای دریافت شده از استعلام پس‌زمینه */
+  /** انتشار تغییرات داده‌ای دریافت شده از استعلام پس‌زمینه و بروزرسانی کش محلی */
   notifyDataUpdated(url: string, data: any): void {
     this._liveDataUpdates$.next({ url, data, timestamp: Date.now() });
+    if (url && data) {
+      this.cacheResponse(url, data).catch(() => {});
+    }
   }
 
   private constructor() {}

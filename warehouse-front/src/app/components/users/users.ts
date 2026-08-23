@@ -518,7 +518,6 @@ export class Users implements OnInit, OnDestroy {
         }
       });
     } else {
-      (payload as any).password = payload.national_code || '123456';
       this.accountsService.createUser(payload).subscribe({
         next: (res) => {
           this.state.appState.users.unshift(res);

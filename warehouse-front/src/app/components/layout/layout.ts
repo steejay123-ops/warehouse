@@ -882,6 +882,15 @@ export class Layout implements OnInit, OnDestroy {
       if (item.id === 'audit') {
         return userPerms.includes('view_wh_audit') || userPerms.includes('perm_sys_logs');
       }
+      if (item.id === 'count-tracking') {
+        return userPerms.includes('view_sys_manager_review') ||
+               userPerms.includes('view_sys_supervisor') ||
+               userPerms.includes('view_sys_dashboard') ||
+               userPerms.includes('perm_inventory_finalize') ||
+               userPerms.includes('view_wh_stocktaking') ||
+               userPerms.includes('can_act_as_manager') ||
+               userPerms.includes('can_act_as_supervisor');
+      }
       return userPerms.includes(item.permission);
     });
   });

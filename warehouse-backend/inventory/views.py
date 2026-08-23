@@ -58,7 +58,7 @@ def _soft_delete_items_cascade(items_qs):
 class ItemPagination(PageNumberPagination):
     page_size = 100
     page_size_query_param = 'page_size'
-    max_page_size = 1000
+    max_page_size = 500
 
 from django.db.models import Case, When, Value, IntegerField, Q
 
@@ -98,6 +98,14 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['warehouse']
     search_fields = ['name', 'label']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user and user.is_authenticated and not user.is_superuser:
+            if hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
+                return qs.filter(warehouse__in=user.assigned_warehouses.all())
+        return qs
 
     def perform_create(self, serializer):
         # اگر رکورد حذف‌نرم با همان (انبار، نام) وجود دارد، احیا می‌شود؛
@@ -259,7 +267,12 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
     def get_queryset(self):
-        return super().get_queryset()
+        qs = super().get_queryset()
+        user = self.request.user
+        if user and user.is_authenticated and not user.is_superuser:
+            if hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
+                return qs.filter(warehouse__in=user.assigned_warehouses.all())
+        return qs
 
     def perform_create(self, serializer):
         from accounts.audit_utils import log_audit_event
@@ -1953,6 +1966,32 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 }, status=409)
         return super().update(request, *args, **kwargs)
 
+    def perform_update(self, serializer):
+        old_instance = self.get_object()
+        old_status = old_instance.status
+        old_counted = str(old_instance.counted_balance)
+        instance = serializer.save(modified_by=self.request.user)
+        
+        # لاگ ممیزی هنگام تغییر وضعیت یا ثبت شمارش
+        if old_status != instance.status or old_counted != str(instance.counted_balance):
+            from accounts.audit_utils import log_audit_event
+            try:
+                item_label = instance.item.fa_unic_code if instance.item else f"#{instance.id}"
+                wh = instance.item.warehouse if instance.item else None
+                log_audit_event(
+                    module='counter' if instance.status in ['INITIAL_COUNT', 'COUNTED', 'PENDING_COUNT'] else 'supervisor',
+                    action='UPDATE',
+                    target_model='CountTask',
+                    target_object_id=instance.id,
+                    target_repr=f"تغییر وضعیت تسک شمارش کالا {item_label}",
+                    warehouse=wh,
+                    user=self.request.user if self.request.user.is_authenticated else None,
+                    before_state={'status': old_status, 'counted_balance': old_counted},
+                    after_state={'status': instance.status, 'counted_balance': str(instance.counted_balance)}
+                )
+            except Exception:
+                pass
+
     def get_queryset(self):
         user = self.request.user
         from django.db.models import Prefetch
@@ -1970,7 +2009,13 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         q_filter = self.request.query_params.get('q')
         
         if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
+            if not user.is_superuser and hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
+                if not user.assigned_warehouses.filter(id=warehouse_id).exists():
+                    return CountTask.objects.none()
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
+        elif not user.is_superuser and hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
+            assigned_wh_ids = list(user.assigned_warehouses.values_list('id', flat=True))
+            queryset = queryset.filter(item__warehouse_id__in=assigned_wh_ids)
         
         # 1. فیلتر بر اساس نقش (Role Filter)
         if as_role == 'counter':
@@ -2286,7 +2331,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         from django.db import transaction
         
         with transaction.atomic():
-            tasks = CountTask.objects.select_for_update().filter(
+            tasks = CountTask.objects.select_for_update(of=('self',)).filter(
                 id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED']
             )
             histories = []
@@ -2321,11 +2366,10 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
             
-        tasks = CountTask.objects.filter(id__in=task_ids, status='MANAGER_REVIEW').select_related('item')
-        
         from .models import CountTaskHistory
         from django.db import transaction
         from decimal import Decimal, InvalidOperation
+        from accounts.audit_utils import log_audit_event
 
         def _to_decimal(val):
             if val is None or str(val).strip() == '':
@@ -2336,11 +2380,25 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 return None
         
         with transaction.atomic():
+            tasks_qs = CountTask.objects.select_for_update(of=('self',)).filter(
+                id__in=task_ids, status='MANAGER_REVIEW'
+            ).select_related('item', 'item__warehouse')
+            tasks = list(tasks_qs)
+            if not tasks:
+                return Response({'message': 'هیچ موردی در وضعیت بررسی مدیر یافت نشد.'})
+
             histories = []
             items_to_update = []
+            wh_ids = set()
             
             for task in tasks:
+                old_status = task.status
+                old_counted = str(task.counted_balance)
                 task.manager_note = note
+                task.status = 'FINAL_APPROVED'
+                task.modified_by = user
+                task.updated_at = timezone.now()
+
                 histories.append(CountTaskHistory(
                     task=task,
                     action_by=user,
@@ -2351,23 +2409,43 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 
                 # بروزرسانی کالای اصلی پس از تایید نهایی
                 item = task.item
-                item.field_status = 'done'
-                if task.counted_balance is not None:
-                    # بررسی استاندارد و دقیق مغایرت با مقایسه اعشاری Decimal
-                    c_dec = _to_decimal(task.counted_balance)
-                    s_dec = _to_decimal(item.bal4miv)
-                    if c_dec is not None and s_dec is not None:
-                        item.has_conflict = (c_dec != s_dec)
-                    elif c_dec is not None:
-                        item.has_conflict = (c_dec != Decimal('0'))
-                    else:
-                        item.has_conflict = False
-                    item.inventory = task.counted_balance
-                item.modified_by = user
-                item.updated_at = timezone.now()
-                items_to_update.append(item)
+                if item:
+                    if item.warehouse_id:
+                        wh_ids.add(item.warehouse_id)
+                    item.field_status = 'done'
+                    if task.counted_balance is not None:
+                        c_dec = _to_decimal(task.counted_balance)
+                        s_dec = _to_decimal(item.bal4miv)
+                        if c_dec is not None and s_dec is not None:
+                            item.has_conflict = (c_dec != s_dec)
+                        elif c_dec is not None:
+                            item.has_conflict = (c_dec != Decimal('0'))
+                        else:
+                            item.has_conflict = False
+                        item.inventory = task.counted_balance
+                    item.modified_by = user
+                    item.updated_at = timezone.now()
+                    items_to_update.append(item)
+
+                try:
+                    item_label = item.fa_unic_code if item else f"#{task.id}"
+                    wh = item.warehouse if item else None
+                    log_audit_event(
+                        module='manager',
+                        action='APPROVE',
+                        target_model='CountTask',
+                        target_object_id=task.id,
+                        target_repr=f"تایید نهایی شمارش کالا {item_label}",
+                        warehouse=wh,
+                        user=user if user.is_authenticated else None,
+                        before_state={'status': old_status, 'counted_balance': old_counted},
+                        after_state={'status': 'FINAL_APPROVED', 'counted_balance': str(task.counted_balance), 'note': note}
+                    )
+                except Exception:
+                    pass
             
-            count = tasks.update(status='FINAL_APPROVED', manager_note=note, modified_by=user, updated_at=timezone.now())
+            CountTask.objects.bulk_update(tasks, ['status', 'manager_note', 'modified_by', 'updated_at'])
+            count = len(tasks)
             
             if items_to_update:
                 Item.objects.bulk_update(items_to_update, ['field_status', 'inventory', 'has_conflict', 'modified_by', 'updated_at'])
@@ -2375,7 +2453,11 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             if histories:
                 CountTaskHistory.objects.bulk_create(histories)
             
-        broadcast_count_task_update()
+        for wid in wh_ids:
+            broadcast_count_task_update(warehouse_id=wid)
+        if not wh_ids:
+            broadcast_count_task_update()
+
         return Response({'message': f'{count} مورد به صورت گروهی تایید نهایی شد.'})
 
     @action(detail=True, methods=['post'])
@@ -2386,12 +2468,16 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if task.status not in ['COUNTED', 'MANAGER_REJECTED']:
             return Response({'error': 'فقط موارد شمرده شده قابل رد هستند.'}, status=400)
             
+        old_status = task.status
         task.status = 'SUPERVISOR_REJECTED'
         task.supervisor_note = note
         task.modified_by = request.user
+        task.updated_at = timezone.now()
         task.save()
         
         from .models import CountTaskHistory
+        from accounts.audit_utils import log_audit_event
+
         CountTaskHistory.objects.create(
             task=task,
             action_by=request.user,
@@ -2399,8 +2485,26 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             counted_balance=task.counted_balance,
             note=note
         )
+
+        try:
+            item_label = task.item.fa_unic_code if task.item else f"#{task.id}"
+            wh = task.item.warehouse if task.item else None
+            log_audit_event(
+                module='supervisor',
+                action='REJECT',
+                target_model='CountTask',
+                target_object_id=task.id,
+                target_repr=f"رد سرپرست برای بازشماری کالا {item_label}",
+                warehouse=wh,
+                user=request.user if request.user.is_authenticated else None,
+                before_state={'status': old_status, 'counted_balance': str(task.counted_balance)},
+                after_state={'status': 'SUPERVISOR_REJECTED', 'counted_balance': str(task.counted_balance), 'note': note}
+            )
+        except Exception:
+            pass
         
-        broadcast_count_task_update()
+        wh_id = task.item.warehouse_id if task.item else None
+        broadcast_count_task_update(warehouse_id=wh_id)
         return Response({'message': 'مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
 
     @action(detail=True, methods=['post'])
@@ -2416,10 +2520,10 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             return Response({'error': 'فقط موارد در انتظار تایید مدیر قابل رد هستند.'}, status=400)
         
         from warehouses.services import get_setting
+        from accounts.audit_utils import log_audit_event
         
-        # بسته به تنظیم سرپرست، تعیین مقصد
-        req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
-        
+        req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id) if task.item else False
+        old_status = task.status
         prev_counted = task.counted_balance
 
         if req_supervisor and task.supervisor:
@@ -2446,8 +2550,26 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             counted_balance=prev_counted,
             note=note
         )
+
+        try:
+            item_label = task.item.fa_unic_code if task.item else f"#{task.id}"
+            wh = task.item.warehouse if task.item else None
+            log_audit_event(
+                module='manager',
+                action='REJECT',
+                target_model='CountTask',
+                target_object_id=task.id,
+                target_repr=f"رد مدیر برای بازشماری کالا {item_label}",
+                warehouse=wh,
+                user=request.user if request.user.is_authenticated else None,
+                before_state={'status': old_status, 'counted_balance': str(prev_counted)},
+                after_state={'status': target_status, 'counted_balance': str(task.counted_balance), 'note': note}
+            )
+        except Exception:
+            pass
         
-        broadcast_count_task_update()
+        wh_id = task.item.warehouse_id if task.item else None
+        broadcast_count_task_update(warehouse_id=wh_id)
         return Response({'message': target_msg})
 
     @action(detail=False, methods=['post'])
@@ -2462,14 +2584,20 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             
         from .models import CountTaskHistory
         from django.db import transaction
+        from accounts.audit_utils import log_audit_event
         
         with transaction.atomic():
-            tasks = CountTask.objects.select_for_update().filter(
+            tasks = CountTask.objects.select_for_update(of=('self',)).filter(
                 id__in=task_ids, supervisor=user, status__in=['COUNTED', 'MANAGER_REJECTED']
-            )
+            ).select_related('item', 'item__warehouse')
             histories = []
             tasks_list = list(tasks)
+            wh_ids = set()
+
             for task in tasks_list:
+                old_status = task.status
+                if task.item and task.item.warehouse_id:
+                    wh_ids.add(task.item.warehouse_id)
                 task.supervisor_note = note
                 task.status = 'SUPERVISOR_REJECTED'
                 task.modified_by = user
@@ -2481,13 +2609,34 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                     counted_balance=task.counted_balance,
                     note=note
                 ))
+
+                try:
+                    item_label = task.item.fa_unic_code if task.item else f"#{task.id}"
+                    wh = task.item.warehouse if task.item else None
+                    log_audit_event(
+                        module='supervisor',
+                        action='REJECT',
+                        target_model='CountTask',
+                        target_object_id=task.id,
+                        target_repr=f"رد سرپرست برای بازشماری کالا {item_label}",
+                        warehouse=wh,
+                        user=user if user.is_authenticated else None,
+                        before_state={'status': old_status, 'counted_balance': str(task.counted_balance)},
+                        after_state={'status': 'SUPERVISOR_REJECTED', 'counted_balance': str(task.counted_balance), 'note': note}
+                    )
+                except Exception:
+                    pass
                 
             if tasks_list:
                 CountTask.objects.bulk_update(tasks_list, ['status', 'supervisor_note', 'modified_by', 'updated_at'])
             if histories:
                 CountTaskHistory.objects.bulk_create(histories)
-                
-        broadcast_count_task_update()
+            
+        for wid in wh_ids:
+            broadcast_count_task_update(warehouse_id=wid)
+        if not wh_ids:
+            broadcast_count_task_update()
+
         return Response({'message': f'{len(tasks_list)} مورد با موفقیت رد شد و به شمارشگر ارجاع داده شد.'})
 
     @action(detail=False, methods=['post'])
@@ -2503,68 +2652,131 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if not task_ids:
             return Response({'error': 'هیچ موردی انتخاب نشده است.'}, status=400)
             
-        tasks = CountTask.objects.filter(id__in=task_ids, status='MANAGER_REVIEW').select_related('item')
-        
         from warehouses.services import get_setting
         from .models import CountTaskHistory
-        
-        histories = []
-        tasks_list = list(tasks)
-        for task in tasks_list:
-            prev_counted = task.counted_balance
-            req_supervisor = get_setting('require_supervisor_approval', task.item.warehouse_id)
-            if req_supervisor and task.supervisor:
-                target_status = 'MANAGER_REJECTED'
-            else:
-                target_status = 'PENDING_COUNT'
-                task.counted_balance = None
+        from django.db import transaction
+        from accounts.audit_utils import log_audit_event
+
+        with transaction.atomic():
+            tasks = CountTask.objects.select_for_update(of=('self',)).filter(
+                id__in=task_ids, status='MANAGER_REVIEW'
+            ).select_related('item', 'item__warehouse')
+            tasks_list = list(tasks)
+            if not tasks_list:
+                return Response({'message': 'هیچ موردی برای رد یافت نشد.'})
+
+            histories = []
+            wh_ids = set()
+
+            for task in tasks_list:
+                old_status = task.status
+                prev_counted = task.counted_balance
+                wh_id = task.item.warehouse_id if task.item else None
+                if wh_id:
+                    wh_ids.add(wh_id)
+                req_supervisor = get_setting('require_supervisor_approval', wh_id) if wh_id else False
+                if req_supervisor and task.supervisor:
+                    target_status = 'MANAGER_REJECTED'
+                else:
+                    target_status = 'PENDING_COUNT'
+                    task.counted_balance = None
+                    
+                task.status = target_status
+                task.manager_note = note
+                task.modified_by = user
+                task.updated_at = timezone.now()
                 
-            task.status = target_status
-            task.manager_note = note
-            task.modified_by = user
-            task.updated_at = timezone.now()
+                histories.append(CountTaskHistory(
+                    task=task,
+                    action_by=user,
+                    action_type='MANAGER_REJECTED',
+                    counted_balance=prev_counted,
+                    note=note
+                ))
+
+                try:
+                    item_label = task.item.fa_unic_code if task.item else f"#{task.id}"
+                    wh = task.item.warehouse if task.item else None
+                    log_audit_event(
+                        module='manager',
+                        action='REJECT',
+                        target_model='CountTask',
+                        target_object_id=task.id,
+                        target_repr=f"رد مدیر برای بازشماری کالا {item_label}",
+                        warehouse=wh,
+                        user=user if user.is_authenticated else None,
+                        before_state={'status': old_status, 'counted_balance': str(prev_counted)},
+                        after_state={'status': target_status, 'counted_balance': str(task.counted_balance), 'note': note}
+                    )
+                except Exception:
+                    pass
+                
+            if tasks_list:
+                CountTask.objects.bulk_update(tasks_list, ['status', 'manager_note', 'counted_balance', 'modified_by', 'updated_at'])
+            if histories:
+                CountTaskHistory.objects.bulk_create(histories)
             
-            histories.append(CountTaskHistory(
-                task=task,
-                action_by=user,
-                action_type='MANAGER_REJECTED',
-                counted_balance=prev_counted,
-                note=note
-            ))
-            
-        if tasks_list:
-            CountTask.objects.bulk_update(tasks_list, ['status', 'manager_note', 'counted_balance', 'modified_by', 'updated_at'])
-        if histories:
-            CountTaskHistory.objects.bulk_create(histories)
-            
-        broadcast_count_task_update()
+        for wid in wh_ids:
+            broadcast_count_task_update(warehouse_id=wid)
+        if not wh_ids:
+            broadcast_count_task_update()
+
         return Response({'message': f'{len(tasks_list)} مورد با موفقیت رد شد و جهت بازشماری ارجاع داده شد.'})
 
     @action(detail=False, methods=['post'])
     def bulk_cancel(self, request):
         """لغو تخصیص گروهی — رکوردهای PENDING_COUNT و INITIAL_COUNT مجاز هستند."""
+        user = request.user
         task_ids = request.data.get('task_ids', [])
         if not task_ids:
             return Response({'error': 'هیچ رکوردی انتخاب نشده است.'}, status=400)
 
-        all_tasks = CountTask.objects.filter(id__in=task_ids)
-        eligible_tasks = all_tasks.filter(status__in=['PENDING_COUNT', 'INITIAL_COUNT'])
-        ineligible_count = all_tasks.count() - eligible_tasks.count()
-
-        if eligible_tasks.count() == 0:
-            return Response(
-                {'error': 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» و «شمارش اولیه» مجاز هستند.'},
-                status=400
-            )
-
-        item_ids = list(eligible_tasks.values_list('item_id', flat=True))
+        from accounts.audit_utils import log_audit_event
+        from .models import CountTaskHistory
+        from django.db import transaction
 
         with transaction.atomic():
-            # پاک کردن تاریخچه مربوطه به صورت نرم
-            soft_delete_queryset(CountTaskHistory.objects.filter(task_id__in=eligible_tasks.values_list('id', flat=True)))
-            deleted_count = eligible_tasks.count()
-            eligible_tasks.delete()
-            # بازگرداندن وضعیت آیتم‌ها
+            all_tasks = CountTask.objects.select_for_update(of=('self',)).filter(id__in=task_ids).select_related('item', 'item__warehouse', 'counter')
+            eligible_tasks = all_tasks.filter(status__in=['PENDING_COUNT', 'INITIAL_COUNT'])
+            eligible_list = list(eligible_tasks)
+            ineligible_count = all_tasks.count() - len(eligible_list)
+
+            if not eligible_list:
+                return Response(
+                    {'error': 'هیچ‌یک از رکوردهای انتخاب شده قابل لغو تخصیص نیستند. فقط رکوردهای «در انتظار شمارش» و «شمارش اولیه» مجاز هستند.'},
+                    status=400
+                )
+
+            item_ids = [t.item_id for t in eligible_list if t.item_id]
+            task_ids_to_del = [t.id for t in eligible_list]
+            wh_ids = set()
+
+            for t in eligible_list:
+                if t.item and t.item.warehouse_id:
+                    wh_ids.add(t.item.warehouse_id)
+                try:
+                    item_label = t.item.fa_unic_code if t.item else f"#{t.id}"
+                    wh = t.item.warehouse if t.item else None
+                    log_audit_event(
+                        module='dispatch',
+                        action='CANCEL_ALLOCATION',
+                        target_model='CountTask',
+                        target_object_id=t.id,
+                        target_repr=f"لغو تخصیص کالا {item_label}",
+                        warehouse=wh,
+                        user=user if user.is_authenticated else None,
+                        before_state={'status': t.status, 'counter': t.counter.username if t.counter else None},
+                        after_state={'status': 'CANCELLED_AND_DELETED'}
+                    )
+                except Exception:
+                    pass
+
+            # پاک کردن تاریخچه مربوطه و خود تسک‌ها به صورت نرم جهت حفظ سینک آفلاین
+            soft_delete_queryset(CountTaskHistory.objects.filter(task_id__in=task_ids_to_del))
+            deleted_count = len(eligible_list)
+            soft_delete_queryset(CountTask.objects.filter(id__in=task_ids_to_del))
+
+            # بازگرداندن وضعیت آیتم‌ها به استخر
             Item.objects.filter(id__in=item_ids).update(
                 field_status='checking',
                 field_assignee=None,
@@ -2575,7 +2787,11 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         if ineligible_count > 0:
             msg += f' ({ineligible_count} رکورد به دلیل وضعیت نامعتبر نادیده گرفته شد.)'
 
-        broadcast_count_task_update()
+        for wid in wh_ids:
+            broadcast_count_task_update(warehouse_id=wid)
+        if not wh_ids:
+            broadcast_count_task_update()
+
         return Response({'message': msg})
 
     @action(detail=False, methods=['get'], url_path='get_export_columns')
@@ -2627,7 +2843,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 if timezone.is_aware(dt):
                     dt = timezone.localtime(dt)
                 jdt = jdatetime.datetime.fromgregorian(datetime=dt)
-                return jdt.strftime('%Y/%m/%d %H:%M')
+                return jdt.strftime('%Y/%m/%d %H:%M:%S')
             except Exception as e:
                 # اگر خطایی رخ داد، لاگ بگیریم تا اشکال‌زدایی راحت‌تر باشد
                 import logging
@@ -2763,39 +2979,54 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         # راست‌چین کردن شیت
         ws.sheet_view.rightToLeft = True
 
-        # استایل‌های ثابت
-        header_font = Font(name='Tahoma', bold=True, color='FFFFFF', size=11)
-        header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid') # سرمه‌ای تیره و شیک
+        # استایل‌های هدر ۲ سطری
+        header_fa_font = Font(name='Tahoma', bold=True, color='FFFFFF', size=11)
+        header_fa_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid') # سرمه‌ای تیره
+        header_en_font = Font(name='Consolas', size=9, color='64748B', italic=True) # فیلد دیتابیس
+        header_en_fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid') # طوسی روشن
+        
         cell_font = Font(name='Tahoma', size=10)
         
         # رنگ‌های یکی‌درمیان ردیف‌ها
-        fill_even = PatternFill(start_color='F8F9FA', end_color='F8F9FA', fill_type='solid')
+        fill_even = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
         fill_odd = PatternFill(start_color='FFFFFF', end_color='FFFFFF', fill_type='solid')
 
         center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         thin_border = Border(
-            left=Side(style='thin', color='E0E0E0'), right=Side(style='thin', color='E0E0E0'),
-            top=Side(style='thin', color='E0E0E0'), bottom=Side(style='thin', color='E0E0E0')
+            left=Side(style='thin', color='CBD5E1'), right=Side(style='thin', color='CBD5E1'),
+            top=Side(style='thin', color='CBD5E1'), bottom=Side(style='thin', color='CBD5E1')
         )
 
-        # هدر
-        headers = [key_to_label[k] for k in selected_keys]
-        ws.append(headers)
+        # ساخت هدر ۲ سطری (سطر ۱: فارسی، سطر ۲: کلید فنی دیتابیس)
+        headers_fa = [key_to_label[k] for k in selected_keys]
+        headers_en = [k for k in selected_keys]
+        ws.append(headers_fa)
+        ws.append(headers_en)
         
+        # استایل سطر اول
         for col_idx, cell in enumerate(ws[1], 1):
-            cell.font = header_font
-            cell.fill = header_fill
+            cell.font = header_fa_font
+            cell.fill = header_fa_fill
             cell.alignment = center_alignment
             cell.border = thin_border
+            ws.row_dimensions[1].height = 28
 
-        # فریز کردن سطر اول (برای اسکرول راحت)
-        ws.freeze_panes = 'A2'
+        # استایل سطر دوم
+        for col_idx, cell in enumerate(ws[2], 1):
+            cell.font = header_en_font
+            cell.fill = header_en_fill
+            cell.alignment = center_alignment
+            cell.border = thin_border
+            ws.row_dimensions[2].height = 18
+
+        # فریز کردن ۲ سطر اول (سطر ۳ به بعد اسکرول شود)
+        ws.freeze_panes = 'A3'
 
         # محاسبه عرض اولیه بر اساس هدرها
-        col_widths = {i: len(headers[i]) + 6 for i in range(len(headers))}
+        col_widths = {i: max(len(headers_fa[i]), len(headers_en[i])) + 6 for i in range(len(headers_fa))}
 
-        # داده‌ها
-        row_idx = 2
+        # درج داده‌ها از سطر ۳
+        row_idx = 3
         for task in queryset.select_related('item', 'item__warehouse', 'counter', 'supervisor', 'assigned_manager').iterator(chunk_size=500):
             row_data = [str(get_cell(task, k)) for k in selected_keys]
             ws.append(row_data)
@@ -2811,20 +3042,21 @@ class CountTaskViewSet(viewsets.ModelViewSet):
                 cell.alignment = center_alignment
                 cell.border = thin_border
                 
-                # بروزرسانی عرض ستون (محدود کردن به حداکثر 60 برای جلوگیری از عرض بیش‌از‌حد)
+                # بروزرسانی عرض ستون (محدود کردن به حداکثر 60)
                 lines = val.split('\n')
                 max_line_len = max([len(line) for line in lines]) if lines else 0
                 if max_line_len > col_widths.get(col_idx, 10):
                     col_widths[col_idx] = min(max_line_len + 4, 60)
             
+            ws.row_dimensions[row_idx].height = 22
             row_idx += 1
 
         # اعمال عرض ستون‌ها
         for col_idx, width in col_widths.items():
-            ws.column_dimensions[get_column_letter(col_idx + 1)].width = width
+            ws.column_dimensions[get_column_letter(col_idx + 1)].width = max(width, 14)
 
         # افزودن قابلیت فیلتر روی هدرها
-        if row_idx > 2:
+        if row_idx > 3:
             last_col_letter = get_column_letter(len(selected_keys))
             ws.auto_filter.ref = f"A1:{last_col_letter}{row_idx - 1}"
 

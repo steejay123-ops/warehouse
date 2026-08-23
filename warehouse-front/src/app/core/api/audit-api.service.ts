@@ -138,6 +138,16 @@ export class AuditApiService {
     return this.api.post<PurgePreviewResponse>(`${this.auditEndpoint}/purge`, { ...req, dry_run: false });
   }
 
+  /** پیش‌نمایش پاکسازی لاگ‌های ورود (تعداد رکوردهای مشمول حذف) */
+  getLoginPurgePreview(req: PurgeRequest): Observable<PurgePreviewResponse> {
+    return this.api.post<PurgePreviewResponse>(`${this.loginEndpoint}/purge`, { ...req, dry_run: true });
+  }
+
+  /** پاکسازی قطعی لاگ‌های ورود با تاییدیه */
+  purgeLoginLogs(req: PurgeRequest): Observable<PurgePreviewResponse> {
+    return this.api.post<PurgePreviewResponse>(`${this.loginEndpoint}/purge`, { ...req, dry_run: false });
+  }
+
   /** پیش‌نمایش بازگردانی زنجیره‌ای به یک تاریخ مشخص */
   previewPointInTimeRollback(req: PointInTimeRollbackRequest): Observable<PointInTimeRollbackPreview> {
     return this.api.post<PointInTimeRollbackPreview>(`${this.auditEndpoint}/preview_point_in_time_rollback`, req);

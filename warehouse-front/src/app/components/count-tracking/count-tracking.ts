@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, inject, ViewChild, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
@@ -97,6 +97,18 @@ export class CountTracking implements OnInit, OnDestroy {
     { label: 'تایید نهایی', value: 'FINAL_APPROVED' }
   ];
   
+  // ─── کشوی جانبی تایم‌لاین گردش کالا (Audit Trail Drawer) ───
+  isDrawerOpen = false;
+  selectedTaskForDrawer: any = null;
+  isLoadingDrawerHistory = false;
+
+  // ─── مودال خلاصه عملکرد و راندمان افراد تیم (Team Performance Modal) ───
+  isPerformanceModalOpen = false;
+  performanceActiveTab: 'overview' | 'counters' | 'supervisors' = 'overview';
+  counterStats: any[] = [];
+  supervisorStats: any[] = [];
+  overviewStats: any = {};
+
   // ─── متغیرهای مودال خروجی اکسل ───
   isExportModalOpen = false;
   exportDataScope: 'all' | 'selected' = 'all';
@@ -965,6 +977,220 @@ export class CountTracking implements OnInit, OnDestroy {
     this.currentPage = 1;
     this.applyFilters();
     this.toast.show('info', `فیلتر بر اساس بارکد: ${clean}`);
+  }
+
+  // ─── بستن مودال‌ها با کلید ESC ───
+  @HostListener('window:keydown.escape')
+  handleEscapeKey() {
+    if (this.isDrawerOpen) {
+      this.closeDrawer();
+    } else if (this.isPerformanceModalOpen) {
+      this.closePerformanceModal();
+    } else if (this.isExportModalOpen) {
+      this.closeExportModal();
+    }
+  }
+
+  // ─── کشوی جانبی تایم‌لاین گردش کالا (Drawer) ───
+  openDrawer(task: any) {
+    if (!task) return;
+    this.selectedTaskForDrawer = task;
+    this.isDrawerOpen = true;
+    this.isLoadingDrawerHistory = true;
+    this.cdr.detectChanges();
+
+    // استعلام زنده تاریخچه کامل تسک جهت اطمینان از جدیدترین لاگ‌ها
+    this.countTaskApi.getById(String(task.id)).subscribe({
+      next: (fresh: any) => {
+        if (fresh && this.selectedTaskForDrawer?.id === task.id) {
+          this.selectedTaskForDrawer = this.preprocessTask(fresh);
+        }
+        this.isLoadingDrawerHistory = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingDrawerHistory = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeDrawer() {
+    this.isDrawerOpen = false;
+    this.selectedTaskForDrawer = null;
+    this.cdr.detectChanges();
+  }
+
+  getActionTypeName(actionType: string): string {
+    const map: Record<string, string> = {
+      'PENDING_COUNT': 'ایجاد یا بازگشت به انتظار شمارش',
+      'INITIAL_COUNT': 'ثبت موقت شمارش اولیه',
+      'COUNTED': 'اتمام شمارش و ارسال به سرپرست',
+      'SUPERVISOR_APPROVED': 'تایید سرپرست و ارسال به مدیر',
+      'SUPERVISOR_REJECTED': 'رد سرپرست (مغایرت - ارجاع به انبارگردان)',
+      'MANAGER_REVIEW': 'در انتظار بررسی مدیریت',
+      'MANAGER_REJECTED': 'رد مدیر (مغایرت - ارجاع به سرپرست/شمارش)',
+      'FINAL_APPROVED': 'تایید نهایی انبارگردانی',
+      'CANCEL_ALLOCATION': 'لغو تخصیص کالا',
+      'RECOUNT': 'درخواست بازشماری'
+    };
+    return map[actionType] || actionType || 'ثبت اقدام';
+  }
+
+  getActionBadgeClass(actionType: string): string {
+    const map: Record<string, string> = {
+      'PENDING_COUNT': 'bg-slate-100 text-slate-700 border-slate-200',
+      'INITIAL_COUNT': 'bg-blue-50 text-blue-700 border-blue-200',
+      'COUNTED': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      'SUPERVISOR_APPROVED': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      'SUPERVISOR_REJECTED': 'bg-rose-50 text-rose-700 border-rose-200',
+      'MANAGER_REVIEW': 'bg-purple-50 text-purple-700 border-purple-200',
+      'MANAGER_REJECTED': 'bg-amber-50 text-amber-700 border-amber-200',
+      'FINAL_APPROVED': 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      'CANCEL_ALLOCATION': 'bg-rose-50 text-rose-700 border-rose-200'
+    };
+    return map[actionType] || 'bg-slate-100 text-slate-700 border-slate-200';
+  }
+
+  // ─── مودال خلاصه عملکرد و راندمان افراد تیم ───
+  openPerformanceModal() {
+    this.calculateTeamPerformance();
+    this.isPerformanceModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closePerformanceModal() {
+    this.isPerformanceModalOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  calculateTeamPerformance() {
+    const allTasks = this.tasks || [];
+
+    // ─── ۱. انبارگردان‌ها ───
+    const counterMap = new Map<string, {
+      name: string;
+      total: number;
+      counted: number;
+      discrepancies: number;
+      timestamps: number[];
+    }>();
+
+    for (const t of allTasks) {
+      const name = t.counter_name || 'استخر عمومی (تخصیص‌نیافته)';
+      if (!counterMap.has(name)) {
+        counterMap.set(name, {
+          name,
+          total: 0,
+          counted: 0,
+          discrepancies: 0,
+          timestamps: []
+        });
+      }
+      const entry = counterMap.get(name)!;
+      entry.total++;
+      if (t.status !== 'PENDING_COUNT') {
+        entry.counted++;
+        if (t._discrepancy !== null && Math.abs(t._discrepancy) > 0.0001) {
+          entry.discrepancies++;
+        }
+        if (t.updated_at) entry.timestamps.push(new Date(t.updated_at).getTime());
+        if (t.created_at) entry.timestamps.push(new Date(t.created_at).getTime());
+      }
+    }
+
+    this.counterStats = Array.from(counterMap.values()).map(c => {
+      const progressPercent = c.total > 0 ? Math.round((c.counted / c.total) * 100) : 0;
+      const discrepancyRate = c.counted > 0 ? Math.round((c.discrepancies / c.counted) * 100) : 0;
+      const accuracyRate = 100 - discrepancyRate;
+
+      let itemsPerHour = 0;
+      if (c.counted > 0 && c.timestamps.length >= 2) {
+        const minTime = Math.min(...c.timestamps);
+        const maxTime = Math.max(...c.timestamps);
+        const hoursDiff = (maxTime - minTime) / (1000 * 60 * 60);
+        const effectiveHours = Math.max(hoursDiff, 0.25);
+        itemsPerHour = Math.round((c.counted / effectiveHours) * 10) / 10;
+      } else if (c.counted > 0) {
+        itemsPerHour = c.counted;
+      }
+
+      return {
+        name: c.name,
+        total: c.total,
+        counted: c.counted,
+        pending: c.total - c.counted,
+        progressPercent,
+        discrepancies: c.discrepancies,
+        discrepancyRate,
+        accuracyRate,
+        itemsPerHour: Math.min(itemsPerHour, 300)
+      };
+    }).sort((a, b) => b.counted - a.counted);
+
+    // ─── ۲. سرپرستان ───
+    const supervisorMap = new Map<string, {
+      name: string;
+      reviewed: number;
+      approved: number;
+      rejected: number;
+    }>();
+
+    for (const t of allTasks) {
+      if (!t.supervisor_name) continue;
+      const name = t.supervisor_name;
+      if (!supervisorMap.has(name)) {
+        supervisorMap.set(name, {
+          name,
+          reviewed: 0,
+          approved: 0,
+          rejected: 0
+        });
+      }
+      const entry = supervisorMap.get(name)!;
+      if (['MANAGER_REVIEW', 'SUPERVISOR_REJECTED', 'FINAL_APPROVED', 'MANAGER_REJECTED'].includes(t.status)) {
+        entry.reviewed++;
+        if (t.status === 'SUPERVISOR_REJECTED') {
+          entry.rejected++;
+        } else {
+          entry.approved++;
+        }
+      }
+    }
+
+    this.supervisorStats = Array.from(supervisorMap.values()).map(s => {
+      const rejectionRate = s.reviewed > 0 ? Math.round((s.rejected / s.reviewed) * 100) : 0;
+      const approvalRate = 100 - rejectionRate;
+      return {
+        name: s.name,
+        reviewed: s.reviewed,
+        approved: s.approved,
+        rejected: s.rejected,
+        rejectionRate,
+        approvalRate
+      };
+    }).sort((a, b) => b.reviewed - a.reviewed);
+
+    // ─── ۳. خلاصه کلی ───
+    const totalTasks = allTasks.length;
+    const totalCounted = this.statCounted;
+    const totalDiscrepancies = this.statDiscrepancy;
+    const overallProgress = totalTasks > 0 ? Math.round((totalCounted / totalTasks) * 100) : 0;
+    const overallAccuracy = totalCounted > 0 ? Math.round(((totalCounted - totalDiscrepancies) / totalCounted) * 100) : 100;
+    const topCounter = this.counterStats.find(c => c.name !== 'استخر عمومی (تخصیص‌نیافته)' && c.counted >= 3) || this.counterStats[0];
+
+    this.overviewStats = {
+      totalTasks,
+      totalCounted,
+      totalApproved: this.statApproved,
+      totalDiscrepancies,
+      overallProgress,
+      overallAccuracy,
+      activeCountersCount: this.counterStats.filter(c => c.name !== 'استخر عمومی (تخصیص‌نیافته)').length,
+      activeSupervisorsCount: this.supervisorStats.length,
+      topCounterName: topCounter?.name || '-',
+      topCounterSpeed: topCounter?.itemsPerHour || 0
+    };
   }
 }
 

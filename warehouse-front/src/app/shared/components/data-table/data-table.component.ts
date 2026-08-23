@@ -420,6 +420,7 @@ export interface PageEvent {
                 class="transition-colors group"
                 [ngClass]="rowClasses(row)"
                 [class.bg-indigo-50/50]="isRowSelected(row)"
+                (click)="onRowClicked(row, $event)"
               >
                 @if (selectable) {
                   <td class="px-3 py-2.5 text-center">
@@ -622,9 +623,11 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   rowClasses = (row: any) => [
     this.rowClass(row) || 'hover:bg-indigo-50/30',
+    this.rowClick.observed ? 'cursor-pointer hover:bg-indigo-50/40' : '',
     row?._offlinePending ? 'bg-sky-50 ring-1 ring-inset ring-sky-200' : '',
   ];
 
+  @Output() rowClick = new EventEmitter<any>();
   @Output() sortChanged = new EventEmitter<SortState>();
   @Output() filterChanged = new EventEmitter<Record<string, string>>();
   @Output() searchChanged = new EventEmitter<string>();
@@ -849,6 +852,14 @@ export class DataTableComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.filterTimeout) {
       clearTimeout(this.filterTimeout);
     }
+  }
+
+  onRowClicked(row: any, event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (target && target.closest('button, input, select, textarea, a, label, [table-row-actions], .no-row-click, .editing-cell-input')) {
+      return;
+    }
+    this.rowClick.emit(row);
   }
 
   zoomIn() {

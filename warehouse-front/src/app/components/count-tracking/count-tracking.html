@@ -10,15 +10,17 @@
       </div>
       
       <div class="flex items-center gap-2 flex-wrap">
-        <div class="w-48">
-          <app-warehouse-selector
-            *ngIf="!authStore.isWarehouseContext()"
-            [allowAll]="true"
-            [projects]="state.appState.projects"
-            [activeId]="authStore.activeWarehouseId()"
-            (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
-          ></app-warehouse-selector>
-        </div>
+        <!-- Team Performance Dashboard Button (Icon-Only) -->
+        <button (click)="openPerformanceModal()" 
+                class="p-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl transition-all shadow-sm flex items-center justify-center"
+                title="مشاهده خلاصه عملکرد و راندمان تیم انبارگردانی" 
+                aria-label="عملکرد تیم">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+        </button>
 
         <!-- Toggle Final Approved Tasks Visibility Button (Square Icon-Only) -->
         <button (click)="toggleCompleted()" 
@@ -150,14 +152,25 @@
                       [rowClass]="getRowClass.bind(this)"
                       [isLoading]="isLoading"
                       [emptyMessage]="'با این فیلترها کالایی برای پیگیری وجود ندارد.'"
+                      (rowClick)="openDrawer($event)"
                       (selectionChanged)="onSelectionChange($event)"
                       (searchChanged)="onTableSearch($event)"
                       (filterChanged)="onTableFilter($event)"
                       (filtersCleared)="onFiltersCleared()"
                       (pageChanged)="onPageChange($event)"
                       (sortChanged)="onSortChanged($event)">
-        <!-- Table Actions: Bulk Cancel & Approve -->
-        <div table-actions class="flex items-center gap-2.5">
+        <!-- Table Actions: Warehouse Selector, Bulk Cancel & Approve -->
+        <div table-actions class="flex items-center gap-2.5 flex-wrap">
+          <!-- Warehouse Selector (Transferred to Table Top) -->
+          <div class="w-44 min-w-[160px]" *ngIf="!authStore.isWarehouseContext()">
+            <app-warehouse-selector
+              [allowAll]="true"
+              [projects]="state.appState.projects"
+              [activeId]="authStore.activeWarehouseId()"
+              (changed)="authStore.setActiveWarehouse($event); state.appState.activeWarehouseId = $event; loadTasks()"
+            ></app-warehouse-selector>
+          </div>
+
           <button *ngIf="selectedTaskIds.size > 0" 
                   (click)="cancelAllocation()" 
                   class="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
@@ -279,11 +292,24 @@
         </ng-template>
 
         <ng-template appTableCol="actions" label="عملیات" [sortable]="false" [filterable]="false" let-row="row">
-          <button *ngIf="row.status === 'PENDING_COUNT' || row.status === 'INITIAL_COUNT'" (click)="cancelSingleAllocation(row)" class="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg transition-all border border-rose-100 hover:border-rose-200 flex items-center gap-1 shadow-2xs text-[11px] font-bold" title="لغو تخصیص این کالا">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-            <span>لغو</span>
-          </button>
-          <span *ngIf="row.status !== 'PENDING_COUNT' && row.status !== 'INITIAL_COUNT'" class="text-slate-300 text-xs font-medium">-</span>
+          <div class="flex items-center justify-center gap-1.5">
+            <!-- دکمه مشاهده تایم‌لاین و گردش کالا -->
+            <button (click)="openDrawer(row); $event.stopPropagation()" 
+                    class="text-indigo-600 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-all border border-indigo-100 hover:border-indigo-200 flex items-center gap-1 shadow-2xs text-[11px] font-bold" 
+                    title="مشاهده تایم‌لاین و گردش کالا">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span>گردش</span>
+            </button>
+
+            <!-- دکمه لغو تخصیص (برای وضعیت‌های در انتظار و اولیه) -->
+            <button *ngIf="row.status === 'PENDING_COUNT' || row.status === 'INITIAL_COUNT'" 
+                    (click)="cancelSingleAllocation(row); $event.stopPropagation()" 
+                    class="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded-lg transition-all border border-rose-100 hover:border-rose-200 flex items-center gap-1 shadow-2xs text-[11px] font-bold" 
+                    title="لغو تخصیص این کالا">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+              <span>لغو</span>
+            </button>
+          </div>
         </ng-template>
       </app-data-table>
 
@@ -395,6 +421,434 @@
           لغو
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════ -->
+  <!-- Audit Trail / History Drawer (کشوی جانبی تایم‌لاین گردش کالا)                  -->
+  <!-- ════════════════════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isDrawerOpen" class="fixed inset-0 z-[220] overflow-hidden" dir="rtl">
+    <!-- Backdrop Blur -->
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-300" (click)="closeDrawer()"></div>
+
+    <!-- Slide-Over Drawer Container -->
+    <div class="fixed inset-y-0 left-0 max-w-full flex pl-0 sm:pl-10 z-10 pointer-events-none">
+      <div class="w-screen max-w-lg bg-white shadow-2xl border-r border-slate-200 pointer-events-auto flex flex-col h-full transform transition-transform duration-300 ease-in-out animate-in slide-in-from-left">
+        
+        <!-- Drawer Header -->
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between flex-none">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-400/30 flex items-center justify-center font-bold">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono font-black text-indigo-300 tracking-wider" dir="ltr">{{ selectedTaskForDrawer?.item_details?.fa_unic_code }}</span>
+                <span [class]="getStatusClass(selectedTaskForDrawer?.status)">{{ getStatusName(selectedTaskForDrawer?.status) }}</span>
+              </div>
+              <h3 class="text-sm font-black text-slate-100 mt-0.5 truncate max-w-[280px]" [title]="selectedTaskForDrawer?.item_details?.description">
+                {{ selectedTaskForDrawer?.item_details?.description || 'بدون شرح کالا' }}
+              </h3>
+            </div>
+          </div>
+          <button (click)="closeDrawer()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors" title="بستن (ESC)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+
+        <!-- Drawer Scrollable Content -->
+        <div class="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/60">
+          
+          <!-- Key Metrics Grid -->
+          <div class="grid grid-cols-3 gap-2.5">
+            <!-- System Balance -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs text-center">
+              <span class="text-[10px] font-bold text-slate-400 block mb-1">موجودی سیستم</span>
+              <span class="text-sm font-black text-slate-700">
+                {{ selectedTaskForDrawer?.item_details?.inventory !== undefined && selectedTaskForDrawer?.item_details?.inventory !== null ? selectedTaskForDrawer?.item_details?.inventory : '-' }}
+              </span>
+            </div>
+            <!-- Counted Balance -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs text-center">
+              <span class="text-[10px] font-bold text-slate-400 block mb-1">شمارش شده</span>
+              <span class="text-sm font-black" [ngClass]="getBalanceColorClass(selectedTaskForDrawer)">
+                {{ selectedTaskForDrawer?.counted_balance !== null ? selectedTaskForDrawer?.counted_balance : '-' }}
+              </span>
+            </div>
+            <!-- Discrepancy -->
+            <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs text-center">
+              <span class="text-[10px] font-bold text-slate-400 block mb-1">میزان مغایرت</span>
+              <span class="text-sm font-black" 
+                    [class.text-emerald-600]="selectedTaskForDrawer?._discrepancy === 0"
+                    [class.text-orange-600]="selectedTaskForDrawer?._discrepancy > 0"
+                    [class.text-rose-600]="selectedTaskForDrawer?._discrepancy < 0"
+                    [class.text-slate-400]="selectedTaskForDrawer?._discrepancy === null">
+                <span *ngIf="selectedTaskForDrawer?._discrepancy === null">-</span>
+                <span *ngIf="selectedTaskForDrawer?._discrepancy === 0">صفر (منطبق)</span>
+                <span *ngIf="selectedTaskForDrawer?._discrepancy > 0">+{{ selectedTaskForDrawer?._discrepancy }} (مازاد)</span>
+                <span *ngIf="selectedTaskForDrawer?._discrepancy < 0">{{ selectedTaskForDrawer?._discrepancy }} (کسری)</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Warehouse & Location Info Box -->
+          <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 font-bold text-[11px]">انبار:</span>
+              <span class="font-black text-slate-800">{{ selectedTaskForDrawer?.item_details?.warehouse_name || '-' }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 font-bold text-[11px]">موقعیت / قفسه:</span>
+              <span class="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                {{ selectedTaskForDrawer?.item_details?.new_location || selectedTaskForDrawer?.item_details?.old_location || 'ثبت نشده' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Timeline Section -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-xs font-black text-slate-800 flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-indigo-600"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                <span>زنجیره اقدامات و تایم‌لاین گردش</span>
+              </h4>
+              <span *ngIf="isLoadingDrawerHistory" class="text-[10px] text-indigo-600 font-bold flex items-center gap-1 animate-pulse">
+                <svg class="animate-spin" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"></circle></svg>
+                در حال استعلام تاریخچه...
+              </span>
+            </div>
+
+            <!-- Timeline Events List -->
+            <div *ngIf="selectedTaskForDrawer?.history && selectedTaskForDrawer.history.length > 0; else emptyTimeline" class="relative pr-6 space-y-4 before:absolute before:top-2 before:bottom-2 before:right-2.5 before:w-0.5 before:bg-slate-200">
+              <div *ngFor="let h of selectedTaskForDrawer.history; let idx = index" class="relative group">
+                <!-- Timeline Dot -->
+                <div class="absolute -right-6 top-1.5 w-5 h-5 rounded-full bg-white border-2 border-indigo-600 shadow-xs flex items-center justify-center">
+                  <div class="w-1.5 h-1.5 rounded-full bg-indigo-600"></div>
+                </div>
+
+                <!-- Event Card -->
+                <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs space-y-2 hover:border-indigo-200 transition-colors">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-black" [class]="getActionBadgeClass(h.action_type)">
+                      {{ getActionTypeName(h.action_type) }}
+                    </span>
+                    <span class="text-[10px] font-mono text-slate-400" dir="ltr">{{ h.created_at | date:'HH:mm:ss' }}</span>
+                  </div>
+
+                  <div class="flex items-center justify-between text-[11px] text-slate-500">
+                    <div class="flex items-center gap-1.5 font-bold">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-slate-400"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                      <span class="text-slate-800">{{ h.action_by_name || 'سیستم / کاربر' }}</span>
+                    </div>
+                    <span class="text-[10px] font-bold text-slate-500">{{ h.created_at | persianDate:'short' }}</span>
+                  </div>
+
+                  <!-- Counted value in step -->
+                  <div *ngIf="h.counted_balance !== null && h.counted_balance !== undefined" class="bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100 text-[11px] flex items-center justify-between font-bold">
+                    <span class="text-slate-500">مقدار ثبت‌شده در این اقدام:</span>
+                    <span class="font-black text-indigo-700">{{ h.counted_balance }}</span>
+                  </div>
+
+                  <!-- Note Box -->
+                  <div *ngIf="h.note" class="bg-amber-50/70 border-r-2 border-amber-400 p-2 rounded-l-lg text-[11px] text-amber-900 leading-relaxed font-medium">
+                    <span class="font-bold text-[10px] text-amber-700 block mb-0.5">یادداشت:</span>
+                    {{ h.note }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <ng-template #emptyTimeline>
+              <div class="bg-white p-6 rounded-xl border border-slate-200 text-center text-slate-400 text-xs font-bold space-y-2">
+                <svg class="mx-auto text-slate-300" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <p>هنوز اقدام جدیدی برای این کالا ثبت نشده است.</p>
+                <p class="text-[10px] text-slate-400">کالا در وضعیت «{{ getStatusName(selectedTaskForDrawer?.status) }}» قرار دارد.</p>
+              </div>
+            </ng-template>
+          </div>
+
+          <!-- Metadata Box -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 text-[11px] space-y-2.5">
+            <h5 class="text-[10px] font-black text-slate-400 uppercase tracking-wider">اطلاعات فراداده و رهگیری</h5>
+            <div class="grid grid-cols-2 gap-2 text-slate-600">
+              <div>
+                <span class="text-slate-400 block text-[10px]">انبارگردان:</span>
+                <span class="font-bold text-slate-800">{{ selectedTaskForDrawer?.counter_name || 'نامشخص' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px]">سرپرست:</span>
+                <span class="font-bold text-slate-800">{{ selectedTaskForDrawer?.supervisor_name || 'ندارد' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px]">مدیریت:</span>
+                <span class="font-bold text-slate-800">{{ selectedTaskForDrawer?._computed_manager_name || 'استخر مشترک' }}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[10px]">آخرین تغییر:</span>
+                <span class="font-bold font-mono">{{ selectedTaskForDrawer?.updated_at | persianDate:'short' }}</span>
+              </div>
+              <div *ngIf="selectedTaskForDrawer?._computed_counter_dur">
+                <span class="text-slate-400 block text-[10px]">زمان سپری‌شده انبارگردان:</span>
+                <span class="font-bold text-indigo-700">{{ selectedTaskForDrawer?._computed_counter_dur }}</span>
+              </div>
+              <div *ngIf="selectedTaskForDrawer?._computed_supervisor_dur">
+                <span class="text-slate-400 block text-[10px]">زمان سپری‌شده سرپرست:</span>
+                <span class="font-bold text-indigo-700">{{ selectedTaskForDrawer?._computed_supervisor_dur }}</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Drawer Footer -->
+        <div class="p-4 bg-white border-t border-slate-200 flex items-center justify-between flex-none">
+          <button (click)="closeDrawer()" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+            بستن کشو
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════════ -->
+  <!-- Team Performance Modal (مودال خلاصه عملکرد و راندمان افراد تیم)               -->
+  <!-- ════════════════════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isPerformanceModalOpen" class="fixed inset-0 z-[210] flex items-center justify-center p-4" dir="rtl">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-xs" (click)="closePerformanceModal()"></div>
+
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 flex-none">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-black text-slate-800">داشبورد راندمان و عملکرد تیم انبارگردانی</h3>
+            <p class="text-[11px] text-slate-500 mt-0.5">تحلیل بلادرنگ سرعت شمارش، نرخ مغایرت، دقت انبارگردان‌ها و سرعت بررسی سرپرستان</p>
+          </div>
+        </div>
+
+        <button (click)="closePerformanceModal()" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="px-6 pt-3 bg-slate-50/50 border-b border-slate-200 flex items-center gap-2 flex-none">
+        <button (click)="performanceActiveTab = 'overview'"
+                [class]="performanceActiveTab === 'overview' ? 'text-indigo-600 border-indigo-600 bg-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-700 border-transparent font-bold'"
+                class="px-4 py-2 border-b-2 rounded-t-lg text-xs transition-all flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          <span>نمای کلی و شاخص‌ها</span>
+        </button>
+
+        <button (click)="performanceActiveTab = 'counters'"
+                [class]="performanceActiveTab === 'counters' ? 'text-indigo-600 border-indigo-600 bg-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-700 border-transparent font-bold'"
+                class="px-4 py-2 border-b-2 rounded-t-lg text-xs transition-all flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <span>انبارگردان‌ها (سرعت و دقت)</span>
+          <span class="bg-indigo-50 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-black">{{ counterStats.length }}</span>
+        </button>
+
+        <button (click)="performanceActiveTab = 'supervisors'"
+                [class]="performanceActiveTab === 'supervisors' ? 'text-indigo-600 border-indigo-600 bg-white shadow-2xs font-black' : 'text-slate-500 hover:text-slate-700 border-transparent font-bold'"
+                class="px-4 py-2 border-b-2 rounded-t-lg text-xs transition-all flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+          <span>سرپرستان (سرعت تایید)</span>
+          <span class="bg-indigo-50 text-indigo-700 text-[10px] px-1.5 py-0.2 rounded-full font-black">{{ supervisorStats.length }}</span>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-6 overflow-y-auto flex-1 space-y-6">
+
+        <!-- TAB 1: OVERVIEW -->
+        <div *ngIf="performanceActiveTab === 'overview'" class="space-y-6">
+          <!-- 4 Summary KPI Cards -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <!-- Progress -->
+            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100/50 p-4 rounded-xl border border-indigo-100">
+              <span class="text-[10px] font-black text-indigo-600 block mb-1">پیشرفت کل پروژه</span>
+              <div class="flex items-baseline gap-1">
+                <span class="text-2xl font-black text-indigo-900">{{ overviewStats.overallProgress }}%</span>
+                <span class="text-[10px] font-bold text-indigo-600">({{ overviewStats.totalCounted }} از {{ overviewStats.totalTasks }})</span>
+              </div>
+              <div class="w-full bg-indigo-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div class="bg-indigo-600 h-full rounded-full transition-all duration-500" [style.width.%]="overviewStats.overallProgress"></div>
+              </div>
+            </div>
+
+            <!-- Accuracy -->
+            <div class="bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-4 rounded-xl border border-emerald-100">
+              <span class="text-[10px] font-black text-emerald-600 block mb-1">نرخ دقت کلی</span>
+              <div class="flex items-baseline gap-1">
+                <span class="text-2xl font-black text-emerald-900">{{ overviewStats.overallAccuracy }}%</span>
+                <span class="text-[10px] font-bold text-emerald-600">منطبق</span>
+              </div>
+              <div class="w-full bg-emerald-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div class="bg-emerald-600 h-full rounded-full transition-all duration-500" [style.width.%]="overviewStats.overallAccuracy"></div>
+              </div>
+            </div>
+
+            <!-- Discrepancies -->
+            <div class="bg-gradient-to-br from-amber-50 to-amber-100/50 p-4 rounded-xl border border-amber-100">
+              <span class="text-[10px] font-black text-amber-700 block mb-1">تعداد کل مغایرت‌ها</span>
+              <div class="flex items-baseline gap-1">
+                <span class="text-2xl font-black text-amber-900">{{ overviewStats.totalDiscrepancies }}</span>
+                <span class="text-[10px] font-bold text-amber-700">قلم کالا</span>
+              </div>
+              <span class="text-[10px] text-amber-800 font-bold block mt-2">کسری و مازاد موجودی</span>
+            </div>
+
+            <!-- Top Counter -->
+            <div class="bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 rounded-xl border border-purple-100">
+              <span class="text-[10px] font-black text-purple-700 block mb-1">بیشترین شمارش</span>
+              <div class="truncate">
+                <span class="text-base font-black text-purple-900 block truncate" [title]="overviewStats.topCounterName">{{ overviewStats.topCounterName }}</span>
+              </div>
+              <span class="text-[10px] text-purple-700 font-bold block mt-2">
+                سرعت: {{ overviewStats.topCounterSpeed }} کالا/ساعت
+              </span>
+            </div>
+          </div>
+
+          <!-- Quick Overview Summary Details -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+            <h4 class="text-xs font-black text-slate-800">وضعیت تیم فعال در انبارگردانی</h4>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                <span class="text-[10px] text-slate-400 block font-bold">تعداد انبارگردان‌ها:</span>
+                <span class="font-black text-slate-800">{{ overviewStats.activeCountersCount }} نفر</span>
+              </div>
+              <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                <span class="text-[10px] text-slate-400 block font-bold">تعداد سرپرستان:</span>
+                <span class="font-black text-slate-800">{{ overviewStats.activeSupervisorsCount }} نفر</span>
+              </div>
+              <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                <span class="text-[10px] text-slate-400 block font-bold">تأیید نهایی شده:</span>
+                <span class="font-black text-emerald-600">{{ overviewStats.totalApproved }} قلم</span>
+              </div>
+              <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                <span class="text-[10px] text-slate-400 block font-bold">باقی‌مانده شمارش:</span>
+                <span class="font-black text-rose-600">{{ overviewStats.totalTasks - overviewStats.totalCounted }} قلم</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: COUNTERS PRODUCTIVITY -->
+        <div *ngIf="performanceActiveTab === 'counters'" class="space-y-4">
+          <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px] font-black">
+                <tr>
+                  <th class="py-3 px-3">نام انبارگردان</th>
+                  <th class="py-3 px-3 text-center">کل تخصیص</th>
+                  <th class="py-3 px-3 text-center">شمرده شده</th>
+                  <th class="py-3 px-3">پیشرفت</th>
+                  <th class="py-3 px-3 text-center">سرعت (کالا/ساعت)</th>
+                  <th class="py-3 px-3 text-center">تعداد مغایرت</th>
+                  <th class="py-3 px-3 text-center">نرخ دقت</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white font-medium">
+                <tr *ngFor="let c of counterStats" class="hover:bg-indigo-50/30 transition-colors">
+                  <td class="py-2.5 px-3 font-bold text-slate-800 flex items-center gap-1.5">
+                    <div class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                      {{ c.name.charAt(0) }}
+                    </div>
+                    <span>{{ c.name }}</span>
+                  </td>
+                  <td class="py-2.5 px-3 text-center font-bold text-slate-700">{{ c.total }}</td>
+                  <td class="py-2.5 px-3 text-center font-bold text-indigo-700">{{ c.counted }}</td>
+                  <td class="py-2.5 px-3 min-w-[120px]">
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div class="bg-indigo-600 h-full rounded-full" [style.width.%]="c.progressPercent"></div>
+                      </div>
+                      <span class="text-[10px] font-black text-slate-600 w-8">{{ c.progressPercent }}%</span>
+                    </div>
+                  </td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span class="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-md font-black text-[11px]">
+                      {{ c.itemsPerHour }}
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span [class]="c.discrepancies > 0 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-slate-400 bg-slate-50 border-slate-200'" class="px-2 py-0.5 rounded-md border font-black text-[11px]">
+                      {{ c.discrepancies }}
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span [class]="c.accuracyRate >= 90 ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : c.accuracyRate >= 75 ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-rose-700 bg-rose-50 border-rose-200'" class="px-2 py-0.5 rounded-md border font-black text-[11px]">
+                      {{ c.accuracyRate }}%
+                    </span>
+                  </td>
+                </tr>
+                <tr *ngIf="counterStats.length === 0">
+                  <td colspan="7" class="py-8 text-center text-slate-400 font-bold">هیچ داده‌ای برای نمایش انبارگردان‌ها وجود ندارد.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 3: SUPERVISORS EFFICIENCY -->
+        <div *ngIf="performanceActiveTab === 'supervisors'" class="space-y-4">
+          <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px] font-black">
+                <tr>
+                  <th class="py-3 px-3">نام سرپرست</th>
+                  <th class="py-3 px-3 text-center">کل بررسی‌شده</th>
+                  <th class="py-3 px-3 text-center">تایید به مدیریت</th>
+                  <th class="py-3 px-3 text-center">ارجاع به بازشماری (رد)</th>
+                  <th class="py-3 px-3 text-center">نرخ تایید</th>
+                  <th class="py-3 px-3 text-center">نرخ ارجاع</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 bg-white font-medium">
+                <tr *ngFor="let s of supervisorStats" class="hover:bg-indigo-50/30 transition-colors">
+                  <td class="py-2.5 px-3 font-bold text-slate-800 flex items-center gap-1.5">
+                    <div class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                      {{ s.name.charAt(0) }}
+                    </div>
+                    <span>{{ s.name }}</span>
+                  </td>
+                  <td class="py-2.5 px-3 text-center font-bold text-slate-700">{{ s.reviewed }}</td>
+                  <td class="py-2.5 px-3 text-center font-bold text-emerald-600">{{ s.approved }}</td>
+                  <td class="py-2.5 px-3 text-center font-bold text-rose-600">{{ s.rejected }}</td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span class="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md font-black text-[11px]">
+                      {{ s.approvalRate }}%
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3 text-center">
+                    <span class="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-black text-[11px]">
+                      {{ s.rejectionRate }}%
+                    </span>
+                  </td>
+                </tr>
+                <tr *ngIf="supervisorStats.length === 0">
+                  <td colspan="6" class="py-8 text-center text-slate-400 font-bold">هنوز هیچ تسکی توسط سرپرستان بررسی نشده است.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end flex-none">
+        <button (click)="closePerformanceModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition-colors">
+          بستن
+        </button>
+      </div>
+
     </div>
   </div>
 

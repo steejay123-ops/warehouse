@@ -60,9 +60,16 @@ export interface AuditStorageStats {
 
 export interface AuditStats {
   total_all_time: number;
-  audits_24h: number;
-  critical_count: number;
-  warning_count: number;
+  logs_24h?: number;
+  audits_24h?: number;
+  critical_24h?: number;
+  critical_all_time?: number;
+  critical_count?: number;
+  warning_24h?: number;
+  warning_all_time?: number;
+  warning_count?: number;
+  rollbacks_24h?: number;
+  rollbacks_all_time?: number;
   module_breakdown: Record<string, number>;
   storage?: AuditStorageStats;
 }

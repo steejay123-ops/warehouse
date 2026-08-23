@@ -51,6 +51,82 @@ export interface WordDiffToken {
   type: 'added' | 'removed' | 'unchanged';
 }
 
+export const AUDIT_FIELD_LABELS_MAP: Record<string, string> = {
+  // کالاها و موجودی
+  fa_unic_code: 'کد یکتا',
+  tag: 'شماره تگ کالا',
+  pl: 'پکینگ لیست (PL)',
+  po: 'سفارش خرید (PO)',
+  pk_number: 'شماره پکیج',
+  request_number_of_table: 'شماره درخواست جدول',
+  size: 'سایز اصلی',
+  description: 'شرح کالا',
+  unit: 'واحد سنجش',
+  scope_discipline: 'دیسیپلین کاری',
+  inventory: 'موجودی فیزیکی',
+  bal4miv: 'موجودی مجاز (Bal4MIV)',
+  new_location: 'لوکیشن جدید',
+  hov_no: 'شماره HOV',
+  hov_date: 'تاریخ HOV',
+  msr_status: 'وضعیت MSR',
+  vendor: 'سازنده',
+  supplier: 'تامین کننده',
+  irn_no: 'شماره IRN',
+  indent: 'تقاضای خرید',
+  remark: 'ملاحظات',
+  price_amount: 'قیمت واحد',
+  similar_unit_price: 'قیمت کالای مشابه',
+  total_value: 'ارزش کل',
+  currency: 'ارز',
+  invoice_type: 'نوع فاکتور',
+  invoice_date: 'تاریخ فاکتور',
+  inv_rti_number: 'شماره RTI فاکتور',
+  added_rti_no: 'شماره RTI افزوده‌شده',
+  page_row: 'ردیف در فاکتور',
+  invoice_page: 'صفحه فاکتور',
+  doc_supplier: 'تامین‌کننده فاکتور',
+  folder_address: 'مسیر پوشه اسناد',
+  hyperlink: 'هایپرلینک اسناد',
+  tag_status: 'وضعیت لیبل',
+  field_status: 'وضعیت میدانی',
+  doc_status: 'وضعیت مستندات',
+  desc_from_standard_system: 'شرح در سامانه یکنواخت',
+  unit_from_standard_system: 'واحد در سامانه یکنواخت',
+  stamp: 'وضعیت مهر اسناد',
+  signature: 'وضعیت امضای اسناد',
+  has_conflict: 'مغایرت دارد',
+  my_tag: 'تگ‌ها',
+  dynamic_data: 'اطلاعات متغیر (پویا)',
+  field_assignee: 'محول شده به میدانی',
+  doc_assignee: 'محول شده به مدارک',
+  is_deleted: 'حذف‌شده (نرم)',
+  
+  // کاربران و نقش‌ها
+  username: 'نام کاربری',
+  first_name: 'نام',
+  last_name: 'نام خانوادگی',
+  email: 'ایمیل',
+  national_code: 'کد ملی',
+  phone_number: 'شماره تماس',
+  is_active: 'فعال بودن حساب',
+  is_staff: 'دسترسی کارمندی',
+  is_superuser: 'مدیر ارشد',
+  roles: 'نقش‌های کاربر',
+  groups: 'گروه‌های کاربری',
+  user_permissions: 'دسترسی‌های مستقیم',
+  operational_zone: 'منطقه عملیاتی',
+  supervisor_id: 'شناسه سرپرست',
+  title: 'عنوان نقش',
+  name: 'نام سیستمی',
+  permissions: 'دسترسی‌ها',
+  
+  // انبارها و تنظیمات
+  warehouse: 'انبار مرتبط',
+  code: 'کد انبار',
+  location: 'موقعیت مکانی',
+  status: 'وضعیت'
+};
+
 @Component({
   selector: 'app-audit',
   standalone: true,
@@ -888,9 +964,11 @@ export class Audit implements OnInit, OnDestroy {
   getLoginStatusLabel(key: string): string {
     const map: Record<string, string> = {
       SUCCESS: 'ورود موفق (Success)',
+      DAILY_ACTIVE: 'حضور روزانه (Daily)',
       FAILED_CREDENTIALS: 'رمز عبور اشتباه',
       FAILED_LOCKED: 'مسدود شده توسط ضدنفوذ',
       FAILED_INACTIVE: 'حساب غیرفعال',
+      FAILED: 'تلاش‌های ناموفق (همه)',
       LOGOUT: 'خروج امن'
     };
     return map[key] || key;
@@ -919,7 +997,12 @@ export class Audit implements OnInit, OnDestroy {
   loadStats(): void {
     if (!this.isOnline) return;
     this.auditApi.getAuditStats(this.currentWarehouseId).subscribe({
-      next: (stats) => {
+      next: (stats: any) => {
+        if (stats) {
+          stats.audits_24h = stats.logs_24h ?? stats.audits_24h ?? 0;
+          stats.critical_count = stats.critical_24h ?? stats.critical_count ?? 0;
+          stats.warning_count = stats.warning_24h ?? stats.warning_count ?? 0;
+        }
         this.auditStats = stats;
         this.cdr.markForCheck();
       },
@@ -938,9 +1021,22 @@ export class Audit implements OnInit, OnDestroy {
   private formatIsoDate(dateStr: string, isEnd: boolean): string | undefined {
     if (!dateStr) return undefined;
     try {
-      const timePart = isEnd ? 'T23:59:59.999' : 'T00:00:00.000';
-      const d = new Date(`${dateStr}${timePart}`);
-      return isNaN(d.getTime()) ? undefined : d.toISOString();
+      const s = String(dateStr).trim();
+      if (!s) return undefined;
+      const dateOnly = s.includes('T') ? s.split('T')[0] : (s.length === 10 && s.includes('-') ? s : null);
+      if (dateOnly) {
+        const timePart = isEnd ? 'T23:59:59.999' : 'T00:00:00.000';
+        const d = new Date(`${dateOnly}${timePart}`);
+        return isNaN(d.getTime()) ? undefined : d.toISOString();
+      }
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return undefined;
+      if (isEnd) {
+        d.setHours(23, 59, 59, 999);
+      } else {
+        d.setHours(0, 0, 0, 0);
+      }
+      return d.toISOString();
     } catch {
       return undefined;
     }
@@ -1559,6 +1655,7 @@ export class Audit implements OnInit, OnDestroy {
 
       items.push({
         key: k,
+        label: AUDIT_FIELD_LABELS_MAP[k] || k,
         oldValue: hasB ? this.formatValue(valB) : '—',
         newValue: hasA ? this.formatValue(valA) : '—',
         type
@@ -1708,8 +1805,20 @@ export class Audit implements OnInit, OnDestroy {
 
   // ─── Word-Level Diff & Highlight Helper ──────────────────────────────────
   computeWordDiff(oldVal: any, newVal: any): { oldTokens: WordDiffToken[]; newTokens: WordDiffToken[]; isDifferent: boolean } {
-    const strOld = oldVal === null || oldVal === undefined ? '' : String(oldVal).trim();
-    const strNew = newVal === null || newVal === undefined ? '' : String(newVal).trim();
+    const formatToString = (v: any): string => {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'object') {
+        try {
+          return JSON.stringify(v, null, 2);
+        } catch {
+          return String(v);
+        }
+      }
+      return String(v).trim();
+    };
+
+    const strOld = formatToString(oldVal);
+    const strNew = formatToString(newVal);
 
     if (strOld === strNew) {
       return {
@@ -1741,11 +1850,14 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   // ─── Purge Logs Methods ──────────────────────────────────────────────────
+  purgeTargetType: 'audit' | 'login' = 'audit';
+
   openPurgeModal(): void {
     if (!this.canPurgeLogs()) {
       this.toast.show('error', 'شما دسترسی لازم برای پاکسازی لاگ‌ها را ندارید.');
       return;
     }
+    this.purgeTargetType = this.activeTab;
     this.purgeFromDate = '';
     this.purgeToDate = '';
     this.purgeFromDateControl.setValue('', { emitEvent: false });
@@ -1791,12 +1903,16 @@ export class Audit implements OnInit, OnDestroy {
     const req: PurgeRequest = {
       from_date: this.formatIsoDate(this.purgeFromDate, false),
       to_date: this.formatIsoDate(this.purgeToDate, true),
-      warehouse: this.purgeWarehouse || undefined,
-      module: this.purgeModule || undefined,
+      warehouse: this.purgeTargetType === 'audit' ? (this.purgeWarehouse || undefined) : undefined,
+      module: this.purgeTargetType === 'audit' ? (this.purgeModule || undefined) : undefined,
       days: this.purgeDays ? Number(this.purgeDays) : undefined,
     };
 
-    this.auditApi.getPurgePreview(req).subscribe({
+    const call$ = this.purgeTargetType === 'login'
+      ? this.auditApi.getLoginPurgePreview(req)
+      : this.auditApi.getPurgePreview(req);
+
+    call$.subscribe({
       next: (res) => {
         this.isLoadingPurgePreview = false;
         this.purgePreviewCount = res.count;
@@ -1811,8 +1927,9 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   executePurge(): void {
-    if (this.purgeConfirmText.trim() !== 'PURGE_AUDIT_LOGS_CONFIRM') {
-      this.toast.show('error', 'لطفاً عبارت تاییدیه امنیتی را به صورت دقیق PURGE_AUDIT_LOGS_CONFIRM وارد نمایید.');
+    const requiredConfirm = this.purgeTargetType === 'login' ? 'PURGE_LOGIN_LOGS_CONFIRM' : 'PURGE_AUDIT_LOGS_CONFIRM';
+    if (this.purgeConfirmText.trim() !== requiredConfirm) {
+      this.toast.show('error', `لطفاً عبارت تاییدیه امنیتی را به صورت دقیق ${requiredConfirm} وارد نمایید.`);
       return;
     }
 
@@ -1822,16 +1939,20 @@ export class Audit implements OnInit, OnDestroy {
     const req: PurgeRequest = {
       from_date: this.formatIsoDate(this.purgeFromDate, false),
       to_date: this.formatIsoDate(this.purgeToDate, true),
-      warehouse: this.purgeWarehouse || undefined,
-      module: this.purgeModule || undefined,
+      warehouse: this.purgeTargetType === 'audit' ? (this.purgeWarehouse || undefined) : undefined,
+      module: this.purgeTargetType === 'audit' ? (this.purgeModule || undefined) : undefined,
       days: this.purgeDays ? Number(this.purgeDays) : undefined,
       confirm_text: this.purgeConfirmText.trim()
     };
 
-    this.auditApi.purgeLogs(req).subscribe({
+    const call$ = this.purgeTargetType === 'login'
+      ? this.auditApi.purgeLoginLogs(req)
+      : this.auditApi.purgeLogs(req);
+
+    call$.subscribe({
       next: (res) => {
         this.isPurging = false;
-        this.toast.show('success', res.message || 'لاگ‌های ممیزی با موفقیت پاکسازی شدند.');
+        this.toast.show('success', res.message || 'لاگ‌ها با موفقیت پاکسازی شدند.');
         this.closePurgeModal();
         this.loadStats();
         this.resetPageAndReload();
@@ -2089,6 +2210,16 @@ export class Audit implements OnInit, OnDestroy {
     if (this.selectedModule && log.module !== this.selectedModule) return false;
     if (this.selectedSeverity && log.severity !== this.selectedSeverity) return false;
     if (this.selectedAction && log.action !== this.selectedAction) return false;
+    if (this.fromDate && log.created_at) {
+      const logTime = new Date(log.created_at).getTime();
+      const fromTime = new Date(this.fromDate).getTime();
+      if (!isNaN(logTime) && !isNaN(fromTime) && logTime < fromTime) return false;
+    }
+    if (this.toDate && log.created_at) {
+      const logTime = new Date(log.created_at).getTime();
+      const toTime = new Date(this.toDate).getTime();
+      if (!isNaN(logTime) && !isNaN(toTime) && logTime > toTime) return false;
+    }
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
       const matchUser = (log.user_display || '').toLowerCase().includes(term) || (log.actor_username || '').toLowerCase().includes(term);
@@ -2101,7 +2232,23 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   private isLoginFilterMatch(log: UserLoginLog): boolean {
-    if (this.selectedLoginStatus && log.status !== this.selectedLoginStatus) return false;
+    if (this.selectedLoginStatus) {
+      if (this.selectedLoginStatus === 'FAILED') {
+        if (!log.status || !log.status.startsWith('FAILED')) return false;
+      } else if (log.status !== this.selectedLoginStatus) {
+        return false;
+      }
+    }
+    if (this.fromDate && log.created_at) {
+      const logTime = new Date(log.created_at).getTime();
+      const fromTime = new Date(this.fromDate).getTime();
+      if (!isNaN(logTime) && !isNaN(fromTime) && logTime < fromTime) return false;
+    }
+    if (this.toDate && log.created_at) {
+      const logTime = new Date(log.created_at).getTime();
+      const toTime = new Date(this.toDate).getTime();
+      if (!isNaN(logTime) && !isNaN(toTime) && logTime > toTime) return false;
+    }
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
       const matchUser = (log.username_attempted || '').toLowerCase().includes(term) || (log.user_display || '').toLowerCase().includes(term);
@@ -2112,6 +2259,11 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   private incrementAuditStats(log: AuditLog): void {
+    const selectedWh = this.currentWarehouseId;
+    const logWh = log.warehouse !== undefined && log.warehouse !== null ? log.warehouse : undefined;
+    const matchesWarehouse = (selectedWh === undefined) || (logWh !== undefined && Number(logWh) === Number(selectedWh));
+    if (!matchesWarehouse) return;
+
     this.auditStats.total_all_time = (this.auditStats.total_all_time || 0) + 1;
     this.auditStats.audits_24h = (this.auditStats.audits_24h || 0) + 1;
     if (log.severity === 'critical') {

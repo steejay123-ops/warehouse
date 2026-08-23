@@ -835,7 +835,14 @@ export class Reports implements OnInit, OnDestroy {
           if (jm) this._loadJoinTargetFields(jm);
         }
       }
+      this.toast.success(`قالب «${t.name}» با موفقیت بارگذاری شد.`);
       this.notifyStateChanged();
+      // اجرای خودکار پس از بارگذاری قالب جهت تجربه کاربری سریع و روان
+      setTimeout(() => {
+        if (!this.store.isOffline() && this.validateReportSpec()) {
+          this.runReport();
+        }
+      }, 100);
     });
   }
 

@@ -415,8 +415,31 @@ export class ReportStore {
       if (e.status === 0 || e.status >= 520) {
         return 'گزارش‌گیری فقط در حالت آنلاین در دسترس است — اتصال به سرور برقرار نیست.';
       }
-      const m = (e.error && (e.error.error || e.error.detail)) as string | undefined;
-      if (m) return m;
+      if (e.error) {
+        if (typeof e.error === 'string' && e.error.trim().length > 0 && e.error.length < 300) {
+          return e.error;
+        }
+        if (typeof e.error === 'object') {
+          const errObj = e.error as Record<string, unknown>;
+          if (typeof errObj['error'] === 'string') return errObj['error'];
+          if (typeof errObj['detail'] === 'string') return errObj['detail'];
+          if (typeof errObj['message'] === 'string') return errObj['message'];
+          
+          // جمع‌آوری خطاهای فیلدها یا خطاهای عمومی
+          const msgs: string[] = [];
+          for (const key of Object.keys(errObj)) {
+            const val = errObj[key];
+            if (Array.isArray(val)) {
+              msgs.push(`${key !== 'non_field_errors' && key !== 'detail' ? key + ': ' : ''}${val.join('، ')}`);
+            } else if (typeof val === 'string') {
+              msgs.push(`${key !== 'non_field_errors' && key !== 'detail' ? key + ': ' : ''}${val}`);
+            }
+          }
+          if (msgs.length > 0) return msgs.join(' | ');
+        }
+      }
+    } else if (e instanceof Error && e.message) {
+      return e.message;
     }
     return 'خطای غیرمنتظره در اجرای گزارش.';
   }

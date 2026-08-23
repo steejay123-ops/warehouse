@@ -1,3 +1,5 @@
+- [Count Tracking 14 Fixes Completed](Count_Tracking_14_Fixes/walkthrough_count_tracking_14_fixes.md)
+- [Count Tracking 14 Fixes Planned](Count_Tracking_14_Fixes/implementation_plan_count_tracking_14_fixes.md)
 - [Report Builder Template Load And Execution Fix Completed](Report_Builder_Template_Load_And_Execution_Fix/walkthrough_Report_Builder_Template_Load_And_Execution_Fix.md)
 - [Report Builder Template Load And Execution Fix Planned](Report_Builder_Template_Load_And_Execution_Fix/implementation_plan_Report_Builder_Template_Load_And_Execution_Fix.md)
 - [Audit Trail Comprehensive Remediation Completed](Audit_Trail_Comprehensive_Remediation_Plan/walkthrough_audit_trail_remediation.md)
@@ -118,3 +120,4 @@
 - [Customs/Financial Cartable 26 Comprehensive Fixes Completed](Customs_Financial_Cartable_26_Fixes/walkthrough_customs_26_fixes.md)
 - [Browser E2E Comprehensive Testing (10 Scenarios & Guardian Agents) Completed](Browser_E2E_Comprehensive_Testing/walkthrough.md)
 - [Audit Backend Logic Remediation & Full Coverage Completed](Audit_Backend_Logic_Remediation/walkthrough.md)
+- [Codebase 17 Items Optimization Completed](Codebase_17_Items_Optimization/walkthrough_codebase_17_items_optimization.md)

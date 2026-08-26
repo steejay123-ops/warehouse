@@ -59,7 +59,27 @@
       "Bash(xargs grep -i \"\\\\.delete\")",
       "Bash(warehouse-backend/venv/Scripts/python -c ' *)",
       "Bash(venv/Scripts/python -c ' *)",
-      "Bash(rm -f warehouse-backend/test_script.py warehouse-backend/test_wh.py warehouse-backend/test_api.py)"
+      "Bash(rm -f warehouse-backend/test_script.py warehouse-backend/test_wh.py warehouse-backend/test_api.py)",
+      "Bash(python manage.py check)",
+      "Bash(./venv/Scripts/python.exe manage.py check)",
+      "Bash(./venv/Scripts/python.exe manage.py makemigrations inventory)",
+      "Bash(./venv/Scripts/python.exe manage.py shell -c \"exec\\(open\\('/tmp/prefetch_data_probe.py'\\).read\\(\\)\\)\")",
+      "Bash(./venv/Scripts/python.exe manage.py test inventory --keepdb -v 1)",
+      "Bash(npx ng *)",
+      "Bash(venv/Scripts/python.exe manage.py check)",
+      "Bash(venv/Scripts/python.exe manage.py showmigrations)",
+      "Bash(venv/Scripts/python.exe manage.py makemigrations --check --dry-run)",
+      "Bash(venv/Scripts/python.exe manage.py showmigrations inventory accounts)",
+      "Bash(venv/Scripts/python.exe manage.py showmigrations inventory)",
+      "Bash(echo \"--- exit $? \\(1 = clean\\) ---\")",
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(cd \"E:/warehouse project\" && sed -n '1,120p;' warehouse-front/src/app/components/supervisor/supervisor-dashboard/supervisor-dashboard.ts)",
+      "Bash(xargs wc -l)",
+      "Bash(cd \"E:/warehouse project\" && echo \"=== settings: channels/redis/asgi ===\" && grep -n \"CHANNEL_LAYERS\\\\|channels\\\\|REDIS\\\\|InMemory\\\\|ASGI_APPLICATION\\\\|DATA_UPLOAD\\\\|FILE_UPLOAD\\\\|MEDIA_ROOT\\\\|MEDIA_URL\\\\|CORS\\\\|ALLOWED_HOSTS\\\\|CSRF_TRUSTED\" -i warehouse-backend/config/settings.py | head -60 && echo \"\" && echo \"=== INSTALLED_APPS ===\" && sed -n '/INSTALLED_APPS/,/^]/p' warehouse-backend/config/settings.py && echo \"\" && echo \"=== urls.py communications ===\" && grep -n \"communications\" warehouse-backend/config/urls.py)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\); console.log\\('karma:', !!\\(p.devDependencies&&p.devDependencies['karma']\\), 'jasmine:', !!\\(p.devDependencies&&p.devDependencies['jasmine-core']\\)\\);\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(p.dependencies['@angular/core'], '| devDeps test-related:', Object.keys\\(p.devDependencies||{}\\).join\\(', '\\)\\)\")",
+      "Bash(cd \"E:/warehouse project\" && stat -c '%y  %n' warehouse-backend/communications/*.py warehouse-backend/communications/management/commands/*.py warehouse-backend/common/media_urls.py warehouse-backend/config/settings.py 2>/dev/null | sort -r)",
+      "Bash(cd \"E:/warehouse project/warehouse-front/src/app\" && stat -c '%y  %n' core/services/communication.service.ts core/services/communication.service.spec.ts components/communications/*/*.ts components/communications/*/*.html components/layout/layout.ts 2>/dev/null | sort -r)"
     ]
   }
 }

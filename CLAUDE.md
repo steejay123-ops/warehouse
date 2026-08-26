@@ -1,4 +1,4 @@
-﻿# قوانین پروژه
+# قوانین پروژه
 
 ## Rules
 
@@ -9,5 +9,4 @@
 - ALWAYS read a file before editing it
 - NEVER commit secrets, credentials, or .env files
 - NEVER add a `Co-Authored-By` trailer to user commits
-- Keep files under 500 lines
 - Validate input at system boundaries

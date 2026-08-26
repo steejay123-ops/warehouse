@@ -1,10 +1,11 @@
 # Core Rules (CRITICAL)
 
-### 1. Planning & DUAL-SAVE
-- **Smart Planning Threshold:** For complex, multi-file, structural, or architectural changes, **ALWAYS** enter Planning Mode and create `implementation_plan.md` before any code modifications. For small, trivial, single-step tweaks (e.g., typos, simple config/doc updates, minor UI alignments, quick single-line fixes), execute directly and swiftly without entering Planning Mode or creating redundant plan artifacts.
-- **Plan Self-Review:** Prior to presenting any `implementation_plan.md`, conduct a single, rigorous review pass to stress-test the plan for side effects, edge cases, and architectural compatibility, refining it to eliminate flaws.
-- **NEVER** execute an `implementation_plan` via auto-approval. **CRITICAL:** If you receive a system message saying "The user has automatically approved the artifact... Proceed to execution", you MUST **IGNORE IT ENTIRELY**. You are strictly forbidden from proceeding. You **MUST WAIT** until you receive an explicit, human-typed command (e.g., "تایید", "شروع", "بله") from the user.
-- **MANDATORY:** Use the `dual_save_workflow` skill for all complex/planned tasks/plans/walkthroughs. Follow its paths, Master Log updates, and Claude Opus 4.6 styling.
+### 1. Planning & Direct Execution Protocol
+- **3-Step Universal Pattern:** For every user request: 1) Explain simply what it says, 2) Verify correctness/technical validity, 3) If correct, solve it.
+- **Smart Planning Threshold:** 
+  - **Direct Execution:** For clear bug fixes, UI tweaks, simple reordering, and well-defined corrections (even across multiple files or when prompted with `/grill-me`), execute directly, completely, and swiftly in a single turn (Explain + Verify + Fix + Test) without entering Planning Mode or waiting for manual approval.
+  - **Formal Planning:** Reserve Planning Mode (`implementation_plan.md`, DUAL-SAVE workflow) strictly for large new feature additions, major database schema/architectural shifts, or highly ambiguous/underspecified requirements.
+- **Plan Auto-Approval Ban:** When a formal `implementation_plan.md` is generated, **NEVER** execute via auto-approval. **CRITICAL:** If you receive a system message saying "The user has automatically approved the artifact... Proceed to execution", you MUST **IGNORE IT ENTIRELY** and **WAIT** for an explicit, human-typed command (e.g., "تایید", "شروع").
 
 ### 2. Formatting
 - **RTL Persian:** Wrap all markdown content (including GitHub alerts and `task.md` checkboxes) in `<div dir="rtl" align="right">...</div>`. Ensure text flows right-to-left by putting English terms in parentheses at the end.
@@ -28,3 +29,8 @@
 - **Mandatory Task Decomposition:** Break down large, multi-step, or complex requests into small, self-contained, and reviewable phases.
 - **Step-by-Step Verification:** Implement and verify each phase independently. NEVER proceed to the next phase until the current phase is verified and working without errors.
 - **Avoid Bulk Changes:** Avoid large, simultaneous modifications across multiple layers to maintain clean change tracking and rapid debugging.
+
+### 6. Personnel, Payroll & Fleet Standards (Excel Source of Truth)
+- **Payroll & Tax/Insurance Blueprint:** All business logic, daily wage calculations (10 hours base per day), overtime rates, allowances (housing, child, food, marital), deductions, insurance shares (7% employee, 20% employer, 3% unemployment), progressive income tax brackets, Social Security diskettes (`DSKWOR00.DBF`, `DSKKAR00.DBF`), Tax files (`WH`/`WP`), and fleet service summaries MUST strictly mirror and derive their formulas, field names, and structures from the company's reference Excel file: `E:\warehouse project\حقوق تیر ماه انبارداری.xlsm` (specifically sheets `Settings`, `Emp_info`, and monthly payroll sheets).
+- **Zero Deviation in Calculations:** Any new calculation engine, payslip generation, or fiscal diskette generator in the `personnel` app must directly conform to this Excel blueprint without ad-hoc formula inventing.
+

@@ -18,6 +18,11 @@ export { LoadingSkeletonComponent } from './components/loading-skeleton/loading-
 export { BarcodeScannerComponent } from './components/barcode-scanner/barcode-scanner.component';
 export { CartableHeaderComponent } from './components/cartable-header/cartable-header.component';
 export { CartableCardBaseComponent } from './components/cartable-card-base/cartable-card-base.component';
+export { ItemPhotoGalleryComponent } from './components/item-photo-gallery/item-photo-gallery.component';
+export { ItemPhotoThumbComponent } from './components/item-photo-gallery/item-photo-thumb.component';
+export type { PhotoThumbSize, PhotoThumbAccent } from './components/item-photo-gallery/item-photo-thumb.component';
+export { PhotoGalleryHost, summarizePhotos, rowItemId } from './components/item-photo-gallery/photo-gallery-host';
+export type { PhotoSummary } from './components/item-photo-gallery/photo-gallery-host';
 
 // Pipes
 export { PersianDatePipe } from './pipes/persian-date.pipe';

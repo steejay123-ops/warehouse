@@ -14,3 +14,4 @@ export { CountTaskApiService } from './count-task-api.service';
 export { DynamicFieldApiService } from './dynamic-field-api.service';
 export { TableViewApiService } from './table-view-api.service';
 export { ReportApiService } from './report-api.service';
+export { PersonnelApiService } from './personnel-api.service';

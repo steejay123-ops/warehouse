@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet, InvalidToken
 
 from accounts.permissions import IsSuperUser, CanManageDatabaseBackup, CanRestoreDatabase
+from accounts.audit_utils import log_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,12 @@ class BackupCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if len(password) < 12:
+            return Response(
+                {"error": "رمز عبور فایل پشتیبان باید حداقل ۱۲ کاراکتر باشد."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         db = _get_db_conf()
         env = os.environ.copy()
         env["PGPASSWORD"] = db["PASSWORD"]
@@ -242,10 +249,25 @@ class BackupCreateView(APIView):
             # ── 3. Build .wbak payload: magic + salt + encrypted data ─────────
             wbak_payload = WBAK_MAGIC + salt + encrypted
 
-            # ── 4. Stream as downloadable file ────────────────────────────────
+            # ── 4. Audit Log ──────────────────────────────────────────────────
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"warehouse_backup_{timestamp}.wbak"
 
+            log_audit_event(
+                module='backup',
+                action='EXPORT',
+                severity='warning',
+                user=request.user,
+                target_model='DatabaseBackup',
+                target_repr=f"ایجاد نسخه پشتیبان دیتابیس ({filename})",
+                details={
+                    'filename': filename,
+                    'size_bytes': len(wbak_payload),
+                },
+                ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+            )
+
+            # ── 5. Stream as downloadable file ────────────────────────────────
             response = HttpResponse(wbak_payload, content_type="application/octet-stream")
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             response["Content-Length"] = len(wbak_payload)
@@ -259,22 +281,31 @@ class BackupCreateView(APIView):
 class BackupRestoreView(APIView):
     """
     POST /api/backup/restore/
-    Multipart body: { "file": <.wbak file>, "password": "<password>" }
+    Multipart body: { "file": <.wbak file>, "password": "<password>", "confirm_text": "RESTORE_DATABASE_CONFIRM" }
 
     Steps:
-      1. Validate the .wbak magic header.
-      2. Decrypt the uploaded file using the provided password.
-      3. Take an emergency backup of the current DB (rollback file).
-      4. Terminate active DB connections to prevent lock conflicts.
-      5. Run pg_restore to restore the database.
-      6. On success: delete rollback file and return 200.
-      7. On failure (fatal only): run pg_restore with rollback file, return 500.
+      1. Validate confirm_text == 'RESTORE_DATABASE_CONFIRM'.
+      2. Check uploaded file size limit (BACKUP_MAX_UPLOAD_MB).
+      3. Validate the .wbak magic header.
+      4. Decrypt the uploaded file using the provided password.
+      5. Take an emergency backup of the current DB (rollback file).
+      6. Terminate active DB connections to prevent lock conflicts.
+      7. Run pg_restore to restore the database.
+      8. On success: delete rollback file and return 200.
+      9. On failure (fatal only): run pg_restore with rollback file, return 500.
 
     Only Superusers can call this endpoint.
     """
     permission_classes = [CanRestoreDatabase]
 
     def post(self, request):
+        confirm_text = request.data.get("confirm_text", "").strip()
+        if confirm_text != 'RESTORE_DATABASE_CONFIRM':
+            return Response(
+                {"error": "جهت بازیابی پایگاه داده، عبارت تاییدیه امنیتی RESTORE_DATABASE_CONFIRM باید به طور دقیق وارد شود."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         uploaded_file = request.FILES.get("file")
         password = request.data.get("password", "").strip()
 
@@ -283,6 +314,37 @@ class BackupRestoreView(APIView):
                 {"error": "فایل و رمز عبور هر دو الزامی هستند."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        max_mb = getattr(django_settings, 'BACKUP_MAX_UPLOAD_MB', 2048)
+        max_bytes = max_mb * 1024 * 1024
+        if uploaded_file.size > max_bytes:
+            return Response(
+                {"error": f"حجم فایل ارسالی بیش از سقف مجاز ({max_mb} مگابایت) است."},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        # Audit log: Record restore initiation before potentially disruptive operations
+        logger.critical(
+            "AUDIT_RESTORE_START: Initiating database restore from file '%s' (%d bytes) by user '%s' (ID: %s, IP: %s)",
+            uploaded_file.name,
+            uploaded_file.size,
+            getattr(request.user, 'username', 'Anonymous'),
+            getattr(request.user, 'id', 'N/A'),
+            getattr(request, 'META', {}).get('REMOTE_ADDR', 'unknown')
+        )
+        log_audit_event(
+            module='backup',
+            action='RESTORE_START',
+            severity='critical',
+            user=request.user,
+            target_model='DatabaseBackup',
+            target_repr=f"آغاز بازیابی دیتابیس از فایل ({uploaded_file.name})",
+            details={
+                'filename': uploaded_file.name,
+                'size_bytes': uploaded_file.size,
+            },
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
 
         wbak_payload = uploaded_file.read()
 
@@ -326,6 +388,7 @@ class BackupRestoreView(APIView):
         rollback_path = None
         restore_path = None
         rollback_succeeded = False
+        restore_failed = False
 
         # ── 3. Emergency backup (rollback) ────────────────────────────────────
         try:
@@ -399,9 +462,11 @@ class BackupRestoreView(APIView):
                     )
 
         except Exception as exc:
+            restore_failed = True
             logger.error("Restore failed: %s", exc)
 
             # ── 6a. Rollback ──────────────────────────────────────────────────
+            rollback_state = 'unavailable'
             if rollback_path and os.path.exists(rollback_path):
                 logger.info("Attempting rollback from emergency backup...")
                 rb_result = subprocess.run(
@@ -412,20 +477,48 @@ class BackupRestoreView(APIView):
                 )
                 rollback_succeeded = (rb_result.returncode == 0)
                 if rollback_succeeded:
+                    rollback_state = 'restored'
                     logger.info("Rollback completed successfully.")
                 else:
+                    rollback_state = 'failed'
                     logger.error(
                         "Rollback also failed: %s",
                         rb_result.stderr.decode("utf-8", errors="replace")[:500],
                     )
+            else:
+                rollback_state = 'unavailable'
 
-            return Response(
-                {
-                    "error": "بازیابی با خطا مواجه شد. سیستم به حالت قبل بازگردانده شد.",
-                    "detail": str(exc),
+            log_audit_event(
+                module='backup',
+                action='RESTORE_FAILED',
+                severity='critical',
+                user=request.user,
+                target_model='DatabaseBackup',
+                target_repr="شکست در بازیابی دیتابیس",
+                details={
+                    'rollback_state': rollback_state,
+                    'error': str(exc),
+                    'rollback_file': rollback_path if rollback_state == 'failed' else None,
                 },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
             )
+
+            if rollback_state == 'restored':
+                err_msg = "بازیابی با خطا مواجه شد. سیستم به حالت قبل بازگردانده شد."
+            elif rollback_state == 'unavailable':
+                err_msg = "بازیابی با خطا مواجه شد و نسخه اضطراری در دسترس نبود. وضعیت دیتابیس نامشخص است — فوراً با پشتیبانی تماس بگیرید."
+            else:
+                err_msg = f"بازیابی و بازگردانی هر دو شکست خوردند. فایل نجات نگه داشته شد: {rollback_path}"
+
+            resp_payload = {
+                "error": err_msg,
+                "rollback_state": rollback_state,
+                "detail": str(exc),
+            }
+            if rollback_state == 'failed':
+                resp_payload["rollback_file"] = rollback_path
+
+            return Response(resp_payload, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         finally:
             # Always clean up restore temp file
@@ -434,15 +527,32 @@ class BackupRestoreView(APIView):
             # Clean up rollback file — EXCEPT when both restore AND rollback
             # failed (keep it as last-resort manual recovery)
             if rollback_path:
-                # If we're in the success path, or rollback succeeded → clean up
-                # If rollback failed → keep the file for manual recovery
-                if rollback_succeeded or 'exc' not in dir():
-                    _safe_remove(rollback_path)
-                else:
+                if restore_failed and not rollback_succeeded:
                     logger.warning(
                         "Keeping rollback file for manual recovery: %s",
                         rollback_path,
                     )
+                else:
+                    _safe_remove(rollback_path)
+
+        logger.critical(
+            "AUDIT_RESTORE_COMPLETE: Database restore completed successfully from file '%s' by user '%s'",
+            uploaded_file.name,
+            getattr(request.user, 'username', 'Anonymous')
+        )
+        log_audit_event(
+            module='backup',
+            action='RESTORE_COMPLETE',
+            severity='info',
+            user=request.user,
+            target_model='DatabaseBackup',
+            target_repr=f"بازیابی موفقیت‌آمیز دیتابیس از فایل ({uploaded_file.name})",
+            details={
+                'filename': uploaded_file.name,
+                'size_bytes': uploaded_file.size,
+            },
+            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+        )
 
         return Response(
             {"message": "بازیابی اطلاعات با موفقیت انجام شد. لطفاً صفحه را مجدداً بارگذاری کنید."},

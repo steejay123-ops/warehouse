@@ -21,8 +21,10 @@ import { ManagerReview } from './components/manager-review/manager-review';
 import { CountTracking } from './components/count-tracking/count-tracking';
 import { Reports } from './components/reports/reports';
 import { VerifyCard } from './components/verify-card/verify-card';
+import { PersonnelManagement } from './components/personnel/personnel-management/personnel-management';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
+import { settingsLeaveGuard } from './core/guards/settings-leave.guard';
 export const routes: Routes = [
   { path: 'login', component: Login },
   { path: 'verify-card/:code', component: VerifyCard },
@@ -48,7 +50,11 @@ export const routes: Routes = [
         canDeactivate: [importLeaveGuard]
       },
       { path: 'users', component: Users },
-      { path: 'settings', component: Settings },
+      { 
+        path: 'settings', 
+        component: Settings,
+        canDeactivate: [settingsLeaveGuard]
+      },
       { path: 'wh-settings', component: WhSettings },
       { path: 'audit', component: Audit },
       { path: 'feeding', component: Feeding },
@@ -60,6 +66,8 @@ export const routes: Routes = [
       { path: 'manager-review', component: ManagerReview, data: { reuse: true } },
       { path: 'count-tracking', component: CountTracking, data: { reuse: true } },
       { path: 'reports', component: Reports },
+      { path: 'personnel', component: PersonnelManagement },
+      { path: 'attendance', component: PersonnelManagement },
       { path: 'tasks', component: Placeholders },
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },

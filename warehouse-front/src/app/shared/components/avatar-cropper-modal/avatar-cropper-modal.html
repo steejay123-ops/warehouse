@@ -26,7 +26,7 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>انتخاب فایل عکس</span>
         </button>
-        <input #fileInput type="file" accept="image/*" (change)="onFileSelected($event)" style="display: none" />
+        <input #fileInput type="file" accept="image/png,image/jpeg,image/webp,image/gif" (change)="onFileSelected($event)" style="display: none" />
 
         <button *ngIf="cameraAvailable" type="button" class="tool-btn camera" (click)="startCamera()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>

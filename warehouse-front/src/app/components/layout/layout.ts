@@ -20,14 +20,17 @@ import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
+import { ChatDrawerComponent } from '../communications/chat-drawer/chat-drawer.component';
+import { CommunicationService } from '../../core/services/communication.service';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent, ChatDrawerComponent],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
 export class Layout implements OnInit, OnDestroy {
+  public commService = inject(CommunicationService);
 
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
@@ -298,6 +301,21 @@ export class Layout implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  toggleChatDrawer() {
+    const nextState = !this.commService.isChatDrawerOpen();
+    this.commService.isChatDrawerOpen.set(nextState);
+    if (nextState) {
+      this.commService.hasNewIncomingPulse.set(false);
+      const active = this.commService.activeConversation$.value;
+      if (active) {
+        this.commService.markAsRead(active.id);
+      }
+    } else {
+      this.commService.closeActiveConversation();
+    }
+    this.cdr.detectChanges();
+  }
+
   // ─── Offline / Sync UI ───
   /** وضعیت سه‌حالته اتصال: online | server-unreachable | offline */
   connectionState: ConnectionState = 'online';
@@ -457,13 +475,15 @@ export class Layout implements OnInit, OnDestroy {
     'check-square': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`,
     database: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
     activity: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`,
-    'bar-chart-2': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`
+    'bar-chart-2': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
+    truck: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`
   };
 
   icons: any = {};
 
   private SYSTEM_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
+    {id:'personnel', label:'پرسنل و ناوگان', icon:'truck', permission: 'view_sys_personnel'},
     {id:'users', label:'کاربران و نقش ها', icon:'users', permission: 'view_sys_users'},
     {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
@@ -478,6 +498,7 @@ export class Layout implements OnInit, OnDestroy {
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد انبار', icon:'grid', permission: 'view_wh_dashboard'},
+    {id:'attendance', label:'کارکرد و ناوگان انبار', icon:'truck', permission: 'view_wh_attendance'},
     {id:'docs', label:'مدیریت کالا', icon:'upload-cloud', permission: 'view_wh_docs'},
     {id:'dispatch', label:'تخصیص کالا', icon:'clipboard', permission: 'view_wh_dispatch'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
@@ -539,6 +560,12 @@ export class Layout implements OnInit, OnDestroy {
         } else if (storedId) {
           this.state.appState.activeWarehouseId = storedId === 'ALL' ? 'ALL' : Number(storedId);
         }
+
+        // راه‌اندازی سراسری وب‌سوکت پیام‌رسان و بارگذاری پیام‌های خوانده‌نشده
+        const initWhId = this.store.activeWarehouseId() === 'ALL' ? undefined : Number(this.store.activeWarehouseId());
+        this.commService.ensureConnected(initWhId);
+        this.commService.loadConversations(initWhId);
+        this.commService.requestNotificationPermission();
       }
     });
 
@@ -1026,7 +1053,9 @@ export class Layout implements OnInit, OnDestroy {
       audit: 'رهگیری تغییرات',
       'wh-settings': 'تنظیمات انبار',
       'count-tracking': 'پیگیری وضعیت شمارش',
-      reports: 'گزارش‌ساز پویا'
+      reports: 'گزارش‌ساز پویا',
+      personnel: 'مدیریت پرسنل و ناوگان',
+      attendance: 'ثبت کارکرد و ناوگان انبار'
     };
     this.currentTitle = titles[tab] || tab;
   }

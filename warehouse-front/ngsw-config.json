@@ -26,5 +26,18 @@
         ]
       }
     }
+  ],
+  "dataGroups": [
+    {
+      "name": "item-photos",
+      "urls": [
+        "/media/item_photos/**"
+      ],
+      "cacheConfig": {
+        "strategy": "performance",
+        "maxSize": 250,
+        "maxAge": "30d"
+      }
+    }
   ]
 }

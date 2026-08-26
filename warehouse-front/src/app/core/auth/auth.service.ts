@@ -4,6 +4,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, of, from, throwError, tap, catchError, map, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
+import { offlineDb } from '../services/offline-db';
 import {
   AuthTokens,
   LoginPayload,
@@ -164,6 +165,7 @@ export class AuthService {
     // Note: SimpleJWT doesn't have a built-in logout endpoint unless token blacklisting is explicitly configured.
     // So we just clear the auth tokens locally to avoid 404 errors.
     this.clearAuth();
+    offlineDb.clearServerDerivedCaches().catch(() => {});
     this.router.navigate(['/login']);
   }
 

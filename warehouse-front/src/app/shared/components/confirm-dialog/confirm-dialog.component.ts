@@ -13,6 +13,8 @@ export interface ConfirmDialogConfig {
   extraText?: string;
   type?: 'danger' | 'warning' | 'info';
   showCancel?: boolean;
+  requireText?: string;
+  requireTextLabel?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -77,7 +79,7 @@ export class ConfirmDialogService {
   template: `
     @if (dialog.isOpen()) {
       <div class="fixed inset-0 z-[110] flex items-center justify-center p-4">
-        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="dialog.cancel()"></div>
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="cancel()"></div>
         <div class="confirm-panel relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
           <!-- Icon -->
           <div class="pt-6 flex justify-center">
@@ -95,11 +97,30 @@ export class ConfirmDialogService {
             <p class="text-xs text-slate-500 leading-relaxed" [innerHTML]="config()?.message"></p>
           </div>
 
+          <!-- Required Text Confirmation Input -->
+          @if (config()?.requireText) {
+            <div class="px-6 pb-2 text-right">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
+                {{ config()?.requireTextLabel || 'جهت تأیید، عبارت زیر را دقیقاً وارد کنید:' }}
+              </label>
+              <div class="bg-slate-50 border border-slate-200 rounded-xl p-2 mb-2 text-center select-all font-mono font-bold text-xs text-rose-600 tracking-wider">
+                {{ config()?.requireText }}
+              </div>
+              <input
+                type="text"
+                [value]="inputText()"
+                (input)="onInputTextChange($event)"
+                class="w-full text-center font-mono text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-white"
+                placeholder="عبارت تأییدیه را اینجا وارد کنید..."
+              />
+            </div>
+          }
+
           <!-- Actions -->
           <div class="px-6 pb-6 pt-4 flex flex-col sm:flex-row items-center gap-2">
             @if (config()?.showCancel) {
               <button
-                (click)="dialog.cancel()"
+                (click)="cancel()"
                 class="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 {{ config()?.cancelText }}
@@ -116,8 +137,11 @@ export class ConfirmDialogService {
             }
 
             <button
-              (click)="dialog.confirm()"
-              class="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white transition-colors"
+              (click)="confirm()"
+              [disabled]="isConfirmDisabled"
+              class="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-white transition-all"
+              [class.opacity-40]="isConfirmDisabled"
+              [class.cursor-not-allowed]="isConfirmDisabled"
               [ngClass]="confirmBtnClass"
             >
               {{ config()?.confirmText }}
@@ -138,19 +162,43 @@ export class ConfirmDialogService {
   `],
 })
 export class ConfirmDialogComponent {
+  inputText = signal('');
+
   constructor(public dialog: ConfirmDialogService) {}
+
+  onInputTextChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.inputText.set(input?.value ?? '');
+  }
+
+  get isConfirmDisabled(): boolean {
+    const req = this.config()?.requireText;
+    if (!req) return false;
+    return this.inputText().trim() !== req.trim();
+  }
+
+  confirm(): void {
+    if (this.isConfirmDisabled) return;
+    this.inputText.set('');
+    this.dialog.confirm();
+  }
+
+  cancel(): void {
+    this.inputText.set('');
+    this.dialog.cancel();
+  }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
     if (this.dialog.isOpen()) {
-      this.dialog.cancel();
+      this.cancel();
     }
   }
 
   @HostListener('document:keydown.enter')
   onEnter(): void {
-    if (this.dialog.isOpen()) {
-      this.dialog.confirm();
+    if (this.dialog.isOpen() && !this.isConfirmDisabled) {
+      this.confirm();
     }
   }
 

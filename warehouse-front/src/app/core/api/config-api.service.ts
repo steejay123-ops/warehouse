@@ -7,6 +7,8 @@ export interface PublicConfig {
   system_name: string;
   offline_sync_interval_minutes?: number;
   offline_cache_ttl_minutes?: number;
+  chat_enabled?: boolean;
+  chat_file_sharing?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

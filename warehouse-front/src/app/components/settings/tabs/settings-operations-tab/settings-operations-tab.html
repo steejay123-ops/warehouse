@@ -1,0 +1,255 @@
+      <div  class="space-y-6 fade-in">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="bg-slate-50 border-b border-slate-100 p-5">
+            <h4 class="font-black text-slate-800 text-[13px] flex items-center gap-2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              قوانین عملیاتی و انبارگردانی فیزیکی
+            </h4>
+          </div>
+          <div class="p-6 space-y-6">
+            
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.require_supervisor_approval = !settings.require_supervisor_approval">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">تایید اجباری سرپرست</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">آیا کارهای شمارش شده قبل از رسیدن به دست مدیر باید توسط سرپرست نیز تایید شوند؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.require_supervisor_approval"></app-toggle-switch>
+            </div>
+
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.require_doc_supervisor_approval = !settings.require_doc_supervisor_approval">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">تایید سرپرست اسناد</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">عدم تایید اسناد نیاز به بررسی مدیر دارد یا سرپرست اسناد بررسی کند؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.require_doc_supervisor_approval"></app-toggle-switch>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">حالت نمایش موجودی سیستمی (شمارش کور)</label>
+              <select [(ngModel)]="settings.blind_counting" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                <option value="blind">کور (شمارشگر موجودی سیستمی را نبیند)</option>
+                <option value="visible">قابل مشاهده برای شمارشگر</option>
+              </select>
+            </div>
+
+            <!-- امکان مشاهده تاریخچه توسط انبارگردان -->
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.counter_can_view_history = !settings.counter_can_view_history">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">امکان مشاهده تاریخچه توسط انبارگردان</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">آیا انبارگردان در پنجره ثبت شمارش می‌تواند تاریخچه و گردش اقدامات قبلی کالا را ببیند؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.counter_can_view_history"></app-toggle-switch>
+            </div>
+
+            <!-- امکان مشاهده یادداشت‌های قبلی در تاریخچه (انبارگردان) -->
+            <div *ngIf="settings.counter_can_view_history" class="flex items-center justify-between p-5 bg-indigo-50/40 rounded-2xl border border-indigo-100 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer mr-4" (click)="settings.counter_can_view_previous_notes = !settings.counter_can_view_previous_notes">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">امکان مشاهده یادداشت‌های قبلی در تاریخچه (انبارگردان)</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">در صورت فعال بودن تاریخچه، آیا انبارگردان تمام یادداشت‌های قبلی را ببیند یا فقط آخرین پیام/یادداشت ارجاع را؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.counter_can_view_previous_notes"></app-toggle-switch>
+            </div>
+
+            <!-- امکان مشاهده تاریخچه توسط کارشناس مالی -->
+            <div class="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer" (click)="settings.financial_can_view_history = !settings.financial_can_view_history">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">امکان مشاهده تاریخچه توسط کارشناس مالی</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">آیا کارشناس مالی در پنجره ثبت اسناد و مدارک می‌تواند تاریخچه و گردش اقدامات قبلی کالا را ببیند؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.financial_can_view_history"></app-toggle-switch>
+            </div>
+
+            <!-- امکان مشاهده یادداشت‌های قبلی در تاریخچه (کارشناس مالی) -->
+            <div *ngIf="settings.financial_can_view_history" class="flex items-center justify-between p-5 bg-indigo-50/40 rounded-2xl border border-indigo-100 hover:border-indigo-300 transition-colors shadow-sm cursor-pointer mr-4" (click)="settings.financial_can_view_previous_notes = !settings.financial_can_view_previous_notes">
+              <div class="pl-4">
+                <h5 class="text-[13px] font-black text-slate-800">امکان مشاهده یادداشت‌های قبلی در تاریخچه (کارشناس مالی)</h5>
+                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed font-medium">در صورت فعال بودن تاریخچه، آیا کارشناس مالی تمام یادداشت‌های قبلی سرپرست و مدیر را ببیند یا فقط آخرین پیام/یادداشت ارجاع را؟</p>
+              </div>
+              <app-toggle-switch [(checked)]="settings.financial_can_view_previous_notes"></app-toggle-switch>
+            </div>
+
+            <div class="h-px bg-slate-200 w-full my-6"></div>
+            
+            <div>
+              <h5 class="font-black text-slate-800 text-[13px] flex items-center gap-2 mb-4">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                یکپارچگی داده‌ها (آپلود اکسل)
+              </h5>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">رفتار پیش‌فرض هنگام تداخل رکوردهای اکسل</label>
+              <select [(ngModel)]="settings.default_conflict_strategy" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                <option value="ignore">نادیده گرفتن رکورد تکراری (حفظ داده‌های فعلی سیستم)</option>
+                <option value="replace">جایگزینی اجباری (Over-write)</option>
+                <option value="update_empty">تکمیل مقادیر خالی بدون تغییر مقادیر موجود</option>
+                <option value="log">توقف پردازش آن سطر و ثبت در لاگ خطا</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">بازه همگام‌سازی خودکار داده‌های آفلاین</label>
+              <select [(ngModel)]="settings.offline_sync_interval_minutes" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                <option [ngValue]="1">هر ۱ دقیقه</option>
+                <option [ngValue]="5">هر ۵ دقیقه</option>
+                <option [ngValue]="15">هر ۱۵ دقیقه (پیش‌فرض)</option>
+                <option [ngValue]="30">هر ۳۰ دقیقه</option>
+                <option [ngValue]="60">هر ۱ ساعت</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2.5">مدت اعتبار داده‌های ذخیره‌شده روی دستگاه (کش آفلاین)</label>
+              <select [(ngModel)]="settings.offline_cache_ttl_minutes" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                <option [ngValue]="30">۳۰ دقیقه</option>
+                <option [ngValue]="60">۱ ساعت (پیش‌فرض)</option>
+                <option [ngValue]="480">۸ ساعت (یک شیفت کاری)</option>
+                <option [ngValue]="1440">۱ روز</option>
+                <option [ngValue]="10080">۱ هفته</option>
+                <option [ngValue]="0">هیچ‌وقت (تا جایگزینی با داده جدید نگه‌داری شود)</option>
+              </select>
+            </div>
+
+            <!-- ── Barcode Scanner Camera Quality Section ── -->
+            <div class="pt-6 border-t border-slate-100 space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  </div>
+                  <div>
+                    <h5 class="text-xs font-bold text-slate-800">کیفیت پیش‌فرض دوربین و حساسیت اسکنر</h5>
+                    <p class="text-[11px] text-slate-400">تعیین پروفایل کیفیت استریم، رزولوشن پردازش و رفتار اسکنر برای کاربران</p>
+                  </div>
+                </div>
+                <span class="text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1 font-mono">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  محافظ هوشمند همواره‌فعال
+                </span>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-2">پروفایل کیفیت پیش‌فرض (Quality Preset)</label>
+                <select [(ngModel)]="settings.scanner_camera_preset" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                  <option value="adaptive">⚡ هوشمند خودکار (Adaptive): شروع از 2K + کاهش خودکار کیفیت در صورت لگ گوشی (پیش‌فرض کارخانه)</option>
+                  <option value="ultra">🎯 فوق‌العاده / حداکثر دقت (Ultra 2K): بالاترین حساسیت 1440p/2K + کراپ متمرکز ۸۵۰px + TRY_HARDER (کدهای بسیار ریز)</option>
+                  <option value="high">💎 کیفیت بالا (High 1080p): رزولوشن 1080p + کراپ ۷۰۰px + فرکانس ۸۰ms برای گوشی‌های مدرن</option>
+                  <option value="balanced">⚖️ متعادل و روان (Balanced 720p): رزولوشن 720p + کراپ ۶۰۰px + فرکانس ۱۰۰ms (سریع و بهینه)</option>
+                  <option value="lite">🔋 سبک و اقتصادی (Lite 480p): رزولوشن 480p + کراپ ۴۰۰px + فرکانس ۱۵۰ms (مصرف کم باتری و سخت‌افزارهای ضعیف)</option>
+                  <option value="custom">🛠️ سفارشی و پیشرفته (تنظیم دستی پارامترها)</option>
+                </select>
+              </div>
+
+              <!-- Advanced Custom Quality Settings -->
+              <div *ngIf="settings.scanner_camera_preset === 'custom'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-200">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">رزولوشن سنسور دوربین</label>
+                  <select [(ngModel)]="settings.scanner_custom_resolution" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-400">
+                    <option value="2k_1440p">2K / 1440p (حداکثر سقف)</option>
+                    <option value="1080p">Full HD 1080p</option>
+                    <option value="720p">HD 720p</option>
+                    <option value="480p">SD 480p</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">ابعاد کادر پردازش (ROI)</label>
+                  <select [(ngModel)]="settings.scanner_custom_roi_size" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-400">
+                    <option [ngValue]="1200">۱۲۰۰×۱۲۰۰ پیکسل (حداکثر چگالی 2K Extreme)</option>
+                    <option [ngValue]="1080">۱۰۸۰×۱۰۸۰ پیکسل (فوق متمرکز 2K Super Density)</option>
+                    <option [ngValue]="850">۸۵۰×۸۵۰ پیکسل (استاندارد پیش‌فرض 1080p Native)</option>
+                    <option [ngValue]="700">۷۰۰×۷۰۰ پیکسل (بالا)</option>
+                    <option [ngValue]="600">۶۰۰×۶۰۰ پیکسل (استاندارد)</option>
+                    <option [ngValue]="400">۴۰۰×۴۰۰ پیکسل (سبک)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">فرکانس اسکن (میلی‌ثانیه)</label>
+                  <select [(ngModel)]="settings.scanner_custom_interval_ms" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:border-indigo-400">
+                    <option [ngValue]="60">هر ۶۰ms (~۱۶ فریم/ثانیه - فوق‌سریع)</option>
+                    <option [ngValue]="80">هر ۸۰ms (~۱۲ فریم/ثانیه)</option>
+                    <option [ngValue]="100">هر ۱۰۰ms (~۱۰ فریم/ثانیه - متعادل)</option>
+                    <option [ngValue]="150">هر ۱۵۰ms (~۶ فریم/ثانیه - سبک)</option>
+                  </select>
+                </div>
+                <div class="flex items-center justify-between pt-5 sm:pt-6">
+                  <span class="text-[11px] font-bold text-slate-700">موتور جستجوی عمیق (TRY_HARDER)</span>
+                  <app-toggle-switch [(checked)]="settings.scanner_custom_try_harder"></app-toggle-switch>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Barcode Scanner Delimiters Section ── -->
+            <div class="pt-6 border-t border-slate-100 space-y-4">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                </div>
+                <div>
+                  <h5 class="text-xs font-bold text-slate-800">جداکننده‌های اسکنر بارکد و کدهای چندردیفه (۲D/QR)</h5>
+                  <p class="text-[11px] text-slate-400">تعیین کاراکترهای تفکیک سطرها و ستون‌ها در اسکن دسته‌ای و ورود داده</p>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-2">الگوی پیش‌فرض جداکننده‌ها (Presets)</label>
+                <select [ngModel]="scannerPreset" (ngModelChange)="onScannerPresetChange($event)" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-[13px] font-semibold text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-400/10 appearance-none cursor-pointer transition-all">
+                  <option value="default">🔹 استاندارد متنی: سمی‌کالن ( ; ) برای سطر | خط عمودی ( | ) برای ستون</option>
+                  <option value="control">🔹 کنترلی صنعتی (ASCII): کاراکتر Chr(30) سطر | کاراکتر Chr(31) ستون</option>
+                  <option value="hybrid">🔹 ترکیبی هوشمند: کاراکتر Chr(30) + سمی‌کالن | کاراکتر Chr(31) + پایپ</option>
+                  <option value="excel">🔹 فرمت اکسل (TSV): اینتر (\n) برای سطر | کلید Tab (\t) برای ستون</option>
+                  <option value="custom">✏️ حالت سفارشی (تعریف دستی کاراکترها)</option>
+                </select>
+              </div>
+
+              <!-- Custom Delimiters Inputs (Only if custom selected) -->
+              <div *ngIf="scannerPreset === 'custom'" class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-200">
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">کاراکتر جداکننده ردیف‌ها (Row Separator)</label>
+                  <input type="text" [(ngModel)]="settings.scanner_row_delimiter" placeholder="مثال: ; یا Chr(30) یا \n" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </div>
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1.5">کاراکتر جداکننده ستون‌ها (Cell Separator)</label>
+                  <input type="text" [(ngModel)]="settings.scanner_col_delimiter" placeholder="مثال: | یا Chr(31) یا \t" class="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-800 outline-none focus:border-indigo-400">
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Communication & Chat Settings Section ── -->
+            <div class="pt-6 border-t border-slate-100 space-y-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  </div>
+                  <div>
+                    <h5 class="text-xs font-bold text-slate-800">سیستم ارتباطات سازمانی و پیام‌رسان انبار</h5>
+                    <p class="text-[11px] text-slate-400">کنترل سراسری فعال‌سازی چت، اشتراک‌گذاری اسناد و سیاست‌های ذخیره‌سازی</p>
+                  </div>
+                </div>
+                <span class="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2.5 py-1 rounded-lg border border-indigo-200 flex items-center gap-1 font-mono">
+                  ماژولار و ایزوله
+                </span>
+              </div>
+
+              <div class="space-y-3">
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer" (click)="settings.chat_enabled = !settings.chat_enabled">
+                  <div>
+                    <h6 class="text-xs font-bold text-slate-800">فعال‌سازی سیستم پیام‌رسان و چت</h6>
+                    <p class="text-[11px] text-slate-500 mt-0.5">امکان ارسال پیام‌های مستقیم و گروه‌های کاری برای هماهنگی پرسنل</p>
+                  </div>
+                  <app-toggle-switch [(checked)]="settings.chat_enabled"></app-toggle-switch>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer" (click)="settings.chat_file_sharing = !settings.chat_file_sharing">
+                  <div>
+                    <h6 class="text-xs font-bold text-slate-800">امکان ارسال تصویر و فایل در پیام‌ها</h6>
+                    <p class="text-[11px] text-slate-500 mt-0.5">ارسال عکس‌های ثبت‌شده از کالا، کارتن‌های آسیب‌دیده و اسناد بارنامه</p>
+                  </div>
+                  <app-toggle-switch [(checked)]="settings.chat_file_sharing"></app-toggle-switch>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>

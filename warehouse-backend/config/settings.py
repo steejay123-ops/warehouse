@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     'inventory.apps.InventoryConfig',
     'notifications.apps.NotificationsConfig',
     'reports.apps.ReportsConfig',
+    'personnel.apps.PersonnelConfig',
+    'communications.apps.CommunicationsConfig',
 ]
 
 MIDDLEWARE = [
@@ -93,12 +95,29 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Channel layer for local dev
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+# Channel layer configuration (Redis with InMemory fallback)
+REDIS_URL = os.environ.get('REDIS_URL') or (f"redis://{os.environ.get('REDIS_HOST', '')}:{os.environ.get('REDIS_PORT', '6379')}/0" if os.environ.get('REDIS_HOST') else None)
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
+        },
     }
-}
+else:
+    import logging
+    logging.getLogger('django').warning(
+        "[CHANNEL_LAYERS WARNING] پیکربندی Redis (متغیرهای REDIS_URL یا REDIS_HOST) یافت نشد. "
+        "سیستم به صورت خودکار به InMemoryChannelLayer تغییر حالت داد. "
+        "توجه: این حالت فقط برای محیط توسعه و تک‌پروسه مناسب است و در محیط چند Worker یا کلاستر عمل نخواهد کرد."
+    )
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer"
+        }
+    }
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
@@ -154,6 +173,15 @@ STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# سقف تعداد فایل در یک درخواست. پیش‌فرض Django عدد ۱۰۰ است؛ سقف واقعی برنامه
+# ۳۰ عکس برای هر کالاست (MAX_PHOTOS_PER_ITEM)، پس ۶۰ هم حاشیه کافی می‌دهد و هم
+# جلوی درخواست با هزاران فایل کوچک را می‌گیرد.
+# توجه: Django سقفی برای *حجم* هر فایل ندارد؛ آن بررسی در
+# inventory/utils/image_processor.py انجام می‌شود (MAX_UPLOAD_BYTES و MAX_PIXELS).
+# FILE_UPLOAD_MAX_MEMORY_SIZE عمداً روی پیش‌فرض (۲.۵MB) می‌ماند تا فایل‌های
+# بزرگ‌تر به دیسک موقت بروند و چند آپلود همزمان حافظه سرور را پر نکند.
+DATA_UPLOAD_MAX_NUMBER_FILES = 60
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
@@ -162,8 +190,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.CustomUser'
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_EXPOSE_HEADERS = ['ETag', 'etag', 'Content-Disposition']
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'if-match',
+    'If-Match',
+]
 
 REST_FRAMEWORK = {
+    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES').strip()) if os.environ.get('NUM_PROXIES') and os.environ.get('NUM_PROXIES').strip().isdigit() else 1,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'accounts.authentication.CustomJWTAuthentication',
     ),
@@ -175,6 +210,16 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '200/day',
+        'chat_message': '60/minute',
+        'chat_upload': '20/minute',
+        'chat_comments': '60/minute',
+    },
 }
 
 from datetime import timedelta

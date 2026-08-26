@@ -19,7 +19,7 @@ import { BackupApiService, DatabaseBackup, BackupVerifyResult } from '../../core
 
 @Component({
   selector: 'app-wh-settings',
-  imports: [CommonModule, FormsModule, LabelDesigner, DynamicFields],
+  imports: [CommonModule, FormsModule],
   templateUrl: './wh-settings.html',
   styleUrl: './wh-settings.css'
 })
@@ -191,22 +191,22 @@ export class WhSettings implements OnInit {
       this.settings.scanner_row_delimiter.value = ';';
       this.settings.scanner_col_delimiter.value = '|';
     } else if (val === 'control') {
-      this.settings.scanner_row_delimiter.value = 'Chr(30)';
-      this.settings.scanner_col_delimiter.value = 'Chr(31)';
+      this.settings.scanner_row_delimiter.value = '\x1E';
+      this.settings.scanner_col_delimiter.value = '\x1F';
     } else if (val === 'hybrid') {
-      this.settings.scanner_row_delimiter.value = 'Chr(30) & ";"';
-      this.settings.scanner_col_delimiter.value = 'Chr(31) & "|"';
+      this.settings.scanner_row_delimiter.value = '\x1E;';
+      this.settings.scanner_col_delimiter.value = '\x1F|';
     } else if (val === 'excel') {
-      this.settings.scanner_row_delimiter.value = '\\n';
-      this.settings.scanner_col_delimiter.value = '\\t';
+      this.settings.scanner_row_delimiter.value = '\n';
+      this.settings.scanner_col_delimiter.value = '\t';
     }
     this.cdr.detectChanges();
   }
 
   detectScannerPreset(rowSep: string, colSep: string): 'default' | 'control' | 'hybrid' | 'excel' | 'custom' {
-    if (rowSep === 'Chr(30)' && colSep === 'Chr(31)') return 'control';
-    if (rowSep === 'Chr(30) & ";"' && colSep === 'Chr(31) & "|"') return 'hybrid';
-    if (rowSep === '\\n' && colSep === '\\t') return 'excel';
+    if (rowSep === '\x1E' && colSep === '\x1F') return 'control';
+    if (rowSep === '\x1E;' && colSep === '\x1F|') return 'hybrid';
+    if (rowSep === '\n' && colSep === '\t') return 'excel';
     if (rowSep === ';' && colSep === '|') return 'default';
     return 'custom';
   }
@@ -354,7 +354,6 @@ export class WhSettings implements OnInit {
   get hasOperationsOverride(): boolean {
     if (!this.settings) return false;
     const opKeys = [
-      'manager_approval_mode',
       'require_supervisor_approval',
       'require_doc_supervisor_approval',
       'blind_counting',
@@ -385,7 +384,6 @@ export class WhSettings implements OnInit {
     if (confirmed) {
       this.isLoading = true;
       const opKeys = [
-        'manager_approval_mode',
         'require_supervisor_approval',
         'require_doc_supervisor_approval',
         'blind_counting',

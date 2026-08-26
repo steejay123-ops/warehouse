@@ -1,10 +1,123 @@
+from django.db.models import Prefetch
 from rest_framework import serializers
-from .models import Item, CountTask, CountTaskHistory, DocTask, DocTaskHistory, ItemFieldDefinition
+from common.media_urls import signed_media_url
+from .models import Item, ItemPhoto, CountTask, CountTaskHistory, DocTask, DocTaskHistory, ItemFieldDefinition
+
+
+# نام صفت و ترتیبی که Prefetch و خواننده آن باید بر سرش توافق داشته باشند.
+PHOTO_CACHE_ATTR = 'cached_photos'
+PHOTO_CACHE_ORDERING = ('-is_primary', '-created_at', '-id')
+
+
+def photo_prefetch(path='photos'):
+    """
+    Prefetch عکس‌های زنده کالا برای پرکردن `cached_photos`.
+
+    بدون این، هر سطر در لیست کالاها/تسک‌ها دو کوئری اضافه می‌زد: یکی برای شمارش
+    عکس‌ها و یکی برای بندانگشتی شاخص. روی یک صفحه ۱۰۰ ردیفی یعنی ۲۰۰ کوئری
+    اضافه، و در Pull سینک (تا ۱۰۰۰ ردیف) یعنی ۲۰۰۰ کوئری.
+
+    `path` برای کوئری‌ست‌هایی است که خودشان Item نیستند و از راه FK به آن
+    می‌رسند (`item__photos` در CountTask/DocTask).
+
+    ترتیب باید *دقیقاً* همان `_live_photos` باشد، چون `get_primary_thumbnail`
+    عضو اول لیست را «عکس شاخص» فرض می‌کند.
+    """
+    return Prefetch(
+        path,
+        queryset=ItemPhoto.objects.order_by(*PHOTO_CACHE_ORDERING),
+        to_attr=PHOTO_CACHE_ATTR,
+    )
+
+
+def _photo_asset_url(photo, *field_names):
+    """
+    اولین فایل موجود از میان فیلدهای داده‌شده را به‌صورت URL امضاشده برمی‌گرداند.
+
+    بدون try/except نوشته شده: `field.name` و امضا هر دو محاسبه رشته‌ای‌اند و
+    استثنا نمی‌دهند. قالب قبلی این توابع یک `except Exception: pass` سرتاسری
+    داشت که هر اشکالی (از جمله خطای تنظیمات) را به «تصویر ندارد» ترجمه می‌کرد.
+    """
+    for name in field_names:
+        file_field = getattr(photo, name, None)
+        if file_field and file_field.name:
+            return signed_media_url(file_field.name)
+    return None
+
+
+def _live_photos(item):
+    """
+    عکس‌های زنده کالا، مرتب‌شده به‌گونه‌ای که عضو اول «شاخص، وگرنه جدیدترین» باشد.
+
+    اگر ویو با `photo_prefetch()` داده را از قبل آورده باشد از همان استفاده
+    می‌شود؛ در غیر این صورت یک کوئری زده می‌شود.
+    """
+    cached = getattr(item, PHOTO_CACHE_ATTR, None)
+    if cached is not None:
+        return cached
+    return list(item.photos.filter(is_deleted=False).order_by(*PHOTO_CACHE_ORDERING))
+
+
+class ItemPhotoSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+    medium_url = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ItemPhoto
+        fields = [
+            'id', 'sync_id', 'item', 'image', 'medium', 'thumbnail',
+            'image_url', 'medium_url', 'thumbnail_url',
+            'caption', 'is_primary', 'display_order',
+            'file_size', 'width', 'height', 'source_type', 'count_task',
+            'created_at', 'updated_at', 'created_by', 'created_by_name'
+        ]
+        # همه‌چیز فقط‌خواندنی است. ساخت عکس از مسیر اختصاصی آپلود انجام می‌شود
+        # (اعتبارسنجی فایل، تولید سه سطح WebP، اسکوپ انبار). اگر این فیلدها
+        # نوشتنی بمانند، کلاینت می‌تواند با یک PATCH ساده عکس را به کالای انبار
+        # دیگری منتقل کند، فایل دلخواه (بدون پردازش و بدون اعتبارسنجی) بنشاند،
+        # یا عکس شاخص را بدون گذر از منطق set_primary عوض کند.
+        read_only_fields = [
+            'id', 'sync_id', 'item', 'image', 'medium', 'thumbnail',
+            'is_primary', 'display_order', 'file_size', 'width', 'height',
+            'source_type', 'count_task', 'created_at', 'updated_at', 'created_by',
+        ]
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_image_url(self, obj):
+        return _photo_asset_url(obj, 'image')
+
+    def get_medium_url(self, obj):
+        return _photo_asset_url(obj, 'medium', 'image')
+
+    def get_thumbnail_url(self, obj):
+        return _photo_asset_url(obj, 'thumbnail', 'medium', 'image')
+
+
+class ItemPhotoUpdateSerializer(serializers.ModelSerializer):
+    """
+    ویرایش عکس = فقط ویرایش توضیح آن.
+
+    هر تغییر دیگری (شاخص‌کردن، ترتیب، جابه‌جایی بین کالاها) اکشن اختصاصی خودش
+    را دارد که اسکوپ و لاگ ممیزی را رعایت می‌کند.
+    """
+
+    class Meta:
+        model = ItemPhoto
+        fields = ['id', 'caption']
+        read_only_fields = ['id']
 
 class ItemSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     modified_by_name = serializers.SerializerMethodField()
     warehouse_name = serializers.SerializerMethodField()
+    photos_count = serializers.SerializerMethodField()
+    primary_thumbnail = serializers.SerializerMethodField()
 
     class Meta:
         model = Item
@@ -24,6 +137,33 @@ class ItemSerializer(serializers.ModelSerializer):
         if obj.modified_by:
             return f"{obj.modified_by.first_name} {obj.modified_by.last_name}".strip() or obj.modified_by.username
         return None
+
+    def get_photos_count(self, obj):
+        # مسیر آماده‌شده در ویو (annotate) اولویت دارد؛ سپس داده Prefetch؛ و
+        # فقط در نهایت یک کوئری مستقل. بدون دو مسیر اول، هر سطر لیست کالاها یک
+        # COUNT جدا می‌زد.
+        annotated = getattr(obj, 'annotated_photos_count', None)
+        if annotated is not None:
+            return annotated
+        cached = getattr(obj, PHOTO_CACHE_ATTR, None)
+        if cached is not None:
+            return len(cached)
+        return obj.photos.filter(is_deleted=False).count()
+
+    def get_primary_thumbnail(self, obj):
+        photos = _live_photos(obj)
+        if not photos:
+            return None
+
+        # عضو اول: عکس شاخص (جدیدترین، اگر چند شاخص باشد) وگرنه آخرین عکس آپلودشده
+        url = _photo_asset_url(photos[0], 'thumbnail', 'medium', 'image')
+        if not url:
+            return None
+
+        request = self.context.get('request')
+        if request and not url.startswith(('http://', 'https://')):
+            return request.build_absolute_uri(url)
+        return url
 
 class ItemFieldDefinitionSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()

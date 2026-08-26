@@ -271,8 +271,19 @@
             </button>
           </div>
 
-          <ng-template appTableCol="fa_unic_code" label="کد یکتا (FA-UNIC)" [editable]="true" let-value="value">
-            <span class="font-mono font-black text-indigo-700">{{value || '-'}}</span>
+          <ng-template appTableCol="fa_unic_code" label="کد یکتا (FA-UNIC)" [editable]="true" let-value="value" let-row="row">
+            <div class="flex items-center gap-2">
+              <!-- بندانگشتی تصویر کالا -->
+              <app-item-photo-thumb
+                *ngIf="row"
+                size="xs"
+                accent="indigo"
+                [photoCount]="row.photos_count"
+                [thumbUrl]="row.primary_thumbnail"
+                (openRequested)="photoGallery.open(row, $event)"
+              ></app-item-photo-thumb>
+              <span class="font-mono font-black text-indigo-700">{{value || '-'}}</span>
+            </div>
           </ng-template>
 
           <ng-template appTableCol="description" label="شرح کالا" [editable]="true" let-value="value" let-row="row">
@@ -283,9 +294,6 @@
             <span class="font-bold text-slate-800">{{value || '0'}}</span>
           </ng-template>
 
-          <ng-template appTableCol="old_location" label="لوکیشن فیزیکی" [editable]="true" let-value="value">
-            <span class="font-mono text-[10px] text-slate-600">{{value || '-'}}</span>
-          </ng-template>
           <ng-template appTableCol="labelStatus" label="وضعیت لیبل" filterType="checkbox" [filterOptions]="[{label: 'چاپ نشده ⚪', value: 'چاپ نشده'}, {label: 'چاپ شده 🔵', value: 'چاپ شده'}, {label: 'چاپ مجدد 🔴', value: 'چاپ مجدد'}]" [editable]="true" inputType="select" [selectOptions]="[{label: 'چاپ نشده ⚪', value: 'چاپ نشده'}, {label: 'چاپ شده 🔵', value: 'چاپ شده'}, {label: 'چاپ مجدد 🔴', value: 'چاپ مجدد'}]" let-value="value">
             <span class="text-[10px] px-1.5 py-0.5 rounded font-bold" 
                   [class.bg-slate-50]="value === 'چاپ نشده'" [class.text-slate-600]="value === 'چاپ نشده'"
@@ -346,13 +354,9 @@
             <span *ngIf="!value" class="text-slate-400 text-[10px]">-</span>
           </ng-template>
 
-          <ng-template appTableCol="plpkitem" label="کد ترکیبی" [editable]="true" let-value="value">
-            <div class="truncate max-w-[120px]" [title]="value">{{value || '-'}}</div>
-          </ng-template>
           <ng-template appTableCol="pl" label="پکینگ لیست" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="po" label="سفارش خرید" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="pk_number" label="پکیج (PK)" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
-          <ng-template appTableCol="item_no" label="ردیف (Item)" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="unit" label="واحد سنجش" [editable]="true" let-value="value"><span class="text-slate-600 text-[10px]">{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="scope_discipline" label="دیسیپلین کاری" [editable]="true" let-value="value"><span>{{value || '-'}}</span></ng-template>
           <ng-template appTableCol="bal4miv" label="موجودی مجاز MIV" [editable]="true" let-value="value"><span class="font-bold text-slate-800">{{value || '0'}}</span></ng-template>
@@ -668,5 +672,16 @@
 
     </div>
   </div>
+
+  <!-- Modal گالری تصاویر کالا -->
+  <app-item-photo-gallery
+    *ngIf="photoGallery.isOpen && photoGallery.itemId"
+    [itemId]="photoGallery.itemId"
+    [itemFaUnicCode]="photoGallery.itemCode"
+    [itemDescription]="photoGallery.itemDescription"
+    [isOpen]="photoGallery.isOpen"
+    (close)="photoGallery.close()"
+    (photosChanged)="onPhotosChanged($event)"
+  ></app-item-photo-gallery>
 
   </div>

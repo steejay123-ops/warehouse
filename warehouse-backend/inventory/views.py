@@ -7,10 +7,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
 from .signals import broadcast_count_task_update, broadcast_doc_task_update
-from .models import Item, ImportLog, ImportHistory, ItemFieldDefinition
+from .models import Item, ImportLog, ImportHistory, ItemFieldDefinition, ItemPhoto
 from .models import CountTaskHistory
 from common.sync_models import soft_delete_queryset
-from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer
+from common.warehouse_scope import scope_queryset, can_access_warehouse
+from .serializers import ItemSerializer, CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer, ItemPhotoSerializer, photo_prefetch
 from django.forms.models import model_to_dict
 from warehouses.models import Warehouse
 from common.mixins import DeleteImpactMixin
@@ -42,17 +43,66 @@ from .filters import ItemFilter
 def _soft_delete_items_cascade(items_qs):
     """
     حذف نرم گروهی آیتم‌ها + Cascade دستی به مدل‌های سینک‌شونده وابسته
-    (CountTask و CountTaskHistory) تا کلاینت آفلاین tombstone همه را بگیرد.
-    DocTask/ItemPhoto/ImportHistory عمداً دست نمی‌خورند (خارج از دامنه سینک فاز ۰؛
+    (CountTask، CountTaskHistory و ItemPhoto) تا کلاینت آفلاین tombstone همه را بگیرد.
+
+    ItemPhoto اضافه شد چون بدون آن، عکس‌های کالای حذف‌شده در دیتابیس زنده
+    می‌ماندند و کلاینت آفلاینی که کالا را حذف‌شده دیده هیچ‌وقت خبردار نمی‌شد که
+    عکس‌ها هم رفته‌اند. is_primary هم پاک می‌شود تا رکورد tombstone با
+    is_primary=True به کلاینت نرسد. مسیر معکوس (احیای کالا) در
+    `_restore_item_photos_cascade` است و باید همیشه با این تابع جفت بماند.
+
+    DocTask/ImportHistory عمداً دست نمی‌خورند (خارج از دامنه سینک فاز ۰؛
     نمایششان با فیلتر item__is_deleted=False کنترل می‌شود).
     خروجی: تعداد آیتم‌های حذف‌نرم‌شده.
     """
     item_ids = list(items_qs.values_list('id', flat=True))
     if not item_ids:
         return 0
+    ItemPhoto.objects.filter(item_id__in=item_ids).update(
+        is_deleted=True, is_primary=False, updated_at=timezone.now()
+    )
     soft_delete_queryset(CountTaskHistory.objects.filter(task__item_id__in=item_ids))
     soft_delete_queryset(CountTask.objects.filter(item_id__in=item_ids))
     return soft_delete_queryset(Item.objects.filter(id__in=item_ids))
+
+
+def _restore_item_photos_cascade(item_ids):
+    """
+    برگرداندن عکس‌های کالاهایی که از حالت حذف‌نرم احیا شده‌اند.
+
+    چرا لازم است: حذف کالا عکس‌هایش را هم tombstone می‌کند. اگر احیا این کار را
+    برنگرداند، تصویری که کاربر گرفته برای همیشه نامرئی می‌ماند — فایل روی دیسک
+    هست، ردیف با is_deleted=True مانده و هیچ مسیر دیگری آن را زنده نمی‌کند.
+    یعنی از دست رفتن داده کاربر.
+
+    is_primary در حذف پاک شده بود، پس برای هر کالا که پس از احیا عکس شاخص ندارد
+    دوباره یکی انتخاب می‌شود؛ وگرنه کالا عکس دارد ولی هیچ‌کدام شاخص نیست و
+    بند انگشتی (thumbnail) کالا خالی می‌ماند.
+
+    خروجی: تعداد عکس‌های احیاشده.
+    """
+    item_ids = list(item_ids)
+    if not item_ids:
+        return 0
+
+    now = timezone.now()
+    # updated_at صریح ست می‌شود چون update() سیگنال auto_now را رد می‌کند و
+    # بدون آن، احیا در دلتای Pull به کلاینت آفلاین نمی‌رسد.
+    restored = ItemPhoto.all_objects.filter(item_id__in=item_ids, is_deleted=True).update(
+        is_deleted=False, updated_at=now
+    )
+    if not restored:
+        return 0
+
+    for item_id in item_ids:
+        live = ItemPhoto.objects.filter(item_id=item_id)
+        if live.filter(is_primary=True).exists():
+            continue
+        successor = live.order_by('display_order', '-created_at', '-id').first()
+        if successor:
+            ItemPhoto.objects.filter(id=successor.id).update(is_primary=True, updated_at=now)
+
+    return restored
 
 
 class ItemPagination(PageNumberPagination):
@@ -100,12 +150,7 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'label']
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user and user.is_authenticated and not user.is_superuser:
-            if hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
-                return qs.filter(warehouse__in=user.assigned_warehouses.all())
-        return qs
+        return scope_queryset(super().get_queryset(), self.request.user)
 
     def perform_create(self, serializer):
         # اگر رکورد حذف‌نرم با همان (انبار، نام) وجود دارد، احیا می‌شود؛
@@ -267,12 +312,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user and user.is_authenticated and not user.is_superuser:
-            if hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
-                return qs.filter(warehouse__in=user.assigned_warehouses.all())
-        return qs
+        # photo_prefetch جلوی N+1 عکس‌ها را می‌گیرد: بدون آن هر ردیف یک COUNT و
+        # یک SELECT جدا برای بندانگشتی می‌زد (صفحه ۱۰۰ ردیفی = ۲۰۰ کوئری اضافه).
+        queryset = super().get_queryset().prefetch_related(photo_prefetch())
+        return scope_queryset(queryset, self.request.user)
 
     def perform_create(self, serializer):
         from accounts.audit_utils import log_audit_event
@@ -285,6 +328,8 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if tombstone:
             serializer.instance = tombstone
             instance = serializer.save(is_deleted=False)
+            # احیای کالا باید عکس‌هایش را هم برگرداند؛ حذف آن‌ها را tombstone کرده بود.
+            _restore_item_photos_cascade([instance.id])
         else:
             instance = serializer.save()
 
@@ -325,6 +370,63 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             except Exception:
                 pass
 
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        
+        user = request.user
+        if not (user.is_superuser or user.has_perm('accounts.perm_wh_edit')):
+            instance = self.get_object()
+            from warehouses.services import get_setting
+            
+            if user.has_perm('accounts.view_sys_counter'):
+                perms = get_setting('field_permissions_counter', instance.warehouse_id) or {}
+            elif user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.view_sys_financial'):
+                perms = get_setting('field_permissions_doc', instance.warehouse_id) or {}
+            else:
+                perms = {}
+                
+            editable_fields = {k for k, v in perms.items() if isinstance(v, dict) and v.get('editable')}
+            
+            invalid_fields = []
+            for field in request.data.keys():
+                if field == 'dynamic_data':
+                    dyn_data = request.data.get('dynamic_data')
+                    if isinstance(dyn_data, str):
+                        try:
+                            import json
+                            dyn_data = json.loads(dyn_data)
+                        except:
+                            dyn_data = {}
+                    if isinstance(dyn_data, dict):
+                        for dyn_k in dyn_data.keys():
+                            if dyn_k not in editable_fields:
+                                invalid_fields.append(dyn_k)
+                elif field not in editable_fields and field not in ['id', 'warehouse']:
+                    invalid_fields.append(field)
+            
+            if invalid_fields:
+                from accounts.audit_utils import log_audit_event
+                log_audit_event(
+                    user=user,
+                    module='docs',
+                    action='UPDATE',
+                    severity='warning',
+                    target_model='Item',
+                    target_object_id=instance.id,
+                    target_repr=f"تلاش غیرمجاز برای ویرایش فیلدها",
+                    warehouse=instance.warehouse,
+                    details={'invalid_fields': invalid_fields},
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
+                return Response({
+                    'error': 'شما مجوز ویرایش این فیلدها را ندارید.',
+                    'invalid_fields': invalid_fields
+                }, status=400)
+                
+        # Re-inject partial since kwargs is passed to super
+        kwargs['partial'] = partial
+        return super().update(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
         from accounts.audit_utils import log_audit_event
         try:
@@ -346,11 +448,18 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             _soft_delete_items_cascade(Item.objects.filter(id=instance.id))
 
     def get_permissions(self):
-        from accounts.permissions import HasMenuAccess
+        from accounts.permissions import HasMenuAccess, CanManageItemPhotos
         from rest_framework.permissions import AllowAny, IsAuthenticated
-        
+
         if self.action in ['download_import_log', 'download_template']:
             permission_classes = [AllowAny()]
+        elif self.action == 'photos':
+            # خواندن عکس برای هر کاربر لاگین‌شده، ولی آپلود فقط برای نقش‌هایی که
+            # با عکس کالا کار می‌کنند. پیش از این POST هم IsAuthenticated بود.
+            if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+                permission_classes = [IsAuthenticated()]
+            else:
+                permission_classes = [IsAuthenticated(), CanManageItemPhotos()]
         elif self.action in ['list', 'retrieve', 'dashboard_stats']:
             permission_classes = [IsAuthenticated()]
         elif self.action == 'bulk_assign':
@@ -365,8 +474,16 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             permission_classes = [HasMenuAccess('perm_wh_edit') | HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor')]
         else: # create, destroy, bulk_update, etc
             permission_classes = [HasMenuAccess('perm_wh_edit')]
-            
+
         return permission_classes
+
+    @action(detail=True, methods=['get', 'post'])
+    def photos(self, request, pk=None):
+        from .views_photos import handle_item_photos_upload, list_item_photos
+        item = self.get_object()
+        if request.method == 'GET':
+            return list_item_photos(request, item)
+        return handle_item_photos_upload(request, item)
 
 
     @action(detail=False, methods=['post'])
@@ -1346,6 +1463,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                     updated_at=timezone.now(),
                                     **defaults,
                                 )
+                                _restore_item_photos_cascade([resurrect_tombstone.id])
                                 history_records.append(ImportHistory(item=resurrect_tombstone, action='update', previous_state=old_state_json))
 
                                 created += 1
@@ -1588,12 +1706,20 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             elif history.action == 'delete':
                                 # حذف حالا نرم است؛ ردیف tombstone هنوز با همه داده‌ها موجود است
                                 # → فقط احیا می‌شود. اگر (به هر دلیل) واقعاً حذف شده بود، بازسازی.
-                                restored = Item.all_objects.filter(
-                                    warehouse_id=state.get('warehouse_id'),
-                                    fa_unic_code=state.get('fa_unic_code'),
-                                    is_deleted=True,
-                                ).update(is_deleted=False, updated_at=timezone.now())
-                                if not restored:
+                                tombstone_ids = list(
+                                    Item.all_objects.filter(
+                                        warehouse_id=state.get('warehouse_id'),
+                                        fa_unic_code=state.get('fa_unic_code'),
+                                        is_deleted=True,
+                                    ).values_list('id', flat=True)
+                                )
+                                if tombstone_ids:
+                                    Item.all_objects.filter(id__in=tombstone_ids).update(
+                                        is_deleted=False, updated_at=timezone.now()
+                                    )
+                                    # عکس‌ها هم با حذف کالا tombstone شده بودند
+                                    _restore_item_photos_cascade(tombstone_ids)
+                                else:
                                     items_to_create.append(Item(**state))
                 
                 if items_to_create:
@@ -1894,13 +2020,36 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         })
 
 from .serializers import CountTaskSerializer
-from .models import CountTask
+from .models import CountTask, CountTaskHistory
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import transaction
+from common.sync_models import soft_delete_queryset
+from .serializers import photo_prefetch
+from common.warehouse_scope import can_access_warehouse
+from .signals import broadcast_count_task_update
 
 class CountTaskViewSet(viewsets.ModelViewSet):
     serializer_class = CountTaskSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        as_role = self.request.query_params.get('as_role')
+        user = self.request.user
+        
+        # اگر نقش یکی از نقش‌های مدیریتی، نظارتی یا پیگیری باشد، یا اکشن خروجی اکسل باشد
+        # شمارش نباید کور باشد و اطلاعات موجودی کامل باید ارسال گردد.
+        if as_role in ['manager', 'supervisor', 'count_tracking', 'doc_supervisor', 'doc_worker']:
+            context['is_blind'] = False
+        elif self.action in ['export_excel', 'get_export_columns', 'bulk_manager_approve', 'bulk_manager_reject', 'bulk_approve', 'bulk_reject']:
+            context['is_blind'] = False
+        elif as_role == 'counter':
+            context['is_blind'] = True
+        elif user.is_authenticated and (user.is_superuser or user.has_perm('accounts.view_sys_manager_review') or user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.view_wh_stocktaking')):
+            if not user.has_perm('accounts.can_act_as_counter') and not user.has_perm('accounts.view_sys_counter'):
+                context['is_blind'] = False
+        return context
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess
@@ -1967,27 +2116,61 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         return super().update(request, *args, **kwargs)
 
     def perform_update(self, serializer):
-        old_instance = self.get_object()
-        old_status = old_instance.status
-        old_counted = str(old_instance.counted_balance)
-        instance = serializer.save(modified_by=self.request.user)
-        
-        # لاگ ممیزی هنگام تغییر وضعیت یا ثبت شمارش
-        if old_status != instance.status or old_counted != str(instance.counted_balance):
-            from accounts.audit_utils import log_audit_event
+        from rest_framework.exceptions import ValidationError
+        instance = serializer.instance
+        old_status = instance.status
+        old_counted = str(instance.counted_balance)
+        new_status = serializer.validated_data.get('status', old_status)
+
+        # جلوگیری از جهش غیرمجاز وضعیت با متد مستقیم PATCH
+        if new_status != old_status:
+            allowed_patch_transitions = {
+                'PENDING_COUNT': ['INITIAL_COUNT', 'PENDING_COUNT'],
+                'INITIAL_COUNT': ['INITIAL_COUNT', 'PENDING_COUNT'],
+                'SUPERVISOR_REJECTED': ['INITIAL_COUNT', 'SUPERVISOR_REJECTED'],
+                'MANAGER_REJECTED': ['INITIAL_COUNT', 'MANAGER_REJECTED'],
+            }
+            allowed = allowed_patch_transitions.get(old_status, [])
+            if new_status not in allowed:
+                raise ValidationError({
+                    'status': f'تغییر مستقیم وضعیت از {old_status} به {new_status} با متد PATCH مجاز نیست. لطفاً از اکشن‌های گردش‌کار استفاده کنید.'
+                })
+
+        updated_instance = serializer.save(modified_by=self.request.user)
+
+        from accounts.audit_utils import log_audit_event
+        from .models import CountTaskHistory
+
+        note = ''
+        if new_status in ['MANAGER_REJECTED', 'FINAL_APPROVED']:
+            note = updated_instance.manager_note or ''
+        elif new_status == 'SUPERVISOR_REJECTED':
+            note = updated_instance.supervisor_note or ''
+        elif new_status in ['COUNTED', 'INITIAL_COUNT']:
+            note = updated_instance.counter_note or ''
+
+        if old_status != new_status or old_counted != str(updated_instance.counted_balance):
+            CountTaskHistory.objects.create(
+                task=updated_instance,
+                action_by=self.request.user if self.request.user.is_authenticated else None,
+                action_type=new_status,
+                counted_balance=updated_instance.counted_balance,
+                note=note
+            )
+
             try:
-                item_label = instance.item.fa_unic_code if instance.item else f"#{instance.id}"
-                wh = instance.item.warehouse if instance.item else None
+                item_label = updated_instance.item.fa_unic_code if updated_instance.item else f"#{updated_instance.id}"
+                wh = updated_instance.item.warehouse if updated_instance.item else None
                 log_audit_event(
-                    module='counter' if instance.status in ['INITIAL_COUNT', 'COUNTED', 'PENDING_COUNT'] else 'supervisor',
-                    action='UPDATE',
+                    module='counter' if new_status in ['INITIAL_COUNT', 'COUNTED', 'PENDING_COUNT'] else 'supervisor',
+                    action='UPDATE' if old_status == new_status else 'STATUS_CHANGE',
                     target_model='CountTask',
-                    target_object_id=instance.id,
-                    target_repr=f"تغییر وضعیت تسک شمارش کالا {item_label}",
+                    target_object_id=updated_instance.id,
+                    target_repr=f"شمارش کالا {item_label} ({new_status})",
                     warehouse=wh,
                     user=self.request.user if self.request.user.is_authenticated else None,
                     before_state={'status': old_status, 'counted_balance': old_counted},
-                    after_state={'status': instance.status, 'counted_balance': str(instance.counted_balance)}
+                    after_state={'status': new_status, 'counted_balance': str(updated_instance.counted_balance), 'note': note}
                 )
             except Exception:
                 pass
@@ -1999,7 +2182,10 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         queryset = CountTask.objects.all().select_related(
             'item', 'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
         ).prefetch_related(
-            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by'))
+            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by')),
+            # item_details کل ItemSerializer را صدا می‌زند؛ بدون این، هر تسک دو
+            # کوئری عکس اضافه می‌زد.
+            photo_prefetch('item__photos'),
         )
         
         as_role = self.request.query_params.get('as_role')
@@ -2009,13 +2195,15 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         q_filter = self.request.query_params.get('q')
         
         if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
-            if not user.is_superuser and hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
-                if not user.assigned_warehouses.filter(id=warehouse_id).exists():
-                    return CountTask.objects.none()
-            queryset = queryset.filter(item__warehouse_id=warehouse_id)
-        elif not user.is_superuser and hasattr(user, 'assigned_warehouses') and user.assigned_warehouses.exists():
-            assigned_wh_ids = list(user.assigned_warehouses.values_list('id', flat=True))
-            queryset = queryset.filter(item__warehouse_id__in=assigned_wh_ids)
+            try:
+                requested_wh = int(warehouse_id)
+            except (TypeError, ValueError):
+                return CountTask.objects.none()
+            if not can_access_warehouse(user, requested_wh):
+                return CountTask.objects.none()
+            queryset = queryset.filter(item__warehouse_id=requested_wh)
+        else:
+            queryset = scope_queryset(queryset, user, field='item__warehouse_id')
         
         # 1. فیلتر بر اساس نقش (Role Filter)
         if as_role == 'counter':
@@ -2049,10 +2237,10 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(item__fa_unic_code__icontains=q_clean) |
                 Q(item__description__icontains=q_clean) |
-                Q(item__item_no__icontains=q_clean) |
+                Q(item__tag__icontains=q_clean) |
                 Q(item__po__icontains=q_clean) |
-                Q(item__new_location__icontains=q_clean) |
-                Q(item__old_location__icontains=q_clean)
+                Q(item__pk_number__icontains=q_clean) |
+                Q(item__new_location__icontains=q_clean)
             )
 
         # 3. فیلتر تاریخ (Date Filter)
@@ -2098,7 +2286,7 @@ class CountTaskViewSet(viewsets.ModelViewSet):
     def pool_tasks(self, request):
         as_role = request.query_params.get('as_role')
         warehouse_id = request.query_params.get('warehouse_id')
-        queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by')
+        queryset = CountTask.objects.all().select_related('item', 'counter', 'supervisor', 'created_by', 'modified_by').prefetch_related(photo_prefetch('item__photos'))
         
         if warehouse_id:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
@@ -2167,68 +2355,6 @@ class CountTaskViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user, modified_by=self.request.user)
-
-    def perform_update(self, serializer):
-        instance = serializer.instance
-        old_status = instance.status
-        new_status = serializer.validated_data.get('status', old_status)
-        
-        updated_instance = serializer.save(modified_by=self.request.user)
-        
-        if old_status != new_status:
-            from .models import CountTaskHistory
-            from accounts.audit_utils import log_audit_event
-            
-            note = ''
-            if new_status in ['MANAGER_REJECTED', 'FINAL_APPROVED']:
-                note = updated_instance.manager_note
-            elif new_status == 'SUPERVISOR_REJECTED':
-                note = updated_instance.supervisor_note
-            elif new_status in ['COUNTED', 'INITIAL_COUNT']:
-                note = updated_instance.counter_note
-                
-            CountTaskHistory.objects.create(
-                task=updated_instance,
-                action_by=self.request.user,
-                action_type=new_status,
-                counted_balance=updated_instance.counted_balance,
-                note=note
-            )
-
-            try:
-                action_map = {
-                    'SUPERVISOR_APPROVED': 'APPROVE',
-                    'FINAL_APPROVED': 'APPROVE',
-                    'SUPERVISOR_REJECTED': 'REJECT',
-                    'MANAGER_REJECTED': 'REJECT',
-                    'RECOUNT': 'RECOUNT',
-                }
-                module_map = {
-                    'SUPERVISOR_APPROVED': 'supervisor',
-                    'SUPERVISOR_REJECTED': 'supervisor',
-                    'FINAL_APPROVED': 'manager',
-                    'MANAGER_REJECTED': 'manager',
-                    'INITIAL_COUNT': 'counter',
-                    'COUNTED': 'counter',
-                }
-                log_action = action_map.get(new_status, 'UPDATE')
-                log_module = module_map.get(new_status, 'counter')
-                item_label = updated_instance.item.fa_unic_code if updated_instance.item else f"#{updated_instance.id}"
-                wh = updated_instance.item.warehouse if updated_instance.item else None
-
-                log_audit_event(
-                    module=log_module,
-                    action=log_action,
-                    target_model='CountTask',
-                    target_object_id=updated_instance.id,
-                    target_repr=f"شمارش کالا {item_label} (تغییر وضعیت به {new_status})",
-                    warehouse=wh,
-                    user=self.request.user if self.request.user.is_authenticated else None,
-                    before_state={'status': old_status, 'counted_balance': str(instance.counted_balance)},
-                    after_state={'status': new_status, 'counted_balance': str(updated_instance.counted_balance), 'note': note}
-                )
-            except Exception:
-                pass
 
     @action(detail=False, methods=['post'])
     def bulk_submit(self, request):
@@ -2386,6 +2512,14 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             tasks = list(tasks_qs)
             if not tasks:
                 return Response({'message': 'هیچ موردی در وضعیت بررسی مدیر یافت نشد.'})
+
+            # بررسی دسترسی انبار برای کاربر (IDOR Check)
+            if not user.is_superuser:
+                from common.warehouse_scope import can_access_warehouse
+                for task in tasks:
+                    wh_id = task.item.warehouse_id if task.item else None
+                    if not can_access_warehouse(user, wh_id):
+                        return Response({'error': f'شما به انبار کالا #{task.id} دسترسی ندارید.'}, status=403)
 
             histories = []
             items_to_update = []
@@ -2665,6 +2799,14 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             if not tasks_list:
                 return Response({'message': 'هیچ موردی برای رد یافت نشد.'})
 
+            # بررسی دسترسی انبار برای کاربر (IDOR Check)
+            if not user.is_superuser:
+                from common.warehouse_scope import can_access_warehouse
+                for task in tasks_list:
+                    wh_id = task.item.warehouse_id if task.item else None
+                    if not can_access_warehouse(user, wh_id):
+                        return Response({'error': f'شما به انبار کالا #{task.id} دسترسی ندارید.'}, status=403)
+
             histories = []
             wh_ids = set()
 
@@ -2940,20 +3082,20 @@ class CountTaskViewSet(viewsets.ModelViewSet):
             elif key == 'inventory':
                 if check_is_blind(task):
                     return ''
-                inv = getattr(task.item, 'inventory', None) if task.item else None
-                if inv is None and task.item:
-                    inv = getattr(task.item, 'balance', None) or getattr(task.item, 'bal4miv', '')
-                return inv if inv is not None else ''
+                base_bal = getattr(task.item, 'bal4miv', None) if task.item else None
+                if base_bal is None and task.item:
+                    base_bal = getattr(task.item, 'inventory', '')
+                return base_bal if base_bal is not None else ''
             elif key == 'difference':
                 if check_is_blind(task):
                     return ''
-                inv = getattr(task.item, 'inventory', None) if task.item else None
-                if inv is None and task.item:
-                    inv = getattr(task.item, 'balance', None) or getattr(task.item, 'bal4miv', None)
+                base_bal = getattr(task.item, 'bal4miv', None) if task.item else None
+                if base_bal is None and task.item:
+                    base_bal = getattr(task.item, 'inventory', None)
                 cnt = task.counted_balance
-                if inv is not None and cnt is not None:
+                if base_bal is not None and cnt is not None:
                     try:
-                        return float(cnt) - float(inv)
+                        return float(cnt) - float(base_bal)
                     except Exception:
                         return ''
                 return ''
@@ -3113,7 +3255,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by').prefetch_related(photo_prefetch('item__photos'))
         
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
@@ -3146,11 +3288,9 @@ class DocTaskViewSet(viewsets.ModelViewSet):
             from django.db.models import Q
             queryset = queryset.filter(
                 Q(item__fa_unic_code__icontains=q_clean) |
-                Q(item__en_unic_code__icontains=q_clean) |
                 Q(item__description__icontains=q_clean) |
-                Q(item__item_no__icontains=q_clean) |
-                Q(item__po__icontains=q_clean) |
                 Q(item__tag__icontains=q_clean) |
+                Q(item__po__icontains=q_clean) |
                 Q(item__pk_number__icontains=q_clean) |
                 Q(item__new_location__icontains=q_clean) |
                 Q(inv_rti_number__icontains=q_clean) |
@@ -3192,7 +3332,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
     def pool_tasks(self, request):
         as_role = request.query_params.get('as_role')
         warehouse_id = request.query_params.get('warehouse_id')
-        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by')
+        queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by').prefetch_related(photo_prefetch('item__photos'))
         
         if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
@@ -4054,6 +4194,4 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         )
         response['Content-Disposition'] = 'attachment; filename="customs_cartable_export.xlsx"'
         return response
-
-
 

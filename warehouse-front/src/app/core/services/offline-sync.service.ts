@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { offlineDb, SyncQueueEntry, SyncErrorEntry } from './offline-db';
 import { SyncPullService } from './sync-pull.service';
 import { NetworkStatusService } from './network-status.service';
+import { PhotoUploadQueueService, PhotoFlushOutcome } from './photo-upload-queue.service';
 import { isServerUnreachable } from './server-reachability';
 import { BehaviorSubject, Subject, Subscription, filter } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -61,7 +62,9 @@ export interface DeepUpdateSummary {
 export class OfflineSyncService {
   private static instance: OfflineSyncService;
   private network = NetworkStatusService.getInstance();
+  private photoQueue = PhotoUploadQueueService.getInstance();
   private subscription: Subscription | null = null;
+  private photoSubscription: Subscription | null = null;
   private autoSyncTimer: any = null;
 
   /** حداکثر تعداد تلاش مجدد برای هر درخواست */
@@ -156,6 +159,15 @@ export class OfflineSyncService {
       .equals('sending')
       .modify({ status: 'pending' })
       .catch(() => {});
+
+    // همین کار برای صف عکس — عکس نیمه‌ارسال‌شده باید دوباره در نوبت بیفتد
+    this.photoQueue.initialize().catch(() => {});
+
+    // شمارنده در انتظار، مجموع دو صف است؛ وگرنه بَج «۰» نشان می‌داد در حالی که
+    // عکس کاربر هنوز ارسال نشده بود.
+    this.photoSubscription = this.photoQueue.changed$.subscribe(() => {
+      this.refreshCounts();
+    });
 
     // وقتی اتصال کامل (مرورگر + سرور) برقرار شد، صف را پردازش کن
     this.subscription = this.network.state$
@@ -520,9 +532,53 @@ export class OfflineSyncService {
    * • خطای شبکه یا ۵xx هرگز باعث از دست رفتن داده نمی‌شود
    */
   async processQueue(): Promise<SyncOutcome> {
-    const outcome = await this.runQueue();
+    const queueOutcome = await this.runQueue();
+    // صف عکس *بعد* از صف JSON تخلیه می‌شود: اگر توکن منقضی بوده باشد تا اینجا
+    // یک بار تازه شده و آپلود عکس با توکن معتبر انجام می‌شود.
+    const outcome = await this.flushPhotoQueue(queueOutcome);
     this._syncOutcome$.next(outcome);
     return outcome;
+  }
+
+  /**
+   * تخلیه صف عکس و ادغام نتیجه‌اش با نتیجه صف اصلی.
+   *
+   * ادغام لازم است چون بدون آن، وقتی صف JSON خالی بود ولی عکسی گیر کرده،
+   * پیام «همه‌چیز همگام شد» به کاربر نشان داده می‌شد.
+   */
+  private async flushPhotoQueue(base: SyncOutcome): Promise<SyncOutcome> {
+    if (!this.network.isBrowserOnline) return base;
+
+    let photo: PhotoFlushOutcome;
+    try {
+      photo = await this.photoQueue.flush();
+    } catch (error) {
+      console.error('[OfflineSync] ❌ خطا در تخلیه صف عکس:', error);
+      return base;
+    }
+    await this.refreshCounts();
+    if (photo.status === 'nothing-to-send') return base;
+
+    const num = (source: any, key: string): number =>
+      typeof source?.[key] === 'number' ? source[key] : 0;
+    const synced = num(base, 'synced') + num(photo, 'sent');
+    const rejected = num(base, 'rejected') + num(photo, 'rejected');
+    const remaining = num(base, 'remaining') + num(photo, 'remaining');
+
+    if (base.status === 'auth-required' || photo.status === 'auth-required') {
+      return { status: 'auth-required', synced };
+    }
+    if (base.status === 'offline' || photo.status === 'offline') {
+      return { status: 'offline' };
+    }
+    if (base.status === 'server-unreachable' || photo.status === 'server-unreachable') {
+      return { status: 'server-unreachable', synced };
+    }
+    if (rejected > 0 || remaining > 0) {
+      return { status: 'partial', synced, rejected, remaining };
+    }
+    if (synced === 0) return { status: 'nothing-to-sync' };
+    return { status: 'completed', synced };
   }
 
   private async runQueue(): Promise<SyncOutcome> {
@@ -655,7 +711,7 @@ export class OfflineSyncService {
         return 'sent';
       } else if (response.status === 401) {
         // توکن منقضی — تلاش برای refresh و ارسال مجدد (فقط یک بار)
-        if (!hasRetriedAuth && (await this.tryRefreshToken())) {
+        if (!hasRetriedAuth && (await this.refreshAccessToken())) {
           return this.sendEntry(entry, true);
         }
         // refresh ناموفق — رکورد در صف بماند تا بعد از login مجدد ارسال شود
@@ -729,9 +785,12 @@ export class OfflineSyncService {
 
   /**
    * تلاش برای تازه‌سازی access token با استفاده از refresh token
+   *
+   * عمومی است چون صف آپلود عکس (PhotoUploadQueueService) هم پس از ۴۰۱ به آن
+   * نیاز دارد و دو نسخه از منطق چرخش توکن دردسر می‌شود.
    * @returns true = توکن جدید گرفته شد / false = ناموفق
    */
-  private async tryRefreshToken(): Promise<boolean> {
+  async refreshAccessToken(): Promise<boolean> {
     const refresh = localStorage.getItem('wh_refresh_token');
     if (!refresh) return false;
 
@@ -810,7 +869,9 @@ export class OfflineSyncService {
         .where('status')
         .anyOf(['pending', 'failed'])
         .count();
-      this._pendingCount$.next(pending);
+      // عکس منتظر ارسال هم «کار ناتمام کاربر» است و باید در همان شمارنده دیده شود
+      const photosPending = await this.photoQueue.countPending();
+      this._pendingCount$.next(pending + photosPending);
 
       const errors = await offlineDb.syncErrors
         .where('dismissed')
@@ -907,6 +968,7 @@ export class OfflineSyncService {
 
   destroy(): void {
     this.subscription?.unsubscribe();
+    this.photoSubscription?.unsubscribe();
     this.stopAutoSync();
   }
 }

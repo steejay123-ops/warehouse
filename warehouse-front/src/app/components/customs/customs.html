@@ -63,6 +63,7 @@
       <app-barcode-scanner
         #scanner
         [headless]="true"
+        [serverPreset]="scannerCameraPreset"
         (scanned)="onBarcodeScanned($event)"
       />
 
@@ -459,10 +460,20 @@
                     (click)="$event.stopPropagation(); toggleSelection(task.id)"
                     class="mt-1 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
                   >
+
+                  <!-- بندانگشتی تصویر کالا -->
+                  <app-item-photo-thumb
+                    size="sm"
+                    accent="indigo"
+                    [photoCount]="task.item_details?.photos_count"
+                    [thumbUrl]="task.item_details?.primary_thumbnail"
+                    (openRequested)="photoGallery.open(task, $event)"
+                  ></app-item-photo-thumb>
+
                   <div class="min-w-0 flex-1">
                     <h3 class="font-bold text-slate-800 text-sm leading-tight mb-1 line-clamp-2">{{task.item_details?.description || '-'}}</h3>
                     <div class="flex items-center gap-2">
-                      <span class="text-[11px] font-mono text-slate-500 font-semibold" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
+                      <span class="text-[11px] font-mono text-slate-500 font-semibold whitespace-nowrap" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
                       <app-offline-pending-badge *ngIf="task._offlinePending" />
                     </div>
                   </div>
@@ -655,10 +666,19 @@
                   <svg *ngIf="selectedPoolTasks.has(task.id)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 </div>
 
+                <!-- بندانگشتی تصویر کالا -->
+                <app-item-photo-thumb
+                  size="sm"
+                  accent="indigo"
+                  [photoCount]="task.item_details?.photos_count"
+                  [thumbUrl]="task.item_details?.primary_thumbnail"
+                  (openRequested)="photoGallery.open(task, $event)"
+                ></app-item-photo-thumb>
+
                 <!-- Main Info Area -->
                 <div class="flex-1 min-w-0">
                   <div class="flex justify-between items-start mb-1">
-                    <span class="font-black text-slate-800 text-xs font-mono" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
+                    <span class="font-black text-slate-800 text-xs font-mono whitespace-nowrap" dir="ltr">{{ task.item_details?.fa_unic_code }}</span>
                     <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">قابل دریافت</span>
                   </div>
                   
@@ -736,8 +756,23 @@
 
         <!-- Item Info Card (Identical to Counter) -->
         <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6">
-          <div class="text-[10px] text-slate-400 font-mono mb-1" dir="ltr" style="text-align: right;">{{ selectedTask.item_details?.fa_unic_code }}</div>
-          <h2 class="text-base font-black text-slate-800 leading-snug mb-4">{{ selectedTask.item_details?.description }}</h2>
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div class="flex items-start gap-3 flex-1 min-w-0">
+              <!-- بندانگشتی تصویر کالا -->
+              <app-item-photo-thumb
+                size="lg"
+                accent="indigo"
+                [photoCount]="selectedTask.item_details?.photos_count"
+                [thumbUrl]="selectedTask.item_details?.primary_thumbnail"
+                (openRequested)="photoGallery.open(selectedTask, $event)"
+              ></app-item-photo-thumb>
+
+              <div class="flex-1 min-w-0">
+                <div class="text-[10px] text-slate-400 font-mono mb-1" dir="ltr" style="text-align: right;">{{ selectedTask.item_details?.fa_unic_code }}</div>
+                <h2 class="text-base font-black text-slate-800 leading-snug">{{ selectedTask.item_details?.description }}</h2>
+              </div>
+            </div>
+          </div>
 
           <!-- Primary & Dynamic Info Fields Grid -->
           <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200" dir="rtl">
@@ -1275,5 +1310,17 @@
 
     </div>
   </div>
+
+  <!-- Modal گالری تصاویر کالا -->
+  <app-item-photo-gallery
+    *ngIf="photoGallery.isOpen && photoGallery.itemId"
+    [itemId]="photoGallery.itemId"
+    [itemFaUnicCode]="photoGallery.itemCode"
+    [itemDescription]="photoGallery.itemDescription"
+    [countTaskId]="photoGallery.countTaskId"
+    [isOpen]="photoGallery.isOpen"
+    (close)="photoGallery.close()"
+    (photosChanged)="onPhotosChanged($event)"
+  ></app-item-photo-gallery>
 
 </div>

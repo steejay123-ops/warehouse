@@ -170,19 +170,50 @@ class ImportHistory(models.Model):
     def __str__(self):
         return f"{self.action} on Item {self.item_id}"
 
-class ItemPhoto(models.Model):
-    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='photos')
-    image = models.ImageField(upload_to='item_photos/')
-    description = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیح عکس")
+class ItemPhoto(SyncModelMixin):
+    SOURCE_CHOICES = [
+        ('camera', 'دوربین انبار'),
+        ('gallery', 'گالری / فایل'),
+    ]
+
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='photos', verbose_name="کالا")
+    image = models.ImageField(upload_to='item_photos/originals/%Y/%m/', verbose_name="تصویر اصلی (WebP)")
+    medium = models.ImageField(upload_to='item_photos/medium/%Y/%m/', null=True, blank=True, verbose_name="تصویر متوسط")
+    thumbnail = models.ImageField(upload_to='item_photos/thumbnails/%Y/%m/', null=True, blank=True, verbose_name="بندانگشتی")
+    
+    caption = models.CharField(max_length=255, blank=True, null=True, verbose_name="توضیح عکس")
+    is_primary = models.BooleanField(default=False, verbose_name="تصویر شاخص")
+    display_order = models.PositiveIntegerField(default=0, verbose_name="ترتیب نمایش")
+    file_size = models.PositiveIntegerField(default=0, verbose_name="حجم فایل (بایت)")
+    width = models.PositiveIntegerField(default=0, verbose_name="عرض")
+    height = models.PositiveIntegerField(default=0, verbose_name="ارتفاع")
+    
+    source_type = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='gallery', verbose_name="منبع تصویر")
+    count_task = models.ForeignKey('CountTask', on_delete=models.SET_NULL, null=True, blank=True, related_name='task_photos', verbose_name="تسک شمارش مرتبط")
     
     # Auditing
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_item_photos')
-    modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_item_photos')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ ویرایش")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_item_photos', verbose_name="ثبت‌کننده")
+    modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_item_photos', verbose_name="ویرایش‌کننده")
+
+    class Meta:
+        # هم‌تراز با PHOTO_ORDERING در inventory/views_photos.py. پیش از این،
+        # Meta با display_order شروع می‌شد ولی ویوها با -is_primary؛ نتیجه این
+        # بود که «عکس شاخص» بسته به مسیر درخواست جای متفاوتی می‌ایستاد و
+        # عکس اول در UI با عکس شاخص یکی نبود.
+        ordering = ['-is_primary', 'display_order', '-created_at', '-id']
+        verbose_name = "عکس کالا"
+        verbose_name_plural = "عکس‌های کالا"
+        base_manager_name = 'all_objects'
+        indexes = [
+            # کوئری غالب: عکس‌های زنده یک کالا به ترتیب نمایش
+            models.Index(fields=['item', 'is_deleted', '-is_primary', 'display_order'],
+                         name='itemphoto_item_live_order_idx'),
+        ]
 
     def __str__(self):
-        return f"Photo for {self.item.fa_unic_code}"
+        return f"Photo for {self.item.fa_unic_code} ({'Primary' if self.is_primary else self.id})"
 
 class CountTask(SyncModelMixin):
     STATUS_CHOICES = [

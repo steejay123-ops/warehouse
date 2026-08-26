@@ -76,6 +76,46 @@ export interface SyncErrorEntry {
 }
 
 /**
+ * مدل صف آپلود عکس — فایلی که کاربر گرفته تا لحظه رسیدن به سرور اینجا می‌ماند
+ *
+ * چرا جدا از syncQueue: آن صف بدنه را با `JSON.stringify` می‌فرستد و یک Blob در
+ * آن مسیر به `{}` تبدیل می‌شود — یعنی عکسی که کاربر در انبار بی‌آنتن گرفته
+ * بی‌صدا نابود می‌شد. IndexedDB خودش Blob را بدون تبدیل نگه می‌دارد، پس فایل
+ * تا لحظه ارسال دست‌نخورده می‌ماند (حتی اگر مرورگر بسته و باز شود).
+ */
+export interface PhotoQueueEntry {
+  id?: number;
+  /** شناسه کالای مقصد */
+  itemId: number;
+  /** sync_id تولیدشده در کلاینت — کلید idempotency سرور (ارسال دوباره ⇒ رکورد تکراری نه) */
+  syncId: string;
+  /** فایل فشرده‌شده؛ همان بایت‌هایی که به سرور می‌رود */
+  blob: Blob;
+  /** نام فایل برای FormData */
+  fileName: string;
+  caption?: string;
+  sourceType?: 'camera' | 'gallery';
+  /** تسک شمارشی که عکس در جریان آن گرفته شده */
+  countTaskId?: number;
+  /** آیا این عکس باید شاخص کالا شود؟ */
+  isPrimary?: boolean;
+  width?: number;
+  height?: number;
+  /** روی دستگاه مشترک، صف هر کاربر جداست */
+  userId?: number;
+  createdAt: number;
+  retryCount: number;
+  /**
+   * pending  → منتظر ارسال
+   * sending  → در حال ارسال (با ری‌استارت برنامه به pending برمی‌گردد)
+   * failed   → خطای موقت؛ همچنان در نوبت ارسال است
+   * rejected → سرور صریحاً رد کرد؛ فایل نگه داشته می‌شود تا کاربر تصمیم بگیرد
+   */
+  status: 'pending' | 'sending' | 'failed' | 'rejected';
+  lastError?: string;
+}
+
+/**
  * cursor و زمان آخرین Pull موفق — per (کاربر، انبار)
  * lastServerTime همیشه از server_time پاسخ سرور است، نه ساعت دستگاه (رفع Clock Skew).
  */
@@ -102,6 +142,7 @@ export interface SyncCursorEntry {
  * 3. syncErrors: صندوق خطاهایی که سرور رد کرده (4xx)
  * 4. countTasks / items / dynamicFields: دادهٔ دامنه Local-First (منبع: Pull API)
  * 5. syncCursors: cursor و server_time آخرین Pull per (کاربر، انبار)
+ * 6. photoQueue: عکس‌های گرفته‌شده که هنوز به سرور نرسیده‌اند (Blob خام)
  *
  * قاعده: هیچ جدولی هرگز Clear نمی‌شود مگر صف خالی باشد و کاربر صریحاً تأیید کند.
  */
@@ -114,6 +155,7 @@ export class OfflineDatabase extends Dexie {
   dynamicFields!: Table<any, string>;
   syncCursors!: Table<SyncCursorEntry, string>;
   docTasks!: Table<any, string>;
+  photoQueue!: Table<PhotoQueueEntry, number>;
 
   constructor() {
     super('WarehouseOfflineDB');
@@ -153,6 +195,35 @@ export class OfflineDatabase extends Dexie {
       syncCursors: 'key, userId, warehouseId',
       docTasks: 'sync_id, id, warehouse_id, status, updated_at',
     });
+
+    // نسخه ۵ — صف آپلود عکس؛ فایل به‌صورت Blob اینجا می‌ماند تا سرور آن را
+    // بپذیرد. جداول قبلی دست‌نخورده‌اند (upgrade فقط جدول جدید اضافه می‌کند).
+    this.version(5).stores({
+      syncQueue: '++id, status, createdAt, userId, entitySyncId',
+      apiCache: 'url, expiresAt',
+      syncErrors: '++id, failedAt, dismissed, userId',
+      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+      syncCursors: 'key, userId, warehouseId',
+      docTasks: 'sync_id, id, warehouse_id, status, updated_at',
+      photoQueue: '++id, status, createdAt, userId, itemId, syncId',
+    });
+  }
+
+  /**
+   * پاک کردن جداول کش مشتق‌شده از سرور پس از بازیابی دیتابیس.
+   * جداول صف (syncQueue, photoQueue, syncErrors) به هیچ عنوان پاک نمی‌شوند.
+   */
+  async clearServerDerivedCaches(): Promise<void> {
+    await Promise.all([
+      this.apiCache.clear(),
+      this.countTasks.clear(),
+      this.docTasks.clear(),
+      this.items.clear(),
+      this.dynamicFields.clear(),
+      this.syncCursors.clear()
+    ]);
   }
 }
 

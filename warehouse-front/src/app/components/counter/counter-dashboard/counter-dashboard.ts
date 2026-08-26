@@ -24,6 +24,9 @@ import { OfflineSyncService } from '../../../core/services/offline-sync.service'
 import { BarcodeScannerComponent } from '../../../shared/components/barcode-scanner/barcode-scanner.component';
 import { PersianDatePipe } from '../../../shared/pipes/persian-date.pipe';
 import { WebSocketService } from '../../../core/http/websocket.service';
+import { ItemPhotoGalleryComponent } from '../../../shared/components/item-photo-gallery/item-photo-gallery.component';
+import { ItemPhotoThumbComponent } from '../../../shared/components/item-photo-gallery/item-photo-thumb.component';
+import { PhotoGalleryHost } from '../../../shared/components/item-photo-gallery/photo-gallery-host';
 import { 
   FieldPermissionConfig, 
   mergeFieldPermissions 
@@ -32,7 +35,7 @@ import {
 @Component({
   selector: 'app-counter-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, PersianDatePipe, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent],
+  imports: [CommonModule, FormsModule, PersianDatePipe, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, ItemPhotoGalleryComponent, ItemPhotoThumbComponent],
   templateUrl: './counter-dashboard.html',
   styleUrl: './counter-dashboard.css',
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -47,6 +50,14 @@ export class CounterDashboard implements OnInit {
   selectedPoolTasks = new Set<number>();
   currentTab: 'my-tasks' | 'pool' = 'my-tasks';
   isSubmitting = false;
+
+  // ── Photo Gallery State ───────────────────────────────────────────────────
+  readonly photoGallery = new PhotoGalleryHost(msg => this.toast.warning(msg));
+
+  onPhotosChanged(photos: any[]): void {
+    this.photoGallery.apply(photos, this.tasks, this.poolTasks, this.selectedTask);
+    this.cdr.markForCheck();
+  }
   
   // Detail view state
   countedBalanceStr: string = '';
@@ -59,6 +70,7 @@ export class CounterDashboard implements OnInit {
   fieldConfigs: FieldPermissionConfig[] = [];
   editableValues: Record<string, any> = {};
   dynamicFieldsList: any[] = [];
+  scannerCameraPreset = 'adaptive';
 
   // Stats & Filters
   totalTasksCount = 0;
@@ -1103,6 +1115,7 @@ export class CounterDashboard implements OnInit {
           this.fieldConfigs = mergeFieldPermissions(savedPerms, this.dynamicFieldsList);
           this.counterCanViewHistory = res?.counter_can_view_history?.value ?? true;
           this.counterCanViewPreviousNotes = res?.counter_can_view_previous_notes?.value ?? true;
+          this.scannerCameraPreset = res?.scanner_camera_preset?.value ?? res?.scanner_camera_preset ?? 'adaptive';
           this.cdr.detectChanges();
         },
         error: () => {
@@ -1119,6 +1132,7 @@ export class CounterDashboard implements OnInit {
           this.fieldConfigs = mergeFieldPermissions(savedPerms, this.dynamicFieldsList);
           this.counterCanViewHistory = res?.counter_can_view_history ?? true;
           this.counterCanViewPreviousNotes = res?.counter_can_view_previous_notes ?? true;
+          this.scannerCameraPreset = res?.scanner_camera_preset ?? 'adaptive';
           this.cdr.detectChanges();
         },
         error: () => {
@@ -1755,8 +1769,9 @@ export class CounterDashboard implements OnInit {
         }
 
         this.countTaskApi.bulkSubmit(submitPayload).subscribe({
-          next: async (res) => {
-            Object.assign(task, updatedTask, { status: targetStatus });
+          next: async (res: any) => {
+            const finalStatus = res?.task?.status || res?.tasks?.[0]?.status || targetStatus;
+            Object.assign(task, updatedTask, { status: finalStatus });
             if (!task.history) task.history = [];
             task.history = [submitHistoryRecord, ...task.history];
             await this.saveExtraEditedFields(task);

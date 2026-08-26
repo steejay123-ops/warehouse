@@ -34,6 +34,8 @@ export interface DocTask {
     unit?: string;
     warehouse_name?: string;
     name?: string;
+    photos_count?: number;
+    primary_thumbnail?: string | null;
   };
   doc_worker: number | null;
   doc_worker_name?: string;

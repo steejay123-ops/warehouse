@@ -1274,3 +1274,103 @@ class InventoryAdvancedWorkflowsAndRBACTests(BaseInventoryTestCase):
         }, format='json')
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def test_46_export_excel_with_active_search_query(self):
+        """تست خروجی اکسل با کلمه جستجوی فعال بدون بروز خطای ۵۰۰ FieldError"""
+        CountTask.objects.create(
+            item=self.item1,
+            counter=self.counter,
+            status='PENDING_COUNT'
+        )
+
+        self.client.force_authenticate(user=self.manager)
+        resp = self.client.post('/api/inventory/count-tasks/export_excel/', {
+            'warehouse_id': self.warehouse.id,
+            'as_role': 'manager',
+            'q': 'VALVE-101'
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def test_47_manager_supervisor_blind_mode_context(self):
+        """تست نمایش موجودی دفتری و سیستم برای مدیر و سرپرست حتی در حالت شمارش کور"""
+        SystemSetting.objects.create(
+            warehouse=self.warehouse,
+            key='blind_counting',
+            value='blind'
+        )
+        task = CountTask.objects.create(
+            item=self.item1,
+            counter=self.counter,
+            status='MANAGER_REVIEW'
+        )
+
+        # نقش مدیر: باید موجودی را دریافت کند
+        self.client.force_authenticate(user=self.manager)
+        resp = self.client.get('/api/inventory/count-tasks/', {'as_role': 'manager'})
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        res_list = resp.data.get('results', resp.data)
+        manager_task = next((t for t in res_list if t['id'] == task.id), None)
+        self.assertIsNotNone(manager_task)
+        self.assertIn('inventory', manager_task['item_details'])
+        self.assertIn('bal4miv', manager_task['item_details'])
+
+    def test_48_patch_disallows_direct_final_approval(self):
+        """تست مسدود بودن تغییر مستقیم وضعیت تسک به FINAL_APPROVED با متد PATCH"""
+        task = CountTask.objects.create(
+            item=self.item1,
+            counter=self.counter,
+            status='PENDING_COUNT'
+        )
+
+        self.client.force_authenticate(user=self.counter)
+        resp = self.client.patch(f'/api/inventory/count-tasks/{task.id}/', {
+            'status': 'FINAL_APPROVED'
+        }, format='json')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'PENDING_COUNT')
+
+    def test_49_bulk_manager_approve_reject_idor_guard(self):
+        """تست گارد امنیتی انبار (IDOR) در تایید و رد گروهی مدیر"""
+        # ساخت کاربری که فقط به warehouse1 دسترسی دارد
+        restricted_mgr = User.objects.create_user(
+            username="restricted_mgr",
+            password="Password123!"
+        )
+        restricted_mgr = self._assign_perms(restricted_mgr, [
+            'view_sys_manager_review',
+            'can_act_as_manager',
+            'perm_inventory_finalize'
+        ])
+        restricted_mgr.assigned_warehouses.set([self.warehouse])
+
+        # کالایی در انبار دوم (warehouse2)
+        item_other = Item.objects.create(
+            warehouse=self.warehouse2,
+            fa_unic_code="UN-OTHER-99",
+            description="Other warehouse item",
+            inventory=Decimal("50"),
+            bal4miv=Decimal("50")
+        )
+        task_other = CountTask.objects.create(
+            item=item_other,
+            counter=self.counter,
+            status='MANAGER_REVIEW',
+            counted_balance=Decimal("55")
+        )
+
+        self.client.force_authenticate(user=restricted_mgr)
+        # تلاش برای تایید کالای انبار دیگر
+        resp_app = self.client.post('/api/inventory/count-tasks/bulk_manager_approve/', {
+            'task_ids': [task_other.id]
+        }, format='json')
+        self.assertEqual(resp_app.status_code, status.HTTP_403_FORBIDDEN)
+
+        # تلاش برای رد کالای انبار دیگر
+        resp_rej = self.client.post('/api/inventory/count-tasks/bulk_manager_reject/', {
+            'task_ids': [task_other.id],
+            'note': 'تست رد'
+        }, format='json')
+        self.assertEqual(resp_rej.status_code, status.HTTP_403_FORBIDDEN)
+

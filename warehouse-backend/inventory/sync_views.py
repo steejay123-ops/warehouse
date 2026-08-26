@@ -33,13 +33,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import CountTask, CountTaskHistory, DocTask, DocTaskHistory, Item, ItemFieldDefinition
-from .serializers import CountTaskSerializer, DocTaskSerializer, ItemFieldDefinitionSerializer, ItemSerializer
+from .serializers import (
+    CountTaskSerializer,
+    DocTaskSerializer,
+    ItemFieldDefinitionSerializer,
+    ItemSerializer,
+    photo_prefetch,
+)
 
 # هم‌راستا با نگهداری ۶ ماهه کلاینت؛ tombstone قدیمی‌تر از این قابل اتکا نیست
 TOMBSTONE_RETENTION_DAYS = 180
 DEFAULT_LIMIT = 500
 MAX_LIMIT = 1000
 # ترتیب ثابت پردازش (وابستگی‌ها اول: تعریف فیلدها → آیتم‌ها → تسک‌ها)
+#
+# ItemPhoto عمداً اینجا نیست: ردیف عکس بدون فایل تصویرش برای کلاینت آفلاین
+# بی‌فایده است و استراتژی کش فایل هنوز وجود ندارد. آنچه رابط آفلاین لازم دارد
+# (`photos_count` و `primary_thumbnail`) از قبل روی خود ردیف کالا می‌آید. اگر
+# روزی اضافه شد، به یک جدول Dexie و پیش‌کش فایل در Service Worker هم نیاز است.
 MODEL_ORDER = ['dynamic_fields', 'items', 'count_tasks', 'doc_tasks']
 
 
@@ -146,7 +157,7 @@ class SyncPullView(APIView):
             if page_full:
                 rows = rows[:remaining]
 
-            results[model_key] = [self._serialize(model_key, obj, blind) for obj in rows]
+            results[model_key] = [self._serialize(model_key, obj, blind, request) for obj in rows]
             remaining -= len(rows)
 
             if page_full:
@@ -179,7 +190,7 @@ class SyncPullView(APIView):
         if model_key == 'items':
             base = Item.all_objects.filter(warehouse_id=warehouse_id).select_related(
                 'warehouse', 'created_by', 'modified_by'
-            )
+            ).prefetch_related(photo_prefetch())
             if full_access:
                 return base
             # شمارشگر: فقط آیتم‌های تسک‌های خودش/استخر + همه tombstoneها (فقط sync_id)
@@ -196,7 +207,8 @@ class SyncPullView(APIView):
                 'item', 'item__warehouse', 'item__created_by', 'item__modified_by',
                 'doc_worker', 'doc_supervisor', 'assigned_manager', 'created_by', 'modified_by'
             ).prefetch_related(
-                Prefetch('history', queryset=DocTaskHistory.objects.order_by('created_at').select_related('action_by'))
+                Prefetch('history', queryset=DocTaskHistory.objects.order_by('created_at').select_related('action_by')),
+                photo_prefetch('item__photos'),
             )
             if full_access:
                 return base
@@ -211,7 +223,8 @@ class SyncPullView(APIView):
             'item', 'item__warehouse', 'item__created_by', 'item__modified_by',
             'counter', 'supervisor', 'assigned_manager', 'created_by', 'modified_by'
         ).prefetch_related(
-            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by'))
+            Prefetch('history', queryset=CountTaskHistory.objects.order_by('created_at').select_related('action_by')),
+            photo_prefetch('item__photos'),
         )
         if full_access:
             return base
@@ -221,22 +234,26 @@ class SyncPullView(APIView):
             | Q(counter__isnull=True, status='PENDING_COUNT')
         )
 
-    def _serialize(self, model_key, obj, blind):
+    def _serialize(self, model_key, obj, blind, request):
         if getattr(obj, 'is_deleted', False):
             return {
                 'sync_id': str(obj.sync_id) if getattr(obj, 'sync_id', None) else None,
                 'is_deleted': True,
                 'updated_at': obj.updated_at.isoformat(),
             }
+        # request در context لازم است تا آدرس تصویر شاخص مطلق شود؛ کلاینت همین
+        # ردیف را در همان جدول Dexie می‌نویسد که پاسخ REST را می‌نویسد و دو نوع
+        # آدرس متفاوت برای یک کالا دردسر می‌شود.
+        context = {'request': request}
         if model_key == 'doc_tasks':
-            return DocTaskSerializer(obj).data
+            return DocTaskSerializer(obj, context=context).data
         if model_key == 'dynamic_fields':
-            return ItemFieldDefinitionSerializer(obj).data
+            return ItemFieldDefinitionSerializer(obj, context=context).data
         if model_key == 'items':
-            data = ItemSerializer(obj).data
+            data = ItemSerializer(obj, context=context).data
             if blind:
                 data.pop('inventory', None)
                 data.pop('bal4miv', None)
             return data
-        return CountTaskSerializer(obj, context={'is_blind': blind}).data
+        return CountTaskSerializer(obj, context={**context, 'is_blind': blind}).data
 

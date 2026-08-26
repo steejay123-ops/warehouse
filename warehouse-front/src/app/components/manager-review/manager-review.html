@@ -405,26 +405,29 @@
             <input 
               type="checkbox" 
               [checked]="selectedTasks.has(task.id)" 
-              (click)="$event.stopPropagation(); toggleSelection(task.id)" 
+              (click)="$event.stopPropagation(); toggleSelection(task.id)"
               class="mt-1 w-4 h-4 text-indigo-600 bg-slate-50 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer shrink-0"
             >
+
+            <!-- بندانگشتی تصویر کالا -->
+            <app-item-photo-thumb
+              size="sm"
+              accent="indigo"
+              [photoCount]="task.item_details?.photos_count"
+              [thumbUrl]="task.item_details?.primary_thumbnail"
+              (openRequested)="photoGallery.open(task, $event, task.id)"
+            ></app-item-photo-thumb>
+
             <div class="min-w-0 flex-1">
               <h3 class="font-bold text-slate-800 text-sm leading-snug mb-1 line-clamp-2">{{task.item_details?.description || '-'}}</h3>
               <div class="flex items-center gap-2">
-                <span class="text-[11px] font-mono text-slate-500 font-semibold" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
+                <span class="text-[11px] font-mono text-slate-500 font-semibold whitespace-nowrap" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
                 <app-offline-pending-badge *ngIf="task._offlinePending" />
               </div>
             </div>
           </div>
           
           <div class="shrink-0 flex items-center gap-1.5 mr-2">
-            <!-- Discrepancy Status Tag -->
-            <div class="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
-                 [ngClass]="isMatched(task) ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700 border border-rose-200'">
-              <span *ngIf="isMatched(task)">منطبق (بدون مغایرت)</span>
-              <span *ngIf="!isMatched(task)">دارای مغایرت ({{getDifference(task) > 0 ? '+' : ''}}{{getDifference(task)}})</span>
-            </div>
-
             <!-- Task Status Badge -->
             <div class="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                  [ngClass]="{
@@ -577,9 +580,19 @@
             (click)="$event.stopPropagation(); togglePoolSelection(task.id)"
             class="mt-1 w-4 h-4 text-indigo-600 bg-slate-50 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer shrink-0"
           >
+
+          <!-- بندانگشتی تصویر کالا -->
+          <app-item-photo-thumb
+            size="sm"
+            accent="indigo"
+            [photoCount]="task.item_details?.photos_count"
+            [thumbUrl]="task.item_details?.primary_thumbnail"
+            (openRequested)="photoGallery.open(task, $event, task.id)"
+          ></app-item-photo-thumb>
+
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-start mb-1">
-              <span class="font-black text-slate-800 tracking-wide font-mono text-sm" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
+              <span class="font-black text-slate-800 tracking-wide font-mono text-sm whitespace-nowrap" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
               <button (click)="claimSingleTask(task, $event)" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition-colors">
                 به عهده گرفتن
               </button>
@@ -884,13 +897,23 @@
             <input 
               type="checkbox" 
               [checked]="selectedDocTasks.has(task.id)" 
-              (click)="$event.stopPropagation(); toggleDocSelection(task.id)" 
+              (click)="$event.stopPropagation(); toggleDocSelection(task.id)"
               class="mt-1 w-4 h-4 text-indigo-600 bg-slate-50 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer shrink-0"
             >
+
+            <!-- بندانگشتی تصویر کالا — بدون countTaskId چون این ردیف تسک سند است -->
+            <app-item-photo-thumb
+              size="sm"
+              accent="indigo"
+              [photoCount]="task.item_details?.photos_count"
+              [thumbUrl]="task.item_details?.primary_thumbnail"
+              (openRequested)="photoGallery.open(task, $event)"
+            ></app-item-photo-thumb>
+
             <div class="min-w-0 flex-1">
               <h3 class="font-bold text-slate-800 text-sm leading-snug mb-1 line-clamp-2">{{task.item_details?.description || '-'}}</h3>
               <div class="flex items-center gap-2">
-                <span class="text-[11px] font-mono text-slate-500 font-semibold" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
+                <span class="text-[11px] font-mono text-slate-500 font-semibold whitespace-nowrap" dir="ltr">{{task.item_details?.fa_unic_code || '-'}}</span>
               </div>
             </div>
           </div>
@@ -1050,12 +1073,22 @@
           <input 
             type="checkbox" 
             [checked]="selectedDocPoolTasks.has(task.id)" 
-            (click)="$event.stopPropagation(); toggleDocPoolSelection(task.id)" 
+            (click)="$event.stopPropagation(); toggleDocPoolSelection(task.id)"
             class="mt-1 w-4 h-4 text-indigo-600 bg-slate-50 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer shrink-0"
           >
+
+          <!-- بندانگشتی تصویر کالا — بدون countTaskId چون این ردیف تسک سند است -->
+          <app-item-photo-thumb
+            size="sm"
+            accent="indigo"
+            [photoCount]="task.item_details?.photos_count"
+            [thumbUrl]="task.item_details?.primary_thumbnail"
+            (openRequested)="photoGallery.open(task, $event)"
+          ></app-item-photo-thumb>
+
           <div class="flex-1 min-w-0">
             <div class="flex justify-between items-start mb-1">
-              <span class="font-black text-slate-800 font-mono text-sm" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
+              <span class="font-black text-slate-800 font-mono text-sm whitespace-nowrap" dir="ltr">{{task.item_details?.fa_unic_code}}</span>
               <button (click)="claimSingleDocTask(task, $event)" class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition-colors">
                 به عهده گرفتن
               </button>
@@ -1081,10 +1114,16 @@
     <div class="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col slide-in overflow-hidden">
       <!-- Header -->
       <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-          </div>
+        <div class="flex items-center gap-3">
+          <!-- بندانگشتی تصویر کالا -->
+          <app-item-photo-thumb
+            size="md"
+            accent="indigo"
+            [light]="true"
+            [photoCount]="selectedCountingDetailTask.item_details?.photos_count"
+            [thumbUrl]="selectedCountingDetailTask.item_details?.primary_thumbnail"
+            (openRequested)="photoGallery.open(selectedCountingDetailTask, $event, selectedCountingDetailTask.id)"
+          ></app-item-photo-thumb>
           <div>
             <h3 class="text-sm font-black text-slate-800 font-mono" dir="ltr">{{selectedCountingDetailTask.item_details?.fa_unic_code}}</h3>
             <p class="text-[11px] text-slate-500 truncate max-w-md">{{selectedCountingDetailTask.item_details?.description}}</p>
@@ -1118,6 +1157,27 @@
                 <b class="text-slate-800 font-mono" dir="auto">{{df.value}}</b>
               </div>
             </div>
+          </div>
+
+          <!-- بخش تصاویر کالا -->
+          <div class="pt-2 border-t border-slate-200 flex items-center justify-between">
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">تصاویر و عکس‌های کالا</span>
+            <button 
+              type="button" 
+              (click)="photoGallery.open(selectedCountingDetailTask, $event, selectedCountingDetailTask.id)"
+              class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer shadow-xs active:scale-95 group"
+            >
+              <div class="relative w-7 h-7 rounded-lg overflow-hidden border border-indigo-200 bg-white flex items-center justify-center shrink-0">
+                <img 
+                  *ngIf="selectedCountingDetailTask.item_details?.primary_thumbnail" 
+                  [src]="selectedCountingDetailTask.item_details?.primary_thumbnail" 
+                  alt="تصویر کالا" 
+                  class="w-full h-full object-cover"
+                />
+                <span *ngIf="!selectedCountingDetailTask.item_details?.primary_thumbnail" class="text-xs">📷</span>
+              </div>
+              <span>{{ selectedCountingDetailTask.item_details?.photos_count ? (selectedCountingDetailTask.item_details?.photos_count + ' تصویر - باز کردن آلبوم') : 'عکاسی یا ثبت تصویر' }}</span>
+            </button>
           </div>
         </div>
 
@@ -1162,6 +1222,16 @@
               <p *ngIf="h.note" class="text-slate-600 m-0 bg-slate-50 p-1.5 rounded-lg border border-slate-100">{{h.note}}</p>
             </div>
           </div>
+        </div>
+
+        <!-- Contextual Comments for Counting Item -->
+        <div *ngIf="selectedCountingDetailTask.item">
+          <app-contextual-comments
+            modelName="item"
+            appLabel="inventory"
+            [objectId]="selectedCountingDetailTask.item"
+            title="گفتگو و یادداشت‌های این کالا">
+          </app-contextual-comments>
         </div>
       </div>
 
@@ -1450,6 +1520,16 @@
             </div>
           </div>
         </div>
+
+        <!-- Contextual Comments for Doc Item -->
+        <div *ngIf="selectedDocDetailTask.item">
+          <app-contextual-comments
+            modelName="item"
+            appLabel="inventory"
+            [objectId]="selectedDocDetailTask.item"
+            title="گفتگو و یادداشت‌های این سند و کالا">
+          </app-contextual-comments>
+        </div>
       </div>
 
       <!-- Footer -->
@@ -1468,4 +1548,17 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal گالری تصاویر کالا -->
+  <app-item-photo-gallery
+    *ngIf="photoGallery.isOpen && photoGallery.itemId"
+    [itemId]="photoGallery.itemId"
+    [itemFaUnicCode]="photoGallery.itemCode"
+    [itemDescription]="photoGallery.itemDescription"
+    [countTaskId]="photoGallery.countTaskId"
+    [isOpen]="photoGallery.isOpen"
+    (close)="photoGallery.close()"
+    (photosChanged)="onPhotosChanged($event)"
+  ></app-item-photo-gallery>
+
 </div>

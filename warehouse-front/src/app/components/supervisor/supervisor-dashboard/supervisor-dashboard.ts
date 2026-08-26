@@ -9,6 +9,7 @@ import { CountTask } from '../../../core/models/count-task.model';
 import { DocTaskApiService } from '../../../core/api/doc-task-api.service';
 import { DocTask } from '../../../core/models/doc-task.model';
 import { ToastService } from '../../../services/toast.service';
+import { SettingsService } from '../../../services/settings';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { StateService } from '../../../services/state.service';
 import { WarehouseSelectorComponent } from '../../../shared/components/warehouse-selector/warehouse-selector.component';
@@ -21,11 +22,15 @@ import { environment } from '../../../../environments/environment';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
 import { NetworkStatusService } from '../../../core/services/network-status.service';
 import { PersianDatePipe } from '../../../shared/pipes/persian-date.pipe';
+import { ItemPhotoGalleryComponent } from '../../../shared/components/item-photo-gallery/item-photo-gallery.component';
+import { ItemPhotoThumbComponent } from '../../../shared/components/item-photo-gallery/item-photo-thumb.component';
+import { PhotoGalleryHost } from '../../../shared/components/item-photo-gallery/photo-gallery-host';
+import { ContextualCommentsComponent } from '../../communications/contextual-comments/contextual-comments.component';
 
 @Component({
   selector: 'app-supervisor-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, PersianDatePipe],
+  imports: [CommonModule, FormsModule, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, PersianDatePipe, ItemPhotoGalleryComponent, ItemPhotoThumbComponent, ContextualCommentsComponent],
   templateUrl: './supervisor-dashboard.html',
   styleUrl: './supervisor-dashboard.css'
 })
@@ -41,6 +46,7 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   authStore = inject(AuthStore);
   auth = inject(AuthService);
   private router = inject(Router);
+  private settingsService = inject(SettingsService);
   tasks: CountTask[] = [];
   poolTasks: CountTask[] = [];
   isLoading = true;
@@ -49,6 +55,27 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   currentTab: 'my-tasks' | 'pool' | 'doc' | 'doc-pool' = 'my-tasks';
   lastCountTab: 'my-tasks' | 'pool' = 'my-tasks';
   lastDocTab: 'doc' | 'doc-pool' = 'doc';
+  scannerCameraPreset = 'adaptive';
+
+  // ── Photo Gallery State ───────────────────────────────────────────────────
+  readonly photoGallery = new PhotoGalleryHost(msg => this.toast.warning(msg));
+
+  /**
+   * `countTaskId` را قالب می‌فرستد، نه این متد: لیست‌های سند (docTasks) هم از
+   * همان بندانگشتی استفاده می‌کنند و شناسهٔ DocTask نباید در فیلدی برود که به
+   * CountTask اشاره دارد.
+   */
+  onPhotosChanged(photos: any[]): void {
+    this.photoGallery.apply(
+      photos,
+      this.tasks,
+      this.poolTasks,
+      this.docTasks,
+      this.docPoolTasks,
+      this.selectedCountingDetailTask,
+    );
+    this.cdr.markForCheck();
+  }
 
   // ─── Search & Filters State ───
   searchQuery: string = '';
@@ -134,6 +161,23 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       case 'code': return 'کد کالا';
       case 'title': return 'شرح کالا';
       default: return 'مرتب‌سازی';
+    }
+  }
+
+  private fetchSettings() {
+    const whId = Number(this.state.appState.activeWarehouseId);
+    if (whId && !isNaN(whId)) {
+      this.settingsService.getWarehouseSettings(whId).subscribe({
+        next: (res: any) => {
+          this.scannerCameraPreset = res?.scanner_camera_preset?.value ?? res?.scanner_camera_preset ?? 'adaptive';
+        }
+      });
+    } else {
+      this.settingsService.getGlobalSettings().subscribe({
+        next: (res: any) => {
+          this.scannerCameraPreset = res?.scanner_camera_preset ?? 'adaptive';
+        }
+      });
     }
   }
 
@@ -518,6 +562,9 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
   ngOnInit() {
     this.wsService.connect();
 
+    // Fetch camera preset
+    this.fetchSettings();
+
     this.wsDebounceSub = this.wsUpdateSubject.pipe(debounceTime(600)).subscribe(() => {
       this.refreshCurrentTab(false, true);
     });
@@ -560,8 +607,10 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
       if (!data) return;
       const freshList = Array.isArray(data) ? data : data.results || [];
       const isPoolUrl = url.includes('/pool_tasks/');
+      const isSupervisorCountTasks = url.includes('/inventory/count-tasks/') && (url.includes('as_role=supervisor') || (!url.includes('as_role=counter') && !url.includes('as_role=manager') && !url.includes('as_role=tracking')));
+      const isSupervisorDocTasks = url.includes('/inventory/doc-tasks/') && (url.includes('as_role=doc_supervisor') || (!url.includes('as_role=doc_worker') && !url.includes('as_role=manager')));
 
-      if (url.includes('/inventory/count-tasks/')) {
+      if (isSupervisorCountTasks) {
         if (isPoolUrl) {
           if (this.currentTab === 'pool') this.trackUpdates(this.poolTasks, freshList);
           this.poolTasks = freshList;
@@ -569,12 +618,14 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         } else {
           const filtered = freshList.filter((t: CountTask) => t.status === 'COUNTED' || t.status === 'MANAGER_REJECTED');
-          if (this.currentTab === 'my-tasks') this.trackUpdates(this.tasks, filtered);
-          this.tasks = filtered;
-          this.applyFilters();
-          this.cdr.detectChanges();
+          if (filtered.length > 0 || freshList.length === 0) {
+            if (this.currentTab === 'my-tasks') this.trackUpdates(this.tasks, filtered);
+            this.tasks = filtered;
+            this.applyFilters();
+            this.cdr.detectChanges();
+          }
         }
-      } else if (url.includes('/inventory/doc-tasks/')) {
+      } else if (isSupervisorDocTasks) {
         if (isPoolUrl) {
           if (this.currentTab === 'doc-pool') this.trackUpdates(this.docPoolTasks, freshList);
           this.docPoolTasks = freshList;
@@ -582,10 +633,12 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         } else {
           const filtered = freshList.filter((t: DocTask) => t.status === 'DOC_PROCESSED' || t.status === 'DOC_MANAGER_REJECTED');
-          if (this.currentTab === 'doc') this.trackUpdates(this.docTasks, filtered);
-          this.docTasks = filtered;
-          this.applyFilters();
-          this.cdr.detectChanges();
+          if (filtered.length > 0 || freshList.length === 0) {
+            if (this.currentTab === 'doc') this.trackUpdates(this.docTasks, filtered);
+            this.docTasks = filtered;
+            this.applyFilters();
+            this.cdr.detectChanges();
+          }
         }
       }
     });
@@ -1575,9 +1628,14 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  closeRejectDialog() {
+  async closeRejectDialog() {
     if (this.rejectNote.trim()) {
-      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+      const ok = await this.confirmDialog.open({
+        title: 'انصراف از رد تسک',
+        message: 'متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟',
+        type: 'warning'
+      });
+      if (!ok) return;
     }
     this.showRejectDialog = false;
     this.rejectingTask = null;
@@ -1626,9 +1684,14 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  cancelBulkReject() {
+  async cancelBulkReject() {
     if (this.bulkRejectNote.trim()) {
-      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+      const ok = await this.confirmDialog.open({
+        title: 'انصراف از رد گروهی',
+        message: 'متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟',
+        type: 'warning'
+      });
+      if (!ok) return;
     }
     this.showBulkRejectDialog = false;
     this.bulkRejectNote = '';
@@ -1819,9 +1882,14 @@ export class SupervisorDashboard implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  closeDocRejectDialog() {
+  async closeDocRejectDialog() {
     if (this.docRejectNote.trim()) {
-      if (!confirm('متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟')) return;
+      const ok = await this.confirmDialog.open({
+        title: 'انصراف از رد مدارک',
+        message: 'متن یادداشت ذخیره نشده است. آیا مایل به بستن پنجره هستید؟',
+        type: 'warning'
+      });
+      if (!ok) return;
     }
     this.showDocRejectDialog = false;
     this.docRejectNote = '';

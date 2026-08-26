@@ -17,10 +17,13 @@ import { LabelDesigner } from '../label-designer/label-designer';
 import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { OfflineSyncService } from '../../core/services/offline-sync.service';
 import { WebSocketService } from '../../core/http/websocket.service';
+import { ItemPhotoGalleryComponent } from '../../shared/components/item-photo-gallery/item-photo-gallery.component';
+import { ItemPhotoThumbComponent } from '../../shared/components/item-photo-gallery/item-photo-thumb.component';
+import { PhotoGalleryHost } from '../../shared/components/item-photo-gallery/photo-gallery-host';
 
 @Component({
   selector: 'app-dispatch',
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective, LabelDesigner, SmartDeleteModalComponent],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, DraggableDirective, LabelDesigner, SmartDeleteModalComponent, ItemPhotoGalleryComponent, ItemPhotoThumbComponent],
   templateUrl: './dispatch.html',
   styleUrl: './dispatch.css'
 })
@@ -38,6 +41,14 @@ export class Dispatch implements OnInit, OnDestroy {
   private roleSubs: Subscription[] = [];
   private wsTaskUpdateSubject = new Subject<any>();
   private offlineSync = OfflineSyncService.getInstance();
+
+  // ── Photo Gallery State ───────────────────────────────────────────────────
+  readonly photoGallery = new PhotoGalleryHost(msg => this.toast.warning(msg));
+
+  onPhotosChanged(photos: any[]): void {
+    this.photoGallery.apply(photos, this.state.appState.items);
+    this.cdr.markForCheck();
+  }
 
   newTagInput = '';
   

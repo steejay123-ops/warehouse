@@ -22,6 +22,9 @@ import { WarehouseSelectorComponent } from '../../shared/components/warehouse-se
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
 import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
+import { ItemPhotoGalleryComponent } from '../../shared/components/item-photo-gallery/item-photo-gallery.component';
+import { ItemPhotoThumbComponent } from '../../shared/components/item-photo-gallery/item-photo-thumb.component';
+import { PhotoGalleryHost } from '../../shared/components/item-photo-gallery/photo-gallery-host';
 import { environment } from '../../../environments/environment';
 import { Router, NavigationEnd } from '@angular/router';
 import { WebSocketService } from '../../core/http/websocket.service';
@@ -51,13 +54,25 @@ const DOC_TASK_DIRECT_KEYS = new Set([
 @Component({
   selector: 'app-customs',
   standalone: true,
-  imports: [CommonModule, FormsModule, PersianDatePipe, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent],
+  imports: [CommonModule, FormsModule, PersianDatePipe, WarehouseSelectorComponent, OfflinePendingBadgeComponent, BarcodeScannerComponent, ItemPhotoGalleryComponent, ItemPhotoThumbComponent],
   templateUrl: './customs.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Customs implements OnInit, OnDestroy {
   tasks: DocTask[] = [];
   poolTasks: DocTask[] = [];
+
+  // ── وضعیت مودال گالری تصاویر کالا ──
+  readonly photoGallery = new PhotoGalleryHost(msg => this.toast.warning(msg));
+
+  /**
+   * `countTaskId` فرستاده نمی‌شود: ردیف‌های این صفحه DocTask هستند و آن ورودی
+   * به CountTask اشاره دارد. نسخهٔ قبلی شناسهٔ DocTask را در آن می‌گذاشت.
+   */
+  onPhotosChanged(photos: any[]): void {
+    this.photoGallery.apply(photos, this.tasks, this.poolTasks, this.selectedTask);
+    this.cdr.markForCheck();
+  }
   isLoading = true;
   selectedTask: DocTask | null = null;
   selectedTasks = new Set<number>();
@@ -122,6 +137,7 @@ export class Customs implements OnInit, OnDestroy {
   activeScanFilterTab: 'all' | 'ready' | 'pool' | 'readonly' | 'not_found' = 'all';
   scannerRowSep = ';';
   scannerColSep = '|';
+  scannerCameraPreset = 'adaptive';
 
   private routerSub?: Subscription;
   private wsSub?: Subscription;
@@ -1027,8 +1043,9 @@ export class Customs implements OnInit, OnDestroy {
         next: (res: any) => {
           const savedPerms = res?.field_permissions_doc?.value;
           this.fieldConfigs = mergeDocFieldPermissions(savedPerms, this.dynamicFieldsList);
-          this.scannerRowSep = res?.scanner_row_delimiter?.value ?? res?.scanner_row_delimiter ?? ';';
-          this.scannerColSep = res?.scanner_col_delimiter?.value ?? res?.scanner_col_delimiter ?? '|';
+          this.scannerRowSep = this.decodeDelimiter(res?.scanner_row_delimiter?.value ?? res?.scanner_row_delimiter ?? ';');
+          this.scannerColSep = this.decodeDelimiter(res?.scanner_col_delimiter?.value ?? res?.scanner_col_delimiter ?? '|');
+          this.scannerCameraPreset = res?.scanner_camera_preset?.value ?? res?.scanner_camera_preset ?? 'adaptive';
           this.financialCanViewHistory = res?.financial_can_view_history?.value ?? res?.financial_can_view_history ?? true;
           this.financialCanViewPreviousNotes = res?.financial_can_view_previous_notes?.value ?? res?.financial_can_view_previous_notes ?? true;
           this.cdr.detectChanges();
@@ -1043,8 +1060,9 @@ export class Customs implements OnInit, OnDestroy {
         next: (res: any) => {
           const savedPerms = res?.field_permissions_doc;
           this.fieldConfigs = mergeDocFieldPermissions(savedPerms, this.dynamicFieldsList);
-          this.scannerRowSep = res?.scanner_row_delimiter ?? ';';
-          this.scannerColSep = res?.scanner_col_delimiter ?? '|';
+          this.scannerRowSep = this.decodeDelimiter(res?.scanner_row_delimiter ?? ';');
+          this.scannerColSep = this.decodeDelimiter(res?.scanner_col_delimiter ?? '|');
+          this.scannerCameraPreset = res?.scanner_camera_preset ?? 'adaptive';
           this.financialCanViewHistory = res?.financial_can_view_history ?? true;
           this.financialCanViewPreviousNotes = res?.financial_can_view_previous_notes ?? true;
           this.cdr.detectChanges();
@@ -1055,6 +1073,17 @@ export class Customs implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  decodeDelimiter(val: string): string {
+    if (!val) return val;
+    if (val === 'Chr(30)') return '\x1E';
+    if (val === 'Chr(31)') return '\x1F';
+    if (val === 'Chr(30) & ";"') return '\x1E;';
+    if (val === 'Chr(31) & "|"') return '\x1F|';
+    if (val === '\\n') return '\n';
+    if (val === '\\t') return '\t';
+    return val;
   }
 
   canViewRecordNote(index: number): boolean {

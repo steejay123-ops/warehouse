@@ -17,11 +17,15 @@ import { WarehouseSelectorComponent } from '../../shared/components/warehouse-se
 import { WebSocketService } from '../../core/http/websocket.service';
 import { OfflineSyncService } from '../../core/services/offline-sync.service';
 import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
+import { ItemPhotoGalleryComponent } from '../../shared/components/item-photo-gallery/item-photo-gallery.component';
+import { ItemPhotoThumbComponent } from '../../shared/components/item-photo-gallery/item-photo-thumb.component';
+import { PhotoGalleryHost } from '../../shared/components/item-photo-gallery/photo-gallery-host';
+import { ContextualCommentsComponent } from '../communications/contextual-comments/contextual-comments.component';
 
 @Component({
   selector: 'app-count-tracking',
   standalone: true,
-  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, WarehouseSelectorComponent, BarcodeScannerComponent],
+  imports: [CommonModule, FormsModule, DataTableComponent, TableColumnDirective, PersianDatePipe, WarehouseSelectorComponent, BarcodeScannerComponent, ItemPhotoGalleryComponent, ItemPhotoThumbComponent, ContextualCommentsComponent],
   templateUrl: './count-tracking.html',
   styleUrl: './count-tracking.css'
 })
@@ -59,6 +63,14 @@ export class CountTracking implements OnInit, OnDestroy {
   updatedTaskIds = new Set<number>();
   currentPage = 1;
   pageSize = 50;
+
+  // ── وضعیت مودال گالری تصاویر کالا ──
+  readonly photoGallery = new PhotoGalleryHost(msg => this.toast.warning(msg));
+
+  onPhotosChanged(photos: any[]): void {
+    this.photoGallery.apply(photos, this.tasks);
+    this.cdr.markForCheck();
+  }
   
   getRowClass(row: any): string {
     return this.updatedTaskIds.has(row.id) ? 'status-updated-flash' : '';

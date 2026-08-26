@@ -64,6 +64,7 @@
       <app-barcode-scanner
         #scanner
         [headless]="true"
+        [serverPreset]="scannerCameraPreset"
         (scanned)="onBarcodeScanned($event)"
       />
 
@@ -469,7 +470,7 @@
                    >
                     <div>
                      <h3 class="font-bold text-slate-800 text-sm leading-tight mb-1">{{task.item_details?.description || '-'}}</h3>
-                     <div class="text-[11px] font-mono text-slate-500 font-semibold" dir="ltr" style="text-align: right;">{{task.item_details?.fa_unic_code || '-'}}</div>
+                     <div class="text-[11px] font-mono text-slate-500 font-semibold whitespace-nowrap" dir="ltr" style="text-align: right;">{{task.item_details?.fa_unic_code || '-'}}</div>
                      <app-offline-pending-badge *ngIf="task._offlinePending" class="inline-block mt-1.5" />
                    </div>
                  </div>
@@ -494,6 +495,15 @@
                        <span *ngIf="(task.status === 'INITIAL_COUNT' || (task.status === 'PENDING_COUNT' && task.counted_balance !== null && task.counted_balance !== undefined)) && !task.supervisor_note && !task.manager_note">آماده ارسال</span>
                        <span *ngIf="task.status === 'PENDING_COUNT' && (task.counted_balance === null || task.counted_balance === undefined)">در انتظار</span>
                     </div>
+
+                    <!-- بندانگشتی تصویر کالا / آیکون دوربین -->
+                    <app-item-photo-thumb
+                      size="sm"
+                      accent="blue"
+                      [photoCount]="task.item_details?.photos_count"
+                      [thumbUrl]="task.item_details?.primary_thumbnail"
+                      (openRequested)="photoGallery.open(task, $event, task.id)"
+                    ></app-item-photo-thumb>
 
                     <!-- دکمه ارسال سریع مستقیم به سرپرست -->
                     <button 
@@ -699,8 +709,21 @@
 
         <!-- Item Info Card -->
         <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm mb-6">
-          <div class="text-[10px] text-slate-400 font-mono mb-1" dir="ltr" style="text-align: right;">{{selectedTask.item_details?.fa_unic_code}}</div>
-          <h2 class="text-base font-black text-slate-800 leading-snug mb-4">{{selectedTask.item_details?.description}}</h2>
+          <div class="flex items-start justify-between gap-3 mb-4">
+            <div class="flex-1 min-w-0">
+              <div class="text-[10px] text-slate-400 font-mono mb-1" dir="ltr" style="text-align: right;">{{selectedTask.item_details?.fa_unic_code}}</div>
+              <h2 class="text-base font-black text-slate-800 leading-snug">{{selectedTask.item_details?.description}}</h2>
+            </div>
+
+            <!-- بندانگشتی تصویر کالا / آیکون عکاسی -->
+            <app-item-photo-thumb
+              size="lg"
+              accent="blue"
+              [photoCount]="selectedTask.item_details?.photos_count"
+              [thumbUrl]="selectedTask.item_details?.primary_thumbnail"
+              (openRequested)="photoGallery.open(selectedTask, $event, selectedTask.id)"
+            ></app-item-photo-thumb>
+          </div>
           
           <!-- Dynamic Visible Info Fields Grid -->
           <div *ngIf="visibleInfoFields.length > 0" class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200" dir="rtl">
@@ -716,7 +739,7 @@
           </div>
 
           <!-- System Balance (Independent of custom fields, shown when not blind and accessible) -->
-          <div *ngIf="!selectedTask.is_blind && isFieldVisible('bal4miv') && isFieldVisible('inventory') && selectedTask.item_details?.bal4miv !== null && selectedTask.item_details?.bal4miv !== undefined" class="bg-amber-50 p-3 rounded-xl border border-amber-200 mt-3" dir="rtl">
+          <div *ngIf="!selectedTask.is_blind && isFieldVisible('bal4miv') && selectedTask.item_details?.bal4miv !== null && selectedTask.item_details?.bal4miv !== undefined" class="bg-amber-50 p-3 rounded-xl border border-amber-200 mt-3" dir="rtl">
             <div class="text-amber-600 mb-1 text-[10px] font-bold">موجودی سیستمی</div>
             <div class="font-black text-amber-700 text-sm" dir="ltr" style="text-align: right;">{{selectedTask.item_details?.bal4miv}} <span class="text-[10px] font-normal text-amber-500">{{selectedTask.item_details?.unit}}</span></div>
           </div>
@@ -1063,4 +1086,17 @@
       </div>
     </div>
   </div>
+
+  <!-- Modal گالری و عکاسی کالا -->
+  <app-item-photo-gallery
+    *ngIf="photoGallery.isOpen && photoGallery.itemId"
+    [itemId]="photoGallery.itemId"
+    [itemFaUnicCode]="photoGallery.itemCode"
+    [itemDescription]="photoGallery.itemDescription"
+    [countTaskId]="photoGallery.countTaskId"
+    [isOpen]="photoGallery.isOpen"
+    (close)="photoGallery.close()"
+    (photosChanged)="onPhotosChanged($event)"
+  ></app-item-photo-gallery>
+
 </div>

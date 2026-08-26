@@ -196,9 +196,21 @@
         </ng-template>
 
         <ng-template appTableCol="fa_unic_code" label="کد کالا" let-row="row">
-          <span class="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-lg font-mono" dir="ltr">
-            {{ row.item_details?.fa_unic_code || '-' }}
-          </span>
+          <div class="flex items-center gap-2">
+            <!-- بندانگشتی تصویر کالا -->
+            <app-item-photo-thumb
+              *ngIf="row"
+              size="xs"
+              accent="indigo"
+              [photoCount]="row.item_details?.photos_count || row.photos_count"
+              [thumbUrl]="row.item_details?.primary_thumbnail || row.primary_thumbnail"
+              (openRequested)="photoGallery.open(row, $event, row.id)"
+            ></app-item-photo-thumb>
+
+            <span class="text-[11px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-lg font-mono" dir="ltr">
+              {{ row.item_details?.fa_unic_code || '-' }}
+            </span>
+          </div>
         </ng-template>
 
         <ng-template appTableCol="description" label="شرح کالا" let-row="row">
@@ -599,6 +611,17 @@
             </div>
           </div>
 
+          <!-- Contextual Comments -->
+          <div *ngIf="selectedTaskForDrawer?.item">
+            <app-contextual-comments
+              modelName="item"
+              appLabel="inventory"
+              [objectId]="selectedTaskForDrawer.item"
+              [warehouseId]="selectedTaskForDrawer.warehouse"
+              title="گفتگو و یادداشت‌های این کالا">
+            </app-contextual-comments>
+          </div>
+
         </div>
 
         <!-- Drawer Footer -->
@@ -852,5 +875,17 @@
 
     </div>
   </div>
+
+  <!-- Modal گالری تصاویر کالا -->
+  <app-item-photo-gallery
+    *ngIf="photoGallery.isOpen && photoGallery.itemId"
+    [itemId]="photoGallery.itemId"
+    [itemFaUnicCode]="photoGallery.itemCode"
+    [itemDescription]="photoGallery.itemDescription"
+    [countTaskId]="photoGallery.countTaskId"
+    [isOpen]="photoGallery.isOpen"
+    (close)="photoGallery.close()"
+    (photosChanged)="onPhotosChanged($event)"
+  ></app-item-photo-gallery>
 
 </div>

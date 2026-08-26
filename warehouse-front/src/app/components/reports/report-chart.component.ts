@@ -45,8 +45,8 @@ const PALETTE = [
       <canvas #canvas></canvas>
     </div>
     @if (truncated) {
-      <p class="text-[11px] text-amber-600 mt-2 text-center">
-        برای نمودار خوانا فقط {{ maxGroups }} گروه اول رسم شد؛ فیلتر دقیق‌تری بگذارید.
+      <p class="text-xs text-amber-700 font-medium mt-2 text-center bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200">
+        جهت خوانایی، نمودار {{ maxGroups }} گروه اول را نمایش می‌دهد؛ برای جزئیات بیشتر فیلتر دقیق‌تری بگذارید.
       </p>
     }
   `,

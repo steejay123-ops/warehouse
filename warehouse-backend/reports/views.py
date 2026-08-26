@@ -1,9 +1,9 @@
 """
 Viewهای گزارش‌ساز
 
-همه endpointها پشت مجوز منوی view_sys_reports هستند؛ export علاوه بر آن
-view_sys_export می‌خواهد (هم‌راستا با گیت export_excel موجود در inventory).
-هر خطای کاربری با ReportError به پاسخ 4xx فارسی تبدیل می‌شود — هرگز 500.
+همه endpointها پشت مجوز منوی view_sys_reports هستند.
+هر خطای کاربری با ReportError به پاسخ 4xx فارسی تبدیل می‌شود.
+خطاهای سروری/غیرمنتظره لاگ شده و به صورت 500 استاندارد بازگردانده می‌شوند.
 """
 from django.db.models import Q
 from django.http import FileResponse
@@ -14,8 +14,10 @@ from rest_framework.views import APIView
 
 from accounts.permissions import require_menu_access
 
+from django.utils import timezone
+
 from .engine import ReportEngine, ReportError
-from .excel import SYNC_ROW_LIMIT, cleanup_old_jobs, start_export_job, sync_excel_response
+from .excel import SYNC_ROW_LIMIT, cleanup_old_jobs, start_export_job, sync_excel_response, worker_alive
 from .pdf import sync_pdf_response
 from .models import ReportExportJob, ReportTemplate
 from .registry import get_registry
@@ -112,7 +114,7 @@ class RunReportView(APIView):
         except Exception as e:
             import logging
             logging.getLogger(__name__).exception('Report execution failed: %s', e)
-            return Response({'error': f'خطا در اجرای گزارش: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'خطای داخلی در اجرای گزارش. لطفاً با مدیر سیستم تماس بگیرید.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ExportReportView(APIView):
@@ -138,8 +140,9 @@ class ExportReportView(APIView):
                     qs, columns, total, filename=safe_pdf_name, report_name=report_name,
                 )
             if total <= SYNC_ROW_LIMIT:
+                safe_excel_name = f'{report_name}.xlsx'
                 return sync_excel_response(
-                    qs, columns, filename='report.xlsx', report_name=report_name,
+                    qs, columns, filename=safe_excel_name, report_name=report_name,
                 )
 
             job = start_export_job(request.user, spec, report_name, total)
@@ -152,7 +155,7 @@ class ExportReportView(APIView):
         except Exception as e:
             import logging
             logging.getLogger(__name__).exception('Report export failed: %s', e)
-            return Response({'error': f'خطا در ایجاد خروجی گزارش: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'خطای داخلی در ایجاد خروجی گزارش. لطفاً با مدیر سیستم تماس بگیرید.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class ExportJobListView(APIView):
@@ -161,7 +164,7 @@ class ExportJobListView(APIView):
 
     def get(self, request):
         cleanup_old_jobs()
-        jobs = ReportExportJob.objects.filter(owner=request.user)[:20]
+        jobs = ReportExportJob.objects.filter(owner=request.user).order_by('-created_at')[:20]
         return Response(ReportExportJobSerializer(jobs, many=True).data)
 
 
@@ -174,6 +177,27 @@ class ExportJobDetailView(APIView):
             job = ReportExportJob.objects.get(pk=job_id, owner=request.user)
         except ReportExportJob.DoesNotExist:
             return Response({'error': 'job یافت نشد.'}, status=404)
+
+        # بازیابی خودکار jobهای گیرکرده (نبض مرده بیش از ۵ دقیقه یا صف معلق در حالت بدون worker)
+        now = timezone.now()
+        is_stale_running = (
+            job.status == 'running'
+            and (
+                (job.heartbeat_at and (now - job.heartbeat_at).total_seconds() > 300)
+                or (not job.heartbeat_at and (now - job.created_at).total_seconds() > 300)
+            )
+        )
+        is_stale_pending = (
+            job.status == 'pending'
+            and not worker_alive()
+            and (now - job.created_at).total_seconds() > 300
+        )
+        if is_stale_running or is_stale_pending:
+            job.status = 'failed'
+            job.error_message = 'پردازش متوقف شد (عدم پاسخ سرور)؛ لطفاً مجدداً خروجی بگیرید.'
+            job.finished_at = now
+            job.save(update_fields=['status', 'error_message', 'finished_at'])
+
         return Response(ReportExportJobSerializer(job).data)
 
 

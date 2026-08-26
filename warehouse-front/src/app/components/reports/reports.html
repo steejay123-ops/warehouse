@@ -119,10 +119,10 @@
       [jobId]="exportJobId()!"
       [totalRows]="exportTotalRows()"
       [fileName]="(store.activeTemplate()?.name || 'report') + '.xlsx'"
-      (close)="exportJobId.set(null)" />
+      (close)="setExportJob(null)" />
   }
 
-  <div [class.!opacity-50]="store.isRefreshing()" [class.pointer-events-none]="store.isRefreshing()" class="grid grid-cols-1 lg:grid-cols-4 gap-3 items-start transition-opacity duration-300">
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-3 items-start transition-opacity duration-300">
 
     <!-- ═══ سایدبار: قالب‌ها ═══ -->
     <div class="lg:col-span-1 space-y-3">
@@ -339,8 +339,8 @@
               <div class="text-[11px] font-black text-slate-700">توابع تجمیعی روی ستون‌ها:</div>
               @for (agg of store.aggregations(); track $index; let i = $index) {
                 <div class="flex items-center gap-2 flex-wrap bg-slate-50/70 p-2 rounded-xl border shadow-2xs transition-all"
-                     [class.border-rose-300]="isRowAliasConflict(agg.alias, i)"
-                     [class.border-slate-200/80]="!isRowAliasConflict(agg.alias, i)">
+                     [class.border-rose-300]="isRowAliasHasError(agg.alias, i)"
+                     [class.border-slate-200/80]="!isRowAliasHasError(agg.alias, i)">
                   <select [ngModel]="agg.fn" (ngModelChange)="updateAggregation(i, { fn: $event })"
                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 bg-white shadow-2xs custom-select">
                     @for (fn of aggFns; track fn.value) {
@@ -349,18 +349,21 @@
                   </select>
                   <select [ngModel]="agg.field" (ngModelChange)="updateAggregation(i, { field: $event })"
                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 min-w-36 bg-white shadow-2xs custom-select">
-                    @for (f of (agg.fn === 'count' ? store.fieldsMeta() : aggregatableFields()); track f.key) {
+                    @for (f of (agg.fn === 'count' ? allSelectableFields() : aggregatableFields()); track f.key) {
                       <option [ngValue]="f.key" [title]="f.key">{{ f.label }}</option>
                     }
                   </select>
                   <div class="relative flex items-center">
                     <input type="text" [ngModel]="agg.alias" (ngModelChange)="updateAggregation(i, { alias: $event })"
-                           placeholder="عنوان دلخواه ستون (مثال: جمع موجودی)"
-                           [class.border-rose-400]="isRowAliasConflict(agg.alias, i)"
-                           [class.bg-rose-50/40]="isRowAliasConflict(agg.alias, i)"
+                           placeholder="شناسه انگلیسی ستون (مثال: total_inv)"
+                           dir="ltr"
+                           [class.border-rose-400]="isRowAliasHasError(agg.alias, i)"
+                           [class.bg-rose-50/40]="isRowAliasHasError(agg.alias, i)"
                            class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-48 bg-white shadow-2xs">
                     @if (isRowAliasConflict(agg.alias, i)) {
                       <span class="text-[10px] text-rose-600 font-bold mr-1.5">تداخل نام مستعار تکراری!</span>
+                    } @else if (isRowAliasInvalidFormat(agg.alias)) {
+                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">فرمت نامعتبر (فقط حروف کوچک انگلیسی، عدد و _)</span>
                     }
                   </div>
                   <button type="button" (click)="removeAggregation(i)"
@@ -544,11 +547,6 @@
                     [xLabel]="chartXLabel()"
                     [yLabel]="chartYLabel()" />
                 }
-                @if (store.count() > 200) {
-                  <p class="text-xs text-amber-600 text-center bg-amber-50 py-1 rounded-lg border border-amber-200">
-                    نمودار ۲۰۰ گروه اول (از {{ store.count() }} گروه) را نمایش می‌دهد.
-                  </p>
-                }
               } @else {
                 <p class="text-xs text-slate-400 text-center py-4">
                   برای رسم نمودار، نوع نمودار، محور دسته‌ها و محور مقادیر را انتخاب کنید.
@@ -564,7 +562,7 @@
   <!-- ═══ مودال ذخیره قالب ═══ -->
   @if (isSaveModalOpen()) {
     <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="isSaveModalOpen.set(false)">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-100" (click)="$event.stopPropagation()">
+      <div role="dialog" aria-modal="true" aria-labelledby="save-modal-title" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-100" (click)="$event.stopPropagation()">
         <!-- Modal Header -->
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center gap-2.5">
@@ -576,7 +574,7 @@
               </svg>
             </div>
             <div>
-              <h3 class="text-sm font-black text-slate-800">ذخیره قالب گزارش</h3>
+              <h3 id="save-modal-title" class="text-sm font-black text-slate-800">ذخیره قالب گزارش</h3>
               <p class="text-[11px] text-slate-400">تنظیمات، فیلدها و فیلترهای فعلی را به عنوان قالب ذخیره کنید</p>
             </div>
           </div>
@@ -638,7 +636,7 @@
   <!-- ═══ مودال راهنمای جامع گزارش‌ساز و سناریوهای کاربردی ═══ -->
   @if (isHelpModalOpen()) {
     <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="closeHelpModal()">
-      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
+      <div role="dialog" aria-modal="true" aria-labelledby="help-modal-title" class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
         
         <!-- Modal Header -->
         <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-l from-purple-50/50 to-white">
@@ -651,7 +649,7 @@
               </svg>
             </div>
             <div>
-              <h3 class="text-sm sm:text-base font-black text-slate-800">راهنمای جامع و سناریوهای آماده گزارش‌ساز</h3>
+              <h3 id="help-modal-title" class="text-sm sm:text-base font-black text-slate-800">راهنمای جامع و سناریوهای آماده گزارش‌ساز</h3>
               <p class="text-[11px] text-slate-500 mt-0.5">آموزش گام‌به‌گام و نمونه گزارش‌های واقعی در فرآیندهای انبارداری</p>
             </div>
           </div>
@@ -835,7 +833,7 @@
 
               <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                 <div class="font-bold text-slate-800 text-xs">خروجی اکسل و PDF:</div>
-                <p class="text-[11px] text-slate-600">دکمه خروجی اکسل (سبز) و PDF (قرمز) تمامی رکوردهای فیلترشده را دقیقاً مطابق با ستون‌ها و ترتیب انتخابی دانلود می‌کنند. در صورت بزرگ بودن گزارش (بالای ۵۰۰۰ ردیف)، فرآیند در پس‌زمینه سرور اجرا شده و درصد پیشرفت نمایش می‌یابد.</p>
+                <p class="text-[11px] text-slate-600">دکمه خروجی اکسل (سبز) و PDF (قرمز) تمامی رکوردهای فیلترشده را دقیقاً مطابق با ستون‌ها و ترتیب انتخابی دانلود می‌کنند. در صورت بزرگ بودن گزارش (بالای ۱۰٬۰۰۰ ردیف)، فرآیند در پس‌زمینه سرور اجرا شده و درصد پیشرفت نمایش می‌یابد.</p>
               </div>
             </div>
           }

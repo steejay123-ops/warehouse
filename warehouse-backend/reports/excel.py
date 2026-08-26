@@ -21,7 +21,7 @@ from decimal import Decimal
 import openpyxl
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.utils import get_column_letter
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -118,12 +118,14 @@ def _make_workbook():
 
 def sync_excel_response(qs, columns, filename='report.xlsx', report_name='گزارش'):
     """تولید همزمان برای نتایج کوچک — دانلود فوری."""
+    from urllib.parse import quote
     wb, ws = _make_workbook()
     _write_workbook(ws, qs, columns, report_name=report_name, zebra=True)
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    encoded_filename = quote(filename.encode('utf-8'))
+    response['Content-Disposition'] = f"attachment; filename=\"report.xlsx\"; filename*=UTF-8''{encoded_filename}"
     wb.save(response)
     return response
 
@@ -141,6 +143,11 @@ def start_export_job(user, spec, report_name, total_rows):
     ساخت job. اگر worker زنده باشد job در صف می‌ماند تا worker بردارد
     (پایدار در برابر ری‌استارت)؛ وگرنه fallback به thread پس‌زمینه فعلی.
     """
+    try:
+        cleanup_old_jobs()
+    except Exception:
+        pass
+
     job = ReportExportJob.objects.create(
         owner=user, spec=spec, report_name=report_name or 'report',
         status='pending', total_rows=total_rows,
@@ -157,16 +164,27 @@ def _run_export_job(job_pk, user_pk):
     from .engine import ReportEngine, ReportError
 
     try:
-        job = ReportExportJob.objects.get(pk=job_pk)
+        with transaction.atomic():
+            job = (
+                ReportExportJob.objects.select_for_update(skip_locked=True)
+                .filter(pk=job_pk)
+                .first()
+            )
+            if job is None or job.status in ('done', 'failed'):
+                return
+            if job.status == 'pending':
+                job.status = 'running'
+            job.heartbeat_at = timezone.now()
+            job.save(update_fields=['status', 'heartbeat_at'])
+
         user = CustomUser.objects.get(pk=user_pk)
         eng = ReportEngine(user, job.spec)
         qs, columns, total = eng.export_queryset()
 
         job.total_rows = total
-        job.status = 'running'
         job.progress = 0
         job.heartbeat_at = timezone.now()
-        job.save(update_fields=['total_rows', 'status', 'progress', 'heartbeat_at'])
+        job.save(update_fields=['total_rows', 'progress', 'heartbeat_at'])
 
         last_hb = [timezone.now()]
 
@@ -203,8 +221,10 @@ def _run_export_job(job_pk, user_pk):
             status='failed', error_message=e.message, finished_at=timezone.now(),
         )
     except Exception as e:  # noqa: BLE001 — هر خطای غیرمنتظره باید status را ببندد
+        import logging
+        logging.getLogger(__name__).exception('Async export job %s failed: %s', job_pk, e)
         ReportExportJob.objects.filter(pk=job_pk).update(
-            status='failed', error_message=str(e)[:1000], finished_at=timezone.now(),
+            status='failed', error_message='خطای داخلی در پردازش خروجی اکسل.', finished_at=timezone.now(),
         )
     finally:
         # اتصال DB مخصوص این thread/پروسه — داخل تراکنش (تست‌ها) بسته نشود

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, OnInit, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subscription, interval } from 'rxjs';
 import { ReportApiService } from '../../core/api/report-api.service';
@@ -47,7 +47,7 @@ import { ToastService } from '../../shared/components/toast/toast.component';
     </div>
   `,
 })
-export class ExportProgressComponent implements OnInit, OnDestroy {
+export class ExportProgressComponent implements OnInit, OnChanges, OnDestroy {
   private api = inject(ReportApiService);
   private toast = inject(ToastService);
 
@@ -60,39 +60,74 @@ export class ExportProgressComponent implements OnInit, OnDestroy {
   downloading = false;
   private sub: Subscription | null = null;
   private consecutiveErrors = 0;
+  private pollCount = 0;
+  private readonly MAX_POLL_COUNT = 300; // سقف ۱۰ دقیقه بررسی وضعیت (۳۰۰ × ۲ ثانیه)
 
   ngOnInit(): void {
+    this.startPolling();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['jobId'] && !changes['jobId'].firstChange) {
+      this.startPolling();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stopPolling();
+  }
+
+  private startPolling(): void {
+    this.stopPolling();
+    this.job = null;
+    this.downloading = false;
+    this.consecutiveErrors = 0;
+    this.pollCount = 0;
     this.poll();
     this.sub = interval(2000).subscribe(() => {
       if (this.job?.status === 'done' || this.job?.status === 'failed') {
-        // job تمام شده — interval دیگر لازم نیست (#13)
-        this.sub?.unsubscribe();
-        this.sub = null;
+        this.stopPolling();
         return;
       }
       this.poll();
     });
   }
 
-  ngOnDestroy(): void {
+  private stopPolling(): void {
     this.sub?.unsubscribe();
+    this.sub = null;
   }
 
   private poll(): void {
+    this.pollCount++;
+    if (this.pollCount > this.MAX_POLL_COUNT) {
+      this.stopPolling();
+      if (!this.job || (this.job.status !== 'done' && this.job.status !== 'failed')) {
+        this.job = {
+          id: this.jobId,
+          status: 'failed',
+          error_message: 'زمان انتظار برای ایجاد فایل به پایان رسید (بیش از ۱۰ دقیقه). لطفاً مجدداً خروجی بگیرید.',
+          progress: this.job?.progress ?? 0,
+          report_name: this.job?.report_name ?? '',
+          created_at: this.job?.created_at ?? '',
+          total_rows: this.job?.total_rows ?? this.totalRows,
+        } as any;
+      }
+      return;
+    }
+
     this.api.getExportJob(this.jobId).subscribe({
       next: (j) => {
         this.consecutiveErrors = 0;
         this.job = j;
         if (j.status === 'done' || j.status === 'failed') {
-          this.sub?.unsubscribe();
-          this.sub = null;
+          this.stopPolling();
         }
       },
       error: (err) => {
         this.consecutiveErrors++;
         if (this.consecutiveErrors >= 3 || err?.status === 404) {
-          this.sub?.unsubscribe();
-          this.sub = null;
+          this.stopPolling();
           if (!this.job) {
             this.job = {
               id: this.jobId,

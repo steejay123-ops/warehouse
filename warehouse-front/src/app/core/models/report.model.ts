@@ -207,12 +207,6 @@ export function serializeReportToQueryParams(state: ReportSavedState): Record<st
   if (state.aggregations && state.aggregations.length) {
     params['aggregations'] = JSON.stringify(state.aggregations);
   }
-  if (state.having && state.having.length) {
-    params['having'] = JSON.stringify(state.having);
-  }
-  if (state.filters && state.filters.children && state.filters.children.length) {
-    params['filters'] = JSON.stringify(state.filters);
-  }
   if (state.sort && state.sort.length) {
     params['sort'] = JSON.stringify(state.sort);
   }

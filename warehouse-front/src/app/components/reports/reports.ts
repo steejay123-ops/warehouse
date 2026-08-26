@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -22,6 +22,7 @@ import {
   serializeReportToQueryParams,
 } from '../../core/models/report.model';
 import { ToastService } from '../../shared/components/toast/toast.component';
+import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import {
   DataTableComponent,
   PageEvent,
@@ -54,6 +55,7 @@ export class Reports implements OnInit, OnDestroy {
   private reportApi = inject(ReportApiService);
   private warehouseHttp = inject(WarehouseHttpService);
   private toast = inject(ToastService);
+  private confirmDialog = inject(ConfirmDialogService);
   private authStore = inject(AuthStore);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -112,8 +114,22 @@ export class Reports implements OnInit, OnDestroy {
   }
 
   // ─── job خروجی بزرگ ───
+  private readonly ACTIVE_EXPORT_JOB_KEY = 'wh_reports_active_export_job';
   exportJobId = signal<number | null>(null);
   exportTotalRows = signal(0);
+
+  setExportJob(jobId: number | null, totalRows = 0): void {
+    this.exportJobId.set(jobId);
+    this.exportTotalRows.set(totalRows);
+    try {
+      if (jobId) {
+        localStorage.setItem(this.ACTIVE_EXPORT_JOB_KEY, JSON.stringify({ jobId, totalRows }));
+      } else {
+        localStorage.removeItem(this.ACTIVE_EXPORT_JOB_KEY);
+      }
+    } catch {}
+  }
+
   /** export در حال انجام — جداگانه برای PDF و Excel (#8) */
   exportingPdf = signal(false);
   exportingExcel = signal(false);
@@ -139,6 +155,17 @@ export class Reports implements OnInit, OnDestroy {
       next: (list) => this.warehouses.set(list.map((w) => ({ id: w.id, name: w.name }))),
       error: () => {},
     });
+
+    // بازیابی job فعال خروجی پس‌زمینه در صورت وجود (پایداری در برابر رفرش صفحه)
+    try {
+      const savedJob = localStorage.getItem(this.ACTIVE_EXPORT_JOB_KEY);
+      if (savedJob) {
+        const parsed = JSON.parse(savedJob);
+        if (parsed?.jobId) {
+          this.setExportJob(parsed.jobId, parsed.totalRows || 0);
+        }
+      }
+    } catch {}
 
     // سابسکریپشن همگام‌سازی بلادرنگ Debounced با URL و LocalStorage
     this.stateSub = this.stateSubject$.pipe(debounceTime(300)).subscribe(() => {
@@ -200,24 +227,15 @@ export class Reports implements OnInit, OnDestroy {
     this._joinTargetFields.set(new Map());
 
     this.store.applySavedState(state, (res) => {
-      // لود فیلدهای مقصدهای JOIN
-      if (state.joins && state.joins.length) {
-        const joinsMeta = res.joins ?? [];
-        for (const jspec of state.joins) {
-          const jm = joinsMeta.find((j) => j.key === jspec.to);
-          if (jm) this._loadJoinTargetFields(jm);
-        }
-      }
-
-      setTimeout(() => {
+      this._loadAllJoinFields(state.joins, res.joins, () => {
         this.isRestoring = false;
-        // اجرای خودکار در صورت وجود موجودیت معتبر
-        if (this.store.entityKey()) {
+        // اجرای خودکار در صورت وجود موجودیت معتبر، آنلاین بودن و معتبر بودن ساختار
+        if (this.store.entityKey() && !this.store.isOffline() && this.validateReportSpec(true)) {
           const snapshot: FilterGroup = JSON.parse(JSON.stringify(this.filterRoot));
           this.store.run(snapshot.children.length ? snapshot : null, true);
         }
         this.notifyStateChanged();
-      }, 50);
+      });
     });
   }
 
@@ -314,6 +332,7 @@ export class Reports implements OnInit, OnDestroy {
         return a;
       }));
       if (swapped) {
+        this.store.pruneAggDependents();
         this.toast.info('به دلیل اضافه شدن جدول چندمقداری، توابع تجمیع فیلدهای پایه برای جلوگیری از محاسبه اشتباه، به صورت خودکار به شمارش (Count) تغییر یافتند.');
       }
     }
@@ -368,7 +387,7 @@ export class Reports implements OnInit, OnDestroy {
   readonly joinTargetFieldsMap = computed(() => this._joinTargetFields());
 
   /** بارگذاری فیلدهای موجودیت مقصد JOIN از API */
-  private _loadJoinTargetFields(jm: ReportJoinMeta): void {
+  private _loadJoinTargetFields(jm: ReportJoinMeta, onComplete?: () => void): void {
     this.reportApi.getFields(jm.target, this.store.warehouseId()).subscribe({
       next: (res) => {
         const alias = this.store.joins().find((j) => j.to === jm.key)?.as ?? jm.default_alias;
@@ -388,9 +407,36 @@ export class Reports implements OnInit, OnDestroy {
           next.set(alias, prefixed);
           return next;
         });
+        onComplete?.();
       },
-      error: () => {/* بی‌صدا — UI بدون فیلدهای JOIN کار می‌کند */},
+      error: () => {
+        onComplete?.();
+      },
     });
+  }
+
+  /** بارگذاری هماهنگ تمام فیلدهای مقصدهای JOIN و فراخوانی اکشن نهایی پس از تکمیل کامل */
+  private _loadAllJoinFields(joins: ReportJoinSpec[] | undefined, joinsMeta: ReportJoinMeta[] | undefined, onComplete: () => void): void {
+    if (!joins || !joins.length || !joinsMeta || !joinsMeta.length) {
+      onComplete();
+      return;
+    }
+    const validJms = joins
+      .map((jspec) => joinsMeta.find((j) => j.key === jspec.to))
+      .filter((jm): jm is ReportJoinMeta => !!jm);
+    if (!validJms.length) {
+      onComplete();
+      return;
+    }
+    let remaining = validJms.length;
+    for (const jm of validJms) {
+      this._loadJoinTargetFields(jm, () => {
+        remaining--;
+        if (remaining <= 0) {
+          onComplete();
+        }
+      });
+    }
   }
 
   /** همه فیلدهای قابل انتخاب: پایه + مقصدهای JOIN */
@@ -405,10 +451,15 @@ export class Reports implements OnInit, OnDestroy {
   readonly visibleJoinFields = computed(() => {
     const q = this.fieldSearch().trim();
     const joinMap = this._joinTargetFields();
+    const joinsMeta = this.store.joinsMeta();
+    const activeJoins = this.store.joins();
     const result: { alias: string; label: string; fields: ReportFieldMeta[] }[] = [];
     joinMap.forEach((fields, alias) => {
       const filtered = q ? fields.filter((f) => f.label.includes(q) || f.key.includes(q)) : fields;
-      if (filtered.length) result.push({ alias, label: alias, fields: filtered });
+      const jspec = activeJoins.find((j) => (j.as || j.to) === alias);
+      const jm = joinsMeta.find((j) => j.key === (jspec?.to || alias));
+      const groupLabel = jm ? `فیلدهای ${jm.label}` : alias;
+      if (filtered.length) result.push({ alias, label: groupLabel, fields: filtered });
     });
     return result;
   });
@@ -456,11 +507,8 @@ export class Reports implements OnInit, OnDestroy {
   isFieldCountOnly(fieldKey: string): boolean {
     if (!fieldKey) return false;
     const isBase = !fieldKey.includes('.');
-    const hasManyJoin = this.activeJoins().some(j => {
-      const jm = this.store.joinsMeta().find(m => m.key === j.to);
-      return jm?.cardinality === 'many';
-    });
-    if (isBase && hasManyJoin) return true;
+    const hasManyInOutput = !!this.store.activeManyJoinAlias();
+    if (isBase && hasManyInOutput) return true;
 
     const fd = this.allSelectableFields().find(f => f.key === fieldKey);
     if (!fd) return true;
@@ -474,12 +522,23 @@ export class Reports implements OnInit, OnDestroy {
     this.notifyStateChanged();
   }
 
-  // ── اعتبارسنجی تداخل نام مستعار (Alias Conflict) ──
+  // ── اعتبارسنجی نام مستعار (Alias Validation) ──
+  readonly ALIAS_REGEX = /^[a-z_][a-z0-9_]{0,40}$/;
+
   isRowAliasConflict(alias: string | undefined, currentIndex: number): boolean {
     if (!alias || !alias.trim()) return false;
     const clean = alias.trim();
     const aggs = this.store.aggregations();
     return aggs.some((a, idx) => idx !== currentIndex && a.alias?.trim() === clean);
+  }
+
+  isRowAliasInvalidFormat(alias: string | undefined): boolean {
+    if (!alias || !alias.trim()) return false;
+    return !this.ALIAS_REGEX.test(alias.trim());
+  }
+
+  isRowAliasHasError(alias: string | undefined, currentIndex: number): boolean {
+    return this.isRowAliasConflict(alias, currentIndex) || this.isRowAliasInvalidFormat(alias);
   }
 
   updateAggregation(index: number, patch: Partial<{ field: string; fn: AggFn; alias: string }>): void {
@@ -534,7 +593,7 @@ export class Reports implements OnInit, OnDestroy {
     const agg = this.store.aggregations()[i];
     if (!agg) return alias;
     const fn = this.aggFns.find((f) => f.value === agg.fn)?.label ?? agg.fn;
-    const field = this.store.fieldByKey().get(agg.field)?.label ?? agg.field;
+    const field = this.getFieldLabel(agg.field);
     return `${fn} ${field}`;
   }
 
@@ -606,12 +665,21 @@ export class Reports implements OnInit, OnDestroy {
   chartXLabel(): string {
     const c = this.store.chart();
     if (!c) return '';
-    return this.store.fieldByKey().get(c.x)?.label ?? c.x;
+    return this.getFieldLabel(c.x);
   }
 
   chartYLabel(): string {
     const c = this.store.chart();
     return c ? this.aliasLabel(c.y) : '';
+  }
+
+  @HostListener('window:keydown.escape')
+  handleEscape(): void {
+    if (this.isSaveModalOpen()) {
+      this.isSaveModalOpen.set(false);
+    } else if (this.isHelpModalOpen()) {
+      this.closeHelpModal();
+    }
   }
 
   // ------------------------------------------------------------------ اجرا
@@ -627,9 +695,9 @@ export class Reports implements OnInit, OnDestroy {
     return this.countTotalConditions(this.filterRoot);
   }
 
-  private validateReportSpec(): boolean {
+  private validateReportSpec(silent = false): boolean {
     if (!this.store.grouped() && this.store.selectedFields().length === 0) {
-      this.toast.warning('لطفاً حداقل یک فیلد برای نمایش در گزارش انتخاب کنید.');
+      if (!silent) this.toast.warning('لطفاً حداقل یک فیلد برای نمایش در گزارش انتخاب کنید.');
       return false;
     }
     // جلوگیری از HAVING با مقدار خالی (#6)
@@ -640,7 +708,7 @@ export class Reports implements OnInit, OnDestroy {
       return h.value === null || h.value === '';
     });
     if (invalidHaving) {
-      this.toast.warning('لطفاً مقدار همه شرط‌های «HAVING» را وارد کنید.');
+      if (!silent) this.toast.warning('لطفاً مقدار همه شرط‌های «HAVING» را وارد کنید.');
       return false;
     }
     // جلوگیری از فیلترهای ناقص
@@ -660,13 +728,18 @@ export class Reports implements OnInit, OnDestroy {
     };
     checkFilters(this.filterRoot);
     if (hasInvalidFilter) {
-      this.toast.warning('لطفاً مقدار همه فیلترها را کامل وارد کنید (مخصوصاً فیلترهای بازه و لیستی).');
+      if (!silent) this.toast.warning('لطفاً مقدار همه فیلترها را کامل وارد کنید (مخصوصاً فیلترهای بازه و لیستی).');
       return false;
     }
 
     // جلوگیری از alias تکراری در تجمیع (#4)
     if (this.hasAliasConflict()) {
-      this.toast.warning('دو تجمیع با نام مستعار یکسان وجود دارد — لطفاً نام مستعار دستی وارد کنید.');
+      if (!silent) this.toast.warning('دو تجمیع با نام مستعار یکسان وجود دارد — لطفاً نام مستعار دستی وارد کنید.');
+      return false;
+    }
+    const hasInvalidAliasFormat = this.store.aggregations().some(a => a.alias && this.isRowAliasInvalidFormat(a.alias));
+    if (hasInvalidAliasFormat) {
+      if (!silent) this.toast.warning('نام مستعار ستون تجمیعی نامعتبر است. فقط حروف کوچک انگلیسی (a-z)، عدد و _ مجاز است (مثال: total_inv).');
       return false;
     }
     return true;
@@ -735,6 +808,7 @@ export class Reports implements OnInit, OnDestroy {
     spec.format = format;
 
     const exportSignal = format === 'pdf' ? this.exportingPdf : this.exportingExcel;
+    this.setExportJob(null);
     exportSignal.set(true);
 
     this.reportApi.export(spec).subscribe({
@@ -750,8 +824,7 @@ export class Reports implements OnInit, OnDestroy {
           this.toast.success(`فایل ${label} دانلود شد.`);
         } else {
           // فقط xlsx بزرگ به job می‌رسد؛ PDF همیشه sync است
-          this.exportJobId.set(outcome.jobId);
-          this.exportTotalRows.set(outcome.totalRows);
+          this.setExportJob(outcome.jobId, outcome.totalRows);
           this.toast.info('نتیجه بزرگ است؛ فایل در سرور تولید می‌شود و درصد پیشرفت را می‌بینید.');
         }
       },
@@ -828,33 +901,33 @@ export class Reports implements OnInit, OnDestroy {
     // بارگذاری فیلدهای مقصد JOINهای ذخیره‌شده در قالب پس از رسیدن متادیتای فیلدها
     this._joinTargetFields.set(new Map());
     this.store.applyTemplate(t, (res) => {
-      if (t.spec.joins?.length) {
-        const joinsMeta = res.joins ?? [];
-        for (const jspec of t.spec.joins) {
-          const jm = joinsMeta.find((j) => j.key === jspec.to);
-          if (jm) this._loadJoinTargetFields(jm);
-        }
-      }
-      this.toast.success(`قالب «${t.name}» با موفقیت بارگذاری شد.`);
-      this.notifyStateChanged();
-      // اجرای خودکار پس از بارگذاری قالب جهت تجربه کاربری سریع و روان
-      setTimeout(() => {
+      this._loadAllJoinFields(t.spec.joins, res.joins, () => {
+        this.toast.success(`قالب «${t.name}» با موفقیت بارگذاری شد.`);
+        this.notifyStateChanged();
+        // اجرای خودکار پس از بارگذاری قالب جهت تجربه کاربری سریع و روان
         if (!this.store.isOffline() && this.validateReportSpec()) {
           this.runReport();
         }
-      }, 100);
+      });
     });
   }
 
   deleteTemplate(t: ReportTemplate): void {
-    if (!confirm(`قالب «${t.name}» حذف شود؟`)) return;
-    this.reportApi.deleteTemplate(t.id).subscribe({
-      next: () => {
-        this.toast.success('قالب حذف شد.');
-        if (this.store.activeTemplate()?.id === t.id) this.store.activeTemplate.set(null);
-        this.store.loadTemplates();
-      },
-      error: (e) => this.toast.error(this.store.msg(e)),
+    this.confirmDialog.open({
+      title: 'حذف قالب گزارش',
+      message: `آیا از حذف قالب «${t.name}» اطمینان دارید؟`,
+      type: 'danger',
+      confirmText: 'حذف'
+    }).then((ok) => {
+      if (!ok) return;
+      this.reportApi.deleteTemplate(t.id).subscribe({
+        next: () => {
+          this.toast.success('قالب حذف شد.');
+          if (this.store.activeTemplate()?.id === t.id) this.store.activeTemplate.set(null);
+          this.store.loadTemplates();
+        },
+        error: (e) => this.toast.error(this.store.msg(e)),
+      });
     });
   }
 
@@ -872,6 +945,12 @@ export class Reports implements OnInit, OnDestroy {
   formatCell(value: unknown, type: string): string {
     if (value === null || value === undefined || value === '') return '—';
     if (type === 'boolean') return value === true || value === 'true' ? 'بله' : 'خیر';
+    if (type === 'number') {
+      const num = Number(value);
+      if (!isNaN(num)) {
+        return new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 3 }).format(num);
+      }
+    }
     if ((type === 'date' || type === 'datetime') && typeof value === 'string') {
       const d = new Date(value);
       if (!isNaN(d.getTime())) {

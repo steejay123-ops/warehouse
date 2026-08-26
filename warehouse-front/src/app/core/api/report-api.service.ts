@@ -89,6 +89,10 @@ export class ReportApiService {
     return this.http.get<ReportExportJob>(`${this.base}exports/${jobId}/`, { context: this.ctx() });
   }
 
+  getExportJobs(): Observable<ReportExportJob[]> {
+    return this.http.get<ReportExportJob[]>(`${this.base}exports/`, { context: this.ctx() });
+  }
+
   downloadExportFile(jobId: number): Observable<Blob> {
     return this.http.get(`${this.base}exports/${jobId}/download/`, {
       responseType: 'blob',

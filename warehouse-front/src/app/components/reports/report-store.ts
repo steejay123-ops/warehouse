@@ -72,7 +72,15 @@ export class ReportStore {
 
   /** مجموعه‌ای از aliasهای مربوط به JOINهای چندمقداری (many) */
   readonly manyJoinAliases = computed(() => {
-    return new Set(this.joinsMeta().filter(j => j.cardinality === 'many').map(j => j.key));
+    const metaMap = new Map(this.joinsMeta().map((j) => [j.key, j]));
+    const set = new Set<string>();
+    for (const j of this.joins()) {
+      const meta = metaMap.get(j.to);
+      if (meta && meta.cardinality === 'many') {
+        set.add(j.as || j.to);
+      }
+    }
+    return set;
   });
 
   /** 
@@ -129,7 +137,7 @@ export class ReportStore {
     const checkDone = () => {
       doneCount++;
       if (doneCount >= 2) {
-        setTimeout(() => this.isRefreshing.set(false), 600);
+        this.isRefreshing.set(false);
       }
     };
 
@@ -241,8 +249,16 @@ export class ReportStore {
     const aliases = new Set(this.aggAliases());
     this.having.update((arr) => arr.filter((h) => aliases.has(h.alias)));
     const c = this.chart();
-    if (c && (!aliases.has(c.y) || !this.groupBy().includes(c.x))) {
-      this.chart.set(null);
+    if (c) {
+      const xInvalid = !!c.x && !this.groupBy().includes(c.x);
+      const yInvalid = !!c.y && !aliases.has(c.y);
+      if (xInvalid || yInvalid) {
+        this.chart.update((cur) => cur ? {
+          ...cur,
+          x: xInvalid ? '' : cur.x,
+          y: yInvalid ? '' : cur.y,
+        } : null);
+      }
     }
   }
 

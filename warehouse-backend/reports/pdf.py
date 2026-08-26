@@ -212,6 +212,8 @@ def sync_pdf_response(qs, columns, total, filename='report.pdf', report_name='گ
         table,
     ])
 
+    from urllib.parse import quote
     response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    encoded_filename = quote(filename.encode('utf-8'))
+    response['Content-Disposition'] = f"attachment; filename=\"report.pdf\"; filename*=UTF-8''{encoded_filename}"
     return response

@@ -13,12 +13,13 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import CustomUser
-from inventory.models import CountTask, Item, ItemFieldDefinition
+from inventory.models import CountTask, CountTaskHistory, Item, ItemFieldDefinition
 from warehouses.models import SystemSetting, Warehouse
 
 from .engine import ReportEngine, ReportError
 from .excel import _run_export_job, cleanup_old_jobs, start_export_job
 from .models import ExportWorkerStatus, ReportExportJob, ReportTemplate
+from .registry import get_registry
 
 
 def _perm(codename):
@@ -637,4 +638,333 @@ class JoinQueryTests(BaseReportTest):
         self.assertEqual(res['count'], 1)
         self.assertEqual(res['rows'][0]['fa_unic_code'], 'FA-001')
         self.assertEqual(res['rows'][0]['count_tasks.status'], 'COUNTED')
+
+    def test_join_filter_only_exists_with_calculated_field(self):
+        """فیلتر روی فیلد محاسباتی جدول پیوندی وقتی جدول در خروجی نیست (مسیر EXISTS) بدون خطا کار کند."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code'],
+            'filters': {'field': 'count_tasks.counter_name', 'operator': 'icontains', 'value': 'رضایی'},
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res.get('join_mode'), 'exists')
+        self.assertEqual(res['count'], 2)
+        codes = [r['fa_unic_code'] for r in res['rows']]
+        self.assertIn('FA-001', codes)
+        self.assertIn('FA-002', codes)
+
+    def test_join_filter_only_exists_with_calculated_field_non_matching(self):
+        """فیلتر EXISTS روی فیلد محاسباتی با مقدار ناموجود باید خروجی خالی بدهد."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code'],
+            'filters': {'field': 'count_tasks.counter_name', 'operator': 'icontains', 'value': 'شخص_ناموجود'},
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res.get('join_mode'), 'exists')
+        self.assertEqual(res['count'], 0)
+        self.assertEqual(res['rows'], [])
+
+    def test_join_filter_only_exists_combined_and_filter(self):
+        """ترکیب فیلتر پایه و فیلد محاسباتی پیوندی در مسیر EXISTS."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'fields': ['fa_unic_code'],
+            'filters': {
+                'op': 'AND',
+                'children': [
+                    {'field': 'fa_unic_code', 'operator': 'eq', 'value': 'FA-001'},
+                    {'field': 'count_tasks.counter_name', 'operator': 'icontains', 'value': 'رضایی'},
+                ],
+            },
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res['count'], 1)
+        self.assertEqual(res['rows'][0]['fa_unic_code'], 'FA-001')
+
+    def test_grouped_pagination_has_deterministic_order(self):
+        """در حالت گروه‌بندی بدون مرتب‌سازی دستی، فیلدهای گروه‌بندی به عنوان tiebreak اضافه شوند."""
+        spec = {
+            'entity': 'items',
+            'group_by': ['vendor'],
+            'aggregations': [{'fn': 'count', 'field': 'id', 'alias': 'c'}],
+            'warehouse_id': self.wh1.id,
+        }
+        eng = ReportEngine(self.admin, spec)
+        qs, cols, mode = eng.build()
+        self.assertIn('vendor', qs.query.order_by)
+
+    def test_grouped_sum_on_base_field_with_filter_only_many_join_allowed(self):
+        """جمع روی فیلد پایه وقتی JOIN چندمقداری فقط در فیلتر (EXISTS) است باید مجاز باشد و درست محاسبه شود."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'group_by': ['vendor'],
+            'aggregations': [{'fn': 'sum', 'field': 'inventory', 'alias': 'total_inv'}],
+            'filters': {'field': 'count_tasks.status', 'operator': 'eq', 'value': 'COUNTED'},
+            'warehouse_id': self.wh1.id,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(res.get('join_mode'), 'exists')
+        self.assertEqual(res['count'], 1)
+        self.assertEqual(res['rows'][0]['vendor'], 'زیمنس')
+        self.assertEqual(Decimal(str(res['rows'][0]['total_inv'])), Decimal('10'))
+
+    def test_grouped_sum_on_base_field_with_output_many_join_rejected(self):
+        """جمع روی فیلد پایه وقتی JOIN چندمقداری در ستون‌های خروجی است باید رد شود (جلوگیری از ضرب دکارتی)."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks', 'type': 'left', 'as': 'count_tasks'}],
+            'group_by': ['count_tasks.status'],
+            'aggregations': [{'fn': 'sum', 'field': 'inventory', 'alias': 'total_inv'}],
+            'warehouse_id': self.wh1.id,
+        }
+        with self.assertRaises(ReportError) as ctx:
+            ReportEngine(self.admin, spec).build()
+        self.assertIn('در ترکیب با جدول چندمقداری', ctx.exception.message)
+
+    def test_sensitive_field_bypass_view_sys_export_cannot_bypass(self):
+        """کاربر دارای مجوز view_sys_export در حالت شمارش کور نباید فیلدهای حساس را ببیند."""
+        from warehouses.services import clear_setting_cache
+        SystemSetting.objects.filter(key='blind_counting').update(value='blind')
+        clear_setting_cache('blind_counting', self.wh1.id)
+        clear_setting_cache('blind_counting', None)
+        export_user = make_user('exporter', perms=('view_sys_reports', 'view_wh_docs', 'view_sys_export'))
+        cfg = get_registry()['items']
+        allowed = cfg.allowed_fields(export_user, self.wh1.id)
+        self.assertNotIn('inventory', allowed)
+
+        # بازگرداندن تنظیم برای سایر تست‌ها
+        SystemSetting.objects.filter(key='blind_counting').update(value='normal')
+        clear_setting_cache('blind_counting', self.wh1.id)
+        clear_setting_cache('blind_counting', None)
+
+    def test_sensitive_field_bypass_manager_review_can_bypass(self):
+        """کاربر دارای مجوز view_sys_manager_review در حالت شمارش کور به فیلدهای حساس دسترسی دارد."""
+        from warehouses.services import clear_setting_cache
+        SystemSetting.objects.filter(key='blind_counting').update(value='blind')
+        clear_setting_cache('blind_counting', self.wh1.id)
+        clear_setting_cache('blind_counting', None)
+        manager_user = make_user('manager', perms=('view_sys_reports', 'view_wh_docs', 'view_sys_manager_review'))
+        cfg = get_registry()['items']
+        allowed = cfg.allowed_fields(manager_user, self.wh1.id)
+        self.assertIn('inventory', allowed)
+
+        # بازگرداندن تنظیم برای سایر تست‌ها
+        SystemSetting.objects.filter(key='blind_counting').update(value='normal')
+        clear_setting_cache('blind_counting', self.wh1.id)
+        clear_setting_cache('blind_counting', None)
+
+    def test_unhandled_exception_returns_500_generic_message(self):
+        """خطای پیش‌بینی‌نشده سروری باید با کد ۵۰۰ و پیام امن فارسی برگردد بدون افشای متن داخلی استثنا."""
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        with patch('reports.views.ReportEngine.run', side_effect=RuntimeError('Database internal table fault')):
+            r = client.post('/api/reports/run/', {'entity': 'items', 'fields': ['fa_unic_code']}, format='json')
+            self.assertEqual(r.status_code, 500)
+            self.assertIn('خطای داخلی در اجرای گزارش', r.json().get('error', ''))
+            self.assertNotIn('Database internal table fault', r.json().get('error', ''))
+
+    def test_export_queryset_handles_operational_error_timeout(self):
+        """در صورت timeout خوردن محاسبه تعداد ردیف‌ها، خطای فارسی مناسب برگردانده شود."""
+        from django.db import OperationalError
+        eng = ReportEngine(self.admin, {'entity': 'items', 'fields': ['fa_unic_code']})
+        with patch('django.db.models.query.QuerySet.count', side_effect=OperationalError('canceling statement due to statement timeout')):
+            with self.assertRaises(ReportError) as ctx:
+                eng.export_queryset()
+            self.assertIn('بیش از حد طول کشید', ctx.exception.message)
+
+    def test_export_job_detail_recovers_stale_running_job(self):
+        """بررسی وضعیت job با نبض کهنه (بیش از ۵ دقیقه) باید آن را به failed تغییر دهد."""
+        old_time = timezone.now() - timezone.timedelta(minutes=10)
+        stale_job = ReportExportJob.objects.create(
+            owner=self.admin, spec={'entity': 'items'}, report_name='stale',
+            status='running', heartbeat_at=old_time,
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        r = client.get(f'/api/reports/exports/{stale_job.pk}/')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json().get('status'), 'failed')
+        self.assertIn('پردازش متوقف شد', r.json().get('error_message', ''))
+        stale_job.refresh_from_db()
+        self.assertEqual(stale_job.status, 'failed')
+
+    def test_multi_warehouse_blind_counting_masks_fields_when_any_warehouse_is_blind(self):
+        """در کوئری بدون انتخاب انبار (چندانباری)، اگر حتی یک انبار blind باشد فیلدهای حساس باید ماسک شوند."""
+        from warehouses.services import clear_setting_cache
+        # تنظیم سراسری عادی، اما انبار ۲ روی blind
+        SystemSetting.objects.filter(key='blind_counting', warehouse__isnull=True).update(value='normal')
+        SystemSetting.objects.create(key='blind_counting', value='blind', warehouse=self.wh2)
+        clear_setting_cache('blind_counting', self.wh2.id)
+        clear_setting_cache('blind_counting', None)
+
+        viewer_user = make_user('viewer_user', perms=('view_sys_reports', 'view_wh_docs'))
+        cfg = get_registry()['items']
+        # بدون انتخاب انبار (warehouse_id=None)
+        allowed = cfg.allowed_fields(viewer_user, warehouse_id=None)
+        self.assertNotIn('inventory', allowed)
+
+        # پاک‌سازی رکورد تستی
+        SystemSetting.objects.filter(key='blind_counting', warehouse=self.wh2).delete()
+        clear_setting_cache('blind_counting', self.wh2.id)
+        clear_setting_cache('blind_counting', None)
+
+    def test_datetime_date_filter_includes_end_of_day(self):
+        """فیلتر lte یا between روی فیلد datetime با ورودی تاریخ باید رکوردهای کل روز پایانی را شامل شود."""
+        task = CountTask.objects.first()
+        today = timezone.now().date()
+        late_today = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time().replace(hour=18, minute=30)))
+        history = CountTaskHistory.objects.create(
+            task=task,
+            action_type='COUNTED',
+            action_by=self.admin,
+            counted_balance=10,
+        )
+        CountTaskHistory.objects.filter(pk=history.pk).update(created_at=late_today)
+
+        # فیلتر lte با تاریخ امروز
+        spec = {
+            'entity': 'count_task_history',
+            'fields': ['id', 'action_type', 'created_at'],
+            'filters': {
+                'field': 'created_at',
+                'operator': 'lte',
+                'value': str(today),
+            }
+        }
+        res = ReportEngine(self.admin, spec).run()
+        found = any(r.get('id') == history.id for r in res['rows'])
+        self.assertTrue(found)
+
+        # فیلتر between با تاریخ امروز
+        spec_between = {
+            'entity': 'count_task_history',
+            'fields': ['id', 'action_type', 'created_at'],
+            'filters': {
+                'field': 'created_at',
+                'operator': 'between',
+                'value': [str(today), str(today)],
+            }
+        }
+        res_between = ReportEngine(self.admin, spec_between).run()
+        found_between = any(r.get('id') == history.id for r in res_between['rows'])
+        self.assertTrue(found_between)
+
+    def test_response_rows_do_not_leak_internal_join_id_columns(self):
+        """ردیف‌های پاسخ فقط باید ستون‌های درخواستی را داشته باشند و کلیدهای داخلی ORM (مانند count_tasks_fr__id) نشت نکنند."""
+        spec = {
+            'entity': 'items',
+            'fields': ['fa_unic_code', 'count_tasks.status'],
+            'joins': [{'to': 'count_tasks'}],
+        }
+        res = ReportEngine(self.admin, spec).run()
+        for row in res['rows']:
+            self.assertIn('fa_unic_code', row)
+            self.assertIn('count_tasks.status', row)
+            self.assertNotIn('count_tasks_fr__id', row)
+            self.assertNotIn('id', row)
+
+    def test_export_content_disposition_utf8_filename(self):
+        """هدر Content-Disposition باید با استاندارد RFC 5987 نام فارسی را با filename* انکود کند."""
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        r = client.post('/api/reports/export/', {
+            'entity': 'items',
+            'fields': ['fa_unic_code'],
+            'report_name': 'گزارش موجودی کالا',
+            'format': 'xlsx',
+        }, format='json')
+        self.assertEqual(r.status_code, 200)
+        cd = r.headers.get('Content-Disposition', '')
+        self.assertIn("filename*=UTF-8''", cd)
+        from urllib.parse import quote
+        self.assertIn(quote('گزارش موجودی کالا.xlsx'.encode('utf-8')), cd)
+
+    def test_filter_on_join_computed_field_when_not_in_output(self):
+        """فیلتر روی فیلد محاسباتی جدول پیوندی وقتی جدول پیوندی در خروجی نیست (مسیر EXISTS)."""
+        spec = {
+            'entity': 'items',
+            'fields': ['fa_unic_code'],
+            'joins': [{'to': 'count_tasks'}],
+            'filters': {
+                'field': 'count_tasks.counter_name',
+                'operator': 'icontains',
+                'value': 'علی',
+            },
+        }
+        res = ReportEngine(self.admin, spec).run()
+        codes = [r['fa_unic_code'] for r in res['rows']]
+        self.assertIn('FA-001', codes)
+        self.assertIn('FA-002', codes)
+        self.assertNotIn('FA-003', codes)
+
+    def test_grouped_pagination_stability(self):
+        """صفحه‌بندی حالت گروه‌بندی‌شده باید دارای ترتیب پایدار و بدون خطا باشد."""
+        spec = {
+            'entity': 'items',
+            'group_by': ['vendor'],
+            'aggregations': [{'fn': 'count', 'field': 'id', 'alias': 'total_items'}],
+            'page': 1,
+            'page_size': 1,
+        }
+        res = ReportEngine(self.admin, spec).run()
+        self.assertEqual(len(res['rows']), 1)
+        self.assertGreaterEqual(res['count'], 2)
+
+    def test_having_on_join_field_alias(self):
+        """شرط HAVING روی تابع تجمیعی اعمال‌شده روی فیلد جدول پیوندی."""
+        spec = {
+            'entity': 'items',
+            'joins': [{'to': 'count_tasks'}],
+            'group_by': ['vendor'],
+            'aggregations': [
+                {'fn': 'sum', 'field': 'count_tasks.counted_balance', 'alias': 'sum_counted'}
+            ],
+            'having': [
+                {'alias': 'sum_counted', 'operator': 'gte', 'value': 5}
+            ]
+        }
+        res = ReportEngine(self.admin, spec).run()
+        vendors = [r['vendor'] for r in res['rows']]
+        self.assertIn('زیمنس', vendors)
+
+    def test_export_queryset_operational_error_handling(self):
+        """مسیر export_queryset در مواجهه با OperationalError (مانند timeout) باید خطای معنادار ReportError بدهد."""
+        from django.db import OperationalError
+        spec = {'entity': 'items', 'fields': ['fa_unic_code']}
+        engine = ReportEngine(self.admin, spec)
+        with patch('django.db.models.query.QuerySet.count', side_effect=OperationalError('canceling statement due to statement timeout')):
+            with self.assertRaises(ReportError) as ctx:
+                engine.export_queryset()
+            self.assertIn('محاسبه تعداد ردیف‌های خروجی', str(ctx.exception))
+
+    def test_export_job_list_view_ordering(self):
+        """اندپوینت فهرست jobها باید به ترتیب نزولی زمان ایجاد (-created_at) مرتب باشد."""
+        job1 = ReportExportJob.objects.create(
+            owner=self.admin, report_name='گزارش اول',
+            spec={'entity': 'items'}, total_rows=10,
+        )
+        job2 = ReportExportJob.objects.create(
+            owner=self.admin, report_name='گزارش دوم',
+            spec={'entity': 'items'}, total_rows=20,
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        r = client.get('/api/reports/exports/')
+        self.assertEqual(r.status_code, 200)
+        items = r.json()
+        self.assertGreaterEqual(len(items), 2)
+        self.assertEqual(items[0]['id'], job2.pk)
+        self.assertEqual(items[1]['id'], job1.pk)
+
+
+
+
 

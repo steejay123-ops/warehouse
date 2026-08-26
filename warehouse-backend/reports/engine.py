@@ -12,12 +12,14 @@
   ۸. مرتب‌سازی + صفحه‌بندی
 هر خطای کاربری با ReportError (پیام فارسی + status) بالا می‌آید — هرگز 500.
 """
+import datetime as _dt
 import re
 from decimal import Decimal, InvalidOperation
 
 from django.db import DataError, OperationalError, transaction, connection
 from django.db.models import Avg, Count, Exists, Max, Min, OuterRef, Q, Sum
 from django.db.models import FilteredRelation
+from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from .registry import AGG_FUNCTIONS, JOINS, get_registry
@@ -181,34 +183,31 @@ class ReportEngine:
             return Q()
         scope_q = Q()
         if not self.user.is_superuser:
-            assigned = getattr(self, '_assigned_ids', None) or []
-            if assigned:
+            assigned = getattr(self, '_assigned_ids', None)
+            if assigned is not None:
                 scope_q &= Q(**{
-                    f'{jd.path}__{jd.warehouse_path}__in': assigned
+                    f'{jd.warehouse_path}__in': assigned
                 })
         if self.warehouse_id:
             scope_q &= Q(**{
-                f'{jd.path}__{jd.warehouse_path}': self.warehouse_id
+                f'{jd.warehouse_path}': self.warehouse_id
             })
         return scope_q
 
     # ------------------------------------------------------------------ scope
     def _check_warehouse_access(self):
-        if self.user.is_superuser:
-            return
-        assigned = list(self.user.assigned_warehouses.values_list('id', flat=True))
-        self._assigned_ids = assigned
-        if self.warehouse_id and assigned and int(self.warehouse_id) not in assigned:
+        from common.warehouse_scope import can_access_warehouse, user_warehouse_ids
+        target_wh = int(self.warehouse_id) if self.warehouse_id else None
+        if target_wh is not None and not can_access_warehouse(self.user, target_wh):
             raise ReportError('به این انبار دسترسی ندارید.', status=403)
+        self._assigned_ids = user_warehouse_ids(self.user)
 
     def _scope_queryset(self, qs):
         path = self.config.warehouse_path
         if not path:
             return qs
-        if not self.user.is_superuser:
-            assigned = getattr(self, '_assigned_ids', None) or []
-            if assigned:
-                qs = qs.filter(**{f'{path}__in': assigned})
+        from common.warehouse_scope import scope_queryset
+        qs = scope_queryset(qs, self.user, field=path)
         if self.warehouse_id:
             qs = qs.filter(**{path: self.warehouse_id})
         return qs
@@ -233,9 +232,15 @@ class ReportEngine:
                     raise ValueError
                 return d
             if fd.type == 'datetime':
-                dt = parse_datetime(str(value)) or parse_date(str(value))
+                s = str(value).strip()
+                d = parse_date(s)
+                if d and len(s) == 10:
+                    return d
+                dt = parse_datetime(s) or d
                 if dt is None:
                     raise ValueError
+                if isinstance(dt, _dt.datetime) and timezone.is_naive(dt) and timezone.is_aware(timezone.now()):
+                    dt = timezone.make_aware(dt)
                 return dt
             if fd.type == 'boolean':
                 if isinstance(value, bool):
@@ -267,7 +272,16 @@ class ReportEngine:
             pk=OuterRef('pk')
         ).annotate(
             **{fr_alias: FilteredRelation(jd.path, condition=scope_q)}
-        ).filter(
+        )
+
+        subq_annotations = {}
+        for k, fd in self.fields.items():
+            if k.startswith(f'{alias}.') and fd.annotation is not None:
+                subq_annotations[fd.source] = fd.annotation()
+        if subq_annotations:
+            subq = subq.annotate(**subq_annotations)
+
+        subq = subq.filter(
             q
         ).values('pk')
         return Q(Exists(subq))
@@ -368,6 +382,13 @@ class ReportEngine:
             if not isinstance(value, (list, tuple)) or len(value) != 2:
                 raise ReportError(f'مقدار بازه برای «{fd.label}» باید دو عضو داشته باشد.')
             lo, hi = self._coerce(fd, value[0]), self._coerce(fd, value[1])
+            if fd.type == 'datetime':
+                if isinstance(lo, _dt.date) and not isinstance(lo, _dt.datetime):
+                    dt_lo = _dt.datetime.combine(lo, _dt.time.min)
+                    lo = timezone.make_aware(dt_lo) if timezone.is_aware(timezone.now()) else dt_lo
+                if isinstance(hi, _dt.date) and not isinstance(hi, _dt.datetime):
+                    dt_hi = _dt.datetime.combine(hi, _dt.time.max)
+                    hi = timezone.make_aware(dt_hi) if timezone.is_aware(timezone.now()) else dt_hi
             base_q = Q(**{f'{fd.source}__gte': lo, f'{fd.source}__lte': hi})
         elif operator == 'in':
             if not isinstance(value, (list, tuple)) or not value:
@@ -375,8 +396,28 @@ class ReportEngine:
             base_q = Q(**{f'{fd.source}__in': [self._coerce(fd, v) for v in value]})
         else:
             coerced = self._coerce(fd, value)
-            if operator == 'eq' and fd.type == 'datetime':
-                base_q = Q(**{f'{fd.source}__date': coerced})
+            if fd.type == 'datetime' and isinstance(coerced, _dt.date) and not isinstance(coerced, _dt.datetime):
+                if operator == 'eq':
+                    base_q = Q(**{f'{fd.source}__date': coerced})
+                elif operator == 'lte':
+                    dt_end = _dt.datetime.combine(coerced, _dt.time.max)
+                    end_of_day = timezone.make_aware(dt_end) if timezone.is_aware(timezone.now()) else dt_end
+                    base_q = Q(**{f'{fd.source}__lte': end_of_day})
+                elif operator == 'gt':
+                    dt_end = _dt.datetime.combine(coerced, _dt.time.max)
+                    end_of_day = timezone.make_aware(dt_end) if timezone.is_aware(timezone.now()) else dt_end
+                    base_q = Q(**{f'{fd.source}__gt': end_of_day})
+                elif operator == 'gte':
+                    dt_start = _dt.datetime.combine(coerced, _dt.time.min)
+                    start_of_day = timezone.make_aware(dt_start) if timezone.is_aware(timezone.now()) else dt_start
+                    base_q = Q(**{f'{fd.source}__gte': start_of_day})
+                elif operator == 'lt':
+                    dt_start = _dt.datetime.combine(coerced, _dt.time.min)
+                    start_of_day = timezone.make_aware(dt_start) if timezone.is_aware(timezone.now()) else dt_start
+                    base_q = Q(**{f'{fd.source}__lt': start_of_day})
+                else:
+                    lookup = OPERATOR_LOOKUPS[operator]
+                    base_q = Q(**{f'{fd.source}{lookup}': coerced})
             else:
                 lookup = OPERATOR_LOOKUPS[operator]
                 base_q = Q(**{f'{fd.source}{lookup}': coerced})
@@ -444,14 +485,6 @@ class ReportEngine:
                 raise ReportError(f'نام alias نامعتبر: {alias}')
             if alias in self.fields or alias in used_aliases:
                 raise ReportError(f'alias تکراری یا رزروشده: {alias}')
-            # محدودیت تجمیع در grouped + many JOIN:
-            # Sum/Avg/Min/Max روی فیلدهای اسکالر پایه (نه مقصد JOIN) ممنوع است
-            if grouped and self._has_many_join and fn in ('sum', 'avg', 'min', 'max'):
-                if '.' not in fd.key:  # فیلد پایه (نه alias.field)
-                    raise ReportError(
-                        f'در ترکیب با جدول چندمقداری، {fn} روی فیلد «{fd.label}» '
-                        f'نادرست است. فیلد جدول مقصد را جمع بزنید یا از Count استفاده کنید.'
-                    )
             used_aliases.add(alias)
             agg_specs.append((alias, fn, fd))
 
@@ -465,6 +498,18 @@ class ReportEngine:
         join_used_in_output = join_field_keys | join_group_keys | join_agg_keys
         # alias مقصدهایی که در output (نه فقط filter) استفاده شده‌اند
         output_join_aliases = {k.split('.')[0] for k in join_used_in_output}
+
+        # محدودیت تجمیع در grouped + many JOIN:
+        # اگر جدول چندمقداری در خروجی (FilteredRelation) باشد نه فقط فیلتر (EXISTS)،
+        # Sum/Avg/Min/Max روی فیلدهای اسکالر پایه ممنوع است چون ردیف‌ها تکثیر می‌شوند
+        has_many_output = any(self._joins.get(a) and self._joins[a].cardinality == 'many' for a in output_join_aliases)
+        if grouped and has_many_output:
+            for alias, fn, fd in agg_specs:
+                if fn in ('sum', 'avg', 'min', 'max') and '.' not in fd.key:
+                    raise ReportError(
+                        f'در ترکیب با جدول چندمقداری، {fn} روی فیلد «{fd.label}» '
+                        f'نادرست است. فیلد جدول مقصد را جمع بزنید یا از Count استفاده کنید.'
+                    )
         
         many_output_count = sum(1 for a in output_join_aliases if self._joins.get(a) and self._joins[a].cardinality == 'many')
         if many_output_count > 1:
@@ -507,6 +552,9 @@ class ReportEngine:
         for k in referenced:
             fd = self.fields.get(k)
             if fd is not None and fd.annotation is not None:
+                alias = k.split('.')[0] if '.' in k else None
+                if alias and alias in self._exists_aliases:
+                    continue
                 annotations[fd.source] = fd.annotation()
         if annotations:
             qs = qs.annotate(**annotations)
@@ -526,9 +574,8 @@ class ReportEngine:
             group_sources = [gd.source for gd in group_defs]
             agg_exprs = {}
             for alias, fn, fd in agg_specs:
-                if fn == 'count' and '.' not in fd.key:
-                    # Count روی فیلد پایه با distinct=True برای many JOIN
-                    agg_exprs[alias] = Count(fd.source, distinct=bool(fr_aliases))
+                if fn == 'count' and (fd.key == 'id' or fd.key.endswith('.id') or fd.source == 'id') and has_many_output:
+                    agg_exprs[alias] = Count(fd.source, distinct=True)
                 else:
                     agg_exprs[alias] = AGG_MAP[fn](fd.source)
             qs = qs.values(*group_sources).annotate(**agg_exprs)
@@ -579,7 +626,11 @@ class ReportEngine:
                 raise ReportError(f'جهت مرتب‌سازی نامعتبر: {direction}')
             source = self.fields[key].source if key in self.fields else key
             order.append(f'-{source}' if direction == 'desc' else source)
-        if not grouped:
+        if grouped:
+            for gs in group_sources:
+                if gs not in order and f'-{gs}' not in order:
+                    order.append(gs)
+        else:
             order.append('pk')  # tiebreak پایدار برای صفحه‌بندی
             if getattr(self, '_has_many_join', False):
                 if 'id' not in sources and 'pk' not in sources:
@@ -679,7 +730,14 @@ class ReportEngine:
         """queryset بدون صفحه‌بندی برای خروجی Excel + ستون‌ها + تعداد کل."""
         qs, columns, _join_mode = self.build()
         try:
-            total = qs.count()
+            with transaction.atomic():
+                with connection.cursor() as cur:
+                    cur.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT_MS}ms'")
+                total = qs.count()
+        except OperationalError:
+            raise ReportError(
+                'محاسبه تعداد ردیف‌های خروجی بیش از حد طول کشید؛ فیلتر دقیق‌تری بگذارید یا بازه را کوچک کنید.'
+            )
         except DataError:
             raise ReportError('داده نامعتبر در یکی از فیلدهای پویا.')
         return qs, columns, total
@@ -687,12 +745,22 @@ class ReportEngine:
 
 def _jsonable(row, source_to_key=None):
     out = {}
+    if source_to_key is not None:
+        for src, key in source_to_key.items():
+            if src in row:
+                v = row[src]
+                if isinstance(v, Decimal):
+                    out[key] = str(v)
+                elif hasattr(v, 'isoformat'):
+                    out[key] = v.isoformat()
+                else:
+                    out[key] = v
+        return out
     for k, v in row.items():
-        out_key = source_to_key.get(k, k) if source_to_key else k
         if isinstance(v, Decimal):
-            out[out_key] = str(v)
+            out[k] = str(v)
         elif hasattr(v, 'isoformat'):
-            out[out_key] = v.isoformat()
+            out[k] = v.isoformat()
         else:
-            out[out_key] = v
+            out[k] = v
     return out

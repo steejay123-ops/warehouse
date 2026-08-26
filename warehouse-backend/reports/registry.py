@@ -37,7 +37,7 @@ OPERATORS_BY_TYPE = {
 AGG_FUNCTIONS = ('count', 'sum', 'avg', 'min', 'max')
 
 # کاربرانی با یکی از این مجوزها اجازه دیدن فیلدهای حساس را دارند
-SENSITIVE_BYPASS_PERMS = ('view_sys_export', 'view_sys_manager_review')
+SENSITIVE_BYPASS_PERMS = ('view_sys_manager_review',)
 
 
 # ---------------------------------------------------------------------------
@@ -240,14 +240,27 @@ class EntityConfig:
     def get_fields(self, warehouse_id=None):
         """همه FieldDefهای این موجودیت با پرچم sensitive نهایی."""
         from warehouses.services import get_setting
+        from warehouses.models import SystemSetting
 
         sensitive_keys = set()
         if self.key == 'items':
             restricted = get_setting('SENSITIVE_EXCEL_FIELDS', warehouse_id) \
                 or ['doc_status', 'field_status', 'tag_status']
             sensitive_keys.update(restricted)
-        if self.blind_sensitive and get_setting('blind_counting', warehouse_id) == 'blind':
-            sensitive_keys.update(self.blind_sensitive)
+
+        # اگر انبار مشخص باشد تنظیم همان انبار بررسی می‌شود.
+        # اگر انبار مشخص نباشد (کوئری چندانباری)، اگر تنظیم عمومی blind باشد یا حداقل یکی از انبارها blind باشد،
+        # فیلدهای حساس شمارش کور علامت sensitive می‌خورند تا موجودی انبار کور نشت نکند.
+        if self.blind_sensitive:
+            if warehouse_id:
+                is_blind = get_setting('blind_counting', warehouse_id) == 'blind'
+            else:
+                is_blind = (
+                    get_setting('blind_counting', None) == 'blind'
+                    or SystemSetting.objects.filter(key='blind_counting', value='blind').exists()
+                )
+            if is_blind:
+                sensitive_keys.update(self.blind_sensitive)
 
         fields = _auto_fields(
             self.model, exclude=self.exclude, include=self.include,

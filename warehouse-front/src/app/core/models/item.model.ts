@@ -46,8 +46,47 @@ export interface Item {
   field_assignee?: string;
   doc_assignee?: string;
   dynamic_data?: { [key: string]: any };
+  photos_count?: number;
+  primary_thumbnail?: string;
+  photos?: ItemPhoto[];
   created_at?: string;
   updated_at?: string;
   created_by?: number;
   modified_by?: number;
+}
+
+export interface ItemPhoto {
+  id: number;
+  sync_id?: string;
+  item: number;
+  image?: string;
+  medium?: string;
+  thumbnail?: string;
+  image_url?: string;
+  medium_url?: string;
+  thumbnail_url?: string;
+  caption?: string;
+  is_primary: boolean;
+  display_order: number;
+  file_size?: number;
+  width?: number;
+  height?: number;
+  source_type: 'camera' | 'gallery';
+  count_task?: number;
+  created_at: string;
+  updated_at?: string;
+  created_by?: number;
+  created_by_name?: string;
+  
+  // Client-side UI fields
+  _previewUrl?: string;
+  _isUploading?: boolean;
+  _uploadProgress?: number;
+  _error?: string;
+  /**
+   * شناسه رکورد در صف آپلود عکس (photoQueue) — فقط برای عکسی که هنوز به سرور
+   * نرسیده. وجودش یعنی این ردیف روی سرور نیست و تلاش مجدد/حذف باید از مسیر صف
+   * انجام شود، نه از مسیر API.
+   */
+  _queueEntryId?: number;
 }

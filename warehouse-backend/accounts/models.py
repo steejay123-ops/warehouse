@@ -41,11 +41,13 @@ class CustomUser(AbstractUser):
             ("view_sys_recounts", "بررسی مغایرت و بازشماری"),
             ("view_sys_settings", "تنظیمات سیستم"),
             ("view_sys_reports", "گزارش‌ساز"),
+            ("view_sys_personnel", "مدیریت پرسنل و ناوگان"),
             
             # Warehouse Tabs (منوی انبار)
             ("view_wh_dashboard", "داشبورد انبار"),
             ("view_wh_docs", "مدیریت کالا (انبار)"),
             ("view_wh_dispatch", "تخصیص کالا (انبار)"),
+            ("view_wh_attendance", "ثبت کارکرد و سرویس ناوگان (انبار)"),
             ("view_wh_customs", "فیلدهای مالی و گمرکی (انبار)"),
             ("view_wh_doc_approvals", "تاییدات سرپرست اسناد (انبار)"),
             ("view_wh_feeding", "مدیریت و تغذیه MT (انبار)"),
@@ -59,6 +61,7 @@ class CustomUser(AbstractUser):
             ("perm_doc_approve_action", "تایید، رد و ثبت امضای اسناد"),
             ("perm_feed_approve_action", "تایید و اعمال فیدهای تغذیه/گمرکی"),
             ("perm_inventory_finalize", "تایید نهایی و بستن دوره‌های انبارگردانی"),
+            ("perm_lock_work_period", "قفل و تایید نهایی کارکرد ماهانه"),
 
             # Sensitive & Critical Permissions (حساس و بحرانی)
             ("perm_rollback_data", "بازگردانی و احیای جامع داده‌ها"),

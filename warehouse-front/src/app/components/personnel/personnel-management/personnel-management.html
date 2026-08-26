@@ -1,0 +1,1426 @@
+<div class="p-4 md:p-6 space-y-6 max-w-7xl mx-auto pb-28" dir="rtl">
+  
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- Header Bar with Perspective Toggle (انباردار / حسابدار) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0" style="background: linear-gradient(135deg, #3b82f6, #6366f1)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-lg font-black text-slate-800 tracking-tight">سامانه جامع پرسنل، کارکرد و حقوق و دستمزد</h1>
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold" [ngClass]="portalPerspective === 'accountant' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'">
+            {{ portalPerspective === 'accountant' ? 'پورتال امور مالی و حسابداری' : 'پورتال ثبت کارکرد انباردار' }}
+          </span>
+        </div>
+        <p class="text-xs text-slate-500 font-medium mt-0.5">ثبت سریع کارکرد روزانه، جدول ۲۰ گروه شغلی، محاسبه ۵۸ ستون حقوق و صدور دیسکت‌های بیمه و مالیات</p>
+      </div>
+    </div>
+
+    <!-- Perspective Segmented Switch -->
+    <div class="flex items-center gap-3">
+      <div class="bg-slate-100 p-1 rounded-2xl border border-slate-200/80 flex items-center shadow-inner">
+        <button (click)="setPerspective('warehouse')" [class.active-perspective]="portalPerspective === 'warehouse'" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          <span>پورتال انباردار (ثبت روزانه)</span>
+        </button>
+        <button (click)="setPerspective('accountant')" [class.active-perspective]="portalPerspective === 'accountant'" class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <span>پورتال حسابدار (حقوق و دیسکت)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Tabs (Role Sensitive) -->
+  <div class="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-sm flex items-center gap-1 overflow-x-auto">
+    <!-- Warehouse Portal Tabs -->
+    <ng-container *ngIf="portalPerspective === 'warehouse'">
+      <button (click)="setTab('attendance')" [class.active-tab]="activeTab === 'attendance'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>ثبت کارکرد پرسنل انبار (ماتریسی)</span>
+      </button>
+      <button (click)="setTab('fleet')" [class.active-tab]="activeTab === 'fleet'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+        <span>ثبت تردد سرویس‌های ناوگان</span>
+      </button>
+    </ng-container>
+
+    <!-- Accountant Portal Tabs -->
+    <ng-container *ngIf="portalPerspective === 'accountant'">
+      <button (click)="setTab('payroll')" [class.active-tab]="activeTab === 'payroll'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+        <span>محاسبه ماهانه حقوق (شیت ۵۸ ستونی)</span>
+      </button>
+      <button (click)="setTab('attendance')" [class.active-tab]="activeTab === 'attendance'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>بازبینی کارکرد روزانه پرسنل</span>
+      </button>
+      <button (click)="setTab('fleet')" [class.active-tab]="activeTab === 'fleet'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+        <span>سرویس‌های ناوگان</span>
+      </button>
+      <button (click)="setTab('settings')" [class.active-tab]="activeTab === 'settings'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span>تنظیمات پایه و ۲۰ گروه شغلی (Settings)</span>
+      </button>
+      <button (click)="setTab('profiles')" [class.active-tab]="activeTab === 'profiles'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span>بانک اطلاعات کارمندان و ناوگان (Emp_info)</span>
+      </button>
+    </ng-container>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۳. تب محاسبه ماهانه حقوق و دیسکت‌ها (شیت تیر) - اختصاصی حسابدار -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'payroll'" class="space-y-6">
+    <!-- Filter & Action Header -->
+    <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Warehouse Selector -->
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">انبار:</label>
+          <select [(ngModel)]="selectedWarehouseId" (change)="loadMonthlyPayroll()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+            <option *ngFor="let wh of warehouses" [value]="wh.id">{{wh.name}}</option>
+          </select>
+        </div>
+
+        <!-- Year/Month Selector -->
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">دوره حقوق:</label>
+          <input type="text" [(ngModel)]="selectedYearMonth" (change)="onYearMonthChange()" placeholder="۱۴۰۵/۰۴" class="w-28 text-center bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+
+        <!-- Lock/Unlock Status -->
+        <button *ngIf="currentPeriodId" (click)="toggleLockPeriod()" [ngClass]="isPeriodLocked ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-200'" class="px-3.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>{{ isPeriodLocked ? 'دوره قفل شده (کلیک برای بازگشایی)' : 'دوره باز (کلیک برای قفل نهایی)' }}</span>
+        </button>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center gap-2">
+        <button (click)="openTaxModal()" class="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-teal-500/20 flex items-center gap-2 cursor-pointer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>درون‌ریزی اکسل مالیات دارایی</span>
+        </button>
+
+        <button (click)="calculateMonthlyPayroll()" [disabled]="isCalculatingPayroll || isPeriodLocked" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <span *ngIf="!isCalculatingPayroll">محاسبه و تجمیع خودکار حقوق (۵۸ ستون)</span>
+          <span *ngIf="isCalculatingPayroll">در حال پردازش ۵۸ ستون...</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 📊 KPI Cards Summary -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-bold text-slate-500">تعداد پرسنل لیست</span>
+        <span class="text-xl font-black text-slate-800 mt-2">{{ payrollSummary.total_personnel }} نفر</span>
+      </div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-bold text-slate-500">جمع ناخالص حقوق</span>
+        <span class="text-lg font-black text-indigo-700 mt-2">{{ payrollSummary.total_gross | number }} <span class="text-[10px] text-slate-400 font-normal">ریال</span></span>
+      </div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-bold text-slate-500">خالص قابل پرداخت</span>
+        <span class="text-lg font-black text-emerald-600 mt-2">{{ payrollSummary.total_payable | number }} <span class="text-[10px] text-slate-400 font-normal">ریال</span></span>
+      </div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-bold text-slate-500">جمع بیمه تأمین اجتماعی (۳۰٪)</span>
+        <span class="text-lg font-black text-blue-600 mt-2">{{ payrollSummary.total_insurance | number }} <span class="text-[10px] text-slate-400 font-normal">ریال</span></span>
+      </div>
+      <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <span class="text-xs font-bold text-slate-500">جمع مالیات حقوق</span>
+        <span class="text-lg font-black text-rose-600 mt-2">{{ payrollSummary.total_tax | number }} <span class="text-[10px] text-slate-400 font-normal">ریال</span></span>
+      </div>
+    </div>
+
+    <!-- 📦 Action Cards for Diskettes and Exports -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <!-- 1. Bimeh DSK ZIP -->
+      <div class="bg-gradient-to-br from-blue-900 to-indigo-900 text-white rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+          </div>
+          <h3 class="text-sm font-black">دیسکت بیمه تأمین اجتماعی</h3>
+          <p class="text-[11px] text-blue-200 mt-1">فایل‌های DSKWOR00 و DSKKAR00 با فرمت باینری DBF و انکودینگ ایران‌سیستم</p>
+        </div>
+        <button (click)="downloadDskZip()" class="mt-4 w-full py-2 bg-white text-blue-900 hover:bg-blue-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>دانلود پکیج دیسکت بیمه (ZIP)</span>
+        </button>
+      </div>
+
+      <!-- 2. Tax WH -->
+      <div class="bg-gradient-to-br from-emerald-900 to-teal-900 text-white rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          </div>
+          <h3 class="text-sm font-black">فایل WH مالیات حقوق</h3>
+          <p class="text-[11px] text-emerald-200 mt-1">فایل ۳۹ فیلدی خلاصه حقوق ماهانه سامانه سازمان امور مالیاتی کشور</p>
+        </div>
+        <button (click)="downloadTaxWh()" class="mt-4 w-full py-2 bg-white text-emerald-900 hover:bg-emerald-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>دانلود فایل WH1405xx.txt</span>
+        </button>
+      </div>
+
+      <!-- 3. Tax WP -->
+      <div class="bg-gradient-to-br from-cyan-900 to-slate-900 text-white rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+          </div>
+          <h3 class="text-sm font-black">فایل WP پرسنل مالیاتی</h3>
+          <p class="text-[11px] text-cyan-200 mt-1">مشخصات هویتی و شغلی پرسنل با انکودینگ استاندارد UTF-8 BOM</p>
+        </div>
+        <button (click)="downloadTaxWp()" class="mt-4 w-full py-2 bg-white text-cyan-950 hover:bg-cyan-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>دانلود فایل WP1405xx.txt</span>
+        </button>
+      </div>
+
+      <!-- 4. Bank Meli Excel -->
+      <div class="bg-gradient-to-br from-amber-900 to-yellow-950 text-white rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+          </div>
+          <h3 class="text-sm font-black">واریز گروهی بانک ملی</h3>
+          <p class="text-[11px] text-amber-200 mt-1">فرمت اکسل واریز گروهی بانک ملی با شبا، نام گیرنده، شرح و شناسه</p>
+        </div>
+        <button (click)="downloadBankExcel()" class="mt-4 w-full py-2 bg-white text-amber-950 hover:bg-amber-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>دانلود اکسل بانک ملی (.xlsx)</span>
+        </button>
+      </div>
+
+      <!-- 5. 58-Column Excel Sheet -->
+      <div class="bg-gradient-to-br from-violet-900 to-purple-950 text-white rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+        <div>
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center mb-3">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          </div>
+          <h3 class="text-sm font-black">گزارش اکسل ۲ سطری ۵۸ ستون</h3>
+          <p class="text-[11px] text-violet-200 mt-1">مطابق شیت تیر با فریز A3، هدر دو ردیفه فارسی و کلید دیتابیس</p>
+        </div>
+        <button (click)="downloadMonthlyExcel()" class="mt-4 w-full py-2 bg-white text-purple-950 hover:bg-purple-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>دانلود اکسل شیت ۵۸ ستونی</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 📋 58 Columns Data Table (Interactive Grid) -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <!-- Search & Filters Bar -->
+      <div class="p-4 border-b border-slate-200/80 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <input type="text" [(ngModel)]="payrollSearch" (input)="applyPayrollFilter()" placeholder="جستجو بر اساس نام، کد ملی یا گروه..." class="w-64 bg-white border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3.5 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          
+          <select [(ngModel)]="selectedStatusCategory" (change)="applyPayrollFilter()" class="bg-white border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+            <option value="ALL">همه گروه‌ها</option>
+            <option value="نفرات شرکتی">نفرات شرکتی</option>
+            <option value="سرپرستی">سرپرستی</option>
+          </select>
+        </div>
+
+        <div class="text-xs font-bold text-slate-500">
+          نمایش {{ filteredPayrollRecords.length }} از {{ monthlyPayrollRecords.length }} پرسنل
+        </div>
+      </div>
+
+      <!-- Full 58 Columns Scrollable Table -->
+      <div class="overflow-x-auto max-h-[650px] overflow-y-auto">
+        <table class="w-full text-right text-[11px] border-collapse">
+          <thead class="bg-slate-100/90 text-slate-700 sticky top-0 z-10 border-b border-slate-200 font-black">
+            <tr>
+              <th class="p-2.5 text-center sticky right-0 bg-slate-100 z-20 w-12 border-l border-slate-200">#</th>
+              <th class="p-2.5 sticky right-12 bg-slate-100 z-20 min-w-[160px] border-l border-slate-200">نام و نام خانوادگی</th>
+              <th class="p-2.5 text-center min-w-[100px]">کد ملی</th>
+              <th class="p-2.5 text-center min-w-[80px]">گروه</th>
+              <th class="p-2.5 text-center min-w-[60px]">شغلی</th>
+              <th class="p-2.5 text-center min-w-[90px]">مزد روزانه</th>
+              <th class="p-2.5 text-center min-w-[80px]">پایه سنوات</th>
+              <th class="p-2.5 text-center min-w-[60px]">سابقه</th>
+              <th class="p-2.5 text-center min-w-[90px]">مزد مبنا</th>
+              <th class="p-2.5 text-center min-w-[60px]">ساعت</th>
+              <th class="p-2.5 text-center min-w-[60px]">روز بیمه</th>
+              <th class="p-2.5 text-center min-w-[60px]">اضافه‌کار</th>
+              <th class="p-2.5 text-center min-w-[90px]">حقوق پایه</th>
+              <th class="p-2.5 text-center min-w-[90px]">بن خانوار</th>
+              <th class="p-2.5 text-center min-w-[90px]">حق مسکن</th>
+              <th class="p-2.5 text-center min-w-[80px]">حق تاهل</th>
+              <th class="p-2.5 text-center min-w-[80px]">حق اولاد</th>
+              <th class="p-2.5 text-center min-w-[90px]">ایاب و ذهاب</th>
+              <th class="p-2.5 text-center min-w-[90px]">بدی آب‌وهوا</th>
+              <th class="p-2.5 text-center min-w-[90px]">پارس و عسلویه</th>
+              <th class="p-2.5 text-center min-w-[90px]">مبلغ اضافه‌کار</th>
+              <th class="p-2.5 text-center min-w-[90px]">هزینه سفر</th>
+              <th class="p-2.5 text-center min-w-[90px]">حق ماموریت</th>
+              <th class="p-2.5 text-center min-w-[90px]">عیدی و پاداش</th>
+              <th class="p-2.5 text-center min-w-[90px]">حق سنوات</th>
+              <th class="p-2.5 text-center min-w-[100px] bg-blue-50/80">مزایا مشمول</th>
+              <th class="p-2.5 text-center min-w-[100px] bg-blue-100/80 font-black">حقوق ناخالص</th>
+              <th class="p-2.5 text-center min-w-[90px] bg-rose-50/80">بیمه کارگر ۷٪</th>
+              <th class="p-2.5 text-center min-w-[90px] bg-rose-50/80">بیمه کارفرما ۲۰٪</th>
+              <th class="p-2.5 text-center min-w-[110px] bg-rose-50/80">مالیات حقوق (منبع)</th>
+              <th class="p-2.5 text-center min-w-[90px]">کسر مساعده</th>
+              <th class="p-2.5 text-center min-w-[110px] bg-emerald-100/90 font-black text-emerald-900">خالص پرداختی</th>
+              <th class="p-2.5 text-center min-w-[100px] bg-slate-200/80 font-black">چک مالیات (تراز)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let rec of filteredPayrollRecords; let idx = index" class="hover:bg-slate-50/80 transition-colors">
+              <td class="p-2.5 text-center sticky right-0 bg-white z-10 border-l border-slate-100 font-bold text-slate-500">{{ rec.row_number || idx + 1 }}</td>
+              <td class="p-2.5 sticky right-12 bg-white z-10 border-l border-slate-100 font-bold text-slate-800">{{ rec.full_name }}</td>
+              <td class="p-2.5 text-center font-mono text-slate-600">{{ rec.national_code }}</td>
+              <td class="p-2.5 text-center text-slate-600">{{ rec.status_category }}</td>
+              <td class="p-2.5 text-center font-bold text-indigo-700">{{ rec.job_grade }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.daily_wage | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.daily_seniority | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.years_of_service }}</td>
+              <td class="p-2.5 text-center font-mono font-bold text-slate-800">{{ rec.base_daily_rate | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.worked_hours }}</td>
+              <td class="p-2.5 text-center font-mono font-bold">{{ rec.insurance_days }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.overtime_hours }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.base_salary | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.food_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.housing_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.marital_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.child_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.transport_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.bad_weather_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.south_pars_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.overtime_amount | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.travel_cost_amount | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.mission_amount | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.bonus_amount | number }}</td>
+              <td class="p-2.5 text-center font-mono">{{ rec.seniority_allowance | number }}</td>
+              <td class="p-2.5 text-center font-mono bg-blue-50/50">{{ rec.total_taxable_allowances | number }}</td>
+              <td class="p-2.5 text-center font-mono font-black text-indigo-800 bg-blue-100/50">{{ rec.gross_salary | number }}</td>
+              <td class="p-2.5 text-center font-mono text-rose-700 bg-rose-50/40">{{ rec.worker_insurance | number }}</td>
+              <td class="p-2.5 text-center font-mono text-rose-700 bg-rose-50/40">{{ rec.employer_insurance | number }}</td>
+              <td class="p-2.5 text-center font-mono text-rose-700 bg-rose-50/40">
+                <div class="flex flex-col items-center gap-0.5">
+                  <span class="font-bold">{{ rec.income_tax | number }}</span>
+                  <span *ngIf="rec.is_tax_imported" class="text-[9px] bg-teal-100 text-teal-800 font-bold px-1.5 py-0.5 rounded-md">دارایی (اکسل)</span>
+                  <span *ngIf="!rec.is_tax_imported" class="text-[9px] bg-slate-100 text-slate-600 font-medium px-1 py-0.5 rounded-md">ماده ۸۴</span>
+                </div>
+              </td>
+              <td class="p-2.5 text-center font-mono text-amber-700">{{ rec.advance_payment_deduction | number }}</td>
+              <td class="p-2.5 text-center font-mono font-black text-emerald-800 bg-emerald-100/50">{{ rec.payable_amount | number }}</td>
+              <td class="p-2.5 text-center font-mono" [ngClass]="rec.tax_check_discrepancy === 0 ? 'text-emerald-700 bg-emerald-50/50 font-bold' : 'text-rose-700 bg-rose-100 font-black'">
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ rec.tax_check_discrepancy | number }}</span>
+                  <span *ngIf="rec.tax_check_discrepancy === 0" class="text-[10px] text-emerald-600 font-bold">✓</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۴. تب تنظیمات سالانه حقوق و ۲۰ گروه شغلی (Settings) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'settings'" class="space-y-6">
+    <!-- Header & Subtabs -->
+    <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-base font-black text-slate-800">تنظیمات پایه حقوق و دستمزد سال {{ fiscalYear }}</h2>
+        <p class="text-xs text-slate-500 font-medium mt-0.5">جدول ۲۰ گروه شغلی، اقلام قانون کار، ساختار دیسکت بیمه، مالیات و بانک</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button (click)="saveYearlySettings()" [disabled]="isSavingSettings" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span *ngIf="!isSavingSettings">ذخیره تمام تنظیمات سال {{ fiscalYear }}</span>
+          <span *ngIf="isSavingSettings">در حال ذخیره...</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 5 Sub-Tabs -->
+    <div class="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/60 overflow-x-auto">
+      <button (click)="settingsSubTab = 'grades'" [class.active-subtab]="settingsSubTab === 'grades'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
+        ۱. جدول ۲۰ گروه شغلی (مزد روزانه و سنوات)
+      </button>
+      <button (click)="settingsSubTab = 'labor'" [class.active-subtab]="settingsSubTab === 'labor'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
+        ۲. اقلام قانون کار و ضرایب فوق‌العاده
+      </button>
+      <button (click)="settingsSubTab = 'dsk'" [class.active-subtab]="settingsSubTab === 'dsk'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
+        ۳. تنظیمات دیسکت بیمه (DSK)
+      </button>
+      <button (click)="settingsSubTab = 'tax'" [class.active-subtab]="settingsSubTab === 'tax'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
+        ۴. تنظیمات مالیات حقوق (WH/WP)
+      </button>
+      <button (click)="settingsSubTab = 'bank'" [class.active-subtab]="settingsSubTab === 'bank'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
+        ۵. تنظیمات واریز بانک ملی
+      </button>
+    </div>
+
+    <!-- Sub-Tab 1: 20 Job Grades Table -->
+    <div *ngIf="settingsSubTab === 'grades' && yearlySettings" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">جدول ۲۰ گروه شغلی سال {{ fiscalYear }} (مزد روزانه پایه و پایه سنواتی)</span>
+        <span class="text-[11px] text-slate-500">نرخ ساعتی = مزد روزانه ÷ ۱۰ ساعت</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3 text-center w-20">گروه شغلی</th>
+              <th class="p-3">مزد روزانه پایه (ریال)</th>
+              <th class="p-3">پایه سنواتی روزانه (ریال)</th>
+              <th class="p-3 text-center">نرخ هر ساعت کارکرد (۱۰ ساعته)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let jg of yearlySettings.job_grades" class="hover:bg-slate-50/60">
+              <td class="p-3 text-center font-black text-indigo-700 bg-indigo-50/30">گروه {{ jg.grade_number }}</td>
+              <td class="p-3">
+                <input type="number" [(ngModel)]="jg.daily_base_wage" class="w-48 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+              </td>
+              <td class="p-3">
+                <input type="number" [(ngModel)]="jg.daily_seniority_bonus" class="w-48 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+              </td>
+              <td class="p-3 text-center font-mono font-bold text-slate-700">
+                {{ (jg.daily_base_wage / 10) | number:'1.0-0' }} ریال
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 2: Labor Law & Allowances -->
+    <div *ngIf="settingsSubTab === 'labor' && yearlySettings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">اقلام ماهانه قانون کار و ضرایب فوق‌العاده‌ها</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">بن خانوار ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_food_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق مسکن ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_housing_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق تاهل ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_spouse_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق اولاد هر فرزند ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_child_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">هزینه سفر و ماموریت روزانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.travel_cost_per_day" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">مبلغ ثابت ایاب و ذهاب (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.transport_fixed_amount" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">ضریب کمک هزینه ایاب و ذهاب:</label>
+          <input type="number" [(ngModel)]="yearlySettings.transport_help_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد جذب بازار کارشناسان:</label>
+          <input type="number" [(ngModel)]="yearlySettings.specialist_attraction_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد بدی آب و هوا:</label>
+          <input type="number" [(ngModel)]="yearlySettings.bad_weather_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد دوری از خانواده:</label>
+          <input type="number" [(ngModel)]="yearlySettings.remote_hardship_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد مناطق پارسیان و عسلویه:</label>
+          <input type="number" [(ngModel)]="yearlySettings.south_pars_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-200/70 md:col-span-2">
+          <label class="block text-xs font-black text-indigo-900 mb-1.5">درصد تخصیص مازاد ناخالص به اضافه‌کار (پیش‌فرض ۵۰٪):</label>
+          <div class="flex items-center gap-3">
+            <input type="number" [(ngModel)]="yearlySettings.surplus_overtime_percent" step="1" min="0" max="100" class="w-36 bg-white border border-indigo-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-800" />
+            <span class="text-[11px] text-indigo-700 font-medium">مابقی مازاد ({{ 100 - (yearlySettings.surplus_overtime_percent || 50) }}٪) به صورت وزنی بین هزینه سفر و حق مأموریت تسهیم می‌گردد.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 3: DSK Insurance Settings -->
+    <div *ngIf="settingsSubTab === 'dsk' && yearlySettings && yearlySettings.workshop_insurance" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات کارگاه و فایل‌های DSK تأمین اجتماعی</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد کارگاه ۱۰ رقمی (DSK_ID):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارگاه (DSK_NAME):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارفرما (DSK_FARM):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.employer_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نشانی کارگاه (DSK_ADRS):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_address" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 4: Tax Settings -->
+    <div *ngIf="settingsSubTab === 'tax' && yearlySettings && yearlySettings.tax_settings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات پیش‌فرض فایل‌های مالیاتی WH و WP</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع پرداختی:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.payment_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">محل خدمت:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.service_location" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد ارز:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.currency_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-Tab 5: Bank Settings -->
+    <div *ngIf="settingsSubTab === 'bank' && yearlySettings && yearlySettings.bank_export_settings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات خروجی پرداخت گروهی بانک ملی</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره حساب مبدا:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.source_account_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">الگوی شرح واریز:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.deposit_description_template" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱. ماتریس کارکرد پرسنل (حضور و غیاب سریع) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'attendance'" class="space-y-6">
+    <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">انبار:</label>
+          <select [(ngModel)]="selectedWarehouseId" (change)="onWarehouseChange()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+            <option *ngFor="let wh of warehouses" [value]="wh.id">{{wh.name}}</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">تاریخ ثبت:</label>
+          <input type="text" [(ngModel)]="selectedDateShamsi" (change)="onDateChange()" placeholder="۱۴۰۵/۰۴/۰۱" class="w-32 text-center bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+
+        <div *ngIf="isPeriodLocked" class="bg-amber-50 text-amber-700 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>دوره ماهانه قفل شده است</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button (click)="setAllPresent()" [disabled]="isPeriodLocked" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>حاضر همه (۱۰ ساعت)</span>
+        </button>
+
+        <button (click)="saveAttendanceMatrix()" [disabled]="isSavingAttendance || isPeriodLocked" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+          <span *ngIf="!isSavingAttendance">ذخیره کارکرد روزانه (۱ کلیک)</span>
+          <span *ngIf="isSavingAttendance">در حال ذخیره...</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Attendance Grid -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200">
+            <tr>
+              <th class="p-3.5 w-12 text-center">#</th>
+              <th class="p-3.5 min-w-[180px]">نام و مشخصات پرسنل</th>
+              <th class="p-3.5 min-w-[140px]">سمت شغلی</th>
+              <th class="p-3.5 min-w-[340px] text-center">وضعیت حضور (تک‌کلیک)</th>
+              <th class="p-3.5 w-24 text-center">ساعت موثر</th>
+              <th class="p-3.5 w-24 text-center">اضافه‌کار</th>
+              <th class="p-3.5 w-32 text-center" *ngIf="portalPerspective === 'accountant'">مساعده (ریال)</th>
+              <th class="p-3.5 min-w-[160px]">توضیحات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let row of attendanceRows; let idx = index" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3.5 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
+              <td class="p-3.5 font-bold text-slate-800">
+                <div class="flex items-center gap-2">
+                  <span>{{ row.full_name }}</span>
+                  <span class="text-[10px] text-slate-400 font-mono">({{ row.national_code }})</span>
+                </div>
+              </td>
+              <td class="p-3.5 text-slate-600">{{ row.job_title }}</td>
+              <td class="p-3.5">
+                <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                  <button (click)="setAttendanceStatus(row, 'PRESENT_10H')" [ngClass]="row.status === 'PRESENT_10H' ? 'bg-emerald-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">حاضر (۱۰س)</button>
+                  <button (click)="setAttendanceStatus(row, 'HALF_5H')" [ngClass]="row.status === 'HALF_5H' ? 'bg-blue-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">نیمه‌وقت (۵س)</button>
+                  <button (click)="setAttendanceStatus(row, 'MISSION')" [ngClass]="row.status === 'MISSION' ? 'bg-purple-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-purple-50 hover:text-purple-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">ماموریت</button>
+                  <button (click)="setAttendanceStatus(row, 'FRIDAY_WORK')" [ngClass]="row.status === 'FRIDAY_WORK' ? 'bg-amber-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">جمعه‌کاری</button>
+                  <button (click)="setAttendanceStatus(row, 'LEAVE')" [ngClass]="row.status === 'LEAVE' ? 'bg-cyan-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">مرخصی</button>
+                  <button (click)="setAttendanceStatus(row, 'ABSENT')" [ngClass]="row.status === 'ABSENT' ? 'bg-rose-600 text-white font-black shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all">غایب</button>
+                </div>
+              </td>
+              <td class="p-3.5 text-center">
+                <input type="number" [(ngModel)]="row.effective_hours" [disabled]="isPeriodLocked" class="w-16 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono font-bold" />
+              </td>
+              <td class="p-3.5 text-center">
+                <input type="number" [(ngModel)]="row.overtime_hours" [disabled]="isPeriodLocked" class="w-16 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono font-bold" />
+              </td>
+              <td class="p-3.5 text-center" *ngIf="portalPerspective === 'accountant'">
+                <input type="number" [(ngModel)]="row.advance_payment" [disabled]="isPeriodLocked" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono" />
+              </td>
+              <td class="p-3.5">
+                <input type="text" [(ngModel)]="row.notes" [disabled]="isPeriodLocked" placeholder="توضیحات..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۲. ماتریس تردد ناوگان -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'fleet'" class="space-y-6">
+    <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">انبار:</label>
+          <select [(ngModel)]="selectedWarehouseId" (change)="onWarehouseChange()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+            <option *ngFor="let wh of warehouses" [value]="wh.id">{{wh.name}}</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-xs font-bold text-slate-600">تاریخ ثبت:</label>
+          <input type="text" [(ngModel)]="selectedDateShamsi" (change)="onDateChange()" placeholder="۱۴۰۵/۰۴/۰۱" class="w-32 text-center bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+      </div>
+
+      <button (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles || isPeriodLocked" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+        <span *ngIf="!isSavingVehicles">ذخیره سرویس‌های ناوگان</span>
+        <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
+      </button>
+    </div>
+
+    <!-- Vehicle Grid -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200">
+            <tr>
+              <th class="p-3.5 w-12 text-center">#</th>
+              <th class="p-3.5 min-w-[160px]">نام راننده و نوع خودرو</th>
+              <th class="p-3.5 min-w-[140px] text-center">پلاک خودرو</th>
+              <th class="p-3.5 w-24 text-center">تعداد سرویس</th>
+              <th class="p-3.5 w-32 text-center" *ngIf="portalPerspective === 'accountant'">نرخ مصوب (ریال)</th>
+              <th class="p-3.5 w-32 text-center" *ngIf="portalPerspective === 'accountant'">مبلغ کل (ریال)</th>
+              <th class="p-3.5 min-w-[140px]">حواله خروج / اعزام</th>
+              <th class="p-3.5 min-w-[180px]">مبدا و مقصد</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let row of vehicleRows; let idx = index" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3.5 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
+              <td class="p-3.5 font-bold text-slate-800">
+                <div>{{ row.driver_name }}</div>
+                <div class="text-[10px] text-slate-400 font-normal">{{ row.vehicle_type_display }}</div>
+              </td>
+              <td class="p-3.5 text-center font-mono font-bold text-slate-700">{{ row.plate_number }}</td>
+              <td class="p-3.5 text-center">
+                <input type="number" [(ngModel)]="row.trip_count" (input)="updateVehicleTotal(row)" [disabled]="isPeriodLocked" class="w-16 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono font-bold" />
+              </td>
+              <td class="p-3.5 text-center" *ngIf="portalPerspective === 'accountant'">
+                <input type="number" [(ngModel)]="row.unit_rate" (input)="updateVehicleTotal(row)" [disabled]="isPeriodLocked" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono font-bold" />
+              </td>
+              <td class="p-3.5 text-center font-mono font-black text-indigo-700" *ngIf="portalPerspective === 'accountant'">
+                {{ row.total_amount | number }}
+              </td>
+              <td class="p-3.5">
+                <input type="text" [(ngModel)]="row.dispatch_reference" [disabled]="isPeriodLocked" placeholder="شماره حواله..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs font-mono" />
+              </td>
+              <td class="p-3.5">
+                <input type="text" [(ngModel)]="row.origin_destination" [disabled]="isPeriodLocked" placeholder="مسیر حرکت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۵. پرونده پرسنل و ناوگان (Emp_info) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'profiles'" class="space-y-6">
+    <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <input type="text" [(ngModel)]="profileSearch" (input)="loadProfiles()" placeholder="جستجو در پرونده‌ها..." class="w-64 bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3.5 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+      </div>
+
+      <div class="flex items-center gap-2">
+        <label class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>درون‌ریزی شیت Emp_info (اکسل)</span>
+          <input type="file" (change)="importExcel($event)" accept=".xlsx, .xlsm, .xls" class="hidden" />
+        </label>
+
+        <button (click)="openAddPersonnelModal()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center gap-1.5 cursor-pointer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>افزودن پرسنل جدید</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Personnel Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div *ngFor="let p of personnelList" class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+        <div>
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-black text-slate-800">{{ p.full_name || (p.first_name + ' ' + p.last_name) }}</h3>
+              <p class="text-xs text-indigo-600 font-bold mt-0.5">{{ p.job_title }}</p>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black" [ngClass]="p.is_active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'">
+              {{ p.is_active ? 'فعال' : 'غیرفعال' }}
+            </span>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-3">
+            <div>
+              <span class="text-slate-400">کد ملی:</span>
+              <span class="font-mono font-bold text-slate-700 mr-1">{{ p.national_code }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">گروه شغلی:</span>
+              <span class="font-bold text-indigo-700 mr-1">گروه {{ p.job_grade || '۱۹' }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">مزد روزانه:</span>
+              <span class="font-mono text-slate-700 mr-1">{{ p.daily_base_wage | number }}</span>
+            </div>
+            <div>
+              <span class="text-slate-400">پایه سنواتی:</span>
+              <span class="font-mono text-slate-700 mr-1">{{ p.daily_seniority_bonus | number }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 border-t border-slate-100 pt-3 flex items-center justify-end gap-2">
+          <button (click)="openEditPersonnelModal(p)" class="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-700 text-xs font-bold rounded-xl transition-colors">
+            ویرایش پرونده
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: پرونده جامع پرسنل و کارگزینی (۵ تب منطبق بر Emp_info) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isPersonnelModalOpen && editingPersonnel" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-5 max-h-[92vh] flex flex-col">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </div>
+          <div>
+            <h2 class="text-base font-black text-slate-800">
+              {{ editingPersonnel.id ? 'ویرایش پرونده کارمند: ' + (editingPersonnel.first_name || '') + ' ' + (editingPersonnel.last_name || '') : 'افزودن کارمند جدید (پرونده پرسنلی)' }}
+            </h2>
+            <p class="text-[11px] text-slate-500 font-medium">اطلاعات کارگزینی و محاسباتی منطبق بر شیت Emp_info و استانداردهای قانون کار</p>
+          </div>
+        </div>
+        <button (click)="closePersonnelModal()" class="text-slate-400 hover:text-slate-600 text-2xl font-bold cursor-pointer transition-colors">&times;</button>
+      </div>
+
+      <!-- 5-Tab Navigation Bar -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/70 overflow-x-auto flex-shrink-0">
+        <button type="button" (click)="setPersonnelTab('identity')" [class]="personnelModalTab === 'identity' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer">
+          <span>👤</span>
+          <span>۱. اطلاعات شناسنامه‌ای</span>
+        </button>
+        <button type="button" (click)="setPersonnelTab('contract')" [class]="personnelModalTab === 'contract' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer">
+          <span>💼</span>
+          <span>۲. قرارداد و گروه شغلی</span>
+        </button>
+        <button type="button" (click)="setPersonnelTab('insurance')" [class]="personnelModalTab === 'insurance' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer">
+          <span>📑</span>
+          <span>۳. بیمه و مالیات</span>
+        </button>
+        <button type="button" (click)="setPersonnelTab('allowances')" [class]="personnelModalTab === 'allowances' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer">
+          <span>💰</span>
+          <span>۴. مزایا و فوق‌العاده‌ها</span>
+        </button>
+        <button type="button" (click)="setPersonnelTab('contact')" [class]="personnelModalTab === 'contact' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 whitespace-nowrap transition-all cursor-pointer">
+          <span>🏦</span>
+          <span>۵. بانکی و تماس</span>
+        </button>
+      </div>
+
+      <!-- Tab Contents (Scrollable) -->
+      <div class="flex-1 overflow-y-auto space-y-4 pr-1 text-xs">
+        
+        <!-- ── تب ۱: اطلاعات هویتی و شناسنامه‌ای ───────────────────────────────── -->
+        <div *ngIf="personnelModalTab === 'identity'" class="space-y-4">
+          <div class="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-3 text-indigo-800 font-medium text-[11px] flex items-center gap-2">
+            <span>ℹ️</span>
+            <span>اطلاعات هویتی دقیقاً جهت صدور دیسکت‌های بیمه تامین اجتماعی و فایل‌های مالیاتی ۳۹ ستونه دارایی استفاده می‌شوند.</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نام <span class="text-rose-500">*</span>:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.first_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500" placeholder="مثال: حسین" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نام خانوادگی <span class="text-rose-500">*</span>:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.last_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500" placeholder="مثال: اکبری" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کد ملی ۱۰ رقمی <span class="text-rose-500">*</span>:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.national_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-800 focus:ring-2 focus:ring-indigo-500" placeholder="مثال: 2452304301" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نام پدر:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.father_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500" placeholder="مثال: علی اکبر" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره شناسنامه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.id_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="مثال: 1192" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">سریال شناسنامه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.id_serial" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="سریال شناسنامه" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">مسلسل شناسنامه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.id_series" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="مسلسل شناسنامه" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تاریخ تولد (شمسی):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.birth_date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="مثال: 13650308 یا 1365/03/08" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">محل تولد:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.birth_place" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="مثال: فراشبند" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">محل صدور شناسنامه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.issue_place" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="مثال: فیروزآباد" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تاریخ صدور شناسنامه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.issue_date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="تاریخ صدور" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">جنسیت:</label>
+              <select [(ngModel)]="editingPersonnel.gender" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="مرد">مرد</option>
+                <option value="زن">زن</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">وضعیت تاهل:</label>
+              <select [(ngModel)]="editingPersonnel.marital_status" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="single">مجرد</option>
+                <option value="married">متاهل</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تعداد فرزند:</label>
+              <input type="number" [(ngModel)]="editingPersonnel.children_count" min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">مدرک تحصیلی (جدول ۲ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.education_level" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="1">زیر دیپلم (۱)</option>
+                <option value="2">دیپلم (۲)</option>
+                <option value="3">فوق دیپلم (۳)</option>
+                <option value="4">کارشناسی (۴)</option>
+                <option value="5">کارشناسی ارشد (۵)</option>
+                <option value="6">دکتری (۶)</option>
+                <option value="7">فوق دکتری (۷)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کد ملیت (جدول ۱ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.nationality_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="1">ایرانی (۱)</option>
+                <option value="2">خارجی (۲)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کشور محل تابعیت (۱۰۳ = ایران):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.citizenship_country_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کشور محل زندگی (۱۰۳ = ایران):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.residence_country_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── تب ۲: قرارداد، دستمزد و گروه شغلی ───────────────────────────────── -->
+        <div *ngIf="personnelModalTab === 'contract'" class="space-y-4">
+          <!-- Real-Time Dynamic Formula Preview Card -->
+          <div class="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200/80 rounded-2xl p-4 shadow-sm space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                <span>⚡</span>
+                <span>فرمول محاسباتی آنی مزد مبنا (قانون کار و شیت Emp_info)</span>
+              </span>
+              <span class="text-[11px] bg-indigo-200 text-indigo-900 px-2 py-0.5 rounded-lg font-bold">گروه شغلی {{ editingPersonnel.job_grade }}</span>
+            </div>
+            
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div class="bg-white/80 rounded-xl p-2.5 border border-indigo-100 text-center">
+                <span class="block text-[10px] text-slate-500 font-bold">مزد روزانه پایه (جدول ۲۰):</span>
+                <span class="font-mono font-black text-indigo-800 text-xs">{{ editingPersonnel.daily_base_wage | number }} ریال</span>
+              </div>
+              <div class="bg-white/80 rounded-xl p-2.5 border border-indigo-100 text-center">
+                <span class="block text-[10px] text-slate-500 font-bold">پایه سنواتی روزانه:</span>
+                <span class="font-mono font-black text-indigo-800 text-xs">{{ editingPersonnel.daily_seniority_bonus | number }} ریال</span>
+              </div>
+              <div class="bg-white/80 rounded-xl p-2.5 border border-indigo-100 text-center">
+                <span class="block text-[10px] text-slate-500 font-bold">مزد مبنا روزانه (محاسباتی):</span>
+                <span class="font-mono font-black text-emerald-800 text-xs">{{ editingPersonnel.base_daily_rate | number }} ریال</span>
+              </div>
+              <div class="bg-white/80 rounded-xl p-2.5 border border-indigo-100 text-center">
+                <span class="block text-[10px] text-slate-500 font-bold">نرخ هر ساعت (مبنا ۱۰ ساعت):</span>
+                <span class="font-mono font-black text-emerald-800 text-xs">{{ editingPersonnel.hourly_rate | number }} ریال</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <!-- Job Grade Select with Auto Fetch -->
+            <div class="bg-indigo-50/60 p-2.5 rounded-2xl border border-indigo-200">
+              <label class="block font-black text-indigo-900 mb-1">گروه شغلی (جدول ۲۰ گانه) <span class="text-rose-500">*</span>:</label>
+              <select [(ngModel)]="editingPersonnel.job_grade" (change)="onJobGradeChange(editingPersonnel.job_grade || '19')" class="w-full bg-white border border-indigo-300 text-indigo-900 rounded-xl px-3 py-2 font-black focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                <option *ngFor="let g of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" [value]="g.toString()">گروه شغلی {{ g }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تعداد سال سابقه کارکرد (سنوات):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.base_years_experience" (input)="recalculatePersonnelRates()" min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نوع قرارداد کاری:</label>
+              <select [(ngModel)]="editingPersonnel.contract_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="daily">روزمزد (مبنا ۱۰ ساعت روزانه)</option>
+                <option value="hourly">ساعتی</option>
+                <option value="monthly">ماهانه قراردادی</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">ساعت کار قرارداد شده ماهانه:</label>
+              <input type="number" [(ngModel)]="editingPersonnel.contract_hours" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثال: 230" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">حقوق قرارداد شده ماهانه (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.contract_base_salary" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-900" placeholder="مثال: 650000000" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">مزد روزانه پایه (ریال) <span class="text-rose-500">*</span>:</label>
+              <input type="number" [(ngModel)]="editingPersonnel.daily_base_wage" (input)="recalculatePersonnelRates()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">پایه سنواتی روزانه (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.daily_seniority_bonus" (input)="recalculatePersonnelRates()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">مزد مبنا روزانه (ریال) <span class="text-[10px] text-emerald-600 font-medium">(محاسباتی خودکار)</span>:</label>
+              <input type="number" [(ngModel)]="editingPersonnel.base_daily_rate" class="w-full bg-emerald-50/50 border border-emerald-200 rounded-xl px-3 py-2 text-xs font-mono font-black text-emerald-900" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تاریخ شروع به کار (شمسی):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.start_date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="مثال: 14040901" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تاریخ پایان کار (شمسی):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.end_date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="تاریخ پایان" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">تاریخ بازنشستگی (شمسی):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.retirement_date" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="تاریخ بازنشستگی" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کد / ردیف پرسنلی کارگاه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.personnel_id_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="کد ردیف پرسنلی" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── تب ۳: مشخصات بیمه و مالیات (DSK / WH / WP) ───────────────────── -->
+        <div *ngIf="personnelModalTab === 'insurance'" class="space-y-4">
+          <div class="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3 text-amber-900 font-medium text-[11px] flex items-center gap-2">
+            <span>🛡️</span>
+            <span>مشخصات این بخش مبنای ساخت فایل‌های باینری DSKWOR00.DBF، DSKKAR00.DBF و فایل‌های مالیاتی WH و WP می‌باشد.</span>
+          </div>
+
+          <!-- بخش اول: بیمه و کارگزینی -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">سمت شغلی / عنوان شغل <span class="text-rose-500">*</span>:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.job_title" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-bold" placeholder="مثال: انباردار" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کد ۶ رقمی شغل بیمه تامین اجتماعی:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.job_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثال: 027212" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">رسته شغلی (جدول ۶ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.job_category" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="5">انبارداری (۵)</option>
+                <option value="9">ترابری و ناوگان (۹)</option>
+                <option value="15">فنی و مهندسی (۱۵)</option>
+                <option value="2">اداری و مالی (۲)</option>
+                <option value="17">کارگری (۱۷)</option>
+                <option value="14">فناوری اطلاعات (۱۴)</option>
+                <option value="11">حراست و نگهبانی (۱۱)</option>
+                <option value="19">کنترل کیفی (۱۹)</option>
+                <option value="1">آموزش و فرهنگی (۱)</option>
+                <option value="13">سایر (۱۳)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره بیمه تامین اجتماعی (۸ یا ۱۰ رقم):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.insurance_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-rose-800" placeholder="مثال: 63605949" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نام سازمان بیمه‌گر:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.insurance_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="تامین اجتماعی" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نوع بیمه (جدول ۳ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.insurance_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="2">تأمین اجتماعی (۲)</option>
+                <option value="1">خدمات درمانی (۱)</option>
+                <option value="3">بیمه سلامت (۳)</option>
+                <option value="4">سایر (۴)</option>
+                <option value="5">ندارد (۵)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نوع استخدام (جدول ۷ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.employment_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="2">شرکتی (۲)</option>
+                <option value="1">قراردادی (۱)</option>
+                <option value="3">رسمی (۳)</option>
+                <option value="4">پیمانی (۴)</option>
+                <option value="8">ساعتی (۸)</option>
+                <option value="9">روزمزد (۹)</option>
+                <option value="6">کارمزدی (۶)</option>
+                <option value="7">خرید خدمت (۷)</option>
+                <option value="12">سایر (۱۲)</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">رده وضعیتی پرسنل:</label>
+              <select [(ngModel)]="editingPersonnel.status_category" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="نفرات شرکتی">نفرات شرکتی</option>
+                <option value="نفرات قراردادی">نفرات قراردادی</option>
+                <option value="نفرات سرپرستی">نفرات سرپرستی</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">وضعیت گروه (شاغل/بازنشسته):</label>
+              <select [(ngModel)]="editingPersonnel.group_status" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="شاغل">شاغل</option>
+                <option value="بازنشسته">بازنشسته</option>
+                <option value="مرخصی">مرخصی</option>
+              </select>
+            </div>
+
+            <div class="sm:col-span-2 md:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">نوع معافیت مالیاتی (جدول ۴ دارایی):</label>
+              <select [(ngModel)]="editingPersonnel.exemption_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option value="1">۱ - عدم معافیت (عادی ماده ۸۴)</option>
+                <option value="11">۱۱ - تخفیف ماده ۱۸ جوانی جمعیت</option>
+                <option value="10">۱۰ - ماده ۲۵ حمایت از معلولان</option>
+                <option value="10+11">۱۰+۱۱ - همزمان معلولان و جوانی جمعیت</option>
+                <option value="2">۲ - جانبازان انقلاب و دفاع مقدس</option>
+                <option value="3">۳ - فرزندان شاهد</option>
+                <option value="4">۴ - آزادگان</option>
+                <option value="5">۵ - پرسنل نیروهای مسلح</option>
+                <option value="6">۶ - کارشناس خارجی (بند ۳ ماده ۹۱)</option>
+                <option value="7">۷ - اجتناب از مالیات مضاعف</option>
+                <option value="8">۸ - وزارت اطلاعات</option>
+                <option value="9">۹ - رزمندگان ۱۲ ماه جبهه</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- بخش دوم: تنظیمات اختصاصی سامانه مالیات دارایی (فایل WH بر اساس WHFildeTable) -->
+          <div class="bg-indigo-50/40 rounded-2xl p-4 border border-indigo-200/80 space-y-3">
+            <div class="flex items-center justify-between border-b border-indigo-100 pb-2">
+              <span class="font-black text-indigo-950 text-xs flex items-center gap-1.5">
+                <span>🏛️</span>
+                <span>تنظیمات اختصاصی سامانه مالیات دارایی (فایل ۳۹ ستونه WH بر اساس WHFildeTable)</span>
+              </span>
+              <span class="text-[10px] text-indigo-600 font-bold bg-indigo-100 px-2 py-0.5 rounded-md">انفرادی با ارث‌بری خودکار از کارگاه</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">نوع پرداختی (جدول ۸ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_payment_type" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="1">۱ - ریالی</option>
+                  <option value="2">۲ - ارزی</option>
+                  <option value="3">۳ - ریالی و ارزی</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">وضعیت محل خدمت (جدول ۹ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_service_location" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="1">۱ - عادی</option>
+                  <option value="2">۲ - مناطق کمتر توسعه یافته</option>
+                  <option value="3">۳ - ستاد پارک علم و فناوری / دانش‌بنیان</option>
+                  <option value="4">۴ - ماده ۱۲ قانون حداکثر استفاده از توان تولیدی</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">استثنائات قانون بودجه (جدول ۱۰ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_exceptions" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="1">۱ - عادی (بدون استثنا)</option>
+                  <option value="4">۴ - کارکنان عملیاتی نفت، جزایر و سکوها</option>
+                  <option value="2">۲ - اعضای هیئت علمی دانشگاه‌ها</option>
+                  <option value="3">۳ - قضات دادگستری</option>
+                  <option value="5">۵ - پزشکان تمام‌وقت جغرافیایی</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">نوع ارز (جدول ۱۳ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_currency_type" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="84">۸۴ - ریال ایران</option>
+                  <option value="40">۴۰ - دلار ایالات متحده آمریکا</option>
+                  <option value="158">۱۵۸ - یورو</option>
+                  <option value="38">۳۸ - درهم مراکش</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">مزایای مسکن (جدول ۱۱ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_housing_benefit_type" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="1">۱ - عدم استفاده از مسکن</option>
+                  <option value="2">۲ - مسکن با اثاثیه</option>
+                  <option value="3">۳ - مسکن بدون اثاثیه</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-bold text-slate-700 mb-1">مزایای اتومبیل اختصاصی (جدول ۱۲ دارایی):</label>
+                <select [(ngModel)]="editingPersonnel.tax_vehicle_benefit_type" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                  <option value="1">۱ - عدم استفاده از اتومبیل اختصاصی</option>
+                  <option value="2">۲ - اتومبیل با راننده</option>
+                  <option value="3">۳ - اتومبیل بدون راننده</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Export Toggles -->
+          <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+            <span class="block font-bold text-slate-800 text-xs">مجوز ارسال در خروجی‌های استاندارد:</span>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <label class="flex items-center gap-2.5 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                <input type="checkbox" [(ngModel)]="editingPersonnel.include_in_insurance" class="w-4 h-4 text-indigo-600 rounded" />
+                <span class="font-bold text-slate-700 text-xs">ارسال در دیسکت بیمه (DSK)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                <input type="checkbox" [(ngModel)]="editingPersonnel.include_in_tax" class="w-4 h-4 text-indigo-600 rounded" />
+                <span class="font-bold text-slate-700 text-xs">ارسال در فایل مالیات دارایی (WH/WP)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 bg-white rounded-xl border border-slate-200 cursor-pointer">
+                <input type="checkbox" [(ngModel)]="editingPersonnel.include_in_bank" class="w-4 h-4 text-indigo-600 rounded" />
+                <span class="font-bold text-slate-700 text-xs">ارسال در فایل اکسل واریز بانک</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── تب ۴: مزایای مستمر و فوق‌العاده‌های ماهانه ─────────────────────── -->
+        <div *ngIf="personnelModalTab === 'allowances'" class="space-y-4">
+          <div class="bg-blue-50/60 border border-blue-200/80 rounded-2xl p-3 text-blue-900 font-medium text-[11px] flex items-center gap-2">
+            <span>💵</span>
+            <span>مزایای مستمر قانون کار و فوق‌العاده‌های ماهانه کارگاه به مبالغ ریالی ثبت می‌گردند.</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">حق مسکن ماهانه (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.housing_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">بن خواربار و اقلام مصرفی (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.food_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">حق تاهل ماهانه (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.spouse_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">فوق‌العاده بدی آب و هوا (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.weather_bonus" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">فوق‌العاده مناطق پارسیان و عسلویه (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.asaluyeh_parsian_bonus" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">فوق‌العاده دوری از خانواده و جذب (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.remote_hardship_bonus" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">فوق‌العاده جذب بازار کارشناسان (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.market_attraction_bonus" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کمک هزینه ایاب و ذهاب / رفاهی (ریال):</label>
+              <input type="number" [(ngModel)]="editingPersonnel.transport_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+            </div>
+          </div>
+        </div>
+
+        <!-- ── تب ۵: حساب بانکی، انبار و اطلاعات تماس ───────────────────────── -->
+        <div *ngIf="personnelModalTab === 'contact'" class="space-y-4">
+          <div class="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-3 text-emerald-900 font-medium text-[11px] flex items-center gap-2">
+            <span>💳</span>
+            <span>اطلاعات بانکی جهت تولید فایل اکسل واریز گروهی بانک ملی و انبار تخصیص‌یافته جهت دسترسی‌های سازمانی ثبت می‌شود.</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">انبار تخصیص‌یافته:</label>
+              <select [(ngModel)]="editingPersonnel.assigned_warehouse" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500">
+                <option [ngValue]="null">بدون انبار (دفتر مرکزی)</option>
+                <option *ngFor="let wh of warehouses" [value]="wh.id">{{ wh.name }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره تلفن همراه:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.phone_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثال: 09120000000" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">نام بانک:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.bank_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" placeholder="بانک ملی ایران" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره حساب بانکی:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.account_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثال: 0341424618008" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره شبا (IBAN):</label>
+              <input type="text" [(ngModel)]="editingPersonnel.sheba_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-left" dir="ltr" placeholder="IR000000000000000000000000" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">شماره کارت ۱۶ رقمی:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.card_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-left" dir="ltr" placeholder="6037-xxxx-xxxx-xxxx" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">کد پستی ۱۰ رقمی:</label>
+              <input type="text" [(ngModel)]="editingPersonnel.postal_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="کد پستی محل سکونت" />
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">وضعیت پرونده:</label>
+              <select [(ngModel)]="editingPersonnel.is_active" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+                <option [ngValue]="true">فعال (مشغول به کار)</option>
+                <option [ngValue]="false">غیرفعال (خاتمه همکاری)</option>
+              </select>
+            </div>
+
+            <div class="sm:col-span-2 md:col-span-3">
+              <label class="block font-bold text-slate-700 mb-1">آدرس کامل محل سکونت:</label>
+              <textarea [(ngModel)]="editingPersonnel.address" rows="2" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="نشانی دقیق محل سکونت پرسنل"></textarea>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer / Actions -->
+      <div class="flex items-center justify-between border-t border-slate-100 pt-4 flex-shrink-0">
+        <div class="flex items-center gap-2">
+          <!-- Step Navigation -->
+          <button *ngIf="personnelModalTab !== 'identity'" type="button" (click)="setPersonnelTab(personnelModalTab === 'contact' ? 'allowances' : (personnelModalTab === 'allowances' ? 'insurance' : (personnelModalTab === 'insurance' ? 'contract' : 'identity')))" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1">
+            <span>←</span>
+            <span>مرحله قبل</span>
+          </button>
+          
+          <button *ngIf="personnelModalTab !== 'contact'" type="button" (click)="setPersonnelTab(personnelModalTab === 'identity' ? 'contract' : (personnelModalTab === 'contract' ? 'insurance' : (personnelModalTab === 'insurance' ? 'allowances' : 'contact')))" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1">
+            <span>مرحله بعد</span>
+            <span>→</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button (click)="closePersonnelModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors">انصراف</button>
+          <button (click)="savePersonnel()" [disabled]="isSavingPersonnel" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-500/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5 transition-all">
+            <svg *ngIf="!isSavingPersonnel" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span *ngIf="!isSavingPersonnel">ذخیره نهایی پرونده پرسنل</span>
+            <span *ngIf="isSavingPersonnel">در حال ذخیره...</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۵. مودال درون‌ریزی فایل اکسل مالیات دارایی -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isTaxModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </div>
+          <div>
+            <h2 class="text-sm font-black text-slate-800">درون‌ریزی فایل اکسل مالیات دارایی</h2>
+            <p class="text-[11px] text-slate-500">تطبیق خودکار مالیات محاسبه‌شده بر اساس کد ملی پرسنل</p>
+          </div>
+        </div>
+        <button (click)="closeTaxModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="bg-teal-50/70 border border-teal-200/70 rounded-2xl p-4 space-y-2">
+          <p class="font-bold text-teal-900 leading-relaxed">
+            راهنما: فایل اکسل دریافتی از سامانه سازمان امور مالیاتی کشور (شامل ستون‌های کدملی، مالیات محاسبه‌شده و تعداد ماه‌های معافیت) را انتخاب نمایید.
+          </p>
+          <div class="text-[11px] text-teal-700">دوره هدف: <span class="font-bold">{{ selectedYearMonth }}</span></div>
+        </div>
+
+        <div class="border-2 border-dashed border-slate-300 hover:border-teal-500 rounded-2xl p-6 text-center cursor-pointer transition-all bg-slate-50/50 hover:bg-teal-50/20">
+          <input type="file" accept=".xlsx, .xls" (change)="onTaxFileSelected($event)" class="hidden" #taxFileInput />
+          <div (click)="taxFileInput.click()" class="space-y-2 cursor-pointer">
+            <svg class="mx-auto text-slate-400" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            <div *ngIf="!selectedTaxFile" class="font-bold text-slate-700">جهت انتخاب فایل اکسل مالیات کلیک کنید</div>
+            <div *ngIf="selectedTaxFile" class="font-bold text-teal-700 flex items-center justify-center gap-1.5">
+              <span>📄 {{ selectedTaxFile.name }}</span>
+              <span class="text-[10px] text-slate-400">({{ (selectedTaxFile.size / 1024).toFixed(1) }} KB)</span>
+            </div>
+            <div class="text-[10px] text-slate-400">پشتیبانی از فرمت‌های .xlsx و .xls</div>
+          </div>
+        </div>
+
+        <!-- Result Summary -->
+        <div *ngIf="taxUploadSummary" class="bg-slate-50 rounded-2xl p-3.5 border border-slate-200 space-y-1.5">
+          <div class="flex items-center justify-between font-bold text-emerald-700">
+            <span>تعداد پرسنل تطبیق‌یافته:</span>
+            <span>{{ taxUploadSummary.matched_count }} نفر</span>
+          </div>
+          <div class="flex items-center justify-between font-bold text-slate-700">
+            <span>جمع کل مالیات بارگذاری‌شده:</span>
+            <span class="text-rose-700">{{ taxUploadSummary.total_imported_tax | number }} ریال</span>
+          </div>
+          <div *ngIf="taxUploadSummary.unmatched_count > 0" class="text-amber-700 font-bold text-[11px] pt-1">
+            ⚠️ {{ taxUploadSummary.unmatched_count }} رکورد در لیست پرسنل دوره جاری یافت نشد.
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+        <button (click)="closeTaxModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف / بستن</button>
+        <button (click)="submitTaxExcel()" [disabled]="isUploadingTax || !selectedTaxFile" class="px-5 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-black rounded-xl shadow-md shadow-teal-500/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5">
+          <span *ngIf="!isUploadingTax">اعمال و تطبیق مالیات</span>
+          <span *ngIf="isUploadingTax">در حال بارگذاری و تطبیق...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+

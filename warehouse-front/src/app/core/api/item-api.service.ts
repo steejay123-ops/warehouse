@@ -144,6 +144,11 @@ export class ItemApiService {
     return this.api.download(`${this.endpoint}/download_template/`, params);
   }
 
+  /** دانلود فایل لاگ خطاهای ایمپورت اکسل */
+  downloadImportLog(importId: string): Observable<Blob> {
+    return this.api.download(`${this.endpoint}/download_import_log/`, { import_id: importId });
+  }
+
   /** خروجی PDF رکوردها */
   exportPdf(filters?: any): Observable<Blob> {
     return this.api.download('reports/records/pdf', filters as globalThis.Record<string, unknown>);

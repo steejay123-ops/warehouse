@@ -23,7 +23,7 @@ import { isServerUnreachable } from '../../core/services/server-reachability';
 export class Docs implements OnInit, OnDestroy, DoCheck {
   isDeleteModalOpen: boolean = false;
   deleteMode: 'all' | 'excel' = 'all';
-  deleteCountdown: number = 10;
+  deleteCountdown: number = 3;
   private deleteInterval: any;
   existingTags: string[] = [];
   expandedSection: string | null = null;
@@ -36,7 +36,7 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   private leavePromiseResolver: ((value: boolean) => void) | null = null;
 
   confirmLeave(): Promise<boolean> | boolean {
-    if (this.importService.currentState.isSimulating) {
+    if (this.importService.hasAnyActiveImport()) {
       this.showLeaveModal = true;
       return new Promise<boolean>((resolve) => {
         this.leavePromiseResolver = resolve;
@@ -77,32 +77,43 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   }
 
   private stateSub?: Subscription;
+  private fieldsSub?: Subscription;
   private lastCheckedWarehouseId: number | null = null;
-  private isFetchingFields: boolean = false;
 
   loadDynamicFields(warehouseId?: number) {
-    if (this.isFetchingFields) return;
-    this.isFetchingFields = true;
-    this.itemApi.getExportColumns(warehouseId).subscribe({
+    if (this.fieldsSub) {
+      this.fieldsSub.unsubscribe();
+    }
+    const NON_IMPORTABLE = new Set(['created_at', 'updated_at', 'created_by', 'modified_by', 'sync_id', 'is_deleted']);
+    this.fieldsSub = this.itemApi.getExportColumns(warehouseId).subscribe({
       next: (cols) => {
-        this.ALL_FIELDS = cols.map(c => ({ id: c.key, name: c.label }));
-        this.isFetchingFields = false;
+        this.ALL_FIELDS = cols
+          .filter(c => !NON_IMPORTABLE.has(c.key))
+          .map(c => ({ id: c.key, name: c.label }));
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.isFetchingFields = false;
-      }
+      error: () => {}
     });
   }
 
   ngOnInit() {
+    this.lastCheckedWarehouseId = this.state.appState.activeWarehouseId || null;
     this.loadDynamicFields(this.state.appState.activeWarehouseId || undefined);
     
     const tagsSet = new Set<string>();
-    this.state.appState.items.forEach((r: any) => {
-      if (r.my_tag) r.my_tag.split('،').forEach((t: string) => tagsSet.add(t.trim()));
+    try {
+      const saved = localStorage.getItem('recent_import_tags');
+      if (saved) {
+        JSON.parse(saved).forEach((t: string) => {
+          if (t && typeof t === 'string') tagsSet.add(t.trim());
+        });
+      }
+    } catch {}
+    const recent = this.state.appState.dispatchSettings?.recentTags || [];
+    recent.forEach((t: string) => {
+      if (t && typeof t === 'string') tagsSet.add(t.trim());
     });
-    this.existingTags = Array.from(tagsSet);
+    this.existingTags = Array.from(tagsSet).filter(Boolean);
     
     this.stateSub = this.importService.stateUpdated.subscribe(() => {
       this.cdr.detectChanges();
@@ -119,6 +130,12 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   }
 
   ngOnDestroy() {
+    if (this.deleteInterval) {
+      clearInterval(this.deleteInterval);
+    }
+    if (this.fieldsSub) {
+      this.fieldsSub.unsubscribe();
+    }
     if (this.stateSub) {
       this.stateSub.unsubscribe();
     }
@@ -173,11 +190,25 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
           // اگر به سرور نرسیدیم (آفلاین/تونل قطع) مشکل از فایل نیست؛ پیام آفلاین
           // را interceptor سراسری نشان می‌دهد و توست قرمز گمراه‌کننده است.
           if (!isServerUnreachable(err?.status ?? 0)) {
-            this.toast.show('error', 'خطا در خواندن فایل اکسل. لطفاً از معتبر بودن فایل اطمینان حاصل کنید.');
+            if (err?.status === 403) {
+              const msg = err?.error?.error || 'شما مجوز دسترسی به این عملیات یا انبار را ندارید.';
+              this.toast.show('error', msg);
+            } else {
+              const msg = err?.error?.error || 'خطا در خواندن فایل اکسل. لطفاً از معتبر بودن فایل اطمینان حاصل کنید.';
+              this.toast.show('error', msg);
+            }
           }
         }
       });
     }
+  }
+
+  removeFile() {
+    this.importService.clearFile();
+    this.expandedSection = null;
+    this.showRestrictedWarning = false;
+    this.isWarningModalOpen = false;
+    this.cdr.detectChanges();
   }
 
   resetForm() {
@@ -214,7 +245,8 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
   }
 
   downloadLog() {
-    if (!this.importService.currentState.importId) {
+    const importId = this.importService.currentState.importId;
+    if (!importId) {
       this.toast.show('error', 'شما هنوز هیچ فرآیندی را آغاز نکرده‌اید.');
       return;
     }
@@ -226,9 +258,21 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
       return;
     }
 
-    const token = this.auth.getAccessToken();
-    const url = `${environment.apiUrl}/inventory/items/download_import_log/?import_id=${this.importService.currentState.importId}&token=${token}`;
-    window.open(url, '_blank');
+    this.itemApi.downloadImportLog(importId).subscribe({
+      next: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `import_log_${importId}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در دریافت فایل لاگ یا فایل منقضی شده است.');
+      }
+    });
   }
 
   toggleErrorDetails() {
@@ -291,6 +335,14 @@ export class Docs implements OnInit, OnDestroy, DoCheck {
     this.isWarningModalOpen = false;
     this.showRestrictedWarning = false;
     
+    const tag = this.importService.currentState.importTag?.trim();
+    if (tag && !this.existingTags.includes(tag)) {
+      this.existingTags = [tag, ...this.existingTags].slice(0, 20);
+      try {
+        localStorage.setItem('recent_import_tags', JSON.stringify(this.existingTags));
+      } catch {}
+    }
+
     const warehouseId = this.state.appState.activeWarehouseId;
     if (warehouseId) {
       this.importService.simulateImportProcess(warehouseId);

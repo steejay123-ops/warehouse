@@ -46,24 +46,28 @@ export class ImportService {
     private ngZone: NgZone,
     private appRef: ApplicationRef
   ) {
-    setInterval(() => {
-      this.states.forEach(state => {
-        let changed = false;
-        if (state.recentOperations && state.recentOperations.length > 0) {
-          state.recentOperations = state.recentOperations.filter((op: any) => {
-            if (op.time_remaining_seconds > 0) {
-              op.time_remaining_seconds--;
-              return true;
-            }
-            return false;
+    this.ngZone.runOutsideAngular(() => {
+      setInterval(() => {
+        let anyChanged = false;
+        this.states.forEach(state => {
+          if (state.recentOperations && state.recentOperations.length > 0) {
+            state.recentOperations = state.recentOperations.filter((op: any) => {
+              if (op.time_remaining_seconds > 0) {
+                op.time_remaining_seconds--;
+                return true;
+              }
+              return false;
+            });
+            anyChanged = true;
+          }
+        });
+        if (anyChanged) {
+          this.ngZone.run(() => {
+            this.stateUpdated.next();
           });
-          changed = true;
         }
-        if (changed) {
-          this.stateUpdated.next();
-        }
-      });
-    }, 1000);
+      }, 1000);
+    });
   }
 
   private get activeWarehouseId(): number | null {
@@ -174,6 +178,30 @@ export class ImportService {
     };
   }
 
+  hasAnyActiveImport(): boolean {
+    for (const state of this.states.values()) {
+      if (state.isSimulating) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  clearFile(warehouseId?: number) {
+    const wId = warehouseId || this.activeWarehouseId;
+    if (wId) {
+      const state = this.states.get(wId);
+      if (state) {
+        state.fileToUpload = null;
+        state.foundFields = [];
+        state.missingFields = [];
+        state.uploadProgress = 0;
+        state.isParsingHeaders = false;
+        this.stateUpdated.next();
+      }
+    }
+  }
+
   resetForm() {
     const wId = this.activeWarehouseId;
     if (wId) {
@@ -207,17 +235,25 @@ export class ImportService {
     }
   }
 
-  cancelProcess() {
-    const state = this.currentState;
-    if (state.isSimulating && state.importId) {
-      state.isCanceling = true;
-      this.itemApi.cancelImport(state.importId).subscribe({
+  cancelProcess(warehouseId?: number) {
+    let targetState = warehouseId ? this.states.get(warehouseId) : this.currentState;
+    if (!targetState || !targetState.isSimulating) {
+      for (const s of this.states.values()) {
+        if (s.isSimulating) {
+          targetState = s;
+          break;
+        }
+      }
+    }
+    if (targetState && targetState.isSimulating && targetState.importId) {
+      targetState.isCanceling = true;
+      this.itemApi.cancelImport(targetState.importId).subscribe({
         next: () => {
           this.toast.show('info', 'درخواست لغو ارسال شد. در حال برگشت تغییرات...');
         },
         error: () => {
           this.toast.show('error', 'خطا در ارسال درخواست لغو');
-          state.isCanceling = false;
+          if (targetState) targetState.isCanceling = false;
         }
       });
     }
@@ -285,12 +321,14 @@ export class ImportService {
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
       let done = false;
+      let hasReceivedSummary = false;
       
       const processLine = (line: string) => {
         if (!line.trim()) return;
         try {
           const data = JSON.parse(line);
           if (data.type === 'summary') {
+            hasReceivedSummary = true;
             state.isSimulating = false;
             state.isCanceling = false;
             
@@ -308,8 +346,8 @@ export class ImportService {
               state.logs.unshift({ time: new Date(), type: 'err', msg: '>> فرآیند توسط کاربر لغو شد. هیچ تغییری در دیتابیس ثبت نشد.' });
               if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'فرآیند لغو شد و هیچ تغییری ثبت نشد.');
             } else if (data.status === 'failed') {
-              state.logs.unshift({ time: new Date(), type: 'err', msg: '>> عملیات به دلیل خطاهای حیاتی متوقف شد.' });
-              if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'فرآیند با خطا روبرو شد.');
+              state.logs.unshift({ time: new Date(), type: 'err', msg: '>> عملیات به دلیل خطاهای حیاتی متوقف شد و تغییری در دیتابیس اعمال نشد.' });
+              if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'فرآیند با خطا روبرو شد و داده‌ای ثبت نشد.');
             } else {
               if (data.created > 0) state.logs.unshift({ time: new Date(), type: 'ok', msg: `[OK] تعداد ${data.created} رکورد جدید با موفقیت ایجاد شد.` });
               if (data.updated > 0) state.logs.unshift({ time: new Date(), type: 'ok', msg: `[OK] تعداد ${data.updated} رکورد با اطلاعات جدید به‌روزرسانی شد.` });
@@ -382,11 +420,26 @@ export class ImportService {
         console.error('Stream reading error', e);
       }
       
+      if (!hasReceivedSummary) {
+        state.createdCount = 0;
+        state.updatedCount = 0;
+        state.logs.unshift({
+          time: new Date(),
+          type: 'err',
+          msg: '>> خطا: ارتباط قبل از دریافت تأییدیه پایانی سرور قطع شد. هیچ داده‌ای در پایگاه‌داده ذخیره نشد.'
+        });
+        if (this.activeWarehouseId === warehouseId) {
+          this.toast.show('error', 'فرآیند ناتمام ماند و تغییری در پایگاه‌داده ثبت نشد.');
+        }
+      }
+
       state.isSimulating = false;
       state.isCanceling = false;
       this.stateUpdated.next();
     } catch (error: any) {
       console.error(error);
+      state.createdCount = 0;
+      state.updatedCount = 0;
       // fetch خام وقتی مرورگر کاملاً آفلاین است TypeError (Failed to fetch)
       // پرتاب می‌کند — این خطای سرور نیست، وضعیت آفلاین است.
       if (error instanceof TypeError) {

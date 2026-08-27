@@ -427,3 +427,82 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
 
         # کالا با موفقیت حذف شده است
         self.assertFalse(Item.objects.filter(id=item.id).exists())
+
+    def test_tag_separator_deduplication_persian_and_english_commas(self):
+        """تگ‌های دارای کامای فارسی و انگلیسی باید درست تفکیک و بدون تکرار ذخیره شوند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from inventory.models import Item
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'my_tag'])
+        ws.append(['FA-TAG-101', 'تست تفکیک تگ', 'پارت۱،پارت۲'])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_tags.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'import_tag': 'پارت۲,پارت۳',
+            'conflict_action': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        created_item = Item.objects.filter(fa_unic_code='FA-TAG-101', warehouse=self.warehouse).first()
+        self.assertIsNotNone(created_item)
+        tags = created_item.my_tag.split('،')
+        # تگ 'پارت۲' نباید تکراری باشد
+        self.assertEqual(len(tags), 3)
+        self.assertEqual(set(tags), {'پارت۱', 'پارت۲', 'پارت۳'})
+
+    def test_download_template_uppercase_dynamic_field_no_duplicates(self):
+        """فیلدهای پویای دارای حروف بزرگ نباید ستون تکراری با حروف کوچک در قالب تولید کنند"""
+        import io
+        import openpyxl
+        from inventory.models import ItemFieldDefinition
+
+        ItemFieldDefinition.objects.create(
+            warehouse=self.warehouse,
+            name="BatchNo",
+            label="شماره بچ",
+            field_type="text"
+        )
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = f"/api/inventory/items/download_template/?warehouse_id={self.warehouse.id}"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        first_row = [cell.value for cell in ws[1]]
+
+        # BatchNo باید دقیقاً یک بار در هدر باشد و batchno نباید وجود داشته باشد
+        self.assertEqual(first_row.count("BatchNo"), 1)
+        self.assertNotIn("batchno", first_row)
+
+    def test_export_columns_checks_warehouse_access(self):
+        """دسترسی به export_columns انبار غیرمجاز باید ۴۰۳ بدهد"""
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = f"/api/inventory/items/export_columns/?warehouse_id={self.other_warehouse.id}"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

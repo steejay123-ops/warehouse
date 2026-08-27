@@ -540,14 +540,15 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         expected_fields_dict = self.get_expected_fields(warehouse_id)
         valid_fields = {f.name: f for f in Item._meta.fields if f.name != 'dynamic_data'}
         
+        canonical_headers = list(dict.fromkeys(expected_fields_dict.values()))
         if columns_scope == 'all_db':
-            headers = list(expected_fields_dict.keys())
+            headers = canonical_headers
         elif columns_scope in ['visible', 'custom']:
-            headers = [c for c in columns_list if c in expected_fields_dict]
+            headers = list(dict.fromkeys([expected_fields_dict[c] for c in columns_list if c in expected_fields_dict]))
             if not headers:
-                headers = list(expected_fields_dict.keys())
+                headers = canonical_headers
         else:
-            headers = list(expected_fields_dict.keys())
+            headers = canonical_headers
             
         header_labels = [(valid_fields[h].verbose_name if hasattr(valid_fields[h], 'verbose_name') and valid_fields[h].verbose_name else h) if h in valid_fields else f"{h} (داینامیک)" for h in headers]
         header_keys = [h for h in headers]
@@ -637,6 +638,16 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def export_columns(self, request):
+        warehouse_id = request.query_params.get('warehouse_id')
+        if warehouse_id:
+            try:
+                wh_id_val = int(warehouse_id)
+            except (ValueError, TypeError):
+                return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+            if not can_access_warehouse(request.user, wh_id_val):
+                return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+            warehouse_id = wh_id_val
+
         valid_fields = Item._meta.fields
         columns = []
         for f in valid_fields:
@@ -644,7 +655,6 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             label = getattr(f, 'verbose_name', '') or f.name
             columns.append({"key": f.name, "label": str(label)})
             
-        warehouse_id = request.query_params.get('warehouse_id')
         if warehouse_id:
             dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
             for d in dynamic_defs:
@@ -674,7 +684,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
         expected_fields = self.get_expected_fields(warehouse_id)
         EXCLUDED_TEMPLATE_FIELDS = {'sync_id', 'is_deleted', 'created_at', 'updated_at', 'created_by', 'modified_by'}
-        headers = [h for h in expected_fields.keys() if h not in EXCLUDED_TEMPLATE_FIELDS]
+        headers = [h for h in dict.fromkeys(expected_fields.values()) if h not in EXCLUDED_TEMPLATE_FIELDS]
 
         # Add dynamic fields if warehouse_id is provided
         dynamic_fields = []
@@ -1591,10 +1601,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             
                             final_tags = []
                             if excel_tag:
-                                final_tags.extend([t.strip() for t in excel_tag.split('，') if t.strip()])
+                                final_tags.extend([t.strip() for t in excel_tag.split('،') if t.strip()])
                             if import_tag:
                                 import_tag_clean = import_tag.replace(',', '،')
-                                final_tags.extend([t.strip() for t in import_tag_clean.split('，') if t.strip()])
+                                final_tags.extend([t.strip() for t in import_tag_clean.split('،') if t.strip()])
                             
                             unique_tags = list(set(final_tags))
                             if unique_tags:
@@ -1854,7 +1864,12 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                 if str(row_err) == "CANCELED_BY_USER":
                                     raise
                                 failed += 1
-                                err_msg = str(row_err)
+                                from django.db import DatabaseError
+                                if isinstance(row_err, DatabaseError):
+                                    logger.warning(f"[Import Row {row_idx}] Database error for {item_display_code}: {row_err}")
+                                    err_msg = "خطا در قالب داده یا محدودیت‌های پایگاه داده (طول فیلد یا نوع نامعتبر)"
+                                else:
+                                    err_msg = str(row_err)
                                 error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
                                 append_colored_row(row, 'err', err_msg)
                                 q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {item_display_code}: {err_msg}"}) + "\n")

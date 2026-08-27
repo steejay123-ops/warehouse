@@ -501,6 +501,12 @@ export class OfflineSyncService {
    * وگرنه فقط پرچم pending پاک می‌شود و نسخهٔ تازه با Pull بعدی می‌رسد.
    */
   private async reconcileRejected(err: SyncErrorEntry): Promise<void> {
+    // ۱. ابطال کش متناظر در apiCache برای دریافت نسخه تازه از سرور
+    if (err.url) {
+      const baseUrl = err.url.split('?')[0];
+      await this.invalidateCache(baseUrl);
+    }
+
     if (!err.entitySyncId || !err.entityType) return;
     const tableMap: Record<string, 'countTasks' | 'items' | 'dynamicFields'> = {
       count_task: 'countTasks',

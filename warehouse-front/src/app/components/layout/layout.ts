@@ -22,6 +22,8 @@ import { NavigationHistoryService } from '../../core/services/navigation-history
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { ChatDrawerComponent } from '../communications/chat-drawer/chat-drawer.component';
 import { CommunicationService } from '../../core/services/communication.service';
+import { WebSocketService } from '../../core/http/websocket.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-layout',
@@ -31,6 +33,7 @@ import { CommunicationService } from '../../core/services/communication.service'
 })
 export class Layout implements OnInit, OnDestroy {
   public commService = inject(CommunicationService);
+  public wsService = inject(WebSocketService);
 
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
@@ -598,11 +601,63 @@ export class Layout implements OnInit, OnDestroy {
     this.offlineSubs.push(
       network.state$.subscribe((state) => {
         this.connectionState = state;
+        const wasOffline = this.isOffline;
         // «آفلاین» از دید کاربر یعنی «سرور در دسترس نیست» —
         // چه اینترنت قطع باشد چه سرور خاموش
         this.isOffline = state !== 'online';
         document.title = this.isOffline ? `📴 آفلاین — ${this.baseTitle}` : this.baseTitle;
+
+        // اگر از حالت آفلاین به آنلاین برگشتیم: استعلام سبک پس‌زمینه برای جبران تغییرات زمان قطعی
+        if (wasOffline && state === 'online') {
+          console.log('[Layout] 🌐 اتصال مجدد شبکه — استعلام سبک پس‌زمینه...');
+          this.whService.getAll().subscribe({
+            next: (data) => this.handleWarehousesLoaded(data),
+            error: () => {}
+          });
+        }
         this.cdr.detectChanges();
+      })
+    );
+
+    // خودترمیمی و اعلان شفاف به کاربر هنگام رد شدن درخواست از صف همگام‌سازی
+    this.offlineSubs.push(
+      syncService.rejected$.subscribe((err) => {
+        const reason = err.serverMessage || 'تداخل یا خطای اعتبارسنجی سرور';
+        this.toast.show(
+          'warning',
+          `تغییر شما به دلیل «${reason}» توسط سرور رد شد و داده‌ها به آخرین نسخه سرور بازگردانی شدند.`
+        );
+        // استعلام تازه برای اطمینان از همگامی کامل نما
+        this.whService.getAll().subscribe({
+          next: (data) => this.handleWarehousesLoaded(data),
+          error: () => {}
+        });
+      })
+    );
+
+    // شنود رویدادهای زنده تغییرات انبار از طریق وب‌سوکت برای همگام‌سازی بلادرنگ همه کلاینت‌ها
+    this.offlineSubs.push(
+      this.wsService.notifications$.subscribe(async (data: any) => {
+        if (data && (data.event === 'warehouse_mutation' || data.type === 'warehouse_mutation')) {
+          console.log('[Layout] 🔔 دریافت رویداد تغییرات انبار از وب‌سوکت:', data);
+          await syncService.invalidateCache(`${environment.apiUrl}/warehouses/`);
+          this.whService.getAll().subscribe({
+            next: (warehouses) => {
+              this.handleWarehousesLoaded(warehouses);
+              if (data.action === 'DELETE' && String(data.warehouse_id) === String(this.store.activeWarehouseId())) {
+                this.toast.show(
+                  'warning',
+                  `انبار «${data.warehouse_name || ''}» توسط مدیر حذف شد؛ انبار فعال شما به‌روزرسانی شد.`
+                );
+              } else if (data.action === 'TOGGLE_FREEZE' && String(data.warehouse_id) === String(this.store.activeWarehouseId())) {
+                this.toast.show(
+                  'info',
+                  `وضعیت فعالیت انبار «${data.warehouse_name || ''}» به‌روزرسانی شد.`
+                );
+              }
+            }
+          });
+        }
       })
     );
 

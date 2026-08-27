@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Warehouse, SystemSetting
 from .serializers import WarehouseSerializer
+from .services import broadcast_warehouse_mutation
 
 from django.db.models import Count, Q
 from common.mixins import DeleteImpactMixin
@@ -49,6 +50,7 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             warehouse=instance,
             after_state={'id': instance.id, 'name': instance.name, 'code': instance.code, 'is_active': instance.is_active}
         )
+        broadcast_warehouse_mutation(instance.id, 'CREATE', instance.name)
 
     def perform_update(self, serializer):
         from accounts.audit_utils import log_audit_event, calculate_model_diff
@@ -77,20 +79,24 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             after_state=diff_a,
             details={'freeze_toggled': is_freeze_change}
         )
+        broadcast_warehouse_mutation(updated_instance.id, 'UPDATE', updated_instance.name)
 
     def perform_destroy(self, instance):
         from accounts.audit_utils import log_audit_event
+        wh_id = instance.id
+        wh_name = instance.name
         log_audit_event(
             module='warehouses',
             action='DELETE',
             target_model='Warehouse',
-            target_object_id=instance.id,
-            target_repr=f"حذف انبار: {instance.name}",
+            target_object_id=wh_id,
+            target_repr=f"حذف انبار: {wh_name}",
             severity='critical',
             warehouse=instance,
-            before_state={'id': instance.id, 'name': instance.name, 'code': instance.code}
+            before_state={'id': wh_id, 'name': wh_name, 'code': instance.code}
         )
         super().perform_destroy(instance)
+        broadcast_warehouse_mutation(wh_id, 'DELETE', wh_name)
 
     @action(detail=True, methods=['patch'])
     def toggle_archive(self, request, pk=None):
@@ -111,6 +117,7 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             after_state={'is_active': warehouse.is_active},
             details={'action': 'toggle_archive'}
         )
+        broadcast_warehouse_mutation(warehouse.id, 'TOGGLE_FREEZE', warehouse.name)
         return Response(self.get_serializer(warehouse).data)
 
 

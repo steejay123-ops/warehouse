@@ -343,9 +343,13 @@ export class ImportService {
             state.errCount = data.failed !== undefined ? data.failed : state.errCount;
 
             if (data.status === 'cancelled') {
+              state.latestCreatedLogs = [];
+              state.latestUpdatedLogs = [];
               state.logs.unshift({ time: new Date(), type: 'err', msg: '>> فرآیند توسط کاربر لغو شد. هیچ تغییری در دیتابیس ثبت نشد.' });
               if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'فرآیند لغو شد و هیچ تغییری ثبت نشد.');
             } else if (data.status === 'failed') {
+              state.latestCreatedLogs = [];
+              state.latestUpdatedLogs = [];
               state.logs.unshift({ time: new Date(), type: 'err', msg: '>> عملیات به دلیل خطاهای حیاتی متوقف شد و تغییری در دیتابیس اعمال نشد.' });
               if (this.activeWarehouseId === warehouseId) this.toast.show('error', 'فرآیند با خطا روبرو شد و داده‌ای ثبت نشد.');
             } else {
@@ -423,6 +427,8 @@ export class ImportService {
       if (!hasReceivedSummary) {
         state.createdCount = 0;
         state.updatedCount = 0;
+        state.latestCreatedLogs = [];
+        state.latestUpdatedLogs = [];
         state.logs.unshift({
           time: new Date(),
           type: 'err',
@@ -440,6 +446,8 @@ export class ImportService {
       console.error(error);
       state.createdCount = 0;
       state.updatedCount = 0;
+      state.latestCreatedLogs = [];
+      state.latestUpdatedLogs = [];
       // fetch خام وقتی مرورگر کاملاً آفلاین است TypeError (Failed to fetch)
       // پرتاب می‌کند — این خطای سرور نیست، وضعیت آفلاین است.
       if (error instanceof TypeError) {

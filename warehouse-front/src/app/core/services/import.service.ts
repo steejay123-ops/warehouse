@@ -9,6 +9,7 @@ import { NetworkStatusService } from './network-status.service';
 export interface WarehouseImportState {
   importTag: string;
   conflictAction: string;
+  isPreCounted: boolean;
   logs: any[];
   latestCreatedLogs: any[];
   latestUpdatedLogs: any[];
@@ -155,6 +156,7 @@ export class ImportService {
     return {
       importTag: '',
       conflictAction: 'ignore',
+      isPreCounted: false,
       logs: [],
       latestCreatedLogs: [],
       latestUpdatedLogs: [],
@@ -293,7 +295,8 @@ export class ImportService {
         warehouseId,
         state.conflictAction,
         state.importTag,
-        state.importId
+        state.importId,
+        state.isPreCounted
       );
 
       if (isServerUnreachable(response.status)) {

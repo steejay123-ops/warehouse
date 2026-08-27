@@ -78,6 +78,46 @@
           </div>
         </div>
 
+        <!-- تنظیمات ورود کالای از قبل شمرده‌شده (Pre-Counted Import) -->
+        <div class="mt-6 p-5 rounded-2xl border transition-all duration-200"
+             [ngClass]="importService.currentState.isPreCounted ? 'bg-emerald-50/70 border-emerald-300 shadow-xs' : 'bg-slate-50/70 border-slate-200'">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <div class="mt-1 p-2 rounded-xl transition-colors"
+                   [ngClass]="importService.currentState.isPreCounted ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-black text-slate-800">ورود به عنوان کالای از قبل شمرده‌شده (انبارگردانی پایان‌یافته)</span>
+                  <span *ngIf="importService.currentState.isPreCounted" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                    شمارش نهایی خودکار فعال است
+                  </span>
+                </div>
+                <p class="text-[11px] font-medium text-slate-600 mt-1.5 leading-relaxed">
+                  با فعال‌سازی این گزینه، اقلام با وضعیت میدانی <span class="font-bold text-emerald-700">«شمارش شده» (done)</span> و تسک تایید نهایی در کارتابل‌ها ثبت شده و در داشبورد انبار ۱۰۰٪ شمرده‌شده منظور می‌گردند. در صورت اختلاف موجودی فیزیکی (inventory) و دفتری (bal4miv)، مغایرت خودکار محاسبه و علامت‌گذاری می‌شود.
+                </p>
+                <div class="mt-2 flex items-center gap-2 text-[10px] text-slate-500 font-medium">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <span>سایر فرآیندها (شامل مستندات فاکتور، اسناد و قیمت‌گذاری در کارتابل مالی) مستقل مانده و بدون تغییر به مسیر خود ادامه خواهند داد.</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- سوئیچ تاگل -->
+            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+              <input 
+                type="checkbox" 
+                [(ngModel)]="importService.currentState.isPreCounted" 
+                class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+        </div>
+
         <!-- دکمه اکشن -->
         <div class="mt-6" *appHasPermission="'perm_rec_import'">
           <div *ngIf="!hasWarehouse" class="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-amber-700 text-xs font-bold fade-in">

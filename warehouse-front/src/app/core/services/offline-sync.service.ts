@@ -415,6 +415,25 @@ export class OfflineSyncService {
     };
   }
 
+  /**
+   * ابطال و پاکسازی یک مسیر یا الگوی URL از کش محلی IndexedDB
+   * برای جلوگیری از دیدن داده‌های استیل پس از اعمال تغییرات یا حذف‌ها
+   */
+  async invalidateCache(urlPatternOrExact: string): Promise<void> {
+    try {
+      await offlineDb.apiCache.delete(urlPatternOrExact);
+      const matching = await offlineDb.apiCache
+        .where('url')
+        .startsWith(urlPatternOrExact)
+        .primaryKeys();
+      if (matching.length > 0) {
+        await offlineDb.apiCache.bulkDelete(matching as string[]);
+      }
+    } catch (err) {
+      console.warn('[OfflineSync] خطا در ابطال کش:', err);
+    }
+  }
+
   // ════════════════════════════════════════════
   //  صندوق خطای همگام‌سازی (Sync Error Inbox)
   // ════════════════════════════════════════════

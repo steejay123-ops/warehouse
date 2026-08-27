@@ -1,5 +1,5 @@
 import django_filters
-from .models import Item
+from .models import Item, ItemFieldDefinition
 from django.db.models import Q
 
 class CharInFilter(django_filters.BaseInFilter, django_filters.CharFilter):
@@ -113,10 +113,12 @@ class ItemFilter(django_filters.FilterSet):
     inventory_min = django_filters.NumberFilter(field_name='inventory', lookup_expr='gte')
     inventory_max = django_filters.NumberFilter(field_name='inventory', lookup_expr='lte')
     
+    # فیلتر امن بر اساس شناسه عددی انبار بدون پرتاب خطای اعتبارسنجی در صورت ناموجود بودن انبار
+    warehouse = django_filters.NumberFilter(field_name='warehouse_id', lookup_expr='exact')
+
     class Meta:
         model = Item
         fields = {
-            'warehouse': ['exact'],
             'field_assignee': ['exact', 'isnull'],
             'doc_assignee': ['exact', 'isnull'],
             'field_status': ['exact', 'in'],
@@ -124,3 +126,12 @@ class ItemFilter(django_filters.FilterSet):
             'tag_status': ['exact', 'in'],
             'has_conflict': ['exact'],
         }
+
+
+class ItemFieldDefinitionFilter(django_filters.FilterSet):
+    """فیلتر امن فیلدهای پویا بر اساس انبار بدون خطای 400 جنگو در صورت حذف یا نبود انبار"""
+    warehouse = django_filters.NumberFilter(field_name='warehouse_id', lookup_expr='exact')
+
+    class Meta:
+        model = ItemFieldDefinition
+        fields = ['warehouse']

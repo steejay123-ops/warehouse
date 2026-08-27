@@ -139,6 +139,8 @@ export class Projects implements OnInit, OnDestroy {
       next: (data) => {
         this.projects = data;
         this.state.appState.projects = data as any;
+        this.store.sanitizeActiveWarehouse(data);
+        this.state.appState.activeWarehouseId = this.store.activeWarehouseId() as any;
         setTimeout(() => {
           this.isRefreshing = false;
           this.cdr.detectChanges();

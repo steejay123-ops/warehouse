@@ -1,8 +1,9 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ImportResult } from './accounts-http.service';
+import { OfflineSyncService } from '../services/offline-sync.service';
 
 export interface Warehouse {
   id: number;
@@ -46,19 +47,27 @@ export class WarehouseHttpService {
   }
 
   create(data: Partial<Warehouse>): Observable<Warehouse> {
-    return this.http.post<Warehouse>(this.baseUrl, data);
+    return this.http.post<Warehouse>(this.baseUrl, data).pipe(
+      tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
+    );
   }
 
   update(id: number, data: Partial<Warehouse>): Observable<Warehouse> {
-    return this.http.patch<Warehouse>(`${this.baseUrl}${id}/`, data);
+    return this.http.patch<Warehouse>(`${this.baseUrl}${id}/`, data).pipe(
+      tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
+    );
   }
 
   delete(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}${id}/`);
+    return this.http.delete<void>(`${this.baseUrl}${id}/`).pipe(
+      tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
+    );
   }
 
   toggleArchive(id: number): Observable<Warehouse> {
-    return this.http.patch<Warehouse>(`${this.baseUrl}${id}/toggle_archive/`, {});
+    return this.http.patch<Warehouse>(`${this.baseUrl}${id}/toggle_archive/`, {}).pipe(
+      tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
+    );
   }
 
   // ── Excel Import/Export ────────────────────────────────────────────

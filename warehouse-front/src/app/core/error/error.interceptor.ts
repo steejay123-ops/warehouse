@@ -8,6 +8,7 @@ import {
 } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../../services/toast.service';
+import { AuthStore } from '../stores/auth.store';
 import { OFFLINE_NO_CACHE, OFFLINE_UPLOAD_UNSUPPORTED } from '../interceptors/offline.interceptor';
 import { isServerUnreachable } from '../services/server-reachability';
 
@@ -30,6 +31,7 @@ export const errorInterceptor: HttpInterceptorFn = (
   next: HttpHandlerFn
 ) => {
   const toast = inject(ToastService);
+  const store = inject(AuthStore);
 
   return next(req).pipe(
     catchError((error: HttpErrorResponse) => {
@@ -87,9 +89,22 @@ export const errorInterceptor: HttpInterceptorFn = (
         } else if (error.error && typeof error.error === 'object') {
           const firstField = Object.keys(error.error)[0];
           const firstError = error.error[firstField];
-          message = Array.isArray(firstError)
-            ? `${firstField}: ${firstError[0]}`
-            : String(firstError);
+          const errorStr = Array.isArray(firstError) ? String(firstError[0]) : String(firstError);
+
+          // تشخیص هوشمند خطای انبار نامعتبر/حذف‌شده در بک‌اند و خودترمیمی
+          if (
+            (firstField === 'warehouse' || firstField === 'warehouse_id') &&
+            (errorStr.includes('Select a valid choice') || errorStr.includes('not one of the available choices'))
+          ) {
+            message = 'انبار انتخاب‌شده در سیستم وجود ندارد یا حذف شده است؛ انبار فعال شما به‌روزرسانی شد.';
+            try {
+              store.setActiveWarehouse('ALL');
+            } catch {}
+          } else {
+            message = Array.isArray(firstError)
+              ? `${firstField}: ${firstError[0]}`
+              : String(firstError);
+          }
         }
       } else if (error.status >= 500) {
         message = 'خطای داخلی سرور. لطفا با پشتیبانی تماس بگیرید.';

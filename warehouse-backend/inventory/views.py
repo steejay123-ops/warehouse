@@ -32,12 +32,14 @@ import asyncio
 from datetime import datetime
 from django.core.cache import cache
 from django.db import transaction
-from django.utils import timezone
+import logging
 from decimal import Decimal
 from django.utils import timezone
 
+logger = logging.getLogger(__name__)
+
 from rest_framework.pagination import PageNumberPagination
-from .filters import ItemFilter
+from .filters import ItemFilter, ItemFieldDefinitionFilter
 
 
 def _soft_delete_items_cascade(items_qs):
@@ -146,7 +148,7 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
     queryset = ItemFieldDefinition.objects.all()
     serializer_class = ItemFieldDefinitionSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['warehouse']
+    filterset_class = ItemFieldDefinitionFilter
     search_fields = ['name', 'label']
 
     def get_queryset(self):
@@ -287,7 +289,7 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
                 from accounts.audit_utils import log_audit_event
                 log_audit_event(
                     user=request.user,
-                    warehouse_id=target_warehouse_id,
+                    warehouse=Warehouse.objects.filter(id=target_warehouse_id).first(),
                     module='warehouses',
                     action='CREATE',
                     severity='info',
@@ -1576,36 +1578,40 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             hr.import_log = log_record
                         ImportHistory.objects.bulk_create(history_records)
 
-                        # ثبت لاگ کلان ممیزی برای بارگذاری اکسل
-                        try:
-                            from accounts.audit_utils import log_audit_event
-                            from django.contrib.auth import get_user_model
-                            actor = get_user_model().objects.filter(id=user_id).first() if user_id else None
-                            log_audit_event(
-                                user=actor,
-                                warehouse_id=target_warehouse_id if 'target_warehouse_id' in locals() and target_warehouse_id else None,
-                                module='docs',
-                                action='IMPORT',
-                                severity='info',
-                                target_model='Item',
-                                target_repr=f"بارگذاری اکسل کالاها ({original_file_name})",
-                                details={
-                                    'import_id': import_id,
-                                    'file_name': original_file_name,
-                                    'records_created': created,
-                                    'records_updated': updated,
-                                    'records_skipped': skipped,
-                                    'records_failed': failed,
-                                    'conflict_strategy': conflict_strategy
-                                }
-                            )
-                        except Exception as log_err:
-                            logger.warning(f"Failed to log audit event for excel import: {log_err}")
+                    # ثبت لاگ کلان ممیزی برای بارگذاری اکسل (خارج از تراکنش جهت جلوگیری از رول‌بک ایمپورت در صورت خطای جانبی)
+                    try:
+                        from accounts.audit_utils import log_audit_event
+                        from django.contrib.auth import get_user_model
+                        actor = get_user_model().objects.filter(id=user_id).first() if user_id else None
+                        target_wh = Warehouse.objects.filter(id=target_warehouse_id).first() if ('target_warehouse_id' in locals() and target_warehouse_id) else None
+                        log_audit_event(
+                            user=actor,
+                            warehouse=target_wh,
+                            module='docs',
+                            action='IMPORT',
+                            severity='info',
+                            target_model='Item',
+                            target_repr=f"بارگذاری اکسل کالاها ({original_file_name})",
+                            details={
+                                'import_id': import_id,
+                                'file_name': original_file_name,
+                                'records_created': created,
+                                'records_updated': updated,
+                                'records_skipped': skipped,
+                                'records_failed': failed,
+                                'conflict_strategy': conflict_strategy
+                            }
+                        )
+                    except Exception as log_err:
+                        logger.warning(f"Failed to log audit event for excel import: {log_err}")
 
-                        # Save the colored log workbook
-                        if import_id:
+                    # Save the colored log workbook
+                    if import_id:
+                        try:
                             out_file_path = os.path.join(tempfile.gettempdir(), f"import_log_{import_id}.xlsx")
                             out_wb.save(out_file_path)
+                        except Exception as wb_err:
+                            logger.warning(f"Failed to save import log workbook: {wb_err}")
 
                 except Exception as ex:
                     if str(ex) == "CANCELED_BY_USER":

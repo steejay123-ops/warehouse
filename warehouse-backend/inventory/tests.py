@@ -1374,3 +1374,111 @@ class InventoryAdvancedWorkflowsAndRBACTests(BaseInventoryTestCase):
         }, format='json')
         self.assertEqual(resp_rej.status_code, status.HTTP_403_FORBIDDEN)
 
+
+from django.test import TransactionTestCase
+
+class ExcelImportAndAuditLoggingTestCase(TransactionTestCase):
+    """تست اعتبارسنجی ورود اکسل کالاها و لاگ‌گیری ممیزی بدون خطای logger"""
+
+    def setUp(self):
+        super().setUp()
+        self.warehouse = Warehouse.objects.create(
+            name="انبار تست اکسل",
+            project_name="پروژه تست"
+        )
+        self.admin = User.objects.create_superuser(
+            username="admin_excel",
+            email="admin_excel@test.com",
+            password="Password123!"
+        )
+        self.client = APIClient()
+
+    def test_log_audit_event_supports_warehouse_id_and_object(self):
+        from accounts.audit_utils import log_audit_event
+        # تست با آبجکت انبار
+        entry1 = log_audit_event(
+            module='docs',
+            action='IMPORT',
+            user=self.admin,
+            warehouse=self.warehouse,
+            target_model='Item'
+        )
+        self.assertIsNotNone(entry1)
+        self.assertEqual(entry1.warehouse, self.warehouse)
+
+        # تست با warehouse_id عددی (که قبلاً خطا می‌داد)
+        entry2 = log_audit_event(
+            module='docs',
+            action='IMPORT',
+            user=self.admin,
+            warehouse_id=self.warehouse.id,
+            target_model='Item'
+        )
+        self.assertIsNotNone(entry2)
+        self.assertEqual(entry2.warehouse, self.warehouse)
+
+    def test_excel_import_endpoint_success(self):
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory'])
+        ws.append(['TEST-ITEM-1001', 'کالای تستی ورود اکسل ۱', 50])
+        ws.append(['TEST-ITEM-1002', 'کالای تستی ورود اکسل ۲', 120])
+        
+        file_io = io.BytesIO()
+        wb.save(file_io)
+        file_io.seek(0)
+        
+        upload_file = SimpleUploadedFile(
+            "test_items.xlsx",
+            file_io.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.post('/api/inventory/items/import_excel/', {
+            'file': upload_file,
+            'warehouse_id': self.warehouse.id,
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # خروجی استریم ndjson از نوع async generator است
+        async def consume_stream():
+            chunks = []
+            async for chunk in resp.streaming_content:
+                if isinstance(chunk, str):
+                    chunks.append(chunk)
+                else:
+                    chunks.append(chunk.decode('utf-8'))
+            return "".join(chunks)
+
+        import asyncio
+        content = asyncio.run(consume_stream())
+
+        self.assertNotIn("خطای سیستمی: name 'logger' is not defined", content)
+        self.assertIn('"status": "success"', content)
+        
+        # بررسی اینکه کالاها حتماً در دیتابیس ذخیره شده‌اند و رول‌بک نشده‌اند
+        self.assertTrue(Item.objects.filter(fa_unic_code='TEST-ITEM-1001', warehouse=self.warehouse).exists())
+        self.assertTrue(Item.objects.filter(fa_unic_code='TEST-ITEM-1002', warehouse=self.warehouse).exists())
+
+    def test_filter_by_deleted_or_nonexistent_warehouse_does_not_error(self):
+        """اعتبارسنجی اینکه فیلتر با شناسه انبار حذف‌شده یا ناموجود باعث خطای 400 جنگو نمی‌شود"""
+        self.client.force_authenticate(user=self.admin)
+        non_existent_wh_id = 999999
+        
+        # ۱. تست فیلتر کالاها با شناسه انبار ناموجود — باید 200 با نتیجه خالی برگردد نه خطای 400
+        resp_items = self.client.get(f'/api/inventory/items/?warehouse={non_existent_wh_id}')
+        self.assertEqual(resp_items.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(resp_items.data.get('results', [])), 0)
+
+        # ۲. تست فیلتر فیلدهای پویا با شناسه انبار ناموجود
+        resp_fields = self.client.get(f'/api/inventory/dynamic-fields/?warehouse={non_existent_wh_id}')
+        self.assertEqual(resp_fields.status_code, status.HTTP_200_OK)
+
+
+

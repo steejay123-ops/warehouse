@@ -73,6 +73,26 @@ export class AuthStore {
     }
   }
 
+  /**
+   * خودترمیمی انبار فعال: بررسی معتبر بودن شناسه ذخیره‌شده در برابر لیست واقعی انبارها.
+   * در صورتی که انبار انتخابی حذف شده باشد، خودکار به اولین انبار معتبر یا ALL سوئیچ می‌کند.
+   */
+  sanitizeActiveWarehouse(validWarehouses: { id: number | string }[]): number | string | null {
+    const currentId = this._activeWarehouseId();
+    if (!currentId || currentId === 'ALL') {
+      return currentId;
+    }
+
+    const exists = Array.isArray(validWarehouses) && validWarehouses.some(w => String(w.id) === String(currentId));
+    if (!exists) {
+      const fallbackId = validWarehouses && validWarehouses.length > 0 ? validWarehouses[0].id : 'ALL';
+      console.warn(`[AuthStore] 🔄 انبار با شناسه ${currentId} نامعتبر یا حذف‌شده است. خودترمیمی به ${fallbackId}`);
+      this.setActiveWarehouse(fallbackId);
+      return fallbackId;
+    }
+    return currentId;
+  }
+
   setCurrentTab(tab: string): void {
     this._currentTab.set(tab);
   }

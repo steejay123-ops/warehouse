@@ -548,18 +548,23 @@ export class Layout implements OnInit, OnDestroy {
     });
   }
 
+  private handleWarehousesLoaded(data: any[]): void {
+    const warehouseList = Array.isArray(data) ? data : [];
+    this.state.appState.projects = warehouseList;
+    this.deepSyncWarehouses = warehouseList;
+
+    // خودترمیمی انبار فعال در صورتی که انبار قبلی حذف یا نامعتبر شده باشد
+    this.store.sanitizeActiveWarehouse(warehouseList);
+    this.state.appState.activeWarehouseId = this.store.activeWarehouseId() as any;
+
+    this.cdr.markForCheck();
+  }
+
   ngOnInit() {
-    // دریافت لیست انبارها از بک‌اند
+    // دریافت لیست انبارها از بک‌اند (با خودترمیمی آنی در صورت حذف یا نامعتبر شدن انبار فعال)
     this.whService.getAll().subscribe({
       next: (data) => {
-        this.state.appState.projects = data as any;
-        
-        const storedId = this.store.activeWarehouseId();
-        if (data.length > 0 && !storedId) {
-          this.onWarehouseChanged(data[0].id);
-        } else if (storedId) {
-          this.state.appState.activeWarehouseId = storedId === 'ALL' ? 'ALL' : Number(storedId);
-        }
+        this.handleWarehousesLoaded(data);
 
         // راه‌اندازی سراسری وب‌سوکت پیام‌رسان و بارگذاری پیام‌های خوانده‌نشده
         const initWhId = this.store.activeWarehouseId() === 'ALL' ? undefined : Number(this.store.activeWarehouseId());
@@ -572,6 +577,17 @@ export class Layout implements OnInit, OnDestroy {
     // ─── Subscribe to offline/sync observables ───
     const network = NetworkStatusService.getInstance();
     const syncService = OfflineSyncService.getInstance();
+
+    // شنود پاسخ‌های پس‌زمینه SWR برای به‌روزرسانی زنده لیست انبارها بدون نیاز به رفرش
+    this.offlineSubs.push(
+      syncService.liveDataUpdates$.subscribe(({ url, data }) => {
+        if (url && (url.includes('/warehouses/') || url.includes('/api/warehouses/'))) {
+          if (Array.isArray(data)) {
+            this.handleWarehousesLoaded(data);
+          }
+        }
+      })
+    );
 
     // نشست‌های طولانی ممکن است روزها باز بمانند و تنظیمات ادمین را از دست بدهند
     this.configApi.getPublicConfig().subscribe({
@@ -738,11 +754,23 @@ export class Layout implements OnInit, OnDestroy {
       return;
     }
 
-    const currentId = this.state.appState.currentProjectId;
+    const currentId = this.store.activeWarehouseId();
     this.deepSyncWarehouses = this.state.appState.projects || [];
     this.deepSyncPreselectId = currentId && currentId !== 'ALL' ? Number(currentId) : null;
     this.isDeepSyncModalOpen = true;
     this.cdr.detectChanges();
+
+    // اعتبارسنجی مجدد و رفرش زنده انبارها پیش از آغاز بروزرسانی عمیق
+    this.whService.getAll().subscribe({
+      next: (data) => {
+        this.handleWarehousesLoaded(data);
+        this.deepSyncWarehouses = data || [];
+        const refreshedId = this.store.activeWarehouseId();
+        this.deepSyncPreselectId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
   }
 
   async startDeepSync(warehouseIds: number[]) {

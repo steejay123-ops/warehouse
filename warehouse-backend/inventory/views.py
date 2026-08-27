@@ -472,9 +472,9 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             permission_classes = [HasMenuAccess('perm_rec_import')]
         elif self.action in ['reject', 'manager_reject']:
             permission_classes = [HasMenuAccess('perm_rec_recount')]
-        elif self.action in ['update', 'partial_update']:
+        elif self.action in ['update', 'partial_update', 'bulk_update']:
             permission_classes = [HasMenuAccess('perm_wh_edit') | HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor')]
-        else: # create, destroy, bulk_update, etc
+        else: # create, destroy, etc
             permission_classes = [HasMenuAccess('perm_wh_edit')]
 
         return permission_classes
@@ -746,14 +746,77 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 return Response({"error": "Data must be a list of records"}, status=400)
             
             record_dict = {str(r['id']): r for r in records if 'id' in r}
-            items = Item.objects.filter(id__in=record_dict.keys())
+            items = self.get_queryset().filter(id__in=record_dict.keys())
             
+            # اعتبارسنجی امنیتی: جلوگیری از ویرایش رکوردهای خارج از انبار مجاز کاربر
+            if len(items) != len(record_dict):
+                missing_ids = set(record_dict.keys()) - set(str(item.id) for item in items)
+                if Item.objects.filter(id__in=missing_ids).exists():
+                    return Response({"error": "دسترسی غیرمجاز: یک یا چند قلم کالا خارج از انبار مجاز شماست."}, status=403)
+            
+            user = request.user
+            check_field_perms = not (user.is_superuser or user.has_perm('accounts.perm_wh_edit'))
+            warehouse_perms_cache = {}
+            from warehouses.services import get_setting
+
             items_to_update = []
             update_fields = set()
             valid_fields = {f.name: f for f in Item._meta.fields}
 
             for item in items:
                 record = record_dict[str(item.id)]
+
+                # بررسی ماتریس دسترسی فیلدها برای کاربران دارای محدودیت نقش (مانند انبارگردان/سرپرست)
+                if check_field_perms:
+                    wh_id = item.warehouse_id
+                    if wh_id not in warehouse_perms_cache:
+                        if user.has_perm('accounts.view_sys_counter'):
+                            perms = get_setting('field_permissions_counter', wh_id) or {}
+                        elif user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.view_sys_financial'):
+                            perms = get_setting('field_permissions_doc', wh_id) or {}
+                        else:
+                            perms = {}
+                        warehouse_perms_cache[wh_id] = {k for k, v in perms.items() if isinstance(v, dict) and v.get('editable')}
+
+                    editable_fields = warehouse_perms_cache[wh_id]
+                    invalid_fields = []
+                    for key in record.keys():
+                        if key in ['id', 'warehouse', 'warehouse_id', 'created_at', 'updated_at', 'created_by', 'modified_by']:
+                            continue
+                        if key == 'dynamic_data':
+                            dyn_data = record.get('dynamic_data')
+                            if isinstance(dyn_data, str):
+                                try:
+                                    import json
+                                    dyn_data = json.loads(dyn_data)
+                                except Exception:
+                                    dyn_data = {}
+                            if isinstance(dyn_data, dict):
+                                for dyn_k in dyn_data.keys():
+                                    if dyn_k not in editable_fields:
+                                        invalid_fields.append(dyn_k)
+                        elif key not in editable_fields:
+                            invalid_fields.append(key)
+
+                    if invalid_fields:
+                        from accounts.audit_utils import log_audit_event
+                        log_audit_event(
+                            user=user,
+                            module='docs',
+                            action='UPDATE',
+                            severity='warning',
+                            target_model='Item',
+                            target_object_id=item.id,
+                            target_repr=f"تلاش غیرمجاز برای ویرایش فیلدهای قفل‌شده در ویرایش دسته‌ای کالا {item.fa_unic_code}",
+                            warehouse=item.warehouse,
+                            details={'invalid_fields': invalid_fields, 'item_id': item.id},
+                            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                        )
+                        return Response({
+                            'error': f'شما مجوز ویرایش فیلدهای ({", ".join(invalid_fields)}) را در کالا {item.fa_unic_code} ندارید.',
+                            'invalid_fields': invalid_fields
+                        }, status=400)
+
                 for key, value in record.items():
                     if key in valid_fields and key != 'id':
                         field = valid_fields[key]
@@ -792,7 +855,8 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             
             return Response({"success": f"Updated {len(items_to_update)} items"})
         except Exception as e:
-            return Response({"error": str(e)}, status=400)
+            logger.exception("خطا در اجرای bulk_update: %s", e)
+            return Response({"error": "خطایی در ذخیره‌سازی دسته‌ای کالاها رخ داد. لطفاً داده‌های ارسالی را بررسی فرمایید."}, status=400)
 
     @action(detail=False, methods=['post'])
     def bulk_assign(self, request):
@@ -815,44 +879,64 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         select_all = request.data.get('select_all', False)
         filters_dict = request.data.get('filters', {})
         
-        if select_all and filters_dict:
+        if select_all:
             from .filters import ItemFilter
-            items = ItemFilter(filters_dict, queryset=Item.objects.all()).qs
-            if 'search' in filters_dict and filters_dict['search']:
+            items = ItemFilter(filters_dict or {}, queryset=self.get_queryset()).qs
+            if filters_dict and 'search' in filters_dict and filters_dict['search']:
                 s = filters_dict['search']
                 items = items.filter(
                     Q(fa_unic_code__icontains=s) |
                     Q(description__icontains=s) |
-                    Q(po_number__icontains=s) |
-                    Q(packing_list_number__icontains=s) |
-                    Q(package_number__icontains=s) |
+                    Q(po__icontains=s) |
+                    Q(pl__icontains=s) |
+                    Q(pk_number__icontains=s) |
                     Q(my_tag__icontains=s)
                 )
-            if 'warehouse' in filters_dict and filters_dict['warehouse']:
+            if filters_dict and 'warehouse' in filters_dict and filters_dict['warehouse']:
                 items = items.filter(warehouse_id=filters_dict['warehouse'])
         elif ids:
-            items = Item.objects.filter(id__in=ids)
+            items = self.get_queryset().filter(id__in=ids)
+            ids_set = set(str(i) for i in ids)
+            if len(items) != len(ids_set):
+                missing_ids = ids_set - set(str(item.id) for item in items)
+                if Item.objects.filter(id__in=missing_ids).exists():
+                    return Response({"error": "دسترسی غیرمجاز: یک یا چند قلم کالا خارج از انبار مجاز شماست."}, status=403)
         else:
-            items = Item.objects.none()
+            items = self.get_queryset().none()
         
-        # مورد 3: هشدار برای ارسال مجدد کالایی که CountTask دارد
+        # بررسی مجوز و اعتبارسنجی در صورت درخواست بازشماری
+        if field_status == 'recount':
+            if not request.user.is_superuser and not request.user.has_perm('accounts.perm_rec_recount'):
+                return Response({'error': 'شما مجوز ثبت درخواست بازشماری (perm_rec_recount) را ندارید.'}, status=403)
+                
+            invalid_uncounted_count = items.filter(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
+            if invalid_uncounted_count > 0:
+                return Response({
+                    'error': f'تعداد {invalid_uncounted_count} مورد از کالاهای انتخابی هنوز شمارش اولیه نشده‌اند و امکان درخواست بازشماری برای آن‌ها وجود ندارد.'
+                }, status=400)
+        
+        # هشدار برای ارسال مجدد کالایی که CountTask فعال دارد
         if field_status == 'counting' and not force:
             from .models import CountTask
-            existing_tasks = CountTask.objects.filter(item__in=items).count()
-            if existing_tasks > 0:
+            active_count_items = CountTask.objects.filter(
+                item__in=items
+            ).exclude(status='FINAL_APPROVED').values('item_id').distinct().count()
+            if active_count_items > 0:
                 return Response({
                     'warning': True,
-                    'message': f'تعداد {existing_tasks} مورد از کالاهای انتخاب شده قبلاً به فرآیند شمارش رفته‌اند. آیا از ارجاع مجدد اطمینان دارید؟'
+                    'message': f'تعداد {active_count_items} قلم از کالاهای انتخاب شده در حال حاضر دارای فرآیند شمارش فعال هستند. آیا از ارجاع مجدد اطمینان دارید؟'
                 }, status=200)
                 
-        # هشدار برای ارسال مجدد کالایی که DocTask دارد
+        # هشدار برای ارسال مجدد کالایی که DocTask فعال دارد
         if doc_status in ['checking', 'processing'] and not force:
             from .models import DocTask
-            existing_doc_tasks = DocTask.objects.filter(item__in=items).count()
-            if existing_doc_tasks > 0:
+            active_doc_items = DocTask.objects.filter(
+                item__in=items
+            ).exclude(status='DOC_FINAL_APPROVED').values('item_id').distinct().count()
+            if active_doc_items > 0:
                 return Response({
                     'warning': True,
-                    'message': f'تعداد {existing_doc_tasks} مورد از کالاهای انتخاب شده قبلاً به فرآیند بررسی اسناد رفته‌اند. آیا از ارجاع مجدد اطمینان دارید؟'
+                    'message': f'تعداد {active_doc_items} قلم از کالاهای انتخاب شده در حال حاضر دارای فرآیند بررسی اسناد فعال هستند. آیا از ارجاع مجدد اطمینان دارید؟'
                 }, status=200)
         
         from django.contrib.auth import get_user_model
@@ -903,117 +987,181 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
         if field_status is not None:
             update_data['field_status'] = field_status
+            if field_status == 'recount':
+                update_data['has_conflict'] = True
         if doc_status is not None:
             update_data['doc_status'] = doc_status
             
-        items_list = list(items)
-        if update_data:
-            update_data['updated_at'] = timezone.now()
-            update_data['modified_by'] = request.user
-            items.update(**update_data)
-            
-        from warehouses.services import get_setting
-        first_item = items_list[0] if items_list else None
-        wh_id = first_item.warehouse_id if first_item else None
-        
-        # Create CountTasks if it's a field dispatch
-        if field_status == 'counting':
-            from .models import CountTask
-            
-            # بررسی تنظیم تایید سرپرست
-            req_supervisor = get_setting('require_supervisor_approval', wh_id)
-            
-            tasks_to_create = []
-            for item in items_list:
-                tasks_to_create.append(CountTask(
-                    item=item,
-                    counter=counter_user,
-                    supervisor=supervisor_user if (req_supervisor and not skip_supervisor) else None,
-                    skip_supervisor=skip_supervisor,
-                    assigned_manager=manager_user,
-                    status='PENDING_COUNT',
-                    created_by=request.user,
-                    modified_by=request.user
-                ))
-            if tasks_to_create:
-                CountTask.objects.bulk_create(tasks_to_create)
-                broadcast_count_task_update()
+        created_count_tasks = False
+        created_doc_tasks = False
 
-        # Create DocTasks if it's a document dispatch
-        if doc_status == 'processing':
-            from .models import DocTask
-            import re
-            from datetime import date as _dt_date
-            
-            # بررسی تنظیم تایید سرپرست اسناد
-            req_doc_supervisor = get_setting('require_doc_supervisor_approval', wh_id)
-            
-            doc_tasks_to_create = []
-            for item in items_list:
-                # تبدیل امن مقادیر اولیه فیلدهای مالی کالا
-                p_amount = item.price_amount
-                s_price = item.similar_unit_price
-                t_value = item.total_value
-                curr = item.currency if item.currency in ['IRR', 'USD', 'EUR', 'OTHER'] else None
-                inv_type = item.invoice_type if item.invoice_type in ['formal', 'domestic', 'foreign', 'consignment'] else None
-                
-                # صفحه و ردیف فاکتور
-                p_row = int(str(item.page_row).strip()) if item.page_row and str(item.page_row).strip().isdigit() else None
-                inv_page = int(str(item.invoice_page).strip()) if item.invoice_page and str(item.invoice_page).strip().isdigit() else None
-                
-                # مهر و امضا
-                stamp_val = bool(item.stamp) if isinstance(item.stamp, bool) else (str(item.stamp).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
-                sign_val = bool(item.signature) if isinstance(item.signature, bool) else (str(item.signature).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
-                
-                # تاریخ فاکتور
-                inv_date = None
-                if item.invoice_date:
-                    inv_date_str = str(item.invoice_date).strip()
-                    jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
-                    if jalali_match:
-                        y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
-                        if 1300 <= y <= 1500:
-                            try:
-                                import jdatetime
-                                inv_date = jdatetime.date(y, m, d).togregorian()
-                            except Exception:
-                                pass
-                        elif 1900 <= y <= 2100:
-                            try:
-                                inv_date = _dt_date(y, m, d)
-                            except Exception:
-                                pass
-                    elif isinstance(item.invoice_date, _dt_date):
-                        inv_date = item.invoice_date
+        with transaction.atomic():
+            items_list = list(items.select_for_update())
+            if not items_list:
+                return Response({'status': 'success', 'updated': 0})
 
-                doc_tasks_to_create.append(DocTask(
-                    item=item,
-                    doc_worker=doc_worker_user,
-                    doc_supervisor=doc_supervisor_user if (req_doc_supervisor and not doc_skip_supervisor) else None,
-                    skip_supervisor=doc_skip_supervisor,
-                    assigned_manager=doc_manager_user,
-                    status='PENDING_DOC',
-                    price_amount=p_amount,
-                    similar_unit_price=s_price,
-                    total_value=t_value,
-                    currency=curr,
-                    invoice_type=inv_type,
-                    invoice_date=inv_date,
-                    inv_rti_number=item.inv_rti_number or None,
-                    added_rti_no=item.added_rti_no or None,
-                    page_row=p_row,
-                    invoice_page=inv_page,
-                    doc_supplier=item.doc_supplier or None,
-                    folder_address=item.folder_address or None,
-                    stamp=stamp_val,
-                    signature=sign_val,
-                    created_by=request.user,
-                    modified_by=request.user,
-                    sync_id=uuid.uuid4()
-                ))
-            if doc_tasks_to_create:
-                DocTask.objects.bulk_create(doc_tasks_to_create)
-                broadcast_doc_task_update()
+            if update_data:
+                update_data['updated_at'] = timezone.now()
+                update_data['modified_by'] = request.user
+                items.update(**update_data)
+                
+            from warehouses.services import get_setting
+            first_item = items_list[0] if items_list else None
+            wh_id = first_item.warehouse_id if first_item else None
+            
+            # Create CountTasks if it's a field dispatch
+            if field_status == 'counting':
+                from .models import CountTask
+                from common.sync_models import soft_delete_queryset
+                
+                # باطل‌سازی تسک‌های فعال قبلی این کالاها برای جلوگیری از ایجاد تسک‌های تکراری در کارتابل
+                soft_delete_queryset(CountTask.objects.filter(item__in=items_list).exclude(status='FINAL_APPROVED'))
+                
+                # بررسی تنظیم تایید سرپرست
+                req_supervisor = get_setting('require_supervisor_approval', wh_id)
+                
+                tasks_to_create = []
+                for item in items_list:
+                    tasks_to_create.append(CountTask(
+                        item=item,
+                        counter=counter_user,
+                        supervisor=supervisor_user if (req_supervisor and not skip_supervisor) else None,
+                        skip_supervisor=skip_supervisor,
+                        assigned_manager=manager_user,
+                        status='PENDING_COUNT',
+                        created_by=request.user,
+                        modified_by=request.user
+                    ))
+                if tasks_to_create:
+                    CountTask.objects.bulk_create(tasks_to_create)
+                    created_count_tasks = True
+
+            # Create or update CountTasks if it's a recount request
+            if field_status == 'recount':
+                from .models import CountTask, CountTaskHistory
+                from warehouses.services import get_setting
+                
+                for item in items_list:
+                    latest_task = CountTask.objects.filter(item=item).order_by('-created_at').first()
+                    req_supervisor = get_setting('require_supervisor_approval', item.warehouse_id)
+                    target_status = 'MANAGER_REJECTED' if (req_supervisor and (latest_task and latest_task.supervisor)) else 'PENDING_COUNT'
+                    
+                    if latest_task:
+                        prev_counted = latest_task.counted_balance
+                        latest_task.status = target_status
+                        latest_task.manager_note = 'درخواست بازشماری از تخصیص کالا (ثبت مغایرت)'
+                        if target_status == 'PENDING_COUNT':
+                            latest_task.counted_balance = None
+                        latest_task.modified_by = request.user
+                        latest_task.updated_at = timezone.now()
+                        latest_task.save()
+                        
+                        CountTaskHistory.objects.create(
+                            task=latest_task,
+                            action_by=request.user,
+                            action_type='MANAGER_REJECTED',
+                            counted_balance=prev_counted,
+                            note='درخواست بازشماری از صفحه تخصیص'
+                        )
+                    else:
+                        new_task = CountTask.objects.create(
+                            item=item,
+                            status=target_status,
+                            manager_note='درخواست بازشماری از تخصیص کالا (ثبت مغایرت)',
+                            created_by=request.user,
+                            modified_by=request.user
+                        )
+                        CountTaskHistory.objects.create(
+                            task=new_task,
+                            action_by=request.user,
+                            action_type='MANAGER_REJECTED',
+                            note='ایجاد تسک بازشماری از صفحه تخصیص'
+                        )
+                created_count_tasks = True
+
+            # Create DocTasks if it's a document dispatch
+            if doc_status == 'processing':
+                from .models import DocTask
+                import re
+                from datetime import date as _dt_date
+                
+                # حذف تسک‌های فعال قبلی این کالاها برای جلوگیری از ایجاد تسک‌های تکراری در کارتابل اسناد
+                DocTask.objects.filter(item__in=items_list).exclude(status='DOC_FINAL_APPROVED').delete()
+                
+                # بررسی تنظیم تایید سرپرست اسناد
+                req_doc_supervisor = get_setting('require_doc_supervisor_approval', wh_id)
+                
+                doc_tasks_to_create = []
+                for item in items_list:
+                    # تبدیل امن مقادیر اولیه فیلدهای مالی کالا
+                    p_amount = item.price_amount
+                    s_price = item.similar_unit_price
+                    t_value = item.total_value
+                    curr = item.currency if item.currency in ['IRR', 'USD', 'EUR', 'OTHER'] else None
+                    inv_type = item.invoice_type if item.invoice_type in ['formal', 'domestic', 'foreign', 'consignment'] else None
+                    
+                    # صفحه و ردیف فاکتور
+                    p_row = int(str(item.page_row).strip()) if item.page_row and str(item.page_row).strip().isdigit() else None
+                    inv_page = int(str(item.invoice_page).strip()) if item.invoice_page and str(item.invoice_page).strip().isdigit() else None
+                    
+                    # مهر و امضا
+                    stamp_val = bool(item.stamp) if isinstance(item.stamp, bool) else (str(item.stamp).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
+                    sign_val = bool(item.signature) if isinstance(item.signature, bool) else (str(item.signature).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
+                    
+                    # تاریخ فاکتور
+                    inv_date = None
+                    if item.invoice_date:
+                        inv_date_str = str(item.invoice_date).strip()
+                        jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
+                        if jalali_match:
+                            y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
+                            if 1300 <= y <= 1500:
+                                try:
+                                    import jdatetime
+                                    inv_date = jdatetime.date(y, m, d).togregorian()
+                                except Exception:
+                                    pass
+                            elif 1900 <= y <= 2100:
+                                try:
+                                    inv_date = _dt_date(y, m, d)
+                                except Exception:
+                                    pass
+                        elif isinstance(item.invoice_date, _dt_date):
+                            inv_date = item.invoice_date
+
+                    doc_tasks_to_create.append(DocTask(
+                        item=item,
+                        doc_worker=doc_worker_user,
+                        doc_supervisor=doc_supervisor_user if (req_doc_supervisor and not doc_skip_supervisor) else None,
+                        skip_supervisor=doc_skip_supervisor,
+                        assigned_manager=doc_manager_user,
+                        status='PENDING_DOC',
+                        price_amount=p_amount,
+                        similar_unit_price=s_price,
+                        total_value=t_value,
+                        currency=curr,
+                        invoice_type=inv_type,
+                        invoice_date=inv_date,
+                        inv_rti_number=item.inv_rti_number or None,
+                        added_rti_no=item.added_rti_no or None,
+                        page_row=p_row,
+                        invoice_page=inv_page,
+                        doc_supplier=item.doc_supplier or None,
+                        folder_address=item.folder_address or None,
+                        stamp=stamp_val,
+                        signature=sign_val,
+                        created_by=request.user,
+                        modified_by=request.user,
+                        sync_id=uuid.uuid4()
+                    ))
+                if doc_tasks_to_create:
+                    DocTask.objects.bulk_create(doc_tasks_to_create)
+                    created_doc_tasks = True
+
+        if created_count_tasks:
+            broadcast_count_task_update()
+        if created_doc_tasks:
+            broadcast_doc_task_update()
 
         from accounts.audit_utils import log_audit_event
         log_audit_event(
@@ -1049,23 +1197,28 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         filters_dict = request.data.get('filters', {})
         
         if action and (item_ids or select_all):
-            if select_all and filters_dict:
+            if select_all:
                 from .filters import ItemFilter
-                items = ItemFilter(filters_dict, queryset=Item.objects.all()).qs
-                if 'search' in filters_dict and filters_dict['search']:
+                items = ItemFilter(filters_dict or {}, queryset=self.get_queryset()).qs
+                if filters_dict and 'search' in filters_dict and filters_dict['search']:
                     s = filters_dict['search']
                     items = items.filter(
                         Q(fa_unic_code__icontains=s) |
                         Q(description__icontains=s) |
-                        Q(po_number__icontains=s) |
-                        Q(packing_list_number__icontains=s) |
-                        Q(package_number__icontains=s) |
+                        Q(po__icontains=s) |
+                        Q(pl__icontains=s) |
+                        Q(pk_number__icontains=s) |
                         Q(my_tag__icontains=s)
                     )
-                if 'warehouse' in filters_dict and filters_dict['warehouse']:
+                if filters_dict and 'warehouse' in filters_dict and filters_dict['warehouse']:
                     items = items.filter(warehouse_id=filters_dict['warehouse'])
             else:
-                items = Item.objects.filter(id__in=item_ids)
+                items = self.get_queryset().filter(id__in=item_ids)
+                item_ids_set = set(str(i) for i in item_ids)
+                if len(items) != len(item_ids_set):
+                    missing_ids = item_ids_set - set(str(item.id) for item in items)
+                    if Item.objects.filter(id__in=missing_ids).exists():
+                        return Response({"error": "دسترسی غیرمجاز: یک یا چند قلم کالا خارج از انبار مجاز شماست."}, status=403)
             updated_count = 0
             with transaction.atomic():
                 for item in items:
@@ -1095,7 +1248,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     item_id = up.get('id')
                     tag = up.get('my_tag', '')
                     if item_id:
-                        Item.objects.filter(id=item_id).update(
+                        self.get_queryset().filter(id=item_id).update(
                             my_tag=tag,
                             updated_at=timezone.now(), 
                             modified_by=request.user
@@ -1105,7 +1258,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             # Fallback for old bulk_tag format if any
             ids = request.data.get('ids', [])
             tag = request.data.get('tag')
-            items = Item.objects.filter(id__in=ids)
+            items = self.get_queryset().filter(id__in=ids)
             if tag == 'conflict':
                 items.update(has_conflict=True, updated_at=timezone.now(), modified_by=request.user)
             updated_count = items.count()
@@ -1966,7 +2119,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         
         # Overall
         total_quantity = items.count()
-        total_counted = items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
+        total_counted = items.exclude(field_status__in=['waiting', 'counting', 'recount', 'در انتظار شمارش', 'بازشماری']).count()
         printed_tags = items.filter(tag_status__in=['printed', 'reprint', 'چاپ شده', 'چاپ مجدد']).count()
         docs_approved = items.filter(doc_status='done').count()
         conflicts = items.filter(Q(has_conflict=True) | Q(field_status='recount')).count()
@@ -1981,7 +2134,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             
             day_items = items.filter(updated_at__gte=d_start, updated_at__lt=d_end)
             
-            c_count = day_items.exclude(field_status__in=['waiting', 'counting', 'در انتظار شمارش']).count()
+            c_count = day_items.exclude(field_status__in=['waiting', 'counting', 'recount', 'در انتظار شمارش', 'بازشماری']).count()
             c_docs = day_items.filter(doc_status='done').count()
             c_feed = day_items.filter(field_status='done', doc_status='done').count()
             

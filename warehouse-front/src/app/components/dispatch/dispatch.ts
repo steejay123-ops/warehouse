@@ -989,31 +989,50 @@ export class Dispatch implements OnInit, OnDestroy {
     sendRequest();
   }
 
-  requestRecount() {
-    if (this.selectedItemIds.size === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
+  async requestRecount() {
+    const isAll = this.selectionMode === 'all';
+    const totalCount = isAll ? this.totalItems : this.selectedItemIds.size;
+    if (totalCount === 0) return this.toast.show('warning', 'رکوردی انتخاب نشده است.');
 
-    const invalidItems = this.items.filter(item => 
-      this.selectedItemIds.has(item.id) && 
-      (item.field_status === 'waiting' || item.field_status === 'counting')
-    );
+    if (!isAll) {
+      const invalidItems = this.items.filter(item => 
+        this.selectedItemIds.has(item.id) && 
+        (item.field_status === 'waiting' || item.field_status === 'counting')
+      );
 
-    if (invalidItems.length > 0) {
-      return this.toast.show('error', 'برخی از رکوردهای انتخاب شده هنوز شمرده نشده‌اند و قابل بازشماری نیستند.');
+      if (invalidItems.length > 0) {
+        return this.toast.show('error', 'برخی از رکوردهای انتخاب شده هنوز شمرده نشده‌اند و قابل بازشماری نیستند.');
+      }
     }
 
-    const payload = {
+    const countDesc = isAll 
+      ? `تمامی <span class="font-black text-emerald-700 underline">${this.totalItems.toLocaleString()}</span> کالای فیلترشده (کل دیتابیس)` 
+      : `<span class="font-black text-rose-700">${this.selectedItemIds.size.toLocaleString()}</span> کالا`;
+
+    const confirmed = await this.confirmDialog.open({
+      title: 'درخواست بازشماری (ثبت مغایرت)',
+      message: `آیا از ثبت مغایرت و ارجاع ${countDesc} به فرآیند بازشماری اطمینان دارید؟`,
+      confirmText: 'بله، ثبت بازشماری',
+      cancelText: 'انصراف',
+      type: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    const payload: any = {
       item_ids: Array.from(this.selectedItemIds),
-      field_status: 'recount'
+      field_status: 'recount',
+      select_all: isAll,
+      filters: isAll ? this.buildApiFilters(false) : undefined
     };
 
     this.itemApi.bulkDispatch(payload).subscribe({
       next: (res) => {
         this.toast.show('warning', `وضعیت ${res.updated} رکورد به "مغایرت - بازشماری کور" تغییر یافت.`);
         this.selectedItemIds.clear();
+        this.selectionMode = 'none';
         this.loadItems();
       },
-      // پیام خطا فقط از errorInterceptor می‌آید — او تفکیک «به سرور نرسیدیم» از
-      // «سرور رد کرد» را می‌داند و متن دقیق DRF را هم نشان می‌دهد.
       error: () => {}
     });
   }

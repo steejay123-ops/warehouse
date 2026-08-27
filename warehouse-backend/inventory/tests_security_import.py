@@ -506,3 +506,104 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_import_pre_counted_items_success_and_consistency(self):
+        """تست ورود اقلام از قبل شمرده‌شده: تسک شمارش تایید نهایی، وضعیت done و مغایرت خودکار"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from inventory.models import Item, CountTask, CountTaskHistory
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory', 'bal4miv'])
+        # ردیف ۱: بدون مغایرت (50 == 50)
+        ws.append(['PRE-COUNT-01', 'کالای بدون مغایرت', 50, 50])
+        # ردیف ۲: دارای مغایرت (30 != 35)
+        ws.append(['PRE-COUNT-02', 'کالای دارای مغایرت', 30, 35])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("pre_counted.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(User)
+        perm_docs, _ = Permission.objects.get_or_create(content_type=ct, codename="view_wh_docs", defaults={'name': "View Docs"})
+        self.user_with_perm.user_permissions.add(perm_docs)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # بررسی کالاها در دیتابیس
+        item1 = Item.objects.filter(fa_unic_code='PRE-COUNT-01', warehouse=self.warehouse).first()
+        self.assertIsNotNone(item1)
+        self.assertEqual(item1.field_status, 'done')
+        self.assertEqual(item1.doc_status, 'waiting') # گردش مالی دست‌نخورده مانده است
+        self.assertFalse(item1.has_conflict) # 50 == 50
+
+        item2 = Item.objects.filter(fa_unic_code='PRE-COUNT-02', warehouse=self.warehouse).first()
+        self.assertIsNotNone(item2)
+        self.assertEqual(item2.field_status, 'done')
+        self.assertEqual(item2.doc_status, 'waiting')
+        self.assertTrue(item2.has_conflict) # 30 != 35
+
+        # بررسی تسک‌های شمارش (CountTask)
+        task1 = CountTask.objects.filter(item=item1).first()
+        self.assertIsNotNone(task1)
+        self.assertEqual(task1.status, 'FINAL_APPROVED')
+        self.assertEqual(float(task1.counted_balance), 50.0)
+
+        history1 = CountTaskHistory.objects.filter(task=task1).first()
+        self.assertIsNotNone(history1)
+        self.assertEqual(history1.action_type, 'FINAL_APPROVED')
+
+        task2 = CountTask.objects.filter(item=item2).first()
+        self.assertIsNotNone(task2)
+        self.assertEqual(task2.status, 'FINAL_APPROVED')
+        self.assertEqual(float(task2.counted_balance), 30.0)
+
+    def test_import_pre_counted_permission_denied_for_unauthorized_user(self):
+        """کاربر بدون دسترسی لازم نباید بتواند از گزینه is_pre_counted استفاده کند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory'])
+        ws.append(['PRE-COUNT-DENIED', 'کالای غیرمجاز', 10])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("denied.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        # کاربری که فقط دسترسی ورود فایل عادی دارد ولی view_wh_docs یا perm_inventory_finalize ندارد
+        self.client.force_authenticate(user=self.user_no_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+

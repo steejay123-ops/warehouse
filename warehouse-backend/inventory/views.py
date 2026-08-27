@@ -1468,6 +1468,17 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         conflict_strategy = request.data.get('conflict_strategy') or sys_conflict_strategy
         import_tag = request.data.get('import_tag', '')
         import_id = request.data.get('import_id', '')
+        is_pre_counted_raw = request.data.get('is_pre_counted', False)
+        is_pre_counted = str(is_pre_counted_raw).strip().lower() in ['true', '1', 'yes']
+
+        if is_pre_counted:
+            can_pre_count = (
+                request.user.is_superuser or 
+                request.user.has_perm('accounts.view_wh_docs') or 
+                request.user.has_perm('accounts.perm_inventory_finalize')
+            )
+            if not can_pre_count:
+                return Response({'error': 'شما مجوز ثبت مستقیم اقلام در وضعیت از قبل شمرده‌شده را ندارید.'}, status=403)
 
         if not file_obj:
             return Response({'error': 'هیچ فایلی ارسال نشده است.'}, status=400)
@@ -1522,6 +1533,16 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 skipped = 0
                 failed = 0
                 error_details = []
+
+                from decimal import Decimal, InvalidOperation
+
+                def _parse_decimal(val):
+                    if val is None or str(val).strip() == '':
+                        return None
+                    try:
+                        return Decimal(str(val).strip().replace(',', '.'))
+                    except (InvalidOperation, ValueError, TypeError):
+                        return None
                 
                 # Fetch sensitive fields settings and user permissions
                 restricted_fields = get_setting('SENSITIVE_EXCEL_FIELDS', warehouse_id) or ['doc_status', 'field_status', 'tag_status']
@@ -1747,6 +1768,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             
                             if final_dynamic_data:
                                 defaults['dynamic_data'] = final_dynamic_data
+
+                            if is_pre_counted:
+                                defaults['field_status'] = 'done'
+                                inv_val = defaults.get('inventory')
+                                if inv_val is None and existing_item:
+                                    inv_val = existing_item.inventory
+                                bal_val = defaults.get('bal4miv')
+                                if bal_val is None and existing_item:
+                                    bal_val = existing_item.bal4miv
+
+                                c_dec = _parse_decimal(inv_val)
+                                s_dec = _parse_decimal(bal_val)
+                                if c_dec is not None and s_dec is not None:
+                                    defaults['has_conflict'] = (c_dec != s_dec)
+                                elif c_dec is not None:
+                                    defaults['has_conflict'] = (c_dec != Decimal('0'))
+                                else:
+                                    defaults['has_conflict'] = False
                                 
                             try:
                                 with transaction.atomic():
@@ -1768,6 +1807,33 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                         )
                                         _restore_item_photos_cascade([resurrect_tombstone.id])
                                         history_records.append(ImportHistory(item=resurrect_tombstone, action='update', previous_state=old_state_json))
+
+                                        if is_pre_counted:
+                                            counted_qty = resurrect_tombstone.inventory
+                                            c_task = CountTask.objects.filter(item=resurrect_tombstone).first()
+                                            if c_task:
+                                                c_task.status = 'FINAL_APPROVED'
+                                                c_task.counted_balance = counted_qty
+                                                c_task.manager_note = f"ثبت مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})"
+                                                c_task.modified_by_id = user_id
+                                                c_task.updated_at = timezone.now()
+                                                c_task.save(update_fields=['status', 'counted_balance', 'manager_note', 'modified_by', 'updated_at'])
+                                            else:
+                                                c_task = CountTask.objects.create(
+                                                    item=resurrect_tombstone,
+                                                    status='FINAL_APPROVED',
+                                                    counted_balance=counted_qty,
+                                                    manager_note=f"ثبت مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})",
+                                                    created_by_id=user_id,
+                                                    modified_by_id=user_id
+                                                )
+                                            CountTaskHistory.objects.create(
+                                                task=c_task,
+                                                action_by_id=user_id,
+                                                action_type='FINAL_APPROVED',
+                                                counted_balance=counted_qty,
+                                                note=c_task.manager_note
+                                            )
 
                                         created += 1
                                         append_colored_row(row, 'created', 'ثبت رکورد جدید (احیای رکورد حذف‌شده)')
@@ -1806,6 +1872,11 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                             if defaults.get('my_tag') and defaults.get('my_tag') != existing_item.my_tag:
                                                 new_defaults['my_tag'] = defaults['my_tag']
 
+                                            if is_pre_counted:
+                                                new_defaults['field_status'] = 'done'
+                                                if 'has_conflict' in defaults:
+                                                    new_defaults['has_conflict'] = defaults['has_conflict']
+
                                             if new_defaults:
                                                 from django.core.serializers.json import DjangoJSONEncoder
                                                 old_state = model_to_dict(existing_item)
@@ -1813,6 +1884,33 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
                                                 Item.objects.filter(id=existing_item.id).update(**{**new_defaults, 'updated_at': timezone.now()})
                                                 history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
+
+                                                if is_pre_counted:
+                                                    counted_qty = new_defaults.get('inventory', getattr(existing_item, 'inventory', None))
+                                                    c_task = CountTask.objects.filter(item=existing_item).first()
+                                                    if c_task:
+                                                        c_task.status = 'FINAL_APPROVED'
+                                                        c_task.counted_balance = counted_qty
+                                                        c_task.manager_note = f"به‌روزرسانی مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})"
+                                                        c_task.modified_by_id = user_id
+                                                        c_task.updated_at = timezone.now()
+                                                        c_task.save(update_fields=['status', 'counted_balance', 'manager_note', 'modified_by', 'updated_at'])
+                                                    else:
+                                                        c_task = CountTask.objects.create(
+                                                            item=existing_item,
+                                                            status='FINAL_APPROVED',
+                                                            counted_balance=counted_qty,
+                                                            manager_note=f"ثبت مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})",
+                                                            created_by_id=user_id,
+                                                            modified_by_id=user_id
+                                                        )
+                                                    CountTaskHistory.objects.create(
+                                                        task=c_task,
+                                                        action_by_id=user_id,
+                                                        action_type='FINAL_APPROVED',
+                                                        counted_balance=counted_qty,
+                                                        note=c_task.manager_note
+                                                    )
 
                                                 updated += 1
                                                 append_colored_row(row, 'updated', 'تکمیل نواقص رکورد')
@@ -1830,6 +1928,33 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
                                             Item.objects.filter(id=existing_item.id).update(**{**defaults, 'updated_at': timezone.now()})
                                             history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
+
+                                            if is_pre_counted:
+                                                counted_qty = defaults.get('inventory', getattr(existing_item, 'inventory', None))
+                                                c_task = CountTask.objects.filter(item=existing_item).first()
+                                                if c_task:
+                                                    c_task.status = 'FINAL_APPROVED'
+                                                    c_task.counted_balance = counted_qty
+                                                    c_task.manager_note = f"به‌روزرسانی مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})"
+                                                    c_task.modified_by_id = user_id
+                                                    c_task.updated_at = timezone.now()
+                                                    c_task.save(update_fields=['status', 'counted_balance', 'manager_note', 'modified_by', 'updated_at'])
+                                                else:
+                                                    c_task = CountTask.objects.create(
+                                                        item=existing_item,
+                                                        status='FINAL_APPROVED',
+                                                        counted_balance=counted_qty,
+                                                        manager_note=f"ثبت مستقیم اقلام شمرده‌شده از اکسل ({original_file_name})",
+                                                        created_by_id=user_id,
+                                                        modified_by_id=user_id
+                                                    )
+                                                CountTaskHistory.objects.create(
+                                                    task=c_task,
+                                                    action_by_id=user_id,
+                                                    action_type='FINAL_APPROVED',
+                                                    counted_balance=counted_qty,
+                                                    note=c_task.manager_note
+                                                )
 
                                             updated += 1
                                             append_colored_row(row, 'updated', 'بروزرسانی کامل رکورد')
@@ -1856,6 +1981,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                             defaults['tag_status'] = 'چاپ نشده'
                                         new_item = Item.objects.create(fa_unic_code=fa_unic_code, **defaults)
                                         history_records.append(ImportHistory(item=new_item, action='create'))
+
+                                        if is_pre_counted:
+                                            counted_qty = new_item.inventory
+                                            c_task = CountTask.objects.create(
+                                                item=new_item,
+                                                status='FINAL_APPROVED',
+                                                counted_balance=counted_qty,
+                                                manager_note=f"ثبت مستقیم اقلام شمرده‌شده از فایل اکسل: {original_file_name}",
+                                                created_by_id=user_id,
+                                                modified_by_id=user_id
+                                            )
+                                            CountTaskHistory.objects.create(
+                                                task=c_task,
+                                                action_by_id=user_id,
+                                                action_type='FINAL_APPROVED',
+                                                counted_balance=counted_qty,
+                                                note=c_task.manager_note
+                                            )
 
                                         created += 1
                                         append_colored_row(row, 'created', 'ثبت رکورد جدید')
@@ -1891,6 +2034,16 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             hr.import_log = log_record
                         ImportHistory.objects.bulk_create(history_records)
 
+                    if is_pre_counted:
+                        try:
+                            target_wh_id = target_warehouse_id if 'target_warehouse_id' in locals() and target_warehouse_id else None
+                            if target_wh_id:
+                                broadcast_count_task_update(warehouse_id=target_wh_id)
+                            else:
+                                broadcast_count_task_update()
+                        except Exception as bc_err:
+                            logger.warning(f"Failed to broadcast count task update after pre-counted import: {bc_err}")
+
                     # ثبت لاگ کلان ممیزی برای بارگذاری اکسل (خارج از تراکنش جهت جلوگیری از رول‌بک ایمپورت در صورت خطای جانبی)
                     try:
                         from accounts.audit_utils import log_audit_event
@@ -1908,6 +2061,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             details={
                                 'import_id': import_id,
                                 'file_name': original_file_name,
+                                'is_pre_counted': is_pre_counted,
                                 'records_created': created,
                                 'records_updated': updated,
                                 'records_skipped': skipped,

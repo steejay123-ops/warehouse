@@ -76,6 +76,7 @@ export interface ReportAggregation {
   field: string;
   fn: AggFn;
   alias?: string;
+  label?: string;
 }
 
 export interface ReportSort {

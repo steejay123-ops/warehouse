@@ -332,7 +332,7 @@ export class ReportStore {
     const spec = this.buildSpec(true);
     if (!spec) return;
     spec.page = 1;
-    spec.page_size = 200;
+    spec.page_size = 50;
     this.chartRowsLoading.set(true);
     this.api.run(spec).subscribe({
       next: (res) => {

@@ -486,7 +486,11 @@ class ReportEngine:
             if alias in self.fields or alias in used_aliases:
                 raise ReportError(f'alias تکراری یا رزروشده: {alias}')
             used_aliases.add(alias)
-            agg_specs.append((alias, fn, fd))
+            raw_label = str(agg.get('label') or '').strip()
+            if raw_label and len(raw_label) > 60:
+                raise ReportError('طول عنوان ستون نمی‌تواند بیشتر از ۶۰ کاراکتر باشد.')
+            label = raw_label or self._agg_label(fn, fd)
+            agg_specs.append((alias, fn, fd, label))
 
         # کوئری پایه + scope
         qs = self._scope_queryset(self.config.base_queryset())
@@ -494,7 +498,7 @@ class ReportEngine:
         # ── تشخیص فیلدهای JOIN در spec ──
         join_field_keys = {k for k in field_keys if '.' in k}
         join_group_keys = {k for k in group_by if '.' in k}
-        join_agg_keys = {fd.key for _, _, fd in agg_specs if '.' in fd.key}
+        join_agg_keys = {fd.key for _, _, fd, _ in agg_specs if '.' in fd.key}
         join_used_in_output = join_field_keys | join_group_keys | join_agg_keys
         # alias مقصدهایی که در output (نه فقط filter) استفاده شده‌اند
         output_join_aliases = {k.split('.')[0] for k in join_used_in_output}
@@ -504,7 +508,7 @@ class ReportEngine:
         # Sum/Avg/Min/Max روی فیلدهای اسکالر پایه ممنوع است چون ردیف‌ها تکثیر می‌شوند
         has_many_output = any(self._joins.get(a) and self._joins[a].cardinality == 'many' for a in output_join_aliases)
         if grouped and has_many_output:
-            for alias, fn, fd in agg_specs:
+            for alias, fn, fd, _ in agg_specs:
                 if fn in ('sum', 'avg', 'min', 'max') and '.' not in fd.key:
                     raise ReportError(
                         f'در ترکیب با جدول چندمقداری، {fn} روی فیلد «{fd.label}» '
@@ -545,7 +549,7 @@ class ReportEngine:
 
         # annotationهای موردنیاز (پویا/محاسباتی برای فیلدهای پایه و JOIN) — قبل از فیلتر
         referenced = set(field_keys) | set(group_by)
-        referenced |= {fd.key for _, _, fd in agg_specs}
+        referenced |= {fd.key for _, _, fd, _ in agg_specs}
         referenced |= self._filter_field_keys(spec.get('filters'))
         referenced |= {s.get('field') for s in sort if isinstance(s, dict)}
         annotations = {}
@@ -573,7 +577,7 @@ class ReportEngine:
         if grouped:
             group_sources = [gd.source for gd in group_defs]
             agg_exprs = {}
-            for alias, fn, fd in agg_specs:
+            for alias, fn, fd, _ in agg_specs:
                 if fn == 'count' and (fd.key == 'id' or fd.key.endswith('.id') or fd.source == 'id') and has_many_output:
                     agg_exprs[alias] = Count(fd.source, distinct=True)
                 else:
@@ -601,8 +605,8 @@ class ReportEngine:
                     qs = qs.filter(**{f'{alias}{OPERATOR_LOOKUPS[op]}': coerced})
             columns = (
                 [{'key': gd.key, 'label': gd.label, 'type': gd.type, 'source': gd.source} for gd in group_defs]
-                + [{'key': alias, 'label': self._agg_label(fn, fd), 'type': 'number', 'source': alias}
-                   for alias, fn, fd in agg_specs]
+                + [{'key': alias, 'label': label, 'type': 'number', 'source': alias}
+                   for alias, fn, fd, label in agg_specs]
             )
             sortable = {gd.key for gd in group_defs} | used_aliases
         else:

@@ -964,6 +964,33 @@ class JoinQueryTests(BaseReportTest):
         self.assertEqual(items[0]['id'], job2.pk)
         self.assertEqual(items[1]['id'], job1.pk)
 
+    def test_aggregation_custom_display_label(self):
+        """توابع تجمیعی باید از برچسب نمایشی دلخواه فارسی پشتیبانی کنند و آن را در columns برگردانند."""
+        spec = {
+            'entity': 'items',
+            'group_by': ['vendor'],
+            'aggregations': [
+                {'fn': 'sum', 'field': 'inventory', 'alias': 'total_stock', 'label': 'مجموع کل موجودی انبار'}
+            ],
+        }
+        res = ReportEngine(self.admin, spec).run()
+        col = next((c for c in res['columns'] if c['key'] == 'total_stock'), None)
+        self.assertIsNotNone(col)
+        self.assertEqual(col['label'], 'مجموع کل موجودی انبار')
+
+    def test_aggregation_label_max_length_validation(self):
+        """عنوان نمایشی ستون تجمیعی نباید بیش از ۶۰ کاراکتر باشد."""
+        spec = {
+            'entity': 'items',
+            'group_by': ['vendor'],
+            'aggregations': [
+                {'fn': 'sum', 'field': 'inventory', 'alias': 'total_stock', 'label': 'یک عنوان بسیار طولانی که بیش از شصت کاراکتر دارد و باید توسط سیستم اعتبارسنجی رد شود'}
+            ],
+        }
+        with self.assertRaises(ReportError) as ctx:
+            ReportEngine(self.admin, spec).run()
+        self.assertIn('طول عنوان ستون', str(ctx.exception))
+
 
 
 

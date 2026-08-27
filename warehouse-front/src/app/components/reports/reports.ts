@@ -1,4 +1,4 @@
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -96,17 +96,55 @@ export class Reports implements OnInit, OnDestroy {
   saveName = '';
   saveDescription = '';
   saveIsPublic = false;
+  readonly saveNameInput = viewChild<ElementRef<HTMLInputElement>>('saveNameInput');
+  private lastFocusedElement: HTMLElement | null = null;
+
+  openSaveModal(): void {
+    this.lastFocusedElement = document.activeElement as HTMLElement;
+    const t = this.store.activeTemplate();
+    this.saveName = t?.name ?? '';
+    this.saveDescription = t?.description ?? '';
+    this.saveIsPublic = t?.is_public ?? false;
+    this.isSaveModalOpen.set(true);
+    requestAnimationFrame(() => {
+      this.saveNameInput()?.nativeElement?.focus();
+    });
+  }
+
+  closeSaveModal(): void {
+    this.isSaveModalOpen.set(false);
+    this.lastFocusedElement?.focus();
+  }
 
   // ─── مودال راهنمای جامع ───
   isHelpModalOpen = signal(false);
   activeHelpTab = signal<'scenarios' | 'steps' | 'joins' | 'export'>('scenarios');
 
   openHelpModal(): void {
+    this.lastFocusedElement = document.activeElement as HTMLElement;
     this.isHelpModalOpen.set(true);
   }
 
   closeHelpModal(): void {
     this.isHelpModalOpen.set(false);
+    this.lastFocusedElement?.focus();
+  }
+
+  onDialogKeyDown(e: KeyboardEvent, container: HTMLElement): void {
+    if (e.key !== 'Tab') return;
+    const focusable = container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   setHelpTab(tab: 'scenarios' | 'steps' | 'joins' | 'export'): void {
@@ -153,6 +191,19 @@ export class Reports implements OnInit, OnDestroy {
     this.store.loadTemplates();
     this.warehouseHttp.getAll().subscribe({
       next: (list) => this.warehouses.set(list.map((w) => ({ id: w.id, name: w.name }))),
+      error: () => {},
+    });
+
+    // فراخوانی فهرست jobهای خروجی کاربر جهت پاک‌سازی رکوردهای کهنه در سرور و بازیابی خودکار وضعیت
+    this.reportApi.getExportJobs().subscribe({
+      next: (jobs) => {
+        if (!this.exportJobId() && jobs && jobs.length) {
+          const activeJob = jobs.find((j) => j.status === 'running' || j.status === 'pending');
+          if (activeJob) {
+            this.setExportJob(activeJob.id, activeJob.total_rows);
+          }
+        }
+      },
       error: () => {},
     });
 
@@ -499,7 +550,7 @@ export class Reports implements OnInit, OnDestroy {
     if (!target) return;
     this.store.aggregations.update((arr) => [
       ...arr,
-      { field: target.key, fn: numeric ? 'sum' : 'count', alias: '' },
+      { field: target.key, fn: numeric ? 'sum' : 'count', alias: '', label: '' },
     ]);
     this.notifyStateChanged();
   }
@@ -541,7 +592,7 @@ export class Reports implements OnInit, OnDestroy {
     return this.isRowAliasConflict(alias, currentIndex) || this.isRowAliasInvalidFormat(alias);
   }
 
-  updateAggregation(index: number, patch: Partial<{ field: string; fn: AggFn; alias: string }>): void {
+  updateAggregation(index: number, patch: Partial<{ field: string; fn: AggFn; alias: string; label: string }>): void {
     if (patch.field) this.checkAndSwitchManyJoin(patch.field);
     this.store.aggregations.update((arr) =>
       arr.map((a, i) => {
@@ -592,6 +643,7 @@ export class Reports implements OnInit, OnDestroy {
     const i = this.store.aggAliases().indexOf(alias);
     const agg = this.store.aggregations()[i];
     if (!agg) return alias;
+    if (agg.label && agg.label.trim()) return agg.label.trim();
     const fn = this.aggFns.find((f) => f.value === agg.fn)?.label ?? agg.fn;
     const field = this.getFieldLabel(agg.field);
     return `${fn} ${field}`;
@@ -676,7 +728,7 @@ export class Reports implements OnInit, OnDestroy {
   @HostListener('window:keydown.escape')
   handleEscape(): void {
     if (this.isSaveModalOpen()) {
-      this.isSaveModalOpen.set(false);
+      this.closeSaveModal();
     } else if (this.isHelpModalOpen()) {
       this.closeHelpModal();
     }
@@ -850,14 +902,6 @@ export class Reports implements OnInit, OnDestroy {
   }
 
   // ------------------------------------------------------------------ قالب‌ها
-  openSaveModal(): void {
-    const t = this.store.activeTemplate();
-    this.saveName = t?.name ?? '';
-    this.saveDescription = t?.description ?? '';
-    this.saveIsPublic = t?.is_public ?? false;
-    this.isSaveModalOpen.set(true);
-  }
-
   saveTemplate(asNew: boolean): void {
     const entity = this.store.entityKey();
     if (!entity || !this.saveName.trim()) return;
@@ -886,7 +930,7 @@ export class Reports implements OnInit, OnDestroy {
     req.subscribe({
       next: (t) => {
         this.toast.success('قالب گزارش ذخیره شد.');
-        this.isSaveModalOpen.set(false);
+        this.closeSaveModal();
         this.store.activeTemplate.set(t);
         this.store.loadTemplates();
       },

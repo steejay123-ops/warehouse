@@ -353,17 +353,25 @@
                       <option [ngValue]="f.key" [title]="f.key">{{ f.label }}</option>
                     }
                   </select>
+                  <!-- عنوان فارسی دلخواه ستون -->
+                  <div class="relative flex items-center">
+                    <input type="text" [ngModel]="agg.label" (ngModelChange)="updateAggregation(i, { label: $event })"
+                           maxlength="60"
+                           placeholder="عنوان ستون (مثال: جمع موجودی)"
+                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-44 bg-white shadow-2xs">
+                  </div>
+                  <!-- شناسه انگلیسی ستون (SQL Alias) -->
                   <div class="relative flex items-center">
                     <input type="text" [ngModel]="agg.alias" (ngModelChange)="updateAggregation(i, { alias: $event })"
-                           placeholder="شناسه انگلیسی ستون (مثال: total_inv)"
+                           placeholder="شناسه SQL (اختیاری)"
                            dir="ltr"
                            [class.border-rose-400]="isRowAliasHasError(agg.alias, i)"
                            [class.bg-rose-50/40]="isRowAliasHasError(agg.alias, i)"
-                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-48 bg-white shadow-2xs">
+                           class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 outline-none focus:border-indigo-400 w-36 bg-white shadow-2xs font-mono">
                     @if (isRowAliasConflict(agg.alias, i)) {
-                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">تداخل نام مستعار تکراری!</span>
+                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">تداخل شناسه تکراری!</span>
                     } @else if (isRowAliasInvalidFormat(agg.alias)) {
-                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">فرمت نامعتبر (فقط حروف کوچک انگلیسی، عدد و _)</span>
+                      <span class="text-[10px] text-rose-600 font-bold mr-1.5">فرمت نامعتبر (فقط انگلیسی)</span>
                     }
                   </div>
                   <button type="button" (click)="removeAggregation(i)"
@@ -561,8 +569,8 @@
 
   <!-- ═══ مودال ذخیره قالب ═══ -->
   @if (isSaveModalOpen()) {
-    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="isSaveModalOpen.set(false)">
-      <div role="dialog" aria-modal="true" aria-labelledby="save-modal-title" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-100" (click)="$event.stopPropagation()">
+    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="closeSaveModal()">
+      <div #saveModalContainer (keydown)="onDialogKeyDown($event, saveModalContainer)" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="save-modal-title" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 border border-slate-100 outline-none" (click)="$event.stopPropagation()">
         <!-- Modal Header -->
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center gap-2.5">
@@ -578,14 +586,14 @@
               <p class="text-[11px] text-slate-400">تنظیمات، فیلدها و فیلترهای فعلی را به عنوان قالب ذخیره کنید</p>
             </div>
           </div>
-          <button type="button" (click)="isSaveModalOpen.set(false)" class="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" title="بستن پنجره">
+          <button type="button" (click)="closeSaveModal()" class="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" title="بستن پنجره">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
 
         <div>
           <label class="text-[11px] font-bold text-slate-700 block mb-1">نام قالب گزارش <span class="text-rose-500">*</span></label>
-          <input type="text" [(ngModel)]="saveName" placeholder="مثلاً: موجودی کالاها به تفکیک انبار"
+          <input #saveNameInput id="save-template-name-input" type="text" [(ngModel)]="saveName" placeholder="مثلاً: موجودی کالاها به تفکیک انبار"
                  class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-white shadow-2xs">
         </div>
 
@@ -624,7 +632,7 @@
               ذخیره قالب
             </button>
           }
-          <button type="button" (click)="isSaveModalOpen.set(false)"
+          <button type="button" (click)="closeSaveModal()"
                   class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold py-2.5 px-4 rounded-xl transition-all cursor-pointer">
             انصراف
           </button>
@@ -636,7 +644,7 @@
   <!-- ═══ مودال راهنمای جامع گزارش‌ساز و سناریوهای کاربردی ═══ -->
   @if (isHelpModalOpen()) {
     <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[70] flex items-center justify-center p-4" (click)="closeHelpModal()">
-      <div role="dialog" aria-modal="true" aria-labelledby="help-modal-title" class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200" (click)="$event.stopPropagation()">
+      <div #helpModalContainer (keydown)="onDialogKeyDown($event, helpModalContainer)" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="help-modal-title" class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200 outline-none" (click)="$event.stopPropagation()">
         
         <!-- Modal Header -->
         <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-l from-purple-50/50 to-white">

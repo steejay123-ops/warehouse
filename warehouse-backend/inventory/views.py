@@ -2,7 +2,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.http import StreamingHttpResponse
+from django.http import StreamingHttpResponse, HttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -35,6 +35,7 @@ from django.db import transaction
 import logging
 from decimal import Decimal
 from django.utils import timezone
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,24 @@ def _restore_item_photos_cascade(item_ids):
             ItemPhoto.objects.filter(id=successor.id).update(is_primary=True, updated_at=now)
 
     return restored
+
+
+def _cleanup_old_import_logs(max_age_hours=24):
+    """پاکسازی فایل‌های گزارش اکسل قدیمی از پوشه موقت سرور"""
+    try:
+        temp_dir = tempfile.gettempdir()
+        now = time.time()
+        for fname in os.listdir(temp_dir):
+            if fname.startswith("import_log_") and fname.endswith(".xlsx"):
+                fpath = os.path.join(temp_dir, fname)
+                if os.path.isfile(fpath):
+                    try:
+                        if (now - os.path.getmtime(fpath)) > (max_age_hours * 3600):
+                            os.remove(fpath)
+                    except OSError:
+                        pass
+    except Exception:
+        pass
 
 
 class ItemPagination(PageNumberPagination):
@@ -453,26 +472,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         from accounts.permissions import HasMenuAccess, CanManageItemPhotos
         from rest_framework.permissions import AllowAny, IsAuthenticated
 
-        if self.action in ['download_import_log', 'download_template']:
-            permission_classes = [AllowAny()]
-        elif self.action == 'photos':
+        if self.action == 'photos':
             # خواندن عکس برای هر کاربر لاگین‌شده، ولی آپلود فقط برای نقش‌هایی که
             # با عکس کالا کار می‌کنند. پیش از این POST هم IsAuthenticated بود.
             if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
                 permission_classes = [IsAuthenticated()]
             else:
                 permission_classes = [IsAuthenticated(), CanManageItemPhotos()]
-        elif self.action in ['list', 'retrieve', 'dashboard_stats']:
+        elif self.action in ['list', 'retrieve', 'dashboard_stats', 'export_columns', 'download_template']:
             permission_classes = [IsAuthenticated()]
         elif self.action == 'bulk_assign':
             permission_classes = [HasMenuAccess('perm_rec_dispatch')]
         elif self.action in ['export_excel', 'export_excel_mt']: # I'll just secure export here in case it's added
             permission_classes = [HasMenuAccess('view_sys_export')]
-        elif self.action in ['import_excel', 'cancel_import', 'delete_from_excel', 'clear_warehouse_data']:
+        elif self.action in ['import_excel', 'cancel_import', 'revert_import', 'download_import_log', 'delete_from_excel', 'clear_warehouse_data', 'latest_import', 'parse_headers']:
             permission_classes = [HasMenuAccess('perm_rec_import')]
         elif self.action in ['reject', 'manager_reject']:
             permission_classes = [HasMenuAccess('perm_rec_recount')]
-        elif self.action in ['update', 'partial_update', 'bulk_update']:
+        elif self.action in ['update', 'partial_update', 'bulk_update', 'bulk_tag']:
             permission_classes = [HasMenuAccess('perm_wh_edit') | HasMenuAccess('view_sys_counter') | HasMenuAccess('view_sys_supervisor')]
         else: # create, destroy, etc
             permission_classes = [HasMenuAccess('perm_wh_edit')]
@@ -642,12 +659,22 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         from django.http import HttpResponse
 
         warehouse_id = request.query_params.get('warehouse_id')
+        if warehouse_id:
+            try:
+                wh_id_val = int(warehouse_id)
+            except (ValueError, TypeError):
+                return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+            if not can_access_warehouse(request.user, wh_id_val):
+                return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+            warehouse_id = wh_id_val
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Template"
 
         expected_fields = self.get_expected_fields(warehouse_id)
-        headers = list(expected_fields.keys())
+        EXCLUDED_TEMPLATE_FIELDS = {'sync_id', 'is_deleted', 'created_at', 'updated_at', 'created_by', 'modified_by'}
+        headers = [h for h in expected_fields.keys() if h not in EXCLUDED_TEMPLATE_FIELDS]
 
         # Add dynamic fields if warehouse_id is provided
         dynamic_fields = []
@@ -1282,6 +1309,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             dynamic_defs = ItemFieldDefinition.objects.filter(warehouse_id=warehouse_id, is_active=True)
             for d in dynamic_defs:
                 fields[d.name] = d.name
+                fields[d.name.lower()] = d.name
                 
         return fields
 
@@ -1293,7 +1321,11 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         
         if not file_obj:
             return Response({'error': 'هیچ فایلی ارسال نشده است.'}, status=400)
+
+        if warehouse_id and not can_access_warehouse(request.user, warehouse_id):
+            return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
             
+        temp_path = None
         try:
             fd, temp_path = tempfile.mkstemp(suffix='.xlsx')
             with os.fdopen(fd, 'wb') as f:
@@ -1307,12 +1339,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             first_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), [])
             # Convert to lower case to remove case sensitivity
             raw_headers = [str(val).strip().lower() if val is not None else '' for val in first_row]
-            
             wb.close()
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
             
             expected_fields = self.get_expected_fields(warehouse_id)
             
@@ -1337,31 +1364,70 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 'is_superuser': is_superuser
             })
         except Exception as e:
-            return Response({'error': str(e)}, status=400)
+            logger.exception("Error parsing excel headers")
+            return Response({'error': 'خطا در خواندن فایل اکسل. لطفاً از معتبر بودن و فرمت استاندارد فایل اطمینان حاصل کنید.'}, status=400)
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
 
     @action(detail=False, methods=['post'])
     def cancel_import(self, request):
         import_id = request.data.get('import_id')
-        if import_id:
-            cache.set(f"cancel_import_{import_id}", True, timeout=3600)
-            return Response({'status': 'cancelled'})
-        return Response({'error': 'import_id required'}, status=400)
+        if not import_id:
+            return Response({'error': 'شناسه فرآیند الزامی است.'}, status=400)
+            
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{1,64}$', str(import_id)):
+            return Response({'error': 'شناسه فرآیند نامعتبر است.'}, status=400)
 
-    @action(detail=False, methods=['get'], permission_classes=[], authentication_classes=[])
+        import_log = ImportLog.objects.filter(import_id=import_id).first()
+        if import_log and not can_access_warehouse(request.user, import_log.warehouse_id):
+            return Response({'error': 'شما دسترسی لازم برای لغو این فرآیند را ندارید.'}, status=403)
+
+        cache.set(f"cancel_import_{import_id}", True, timeout=3600)
+        return Response({'status': 'cancelled'})
+
+    @action(detail=False, methods=['get'])
     def download_import_log(self, request):
         import_id = request.query_params.get('import_id')
         if not import_id:
-            return Response({'error': 'import_id required'}, status=400)
-            
-        file_path = os.path.join(tempfile.gettempdir(), f"import_log_{import_id}.xlsx")
+            return Response({'error': 'شناسه فرآیند الزامی است.'}, status=400)
+
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]{1,64}$', str(import_id)):
+            return Response({'error': 'شناسه فرآیند نامعتبر است.'}, status=400)
+
+        import_log = ImportLog.objects.filter(import_id=import_id).first()
+        if not import_log:
+            return Response({'error': 'فایل لاگ یافت نشد یا منقضی شده است.'}, status=404)
+
+        # کنترل دسترسی کاربر به لاگ (سوپریوزر، ثبت‌کننده لاگ یا دسترسی مجاز به انبار)
+        is_owner = (import_log.imported_by_id == request.user.id)
+        has_wh_access = can_access_warehouse(request.user, import_log.warehouse_id)
+        if not (request.user.is_superuser or is_owner or has_wh_access):
+            return Response({'error': 'شما دسترسی لازم برای دریافت این فایل لاگ را ندارید.'}, status=403)
+
+        temp_dir = os.path.abspath(tempfile.gettempdir())
+        file_path = os.path.abspath(os.path.join(temp_dir, f"import_log_{import_id}.xlsx"))
+
+        # محافظت قطعی در برابر Path Traversal
+        try:
+            if os.path.commonpath([temp_dir, file_path]) != temp_dir:
+                return Response({'error': 'مسیر فایل نامعتبر است.'}, status=400)
+        except ValueError:
+            return Response({'error': 'مسیر فایل نامعتبر است.'}, status=400)
+
         if not os.path.exists(file_path):
             return Response({'error': 'فایل لاگ یافت نشد یا منقضی شده است.'}, status=404)
-            
+
         with open(file_path, 'rb') as f:
             file_data = f.read()
-            
-        response = StreamingHttpResponse(
-            iter([file_data]),
+
+        response = HttpResponse(
+            file_data,
             content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         response['Content-Disposition'] = f'attachment; filename="import_log_{import_id}.xlsx"'
@@ -1371,14 +1437,28 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     def import_excel(self, request):
         file_obj = request.FILES.get('file')
         warehouse_id = request.data.get('warehouse_id')
-        
+
+        if warehouse_id is not None and str(warehouse_id).strip() != '':
+            try:
+                warehouse_id_val = int(warehouse_id)
+            except (ValueError, TypeError):
+                return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+
+            if not can_access_warehouse(request.user, warehouse_id_val):
+                return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+            warehouse_id = warehouse_id_val
+        else:
+            warehouse_id = None
+            if not can_access_warehouse(request.user, None):
+                return Response({'error': 'تعیین انبار مجاز برای کاربران با دسترسی محدود الزامی است.'}, status=403)
+
         from warehouses.services import get_setting
         sys_conflict_strategy = get_setting('default_conflict_strategy', warehouse_id)
-        
+
         conflict_strategy = request.data.get('conflict_strategy') or sys_conflict_strategy
         import_tag = request.data.get('import_tag', '')
         import_id = request.data.get('import_id', '')
-        
+
         if not file_obj:
             return Response({'error': 'هیچ فایلی ارسال نشده است.'}, status=400)
             
@@ -1463,6 +1543,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 
                 try:
                     history_records = []
+                    valid_fields_dict = {f.name: f for f in Item._meta.fields}
                     
                     with transaction.atomic():
                         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
@@ -1510,10 +1591,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             
                             final_tags = []
                             if excel_tag:
-                                final_tags.extend([t.strip() for t in excel_tag.split('،') if t.strip()])
+                                final_tags.extend([t.strip() for t in excel_tag.split('，') if t.strip()])
                             if import_tag:
                                 import_tag_clean = import_tag.replace(',', '،')
-                                final_tags.extend([t.strip() for t in import_tag_clean.split('،') if t.strip()])
+                                final_tags.extend([t.strip() for t in import_tag_clean.split('，') if t.strip()])
                             
                             unique_tags = list(set(final_tags))
                             if unique_tags:
@@ -1527,15 +1608,32 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             if warehouse_str:
                                 wh_str = str(warehouse_str).strip()
                                 wh = Warehouse.objects.filter(Q(name__iexact=wh_str) | Q(code__iexact=wh_str)).first()
-                                if wh:
-                                    target_warehouse_id = wh.id
-                                else:
+                                if not wh:
                                     failed += 1
                                     err_msg = f"انبار با نام یا کد '{wh_str}' یافت نشد."
                                     error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
                                     append_colored_row(row, 'err', err_msg)
                                     q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {fa_unic_code}: {err_msg}"}) + "\n")
                                     continue
+
+                                # اگر فرآیند برای انبار مشخصی اجرا شده، ردیف نباید به انبار دیگری اشاره کند
+                                if warehouse_id and wh.id != int(warehouse_id):
+                                    failed += 1
+                                    err_msg = f"مغایرت انبار: فرآیند برای انبار شناسه {warehouse_id} آغاز شده اما این ردیف انبار '{wh.name}' را مشخص کرده است."
+                                    error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                    append_colored_row(row, 'err', err_msg)
+                                    q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {fa_unic_code}: {err_msg}"}) + "\n")
+                                    continue
+
+                                target_warehouse_id = wh.id
+
+                            if target_warehouse_id and not can_access_warehouse(request.user, target_warehouse_id):
+                                failed += 1
+                                err_msg = "شما دسترسی لازم به انبار مشخص‌شده در این ردیف را ندارید."
+                                error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                append_colored_row(row, 'err', err_msg)
+                                q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {fa_unic_code}: {err_msg}"}) + "\n")
+                                continue
 
                             # Extract dynamic data
                             dynamic_data_updates = {}
@@ -1544,29 +1642,67 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                     if d_key in row_data and row_data[d_key] is not None:
                                         dynamic_data_updates[d_key] = row_data.pop(d_key)
 
-                            defaults = {k: v for k, v in row_data.items() if k != 'fa_unic_code' and v is not None}
+                            if conflict_strategy == 'replace':
+                                defaults = {}
+                                for k, v in row_data.items():
+                                    if k == 'fa_unic_code':
+                                        continue
+                                    if v is None:
+                                        f = valid_fields_dict.get(k)
+                                        if f and f.null:
+                                            defaults[k] = None
+                                        elif f and f.has_default():
+                                            defaults[k] = f.default if not callable(f.default) else f.default()
+                                        elif f and isinstance(f, (models.CharField, models.TextField)):
+                                            defaults[k] = ''
+                                    else:
+                                        defaults[k] = v
+                            else:
+                                defaults = {k: v for k, v in row_data.items() if k != 'fa_unic_code' and v is not None}
                             if target_warehouse_id: defaults['warehouse_id'] = target_warehouse_id
                             if user_id: defaults['modified_by_id'] = user_id
-                            
+
+                            item_display_code = fa_unic_code or f"ID:{item_id}"
                             existing_item = None
                             if item_id:
                                 try:
                                     clean_id = int(float(item_id))
                                 except ValueError:
                                     clean_id = item_id
-                                    
+
                                 existing_item = Item.objects.filter(id=clean_id).first()
-                                
-                                # Check if ID points to a different fa_unic_code
-                                if existing_item and fa_unic_code:
-                                    db_code = str(existing_item.fa_unic_code).strip() if existing_item.fa_unic_code else ""
-                                    if db_code and db_code != fa_unic_code:
+                                if existing_item:
+                                    # جلوگیری از سرقت یا جابجایی ناخواسته کالا بین انبارها
+                                    if target_warehouse_id and existing_item.warehouse_id != target_warehouse_id:
                                         failed += 1
-                                        err_msg = f"مغایرت شناسه: کالا با id={clean_id} دارای کد {db_code} است ولی اکسل کد {fa_unic_code} را ارسال کرده است."
-                                        error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                        err_msg = f"مغایرت انبار: کالای شناسه {clean_id} متعلق به انبار دیگری است و امکان جابجایی یا ویرایش آن از این انبار وجود ندارد."
+                                        error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
                                         append_colored_row(row, 'err', err_msg)
                                         q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
                                         continue
+
+                                    if not can_access_warehouse(request.user, existing_item.warehouse_id):
+                                        failed += 1
+                                        err_msg = f"عدم دسترسی: شما به انبار کالای شناسه {clean_id} دسترسی ندارید."
+                                        error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
+                                        append_colored_row(row, 'err', err_msg)
+                                        q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
+                                        continue
+
+                                    # Check if ID points to a different fa_unic_code
+                                    if fa_unic_code:
+                                        db_code = str(existing_item.fa_unic_code).strip() if existing_item.fa_unic_code else ""
+                                        if db_code and db_code != fa_unic_code:
+                                            failed += 1
+                                            err_msg = f"مغایرت شناسه: کالا با id={clean_id} دارای کد {db_code} است ولی اکسل کد {fa_unic_code} را ارسال کرده است."
+                                            error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
+                                            append_colored_row(row, 'err', err_msg)
+                                            q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
+                                            continue
+
+                            # هرگز انبار یک کالای موجود را از طریق فایل اکسل تغییر ندهید (جلوگیری از سرقت یا جابجایی انبار)
+                            if existing_item:
+                                defaults.pop('warehouse_id', None)
                             
                             if not existing_item and fa_unic_code and target_warehouse_id:
                                 existing_item = Item.objects.filter(fa_unic_code=fa_unic_code, warehouse_id=target_warehouse_id).first()
@@ -1602,117 +1738,126 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             if final_dynamic_data:
                                 defaults['dynamic_data'] = final_dynamic_data
                                 
-                            if resurrect_tombstone:
-                                # احیای رکورد حذف‌نرم: از دید کاربر «رکورد جدید» است،
-                                # اما ردیف قبلی (با همان sync_id) به‌روزرسانی و زنده می‌شود.
-                                from django.core.serializers.json import DjangoJSONEncoder
-                                old_state = model_to_dict(resurrect_tombstone)
-                                old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
-
-                                if user_id: defaults['created_by_id'] = user_id
-                                if 'tag_status' not in defaults:
-                                    defaults['tag_status'] = 'چاپ نشده'
-                                Item.all_objects.filter(id=resurrect_tombstone.id).update(
-                                    fa_unic_code=fa_unic_code,
-                                    is_deleted=False,
-                                    updated_at=timezone.now(),
-                                    **defaults,
-                                )
-                                _restore_item_photos_cascade([resurrect_tombstone.id])
-                                history_records.append(ImportHistory(item=resurrect_tombstone, action='update', previous_state=old_state_json))
-
-                                created += 1
-                                append_colored_row(row, 'created', 'ثبت رکورد جدید (احیای رکورد حذف‌شده)')
-                                q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید (احیا): {fa_unic_code}"}) + "\n")
-                            elif existing_item:
-                                # Append new tags to existing item's tags
-                                if existing_item.my_tag:
-                                    existing_tags = [t.strip() for t in existing_item.my_tag.split('،') if t.strip()]
-                                    new_tags = [t.strip() for t in defaults.get('my_tag', '').split('،') if t.strip()]
-                                    combined_tags = list(set(existing_tags + new_tags))
-                                    defaults['my_tag'] = '،'.join(combined_tags) if combined_tags else ''
-
-                                if conflict_strategy == 'ignore':
-                                    skipped += 1
-                                    append_colored_row(row, 'warn', 'نادیده گرفتن رکورد تکراری')
-                                    q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] نادیده گرفتن رکورد تکراری: {item_display_code}"}) + "\n")
-                                    continue
-                                elif conflict_strategy == 'log':
-                                    error_details.append({"row": row_idx, "code": item_display_code, "error": "تداخل رکورد (ثبت در لاگ)"})
-                                    skipped += 1
-                                    append_colored_row(row, 'warn', 'تداخل رکورد (ثبت در لاگ)')
-                                    q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] تداخل رکورد: {item_display_code}"}) + "\n")
-                                    continue
-                                elif conflict_strategy == 'update_empty':
-                                    new_defaults = {k: v for k, v in defaults.items() if not getattr(existing_item, k) and v not in [None, '']}
-                                    # Always update fa_unic_code if empty
-                                    if fa_unic_code and not existing_item.fa_unic_code:
-                                        new_defaults['fa_unic_code'] = fa_unic_code
-                                    # Always update tag since we append them
-                                    if defaults.get('my_tag') and defaults.get('my_tag') != existing_item.my_tag:
-                                        new_defaults['my_tag'] = defaults['my_tag']
-                                        
-                                    if new_defaults:
+                            try:
+                                with transaction.atomic():
+                                    if resurrect_tombstone:
+                                        # احیای رکورد حذف‌نرم: از دید کاربر «رکورد جدید» است،
+                                        # اما ردیف قبلی (با همان sync_id) به‌روزرسانی و زنده می‌شود.
                                         from django.core.serializers.json import DjangoJSONEncoder
-                                        old_state = model_to_dict(existing_item)
+                                        old_state = model_to_dict(resurrect_tombstone)
                                         old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
-                                        
-                                        Item.objects.filter(id=existing_item.id).update(**{**new_defaults, 'updated_at': timezone.now()})
-                                        history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
-                                        
-                                        updated += 1
-                                        append_colored_row(row, 'updated', 'تکمیل نواقص رکورد')
-                                        q.put(json.dumps({"type": "updated", "msg": f"[ردیف {row_idx}] تکمیل نواقص رکورد: {item_display_code}"}) + "\n")
+
+                                        if user_id: defaults['created_by_id'] = user_id
+                                        if 'tag_status' not in defaults:
+                                            defaults['tag_status'] = 'چاپ نشده'
+                                        Item.all_objects.filter(id=resurrect_tombstone.id).update(
+                                            fa_unic_code=fa_unic_code,
+                                            is_deleted=False,
+                                            updated_at=timezone.now(),
+                                            **defaults,
+                                        )
+                                        _restore_item_photos_cascade([resurrect_tombstone.id])
+                                        history_records.append(ImportHistory(item=resurrect_tombstone, action='update', previous_state=old_state_json))
+
+                                        created += 1
+                                        append_colored_row(row, 'created', 'ثبت رکورد جدید (احیای رکورد حذف‌شده)')
+                                        q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید (احیا): {fa_unic_code}"}) + "\n")
+                                    elif existing_item:
+                                        # Append new tags to existing item's tags
+                                        if existing_item.my_tag:
+                                            existing_tags = [t.strip() for t in existing_item.my_tag.split('،') if t.strip()]
+                                            new_tags = [t.strip() for t in defaults.get('my_tag', '').split('،') if t.strip()]
+                                            combined_tags = list(set(existing_tags + new_tags))
+                                            defaults['my_tag'] = '،'.join(combined_tags) if combined_tags else ''
+
+                                        if conflict_strategy == 'ignore':
+                                            skipped += 1
+                                            append_colored_row(row, 'warn', 'نادیده گرفتن رکورد تکراری')
+                                            q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] نادیده گرفتن رکورد تکراری: {item_display_code}"}) + "\n")
+                                            continue
+                                        elif conflict_strategy == 'log':
+                                            error_details.append({"row": row_idx, "code": item_display_code, "error": "تداخل رکورد (ثبت در لاگ)"})
+                                            skipped += 1
+                                            append_colored_row(row, 'warn', 'تداخل رکورد (ثبت در لاگ)')
+                                            q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] تداخل رکورد: {item_display_code}"}) + "\n")
+                                            continue
+                                        elif conflict_strategy == 'update_empty':
+                                            def _is_field_empty(val):
+                                                return val is None or (isinstance(val, str) and val.strip() == '')
+
+                                            new_defaults = {
+                                                k: v for k, v in defaults.items()
+                                                if _is_field_empty(getattr(existing_item, k, None)) and not _is_field_empty(v)
+                                            }
+                                            # Always update fa_unic_code if empty
+                                            if fa_unic_code and _is_field_empty(existing_item.fa_unic_code):
+                                                new_defaults['fa_unic_code'] = fa_unic_code
+                                            # Always update tag since we append them
+                                            if defaults.get('my_tag') and defaults.get('my_tag') != existing_item.my_tag:
+                                                new_defaults['my_tag'] = defaults['my_tag']
+
+                                            if new_defaults:
+                                                from django.core.serializers.json import DjangoJSONEncoder
+                                                old_state = model_to_dict(existing_item)
+                                                old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
+
+                                                Item.objects.filter(id=existing_item.id).update(**{**new_defaults, 'updated_at': timezone.now()})
+                                                history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
+
+                                                updated += 1
+                                                append_colored_row(row, 'updated', 'تکمیل نواقص رکورد')
+                                                q.put(json.dumps({"type": "updated", "msg": f"[ردیف {row_idx}] تکمیل نواقص رکورد: {item_display_code}"}) + "\n")
+                                            else:
+                                                skipped += 1
+                                                append_colored_row(row, 'warn', 'بدون نقص، نادیده گرفته شد')
+                                                q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] بدون نقص، نادیده گرفته شد: {item_display_code}"}) + "\n")
+                                        elif conflict_strategy == 'replace':
+                                            if fa_unic_code: defaults['fa_unic_code'] = fa_unic_code
+
+                                            from django.core.serializers.json import DjangoJSONEncoder
+                                            old_state = model_to_dict(existing_item)
+                                            old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
+
+                                            Item.objects.filter(id=existing_item.id).update(**{**defaults, 'updated_at': timezone.now()})
+                                            history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
+
+                                            updated += 1
+                                            append_colored_row(row, 'updated', 'بروزرسانی کامل رکورد')
+                                            q.put(json.dumps({"type": "updated", "msg": f"[ردیف {row_idx}] بروزرسانی رکورد: {item_display_code}"}) + "\n")
                                     else:
-                                        skipped += 1
-                                        append_colored_row(row, 'warn', 'بدون نقص، نادیده گرفته شد')
-                                        q.put(json.dumps({"type": "warn", "msg": f"[ردیف {row_idx}] بدون نقص، نادیده گرفته شد: {item_display_code}"}) + "\n")
-                                elif conflict_strategy == 'replace':
-                                    if fa_unic_code: defaults['fa_unic_code'] = fa_unic_code
-                                    
-                                    from django.core.serializers.json import DjangoJSONEncoder
-                                    old_state = model_to_dict(existing_item)
-                                    old_state_json = json.loads(json.dumps(old_state, cls=DjangoJSONEncoder))
-                                    
-                                    Item.objects.filter(id=existing_item.id).update(**{**defaults, 'updated_at': timezone.now()})
-                                    history_records.append(ImportHistory(item=existing_item, action='update', previous_state=old_state_json))
-                                    
-                                    updated += 1
-                                    append_colored_row(row, 'updated', 'بروزرسانی کامل رکورد')
-                                    q.put(json.dumps({"type": "updated", "msg": f"[ردیف {row_idx}] بروزرسانی رکورد: {item_display_code}"}) + "\n")
-                            else:
-                                if not target_warehouse_id:
-                                    failed += 1
-                                    err_msg = "بدون انبار امکان ساخت رکورد جدید نیست"
-                                    error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
-                                    append_colored_row(row, 'err', err_msg)
-                                    q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {item_display_code}: {err_msg}"}) + "\n")
-                                    continue
-                                    
-                                if not fa_unic_code:
-                                    failed += 1
-                                    err_msg = "برای ساخت رکورد جدید، کد یکتا (fa_unic_code) الزامی است"
-                                    error_details.append({"row": row_idx, "code": "N/A", "error": err_msg})
-                                    append_colored_row(row, 'err', err_msg)
-                                    q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
-                                    continue
-                                    
-                                try:
-                                    if user_id: defaults['created_by_id'] = user_id
-                                    if 'tag_status' not in defaults:
-                                        defaults['tag_status'] = 'چاپ نشده'
-                                    new_item = Item.objects.create(fa_unic_code=fa_unic_code, **defaults)
-                                    history_records.append(ImportHistory(item=new_item, action='create'))
-                                    
-                                    created += 1
-                                    append_colored_row(row, 'created', 'ثبت رکورد جدید')
-                                    q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید: {fa_unic_code}"}) + "\n")
-                                except Exception as e:
-                                    failed += 1
-                                    err_msg = str(e)
-                                    error_details.append({"row": row_idx, "code": fa_unic_code, "error": err_msg})
-                                    append_colored_row(row, 'err', err_msg)
-                                    q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {fa_unic_code}: {err_msg}"}) + "\n")
+                                        if not target_warehouse_id:
+                                            failed += 1
+                                            err_msg = "بدون انبار امکان ساخت رکورد جدید نیست"
+                                            error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
+                                            append_colored_row(row, 'err', err_msg)
+                                            q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {item_display_code}: {err_msg}"}) + "\n")
+                                            continue
+
+                                        if not fa_unic_code:
+                                            failed += 1
+                                            err_msg = "برای ساخت رکورد جدید، کد یکتا (fa_unic_code) الزامی است"
+                                            error_details.append({"row": row_idx, "code": "N/A", "error": err_msg})
+                                            append_colored_row(row, 'err', err_msg)
+                                            q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا: {err_msg}"}) + "\n")
+                                            continue
+
+                                        if user_id: defaults['created_by_id'] = user_id
+                                        if 'tag_status' not in defaults:
+                                            defaults['tag_status'] = 'چاپ نشده'
+                                        new_item = Item.objects.create(fa_unic_code=fa_unic_code, **defaults)
+                                        history_records.append(ImportHistory(item=new_item, action='create'))
+
+                                        created += 1
+                                        append_colored_row(row, 'created', 'ثبت رکورد جدید')
+                                        q.put(json.dumps({"type": "created", "msg": f"[ردیف {row_idx}] ثبت رکورد جدید: {fa_unic_code}"}) + "\n")
+                            except Exception as row_err:
+                                if str(row_err) == "CANCELED_BY_USER":
+                                    raise
+                                failed += 1
+                                err_msg = str(row_err)
+                                error_details.append({"row": row_idx, "code": item_display_code, "error": err_msg})
+                                append_colored_row(row, 'err', err_msg)
+                                q.put(json.dumps({"type": "err", "msg": f"[ردیف {row_idx}] خطا در {item_display_code}: {err_msg}"}) + "\n")
 
                         log_record = ImportLog.objects.create(
                             import_id=import_id,
@@ -1761,6 +1906,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     # Save the colored log workbook
                     if import_id:
                         try:
+                            _cleanup_old_import_logs(max_age_hours=24)
                             out_file_path = os.path.join(tempfile.gettempdir(), f"import_log_{import_id}.xlsx")
                             out_wb.save(out_file_path)
                         except Exception as wb_err:
@@ -1777,7 +1923,20 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                         }) + "\n")
                         return
                     else:
-                        raise ex
+                        traceback.print_exc()
+                        q.put(json.dumps({"type": "err", "msg": f">> خطای بحرانی در فرآیند: {str(ex)}"}) + "\n")
+                        q.put(json.dumps({
+                            "type": "summary",
+                            "status": "failed",
+                            "created": 0,
+                            "updated": 0,
+                            "skipped": skipped if 'skipped' in locals() else 0,
+                            "failed": (failed if 'failed' in locals() else 0) + 1,
+                            "found_fields": list(set(found_fields)) if 'found_fields' in locals() else [],
+                            "missing_fields": list(set(missing_fields)) if 'missing_fields' in locals() else [],
+                            "error_details": (error_details if 'error_details' in locals() else []) + [{"row": 0, "code": "CRASH", "error": f"خطای سیستمی: {str(ex)}"}]
+                        }) + "\n")
+                        return
 
                 q.put(json.dumps({
                     "type": "summary",
@@ -1794,13 +1953,31 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             except Exception as e:
                 traceback.print_exc()
                 q.put(json.dumps({"type": "err", "msg": f">> خطای سیستمی: {str(e)}"}) + "\n")
+                q.put(json.dumps({
+                    "type": "summary",
+                    "status": "failed",
+                    "created": 0,
+                    "updated": 0,
+                    "skipped": 0,
+                    "failed": 1,
+                    "found_fields": [],
+                    "missing_fields": [],
+                    "error_details": [{"row": 0, "code": "FATAL", "error": str(e)}]
+                }) + "\n")
             finally:
                 q.put(None)
+                if import_id:
+                    cache.delete(f"cancel_import_{import_id}")
                 if os.path.exists(temp_path):
                     try:
                         os.remove(temp_path)
                     except:
                         pass
+                try:
+                    from django.db import connection
+                    connection.close()
+                except Exception:
+                    pass
 
         async def stream_logs_async():
             q = queue.Queue()
@@ -1832,7 +2009,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             import_log = ImportLog.objects.get(import_id=import_id)
         except ImportLog.DoesNotExist:
             return Response({'error': 'فرآیندی با این شناسه یافت نشد.'}, status=404)
-            
+
+        if not can_access_warehouse(request.user, import_log.warehouse_id):
+            return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+
         if import_log.is_reverted:
             return Response({'error': 'این فرآیند قبلاً بازگردانی شده است.'}, status=400)
             
@@ -1906,14 +2086,24 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 
             return Response({'status': 'success', 'msg': 'فرآیند با موفقیت بازگردانی شد.', 'affected_records': len(histories)})
         except Exception as e:
-            return Response({'error': f'خطا در بازگردانی: {str(e)}'}, status=500)
+            logger.exception(f"Error reverting import {import_id}")
+            return Response({'error': 'خطا در بازگردانی فرآیند در دیتابیس.'}, status=500)
 
     @action(detail=False, methods=['post'])
     def clear_warehouse_data(self, request):
         warehouse_id = request.data.get('warehouse_id')
         if not warehouse_id:
             return Response({'error': 'شناسه انبار الزامی است.'}, status=400)
-            
+
+        try:
+            warehouse_id_val = int(warehouse_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+
+        if not can_access_warehouse(request.user, warehouse_id_val):
+            return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+        warehouse_id = warehouse_id_val
+
         try:
             items_deleted = 0
             user_id = request.user.id if request.user.is_authenticated else None
@@ -1942,9 +2132,13 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                         action='delete',
                         previous_state=state
                     ))
+                    if len(histories) >= 500:
+                        ImportHistory.objects.bulk_create(histories, batch_size=500)
+                        histories.clear()
                 
                 if histories:
-                    ImportHistory.objects.bulk_create(histories)
+                    ImportHistory.objects.bulk_create(histories, batch_size=500)
+                    histories.clear()
                     
                 deleted = _soft_delete_items_cascade(items_qs)
                 items_deleted = deleted
@@ -1979,7 +2173,16 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         warehouse_id = request.query_params.get('warehouse_id')
         if not warehouse_id:
             return Response({'error': 'شناسه انبار الزامی است.'}, status=400)
-            
+
+        try:
+            warehouse_id_val = int(warehouse_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+
+        if not can_access_warehouse(request.user, warehouse_id_val):
+            return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+        warehouse_id = warehouse_id_val
+
         try:
             logs = ImportLog.objects.filter(warehouse_id=warehouse_id, is_reverted=False).order_by('-imported_at')[:10]
             
@@ -2006,10 +2209,19 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     def delete_from_excel(self, request):
         warehouse_id = request.data.get('warehouse_id')
         file_obj = request.FILES.get('file')
-        
+
         if not warehouse_id or not file_obj:
             return Response({'error': 'پارامترهای warehouse_id و file الزامی است.'}, status=400)
-            
+
+        try:
+            warehouse_id_val = int(warehouse_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه انبار نامعتبر است.'}, status=400)
+
+        if not can_access_warehouse(request.user, warehouse_id_val):
+            return Response({'error': 'شما به این انبار دسترسی ندارید.'}, status=403)
+        warehouse_id = warehouse_id_val
+
         try:
             wb = openpyxl.load_workbook(file_obj, data_only=True)
             sheet = wb.active
@@ -2028,9 +2240,14 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 id_val = row[id_idx] if id_idx is not None else None
                 fa_val = row[fa_unic_idx] if fa_unic_idx is not None else None
                 
-                if id_val:
-                    ids_to_delete.append(str(id_val).strip())
-                elif fa_val:
+                if id_val is not None and str(id_val).strip():
+                    raw_str = str(id_val).strip()
+                    try:
+                        clean_id = int(float(raw_str))
+                        ids_to_delete.append(clean_id)
+                    except (ValueError, TypeError):
+                        ids_to_delete.append(raw_str)
+                elif fa_val is not None and str(fa_val).strip():
                     fa_unics_to_delete.append(str(fa_val).strip())
                     
             if not ids_to_delete and not fa_unics_to_delete:
@@ -2071,9 +2288,13 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                         action='delete',
                         previous_state=state
                     ))
+                    if len(histories) >= 500:
+                        ImportHistory.objects.bulk_create(histories, batch_size=500)
+                        histories.clear()
                 
                 if histories:
-                    ImportHistory.objects.bulk_create(histories)
+                    ImportHistory.objects.bulk_create(histories, batch_size=500)
+                    histories.clear()
                     
                 deleted = _soft_delete_items_cascade(items_qs)
                 items_deleted = deleted

@@ -64,4 +64,10 @@ def can_access_warehouse(user, warehouse_id):
     allowed = user_warehouse_ids(user)
     if allowed is None:
         return True
-    return warehouse_id in allowed
+    try:
+        clean_id = int(warehouse_id)
+        if clean_id in allowed:
+            return True
+    except (ValueError, TypeError):
+        pass
+    return warehouse_id in allowed or str(warehouse_id) in [str(x) for x in allowed]

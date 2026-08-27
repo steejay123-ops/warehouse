@@ -130,9 +130,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
         )
 
         # محاسبه بهینه تعداد پیام‌های نخوانده با استفاده از ConversationParticipant بدون اتکا به جدول حجیم ManyToMany
+        # توجه: ارجاع باید به conversation_id پیام بیرونی باشد، نه pk (چون pk به شناسه خود Message ارجاع می‌دهد)
         participant_last_read_subquery = Subquery(
             ConversationParticipant.objects.filter(
-                conversation=OuterRef('pk'),
+                conversation_id=OuterRef('conversation_id'),
                 user=user
             ).values('last_read_message_id')[:1]
         )

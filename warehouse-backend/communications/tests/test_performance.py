@@ -198,3 +198,32 @@ class ReadStateAndPerformanceTestCase(BaseCommsTestCase):
         self.assertIsNotNone(direct_result)
         # دو پیام خوانده‌نشده جدید به علاوه پیام اولیه setup
         self.assertGreaterEqual(direct_result['unread_count'], 2)
+
+    def test_unread_count_becomes_zero_after_mark_read_and_refresh(self):
+        """پس از خواندن پیام‌ها و رفرش، شمارنده خوانده‌نشده باید دقیقاً صفر باقی بماند"""
+        self.auth(self.staff_wh1)
+        conv_url = "/api/communications/conversations/"
+        mark_read_url = f"/api/communications/conversations/{self.direct_conv.id}/mark-read/"
+
+        # ساخت ۲ پیام جدید توسط مدیر
+        m1 = Message.objects.create(conversation=self.direct_conv, sender=self.manager_wh1, text="پیام تازه ۱")
+        m2 = Message.objects.create(conversation=self.direct_conv, sender=self.manager_wh1, text="پیام تازه ۲")
+
+        # قبل از خواندن: شمارنده باید بیشتر از صفر باشد
+        resp1 = self.client.get(conv_url)
+        self.assertEqual(resp1.status_code, status.HTTP_200_OK)
+        results1 = resp1.data.get('results', resp1.data)
+        conv_data1 = next(c for c in results1 if str(c['id']) == str(self.direct_conv.id))
+        self.assertGreater(conv_data1['unread_count'], 0)
+
+        # ارسال درخواست mark-read
+        resp_mark = self.client.post(mark_read_url)
+        self.assertEqual(resp_mark.status_code, status.HTTP_200_OK)
+
+        # شبیه‌سازی رفرش صفحه (درخواست مجدد به لیست گفتگوها)
+        resp2 = self.client.get(conv_url)
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        results2 = resp2.data.get('results', resp2.data)
+        conv_data2 = next(c for c in results2 if str(c['id']) == str(self.direct_conv.id))
+        self.assertEqual(conv_data2['unread_count'], 0)
+

@@ -96,7 +96,9 @@ def log_audit_event(
     before_state=None,
     after_state=None,
     details=None,
-    ip_address=None
+    ip_address=None,
+    warehouse_id=None,
+    **kwargs
 ):
     """
     ثبت آسان و ایمن یک رویداد ممیزی در سامانه
@@ -106,6 +108,13 @@ def log_audit_event(
         client_ip = ip_address or get_current_ip()
         
         target_wh = warehouse
+        if target_wh is None and warehouse_id is not None:
+            target_wh = warehouse_id
+
+        if isinstance(target_wh, (int, str)) and str(target_wh).isdigit():
+            from warehouses.models import Warehouse
+            target_wh = Warehouse.objects.filter(id=int(target_wh)).first()
+        
         if target_wh is None:
             wh_id = get_current_warehouse()
             if wh_id:

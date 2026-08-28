@@ -529,8 +529,8 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
 
         from django.contrib.contenttypes.models import ContentType
         ct = ContentType.objects.get_for_model(User)
-        perm_docs, _ = Permission.objects.get_or_create(content_type=ct, codename="view_wh_docs", defaults={'name': "View Docs"})
-        self.user_with_perm.user_permissions.add(perm_docs)
+        perm_finalize, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inventory"})
+        self.user_with_perm.user_permissions.add(perm_finalize)
 
         self.client.force_authenticate(user=self.user_with_perm)
         url = "/api/inventory/items/import_excel/"
@@ -581,10 +581,11 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertEqual(float(task2.counted_balance), 30.0)
 
     def test_import_pre_counted_permission_denied_for_unauthorized_user(self):
-        """کاربر بدون دسترسی لازم نباید بتواند از گزینه is_pre_counted استفاده کند"""
+        """کاربری که دسترسی ورود فایل عادی دارد ولی perm_inventory_finalize ندارد باید با ۴۰۳ مسدود شود"""
         import io
         import openpyxl
         from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -596,8 +597,18 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
 
         excel_file = SimpleUploadedFile("denied.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # کاربری که فقط دسترسی ورود فایل عادی دارد ولی view_wh_docs یا perm_inventory_finalize ندارد
-        self.client.force_authenticate(user=self.user_no_perm)
+        # ساخت کاربری که پرمیشن ورودی کالا (perm_rec_import) دارد تا از گیت منو رد شود
+        normal_import_user = User.objects.create_user(
+            username="normal_importer",
+            password="Password123!"
+        )
+        ct = ContentType.objects.get_for_model(User)
+        perm_import = Permission.objects.get(codename="perm_rec_import", content_type=ct)
+        normal_import_user.user_permissions.add(perm_import)
+        normal_import_user.assigned_warehouses.add(self.warehouse)
+
+        # ارسال با is_pre_counted=true توسط این کاربر باید به طور صریح با ۴۰۳ و پیام مربوطه رد شود
+        self.client.force_authenticate(user=normal_import_user)
         url = "/api/inventory/items/import_excel/"
         response = self.client.post(url, {
             'warehouse_id': self.warehouse.id,
@@ -606,4 +617,355 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         }, format='multipart')
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('شما مجوز ثبت مستقیم اقلام در وضعیت از قبل شمرده‌شده را ندارید', response.json().get('error', ''))
+
+    def test_import_pre_counted_resurrect_tombstone_fresh_inventory(self):
+        """احیای رکورد حذف‌شده با فایل شمرده‌شده باید موجودی جدید اکسل را در کالا و تسک شمارش بنشاند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask
+
+        # ایجاد کالای حذف‌شده در دیتابیس با موجودی قبلی 10
+        tombstone = Item.all_objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="TOMB-RESURRECT-01",
+            description="کالای حذف‌شده قدیمی",
+            inventory=10,
+            bal4miv=25,
+            is_deleted=True,
+            field_status='waiting'
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory', 'bal4miv'])
+        # در اکسل موجودی شمرده‌شده جدید 25 است (برابر با دفتری 25 -> بدون مغایرت)
+        ws.append(['TOMB-RESURRECT-01', 'کالای احیاشده', 25, 25])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("resurrect.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_finalize, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inventory"})
+        self.user_with_perm.user_permissions.add(perm_finalize)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # کالا باید از حالت حذف خارج شده باشد و موجودی آن ۲۵ باشد (نه مقدار کهنه ۱۰)
+        tombstone.refresh_from_db()
+        self.assertFalse(tombstone.is_deleted)
+        self.assertEqual(float(tombstone.inventory), 25.0)
+        self.assertEqual(tombstone.field_status, 'done')
+        self.assertFalse(tombstone.has_conflict) # 25 == 25
+
+        task = CountTask.objects.filter(item=tombstone).first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.status, 'FINAL_APPROVED')
+        # مقدار تسک شمارش نیز باید دقیقاً مقدار جدید ۲۵ باشد نه مقدار کهنه ۱۰
+        self.assertEqual(float(task.counted_balance), 25.0)
+
+    def test_import_pre_counted_update_empty_consistent_values(self):
+        """در استراتژی update_empty مقادیر Item.inventory، has_conflict و CountTask کاملاً هم‌خوان باشند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask
+
+        # ایجاد کالای موجود با موجودی 10 و دفتری 10 (بدون مغایرت اولیه)
+        existing = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="EXISTING-EMPTY-TEST",
+            description="کالای موجود با موجودی پر",
+            inventory=10,
+            bal4miv=10,
+            field_status='waiting',
+            has_conflict=False
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'inventory', 'bal4miv'])
+        # در اکسل موجودی 99 ارسال می‌شود اما چون استراتژی update_empty است و موجودی کالا خالی نیست، بازنویسی نمی‌شود
+        ws.append(['EXISTING-EMPTY-TEST', 99, 10])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("update_empty.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_finalize, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inventory"})
+        self.user_with_perm.user_permissions.add(perm_finalize)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'conflict_strategy': 'update_empty'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        existing.refresh_from_db()
+        # موجودی در update_empty تغییر نکرده و همان 10 باقی مانده است
+        self.assertEqual(float(existing.inventory), 10.0)
+        # مغایرت باید با موجودی نهایی ماندگار (10) سنجیده شده باشد نه عدد 99 اکسل! پس 10 == 10 یعنی False
+        self.assertFalse(existing.has_conflict)
+        self.assertEqual(existing.field_status, 'done')
+
+        task = CountTask.objects.filter(item=existing).first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.status, 'FINAL_APPROVED')
+        # مقدار شمارش تسک هم با موجودی واقعی کالا هم‌خوان است (10)
+        self.assertEqual(float(task.counted_balance), 10.0)
+
+    def test_import_doc_pre_approved_permission_denied_without_perm(self):
+        """کاربر بدون مجوز تایید اسناد باید در صورت ارسال is_doc_pre_approved خطای ۴۰۳ دریافت کند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'price_amount'])
+        ws.append(['DOC-DENIED-01', 'کالای رد مجوز اسناد', 150000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_doc_denied.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        # user_with_perm دارای perm_rec_import است اما فاقد perm_doc_approve_action است
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn('شما مجوز ثبت مستقیم اقلام در وضعیت اسناد تاییدشده را ندارید', response.json().get('error', ''))
+
+    def test_import_doc_pre_approved_success_with_perm_and_financial_fields(self):
+        """کاربر مجاز با ارسال is_doc_pre_approved باید آیتم تاییدشده و تسک مالی DOC_FINAL_APPROVED ایجاد کند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask, DocTaskHistory
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'price_amount', 'invoice_type', 'doc_supplier', 'stamp', 'signature'])
+        ws.append(['DOC-SUCCESS-01', 'کالای اسناد کامل', 450000, 'رسمی', 'شرکت تامین پیشرو', 'دارد', 'دارد'])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_doc_success.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        self.user_with_perm.user_permissions.add(perm_doc)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # بررسی ایجاد آیتم
+        item = Item.objects.filter(fa_unic_code='DOC-SUCCESS-01').first()
+        self.assertIsNotNone(item)
+        self.assertEqual(item.doc_status, 'done')
+        self.assertEqual(float(item.price_amount), 450000.0)
+
+        # بررسی تشکیل DocTask
+        doc_task = DocTask.objects.filter(item=item).first()
+        self.assertIsNotNone(doc_task)
+        self.assertEqual(doc_task.status, 'DOC_FINAL_APPROVED')
+        self.assertEqual(float(doc_task.price_amount), 450000.0)
+        self.assertEqual(doc_task.invoice_type, 'رسمی')
+        self.assertEqual(doc_task.doc_supplier, 'شرکت تامین پیشرو')
+        self.assertTrue(doc_task.stamp)
+        self.assertTrue(doc_task.signature)
+
+        # بررسی ثبت تاریخچه DocTaskHistory
+        history = DocTaskHistory.objects.filter(task=doc_task).first()
+        self.assertIsNotNone(history)
+        self.assertEqual(history.action_type, 'DOC_FINAL_APPROVED')
+        self.assertIsNotNone(history.data_snapshot)
+        self.assertEqual(history.data_snapshot.get('invoice_type'), 'رسمی')
+
+    def test_import_both_pre_counted_and_doc_pre_approved_together(self):
+        """ارسال هم‌زمان هر دو تاگل: شمارش فیزیکی و اسناد هر دو ۱۰۰٪ تایید نهایی شوند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask, DocTask
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory', 'bal4miv', 'price_amount'])
+        ws.append(['BOTH-APPROVED-01', 'کالای کامل هر دو فاز', 50, 50, 200000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_both.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_finalize, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inventory"})
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        self.user_with_perm.user_permissions.add(perm_finalize, perm_doc)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        item = Item.objects.filter(fa_unic_code='BOTH-APPROVED-01').first()
+        self.assertIsNotNone(item)
+        self.assertEqual(item.field_status, 'done')
+        self.assertEqual(item.doc_status, 'done')
+
+        c_task = CountTask.objects.filter(item=item).first()
+        self.assertIsNotNone(c_task)
+        self.assertEqual(c_task.status, 'FINAL_APPROVED')
+
+        d_task = DocTask.objects.filter(item=item).first()
+        self.assertIsNotNone(d_task)
+        self.assertEqual(d_task.status, 'DOC_FINAL_APPROVED')
+
+    def test_import_replace_empty_inventory_preserves_existing_balance(self):
+        """در استراتژی replace، اگر سلول موجودی اکسل خالی باشد، موجودی قبلی کالا صفر نشود"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask
+
+        # ایجاد کالای موجود با موجودی 15.0
+        existing = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="PRESERVE-INV-TEST",
+            description="کالای با موجودی 15",
+            inventory=15.0,
+            bal4miv=15.0,
+            field_status='waiting'
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'inventory'])
+        # سلول موجودی را خالی (None) ارسال می‌کنیم
+        ws.append(['PRESERVE-INV-TEST', 'شرح ویرایش‌شده جدید', None])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_preserve.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_finalize, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inventory"})
+        self.user_with_perm.user_permissions.add(perm_finalize)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        existing.refresh_from_db()
+        # شرح تغییر کرده است
+        self.assertEqual(existing.description, 'شرح ویرایش‌شده جدید')
+        # موجودی نباید به 0.0 پاک شده باشد؛ باید همان 15.0 حفظ شده باشد!
+        self.assertEqual(float(existing.inventory), 15.0)
+        self.assertEqual(existing.field_status, 'done')
+
+        task = CountTask.objects.filter(item=existing).first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.status, 'FINAL_APPROVED')
+        self.assertEqual(float(task.counted_balance), 15.0)
+
+
+
 

@@ -641,7 +641,7 @@ export class Dispatch implements OnInit, OnDestroy {
           ...r,
           labelStatus: r.tag_status === 'printed' ? 'چاپ شده' : (r.tag_status || 'چاپ نشده'),
           fieldStatus: r.field_status === 'counting' ? 'counting' : r.field_status === 'recount' ? 'recount' : r.field_status === 'done' ? 'done' : 'waiting',
-          docStatus: r.doc_status === 'processing' ? 'processing' : r.doc_status === 'done' ? 'done' : 'waiting',
+          docStatus: r.doc_status === 'processing' ? 'processing' : (r.doc_status === 'done' || r.doc_status === 'approved') ? 'done' : 'waiting',
           fieldAssignee: r.field_assignee || 'ثبت نشده',
           docAssignee: r.doc_assignee || 'ثبت نشده'
         }));

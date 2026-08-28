@@ -1,34 +1,29 @@
-# گزارش تکمیلی پیاده‌سازی و رفع ایرادات جزئی (Comprehensive Walkthrough)
+# گزارش تکمیلی پیاده‌سازی موارد ۷، ۸ و ۹ (Type Conversion & Snapshot Hardening)
 
-در ادامه پیاده‌سازی موفق قابلیت‌های ورود شمرده‌شده و اسناد تاییدشده، تمامی موارد ریزبینی، تمیزکاری کدها و سناریوهای لبه با موفقیت ۱۰۰٪ برطرف و اعتبارسنجی شدند.
-
----
-
-## ۱. اصلاحات تکمیلی انجام‌شده (Accomplished Enhancements)
-
-| شماره | موضوع | فایل | شرح اقدام فنی |
-| :---: | :--- | :--- | :--- |
-| **۱** | **بای‌پاس دسترسی سوپریوزر** | [auth.service.ts](file:///e:/warehouse%20project/warehouse-front/src/app/core/auth/auth.service.ts) | افزودن بررسی `admin_all` به متد `hasPermission` تا کاربران مدیر ارشد به صورت سراسری تمام بخش‌های محافظت‌شده فرانت را ببینند. |
-| **۲** | **حذف تابع تکراری** | [inventory/views.py](file:///e:/warehouse%20project/warehouse-backend/inventory/views.py) | حذف `_to_decimal` محلی در خط ۳۱۵۴ و اتصال مستقیم به تابع ماژولار `_parse_decimal`. |
-| **۳** | **محافظت از سلول‌های خالی موجودی** | [inventory/views.py](file:///e:/warehouse%20project/warehouse-backend/inventory/views.py) | در استراتژی `replace`، در صورت خالی بودن سلول موجودی در فایل اکسل، مقدار موجودی کالا به اشتباه صفر نمی‌شود و مقدار قبلی حفظ می‌گردد. |
-| **۴** | **اصلاح دامنه برودکست وب‌سوکت** | [inventory/views.py](file:///e:/warehouse%20project/warehouse-backend/inventory/views.py) | برودکست تغییرات منحصراً بر اساس `warehouse_id` معتبر سطح درخواست ارسال می‌شود تا تمام انبارها به اشتباه پیام نگیرند. |
-| **۵** | **شفاف‌سازی استراتژی لاگ در فرانت** | [docs.html](file:///e:/warehouse%20project/warehouse-front/src/app/components/docs/docs.html) | نمایش راهنمای زرد هشدار در صورت انتخاب استراتژی «ثبت تداخل در لاگ» هنگام فعال بودن تاگل‌ها. |
-| **۶** | **آزمون واحد خودکار جدید** | [tests_security_import.py](file:///e:/warehouse%20project/warehouse-backend/inventory/tests_security_import.py) | افزودن متد `test_import_replace_empty_inventory_preserves_existing_balance` و پاس شدن کامل ۲۸ تست. |
+تمامی موارد مربوط به همگام‌سازی انواع داده، تبدیل تقویم شمسی به میلادی، پاکسازی توابع تکراری و آزمون‌های خودکار به طور کامل پیاده‌سازی و تست شدند.
 
 ---
 
-## ۲. نتایج نهایی اعتبارسنجی (Verification Results)
+## ۱. اقدامات انجام‌شده به تفکیک موارد (Accomplished Hardening Fixes)
 
-```bash
-# تست‌های خودکار بک‌اند:
-python manage.py test inventory.tests_security_import
-Ran 28 tests in 46.966s - OK
+### ۱. حذف تابع تکراری `_create_doc_task_snapshot` (مورد ۷)
+* **اصلاح:** تعریف تکراری تابع `_create_doc_task_snapshot` در خط ۳۹۳۸ فایل [inventory/views.py](file:///e:/warehouse%20project/warehouse-backend/inventory/views.py) به طور کامل حذف گردید و تنها یک نسخه مرجع در خط ۵۲ فایل نگهداری شد تا از بروز رفتارهای غیرمنتظره و بازنویسی متدهای ماژول جلوگیری شود.
 
-# بررسی سلامت سیستم جنگو:
-python manage.py check
-System check identified no issues (0 silenced).
+### ۲. رفع چالش تبدیل نوع داده و پشتیبانی از تاریخ شمسی (مورد ۸)
+* **پارسر هوشمند تاریخ (`_parse_date_flexible`):** رشته‌های تاریخ شمسی (نظیر `1403/05/12` یا `1403-05-12`) به طور خودکار شناسایی شده و از طریق کتابخانه `jdatetime` به تاریخ استاندارد میلادی دیتابیس (`DateField`) تبدیل می‌شوند. تاریخ‌های میلادی و فرمت‌های استاندارد ISO نیز بدون تغییر پشتیبانی می‌شوند.
+* **استخراج مقاوم اعداد صحیح مثبت (`_parse_positive_int`):** برای فیلدهای شماره صفحه (`invoice_page`) و شماره ردیف (`page_row`)، ارقام فارسی/عربی به انگلیسی تبدیل شده و با استفاده از عبارات باقاعده (`regex`) توالی اعداد از داخل متون (مانند «صفحه ۳» یا «ردیف ۱۲») استخراج می‌شوند. همچنین با فیلتر مقادیر منفی، از خطای `PositiveIntegerField` پایگاه داده پیشگیری شد.
+* **پاکسازی و نگاشت ارز و نوع فاکتور:** عناوین متنی متداول مانند «ریال»، «تومان»، «دلار»، «داخلی» و ... به کدهای استاندارد مدل (`IRR`, `USD`, `domestic`, ...) نگاشت شده و طول رشته‌ها متناسب با ظرفیت فیلدها محدود گردید تا از خطای طول متغیر جلوگیری شود.
 
-# بیلد فرانت‌اند:
-npm run build
-Application bundle generation complete. [Exit code: 0]
-```
+### ۳. پوشش آزمون‌های خودکار (مورد ۹)
+* آزمون واحد جدید `test_import_doc_pre_approved_shamsi_date_and_type_conversions` در [inventory/tests_security_import.py](file:///e:/warehouse%20project/warehouse-backend/inventory/tests_security_import.py) اضافه شد.
+* این آزمون تبدیل خودکار تاریخ شمسی `1403/05/12` به تاریخ میلادی معادل، استخراج عدد `3` از عبارت «صفحه ۳»، استخراج عدد `12` از «ردیف ۱۲»، نگاشت ارز «ریال ایران» به `IRR`، و نگاشت نوع فاکتور «داخلی» به `domestic` را در یک چرخه کامل ایمپورت تایید کرد.
+
+---
+
+## ۲. نتایج نهایی تست‌های خودکار (Verification Results)
+
+| ماژول آزمون | تعداد تست‌ها | نتیجه | مدت زمان |
+| :--- | :---: | :---: | :---: |
+| **تست‌های امنیتی و ایمپورت (`tests_security_import.py`)** | **۳۲** تست | **OK** | ۴۷.۰ ثانیه |
+| **تست‌های گردش کار اسناد (`tests_docs.py`)** | **۲۰** تست | **OK** | ۲۳.۷ ثانیه |
+| **بررسی جامع سیستم جنگو (`manage.py check`)** | ۰ خطا | **OK** | ۱.۴ ثانیه |

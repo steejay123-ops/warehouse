@@ -10,6 +10,7 @@ export interface WarehouseImportState {
   importTag: string;
   conflictAction: string;
   isPreCounted: boolean;
+  isDocPreApproved: boolean;
   logs: any[];
   latestCreatedLogs: any[];
   latestUpdatedLogs: any[];
@@ -155,8 +156,9 @@ export class ImportService {
   private createEmptyState(): WarehouseImportState {
     return {
       importTag: '',
-      conflictAction: 'ignore',
+      conflictAction: 'replace',
       isPreCounted: false,
+      isDocPreApproved: false,
       logs: [],
       latestCreatedLogs: [],
       latestUpdatedLogs: [],
@@ -296,7 +298,8 @@ export class ImportService {
         state.conflictAction,
         state.importTag,
         state.importId,
-        state.isPreCounted
+        state.isPreCounted,
+        state.isDocPreApproved
       );
 
       if (isServerUnreachable(response.status)) {
@@ -314,7 +317,25 @@ export class ImportService {
         return;
       }
       if (!response.ok) {
-        throw new Error(`پاسخ خطا از سرور: ${response.status}`);
+        let errorMsg = `پاسخ خطا از سرور: ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData && errData.error) {
+            errorMsg = errData.error;
+          }
+        } catch (_) {}
+        state.logs.unshift({
+          time: new Date(),
+          type: 'err',
+          msg: `>> خطا (${response.status}): ${errorMsg}`
+        });
+        if (this.activeWarehouseId === warehouseId) {
+          this.toast.show('error', errorMsg);
+        }
+        state.isSimulating = false;
+        state.isCanceling = false;
+        this.stateUpdated.next();
+        return;
       }
       if (!response.body) {
         throw new Error("پاسخ سرور نامعتبر است");

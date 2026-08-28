@@ -76,10 +76,17 @@
               <span class="text-xs font-semibold text-slate-800">ثبت تداخل در لاگ و ادامه</span>
             </label>
           </div>
+
+          <div *ngIf="(importService.currentState.isPreCounted || importService.currentState.isDocPreApproved) && importService.currentState.conflictAction === 'log'" 
+               class="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-medium flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 text-amber-600"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>توجه: در استراتژی «ثبت تداخل در لاگ»، اقلام تکراری بدون تغییر رد می‌شوند و تأییدیه شمارش یا اسناد تنها برای ردیف‌های جدید فایل اعمال خواهد شد. برای به‌روزرسانی اقلام موجود، استفاده از «جایگزینی» توصیه می‌شود.</span>
+          </div>
         </div>
 
         <!-- تنظیمات ورود کالای از قبل شمرده‌شده (Pre-Counted Import) -->
-        <div class="mt-6 p-5 rounded-2xl border transition-all duration-200"
+        <div *appHasPermission="'perm_inventory_finalize'"
+             class="mt-6 p-5 rounded-2xl border transition-all duration-200"
              [ngClass]="importService.currentState.isPreCounted ? 'bg-emerald-50/70 border-emerald-300 shadow-xs' : 'bg-slate-50/70 border-slate-200'">
           <div class="flex items-start justify-between gap-4">
             <div class="flex items-start gap-3">
@@ -114,6 +121,48 @@
                 [(ngModel)]="importService.currentState.isPreCounted" 
                 class="sr-only peer">
               <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- تنظیمات ورود کالای دارای اسناد تاییدشده (Pre-Approved Docs Import) -->
+        <div *appHasPermission="'perm_doc_approve_action'"
+             class="mt-4 p-5 rounded-2xl border transition-all duration-200"
+             [ngClass]="importService.currentState.isDocPreApproved ? 'bg-indigo-50/70 border-indigo-300 shadow-xs' : 'bg-slate-50/70 border-slate-200'">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <div class="mt-1 p-2 rounded-xl transition-colors"
+                   [ngClass]="importService.currentState.isDocPreApproved ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200 text-slate-500'">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <path d="m9 15 2 2 4-4"/>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-black text-slate-800">ورود به عنوان کالای دارای اسناد تاییدشده (مدارک و قیمت نهایی)</span>
+                  <span *ngIf="importService.currentState.isDocPreApproved" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300 animate-pulse">
+                    تأیید نهایی اسناد فعال است
+                  </span>
+                </div>
+                <p class="text-[11px] font-medium text-slate-600 mt-1.5 leading-relaxed">
+                  با فعال‌سازی این گزینه، اقلام با وضعیت مستندات <span class="font-bold text-indigo-700">«تایید شده» (done)</span> و تسک اسناد تایید نهایی در کارتابل مدارک و قیمت ثبت می‌شوند. در صورت وجود ستون‌های مالی (قیمت، نوع فاکتور، شماره RTI، تامین‌کننده و...) در فایل اکسل، این مقادیر مستقیماً در پرونده اسناد کالا ذخیره خواهند شد.
+                </p>
+                <div class="mt-2 flex items-center gap-2 text-[10px] text-slate-500 font-medium">
+                  <span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                  <span>فرآیند شمارش فیزیکی کالاها مستقل بوده و طبق وضعیت تاگل شمارش مدیریت می‌شود.</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- سوئیچ تاگل اسناد -->
+            <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+              <input 
+                type="checkbox" 
+                [(ngModel)]="importService.currentState.isDocPreApproved" 
+                class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
             </label>
           </div>
         </div>

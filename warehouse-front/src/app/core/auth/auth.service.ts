@@ -215,7 +215,8 @@ export class AuthService {
 
   /** بررسی دسترسی */
   hasPermission(permCode: string): boolean {
-    return this.userPermissions().includes(permCode);
+    const perms = this.userPermissions();
+    return perms.includes('admin_all') || perms.includes(permCode);
   }
 
   /** بررسی نقش (department) */

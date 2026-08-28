@@ -81,7 +81,7 @@ export class ItemApiService {
     return this.api.upload<any>(`${this.endpoint}/delete_from_excel/`, formData);
   }
 
-  async bulkImportStream(file: File, warehouseId: string | number, conflictStrategy: string, importTag: string, importId: string, isPreCounted: boolean = false): Promise<Response> {
+  async bulkImportStream(file: File, warehouseId: string | number, conflictStrategy: string, importTag: string, importId: string, isPreCounted: boolean = false, isDocPreApproved: boolean = false): Promise<Response> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('warehouse_id', warehouseId ? warehouseId.toString() : '');
@@ -89,6 +89,7 @@ export class ItemApiService {
     formData.append('import_tag', importTag);
     formData.append('import_id', importId);
     formData.append('is_pre_counted', isPreCounted ? 'true' : 'false');
+    formData.append('is_doc_pre_approved', isDocPreApproved ? 'true' : 'false');
     
     const token = this.auth.getAccessToken();
     const cleanEndpoint = this.endpoint.replace(/^\/|\/$/g, '');

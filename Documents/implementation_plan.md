@@ -223,6 +223,19 @@ class GenericComment(SyncModelMixin):
 * **پاکسازی دیسک و پنل ادمین:** اصلاح دستور `purge_expired_chat_media` برای خواندن از `all_objects` و Hard Delete فایل‌ها از دیسک و دیتابیس، ایجاد `communications/admin.py` و پاکسازی ۵ اسکریپت تستی موقت ریشه.
 * **زیرساخت Redis Channels:** پیکربندی `RedisChannelLayer` در `settings.py` با پشتیبانی از Fallback امن.
 
-</div>
+---
 
+# 📅 طرح اجرایی موتور سراسری تحلیل و پارس تاریخ (Dual-Path Date Parser Engine)
 
+> [!IMPORTANT]
+> **سند مرجع اختصاصی:** [Documents/Global_Date_Parser_Auxiliary/implementation_plan_global_date_parser.md](Global_Date_Parser_Auxiliary/implementation_plan_global_date_parser.md)  
+> **وضعیت:** تدوین‌شده و در انتظار تأیید کاربر جهت شروع پیاده‌سازی
+
+### خلاصه‌سازی اقدامات کلیدی طرح:
+* **معماری دو مسیره (Fast-Path / Fallback):** بیش از ۹۵٪ داده‌های استاندارد از مسیر سریع (رگکس سبک زیر ۲ میکروثانیه) عبور کرده و تابع کمکی ارقام منحصراً به عنوان مسیر جبرانی (Fallback) وارد مدار می‌شود.
+* **تحقق ۴ اصل فنی چت قبل:**
+  1. پشتیبانی از طول‌های متغیر ارقام: ۶ رقم (`YYMMDD` با پیشوند قرن خورشیدی)، ۸ رقم (`YYYYMMDD` با ساعت پیش‌فرض)، ۱۲ رقم (`YYYYMMDDHHmm` با ثانیه صفر)، ۱۴ رقم (`YYYYMMDDHHmmss`).
+  2. تبدیل خودکار ارقام فارسی (`۰-۹`) و عربی (`٠-٩`) به انگلیسی با جدول نگاشت `str.maketrans`.
+  3. رفع تداخل ماه‌ها و روزهای تک‌رقمی با پیش‌پردازش قطعات و پر کردن با صفر (`Token-Padding` به عنوان مثال تبدیل `1403/5/8` به `14030508`).
+  4. اعتبارسنجی سخت‌گیرانه دامنه تقویمی (ماه ۱ تا ۱۲، روز ۱ تا ۳۱، تفکیک خورشیدی ۱۳۰۰-۱۵۰۰ و میلادی بالای ۱۹۰۰).
+* **یکپارچه‌سازی در سامانه:** استقرار در `warehouse-backend/common/date_utils.py` و جایگزینی متد محلی `_parse_date_flexible` در `inventory/views.py` و ایجاد ماژول متناظر کلاینت در `warehouse-front/src/app/core/utils/date-utils.ts`.

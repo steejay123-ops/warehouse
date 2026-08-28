@@ -560,11 +560,29 @@ export class Dispatch implements OnInit, OnDestroy {
         // We know which ones are checkboxes based on if they contain commas and match certain keys
         const inFields = ['field_status', 'doc_status', 'tag_status', 'field_assignee', 'doc_assignee', 'my_tag', 'created_by_name', 'modified_by_name'];
         if (inFields.includes(key)) {
-            filters[`${key}__in`] = stateFilters[key];
+            let val = stateFilters[key];
+            if (key === 'doc_status' && val && typeof val === 'string') {
+              const parts = val.split(',').map((p: string) => p.trim());
+              if (parts.includes('done') && !parts.includes('approved')) {
+                parts.push('approved');
+                val = parts.join(',');
+              }
+            }
+            filters[`${key}__in`] = val;
         } else {
             // For mapping UI keys to Backend keys if they differ
             if (key === 'fieldStatus') filters['field_status__in'] = stateFilters[key];
-            else if (key === 'docStatus') filters['doc_status__in'] = stateFilters[key];
+            else if (key === 'docStatus') {
+              let val = stateFilters[key];
+              if (val && typeof val === 'string') {
+                const parts = val.split(',').map((p: string) => p.trim());
+                if (parts.includes('done') && !parts.includes('approved')) {
+                  parts.push('approved');
+                  val = parts.join(',');
+                }
+              }
+              filters['doc_status__in'] = val;
+            }
             else if (key === 'labelStatus') filters['tag_status__in'] = stateFilters[key];
             else if (key === 'fieldAssignee') filters['field_assignee__in'] = stateFilters[key];
             else if (key === 'docAssignee') filters['doc_assignee__in'] = stateFilters[key];

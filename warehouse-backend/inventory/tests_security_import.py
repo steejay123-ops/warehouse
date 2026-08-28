@@ -833,7 +833,7 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertIsNotNone(doc_task)
         self.assertEqual(doc_task.status, 'DOC_FINAL_APPROVED')
         self.assertEqual(float(doc_task.price_amount), 450000.0)
-        self.assertEqual(doc_task.invoice_type, 'رسمی')
+        self.assertEqual(doc_task.invoice_type, 'formal')
         self.assertEqual(doc_task.doc_supplier, 'شرکت تامین پیشرو')
         self.assertTrue(doc_task.stamp)
         self.assertTrue(doc_task.signature)
@@ -843,7 +843,7 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertIsNotNone(history)
         self.assertEqual(history.action_type, 'DOC_FINAL_APPROVED')
         self.assertIsNotNone(history.data_snapshot)
-        self.assertEqual(history.data_snapshot.get('invoice_type'), 'رسمی')
+        self.assertEqual(history.data_snapshot.get('invoice_type'), 'formal')
 
     def test_import_both_pre_counted_and_doc_pre_approved_together(self):
         """ارسال هم‌زمان هر دو تاگل: شمارش فیزیکی و اسناد هر دو ۱۰۰٪ تایید نهایی شوند"""
@@ -1102,7 +1102,8 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
 
         d_task = DocTask.objects.create(
             item=existing,
-            status='PENDING_DOC'
+            status='PENDING_DOC',
+            price_amount=500000
         )
 
         wb = openpyxl.Workbook()
@@ -1152,13 +1153,14 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertEqual(c_task.status, 'FINAL_APPROVED')
         self.assertEqual(float(c_task.counted_balance), 25.0)
         self.assertEqual(d_task.status, 'DOC_FINAL_APPROVED')
+        self.assertEqual(float(d_task.price_amount), 1200000.0)
 
         # حالا اکشن revert_import را فراخوانی می‌کنیم
         revert_url = "/api/inventory/items/revert_import/"
         revert_resp = self.client.post(revert_url, {'import_id': import_id}, format='json')
         self.assertEqual(revert_resp.status_code, status.HTTP_200_OK)
 
-        # راستی‌آزمایی بازگشت کالا و تسک‌ها به وضعیت قبل
+        # راستی‌آزمایی بازگشت کالا و تسک‌ها به وضعیت قبل و مقادیر مالی قبل
         existing.refresh_from_db()
         c_task.refresh_from_db()
         d_task.refresh_from_db()
@@ -1167,6 +1169,82 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertEqual(c_task.status, 'PENDING_COUNT')
         self.assertIsNone(c_task.counted_balance)
         self.assertEqual(d_task.status, 'PENDING_DOC')
+        self.assertEqual(float(d_task.price_amount), 500000.0)
+
+    def test_resurrect_item_revives_tombstoned_count_task_without_duplication(self):
+        """کالایی که قبلاً حذف‌نرم شده هنگام احیا نباید تسک شمارش تکراری بسازد بلکه باید همان تسک قبلی را احیا کند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask
+        from inventory.views import _soft_delete_items_cascade
+
+        item = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="RESURRECT-TASK-UNIQ",
+            description="کالای قبل از حذف نرم",
+            inventory=5.0
+        )
+        c_task = CountTask.objects.create(
+            item=item,
+            status='INITIAL_COUNT',
+            counted_balance=5.0
+        )
+
+        # حذف نرم کالا به همراه تسک‌های متصل
+        _soft_delete_items_cascade(Item.objects.filter(id=item.id))
+        item.refresh_from_db()
+        c_task.refresh_from_db()
+        self.assertTrue(item.is_deleted)
+        self.assertTrue(c_task.is_deleted)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'inventory'])
+        ws.append(['RESURRECT-TASK-UNIQ', 18.0])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_resurrect_task.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_fin, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inv"})
+        self.user_with_perm.user_permissions.add(perm_fin)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # کالا احیا شده است
+        item.refresh_from_db()
+        self.assertFalse(item.is_deleted)
+
+        # فقط و فقط ۱ تسک شمارش در دیتابیس وجود دارد (هیچ رکورد تکراری ساخته نشده)
+        all_tasks = CountTask.all_objects.filter(item=item)
+        self.assertEqual(all_tasks.count(), 1)
+
+        c_task.refresh_from_db()
+        self.assertFalse(c_task.is_deleted)
+        self.assertEqual(c_task.status, 'FINAL_APPROVED')
+        self.assertEqual(float(c_task.counted_balance), 18.0)
+
 
     def test_import_doc_pre_approved_shamsi_date_and_type_conversions(self):
         """راستی‌آزمایی تبدیل خودکار تاریخ شمسی به میلادی، استخراج اعداد صفحه و نگاشت ارز در تایید اسناد"""
@@ -1231,6 +1309,226 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertEqual(task.currency, 'IRR')
         # نوع فاکتور به کد مجاز نگاشت شده است:
         self.assertEqual(task.invoice_type, 'domestic')
+
+    def test_revert_import_claimed_history_restores_valid_status_not_claimed(self):
+        """در صورت وجود اکشن CLAIMED در تاریخچه، در زمان بازگردانی نباید وضعیت تسک به CLAIMED تبدیل شود بلکه باید PENDING_DOC بماند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask, DocTaskHistory
+        from inventory.views import _create_doc_task_snapshot
+
+        existing = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="REVERT-CLAIMED-TEST",
+            description="تست ریورت کلیم",
+            doc_status='processing'
+        )
+
+        d_task = DocTask.objects.create(
+            item=existing,
+            status='PENDING_DOC',
+            doc_worker=self.user_with_perm
+        )
+
+        DocTaskHistory.objects.create(
+            task=d_task,
+            action_by=self.user_with_perm,
+            action_type='CLAIMED',
+            note='بر عهده گرفته شد',
+            data_snapshot=_create_doc_task_snapshot(d_task)
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'price_amount'])
+        ws.append(['REVERT-CLAIMED-TEST', 770000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_revert_claim.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        perm_rollback, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_rollback_data", defaults={'name': "Rollback Data"})
+        self.user_with_perm.user_permissions.add(perm_doc, perm_rollback)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        import_id = "test_revert_claimed_123"
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true',
+            'conflict_strategy': 'replace',
+            'import_id': import_id
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        d_task.refresh_from_db()
+        self.assertEqual(d_task.status, 'DOC_FINAL_APPROVED')
+
+        # بازگردانی فرآیند
+        revert_url = "/api/inventory/items/revert_import/"
+        revert_resp = self.client.post(revert_url, {'import_id': import_id}, format='json')
+        self.assertEqual(revert_resp.status_code, status.HTTP_200_OK)
+
+        d_task.refresh_from_db()
+        # وضعیت باید به وضعیت معتبر PENDING_DOC بازگردد، نه وضعیت نامعتبر CLAIMED
+        self.assertEqual(d_task.status, 'PENDING_DOC')
+
+    def test_import_doc_pre_approved_formal_invoice_type_mapping(self):
+        """راستی‌آزمایی نگاشت دقیق فاکتور رسمی به formal و ارز دلار/USD"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'invoice_type', 'currency'])
+        ws.append(['FORMAL-INV-TEST', 'رسمی', 'USD'])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_formal.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        self.user_with_perm.user_permissions.add(perm_doc)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        task = DocTask.objects.filter(item__fa_unic_code='FORMAL-INV-TEST').first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.invoice_type, 'formal')
+        self.assertEqual(task.currency, 'USD')
+
+    def test_revert_import_with_long_item_financial_fields_prevents_doctask_overflow(self):
+        """تست N6: بازگردانی کالایی با فیلدهای مالی بسیار طولانی در مدل Item نباید با DataError در DocTask بشکند"""
+        import io
+        import openpyxl
+        from decimal import Decimal
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask
+
+        # کالایی با وضعیت اسناد done و مقادیر طولانی در مدل Item
+        long_added_rti = "RTI-" + "X" * 150  # طول 154 کاراکتر (بیشتر از 100)
+        long_inv_rti = "INV-" + "Y" * 150    # طول 154 کاراکتر (بیشتر از 100)
+        long_inv_type = "فاکتور خرید تجهیزات کارگاهی آزاد"  # بیشتر از 20 کاراکتر
+        long_currency = "ریال جمهوری اسلامی ایران"          # بیشتر از 10 کاراکتر
+
+        item = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="N6-REVERT-TEST",
+            description="تست ریورت با فیلدهای طولانی",
+            doc_status='done',
+            added_rti_no=long_added_rti,
+            inv_rti_number=long_inv_rti,
+            invoice_type=long_inv_type,
+            currency=long_currency,
+            total_value=Decimal('999999999999.00'),
+            price_amount=Decimal('5000000.00'),
+            similar_unit_price=Decimal('4800000.00'),
+            doc_supplier="شرکت نمونه",
+            folder_address="C:/Docs/Samples/Test"
+        )
+
+        doc_task = DocTask.objects.create(
+            item=item,
+            status='DOC_FINAL_APPROVED',
+            added_rti_no=long_added_rti[:100],
+            inv_rti_number=long_inv_rti[:100],
+            invoice_type='domestic',
+            currency='IRR',
+            total_value=Decimal('999999999999.00'),
+            price_amount=Decimal('5000000.00'),
+            similar_unit_price=Decimal('4800000.00'),
+            doc_supplier="شرکت نمونه",
+            folder_address="C:/Docs/Samples/Test"
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'description', 'price_amount'])
+        ws.append(['N6-REVERT-TEST', 'شرح ویرایش‌شده با ایمپورت', 8500000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_n6.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        perm_rollback, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_rollback_data", defaults={'name': "Rollback Data"})
+        self.user_with_perm.user_permissions.add(perm_doc, perm_rollback)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        import_id = "test_n6_revert_import"
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true',
+            'conflict_strategy': 'replace',
+            'import_id': import_id
+        }, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # حال فراخوانی revert_import که previous_state کالا را به DocTask اعمال می‌کند
+        revert_url = "/api/inventory/items/revert_import/"
+        revert_resp = self.client.post(revert_url, {'import_id': import_id}, format='json')
+        self.assertEqual(revert_resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(revert_resp.data.get('status'), 'success')
+
+        # راستی‌آزمایی اینکه DocTask بدون خطای سرریز یا طول رشته با موفقیت به‌روزرسانی شده
+        doc_task.refresh_from_db()
+        self.assertEqual(doc_task.status, 'DOC_FINAL_APPROVED')
+        self.assertLessEqual(len(doc_task.added_rti_no), 100)
+        self.assertLessEqual(len(doc_task.inv_rti_number), 100)
+        self.assertLessEqual(len(doc_task.invoice_type), 20)
+        self.assertLessEqual(len(doc_task.currency), 10)
+        self.assertEqual(doc_task.currency, 'IRR')  # "ریال جمهوری اسلامی ایران" به 'IRR' نگاشت شده
+
+
 
 
 

@@ -966,6 +966,275 @@ class DownloadImportLogSecurityTests(TransactionTestCase):
         self.assertEqual(task.status, 'FINAL_APPROVED')
         self.assertEqual(float(task.counted_balance), 15.0)
 
+    def test_import_doc_pre_approved_preserves_existing_doctask_fields_and_stamps(self):
+        """در صورت تایید اسناد از طریق اکسل، فیلدهای موجود در DocTask و مقادیر مهر و امضا نباید پاک شوند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask
+
+        # ایجاد کالای موجود با یک تسک اسناد از قبل تکمیل‌شده توسط کارشناس در کارتابل
+        existing = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="PRESERVE-DOC-TEST",
+            description="کالای با پرونده اسناد موجود",
+            doc_status='processing'
+        )
+
+        doc_task = DocTask.objects.create(
+            item=existing,
+            invoice_page=5,
+            page_row=2,
+            doc_supplier='شرکت پتروشیمی الف',
+            inv_rti_number='RTI-EXISTING-99',
+            stamp=True,
+            signature=True,
+            status='DOC_PROCESSED'
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        # فایل اکسل فقط حاوی قیمت است و ستون‌های صفحه، تامین‌کننده، مهر و امضا را ندارد
+        ws.append(['fa_unic_code', 'price_amount'])
+        ws.append(['PRESERVE-DOC-TEST', 980000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+
+        excel_file = SimpleUploadedFile("test_doc_preserve.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        self.user_with_perm.user_permissions.add(perm_doc)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true',
+            'conflict_strategy': 'replace'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.doc_status, 'done')
+
+        doc_task.refresh_from_db()
+        self.assertEqual(doc_task.status, 'DOC_FINAL_APPROVED')
+        # فیلد جدید اکسل (قیمت) اعمال شده است:
+        self.assertEqual(float(doc_task.price_amount), 980000.0)
+        # فیلدهای قبلی تسک پاک نشده و دست‌نخورده حفظ شده‌اند:
+        self.assertEqual(doc_task.invoice_page, 5)
+        self.assertEqual(doc_task.page_row, 2)
+        self.assertEqual(doc_task.doc_supplier, 'شرکت پتروشیمی الف')
+        self.assertEqual(doc_task.inv_rti_number, 'RTI-EXISTING-99')
+        # وضعیت‌های مهر و امضا حفظ شده و به اشتباه False نشده‌اند:
+        self.assertTrue(doc_task.stamp)
+        self.assertTrue(doc_task.signature)
+
+    def test_import_doc_pre_approved_view_permission_only_rejected(self):
+        """کاربری که فقط پرمیشن مشاهده منوی مدیر (view_sys_manager_review) دارد نباید بتواند اسناد را تایید نهایی کند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'price_amount'])
+        ws.append(['VIEW-ONLY-FAIL', 500000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_view_only.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        # فقط پرمیشن view_sys_manager_review و perm_rec_import دارد
+        ct = ContentType.objects.get_for_model(User)
+        perm_view_mgr, _ = Permission.objects.get_or_create(content_type=ct, codename="view_sys_manager_review", defaults={'name': "View Mgr Review"})
+        self.user_with_perm.user_permissions.add(perm_view_mgr)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        # باید خطای ۴۰۳ بدهد چون مجوز عملیاتی perm_doc_approve_action را ندارد
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("شما مجوز ثبت مستقیم اقلام در وضعیت اسناد تاییدشده را ندارید", response.data['error'])
+
+    def test_revert_import_rolls_back_pre_counted_and_pre_approved_tasks(self):
+        """بازگردانی (revert_import) باید وضعیت تسک‌های شمارش و اسناد را به حالت قبل برگرداند"""
+        import io
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, CountTask, DocTask
+
+        existing = Item.objects.create(
+            warehouse=self.warehouse,
+            fa_unic_code="REVERT-TASK-TEST",
+            description="کالای آزمایشی ریورت",
+            inventory=10.0,
+            field_status='waiting',
+            doc_status='waiting'
+        )
+
+        c_task = CountTask.objects.create(
+            item=existing,
+            status='PENDING_COUNT',
+            counted_balance=None
+        )
+
+        d_task = DocTask.objects.create(
+            item=existing,
+            status='PENDING_DOC'
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'inventory', 'price_amount'])
+        ws.append(['REVERT-TASK-TEST', 25.0, 1200000])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_revert.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_fin, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_inventory_finalize", defaults={'name': "Finalize Inv"})
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        perm_rollback, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_rollback_data", defaults={'name': "Rollback Data"})
+        self.user_with_perm.user_permissions.add(perm_fin, perm_doc, perm_rollback)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        import_id = "test_revert_task_123"
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_pre_counted': 'true',
+            'is_doc_pre_approved': 'true',
+            'conflict_strategy': 'replace',
+            'import_id': import_id
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        # کالا و تسک‌ها باید در وضعیت done و تایید نهایی باشند
+        existing.refresh_from_db()
+        c_task.refresh_from_db()
+        d_task.refresh_from_db()
+        self.assertEqual(existing.field_status, 'done')
+        self.assertEqual(existing.doc_status, 'done')
+        self.assertEqual(c_task.status, 'FINAL_APPROVED')
+        self.assertEqual(float(c_task.counted_balance), 25.0)
+        self.assertEqual(d_task.status, 'DOC_FINAL_APPROVED')
+
+        # حالا اکشن revert_import را فراخوانی می‌کنیم
+        revert_url = "/api/inventory/items/revert_import/"
+        revert_resp = self.client.post(revert_url, {'import_id': import_id}, format='json')
+        self.assertEqual(revert_resp.status_code, status.HTTP_200_OK)
+
+        # راستی‌آزمایی بازگشت کالا و تسک‌ها به وضعیت قبل
+        existing.refresh_from_db()
+        c_task.refresh_from_db()
+        d_task.refresh_from_db()
+        self.assertEqual(existing.field_status, 'waiting')
+        self.assertEqual(existing.doc_status, 'waiting')
+        self.assertEqual(c_task.status, 'PENDING_COUNT')
+        self.assertIsNone(c_task.counted_balance)
+        self.assertEqual(d_task.status, 'PENDING_DOC')
+
+    def test_import_doc_pre_approved_shamsi_date_and_type_conversions(self):
+        """راستی‌آزمایی تبدیل خودکار تاریخ شمسی به میلادی، استخراج اعداد صفحه و نگاشت ارز در تایید اسناد"""
+        import io
+        import openpyxl
+        from datetime import date
+        import jdatetime
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.contrib.contenttypes.models import ContentType
+        from inventory.models import Item, DocTask
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(['fa_unic_code', 'invoice_date', 'invoice_page', 'page_row', 'currency', 'invoice_type'])
+        # تاریخ شمسی 1403/05/12، شماره صفحه رشته‌ای 'صفحه ۳'، ردیف 'ردیف ۱۲'، ارز 'ریال ایران'، نوع 'فاکتور رسمی داخلی'
+        ws.append(['TYPE-CONV-TEST', '1403/05/12', 'صفحه ۳', 'ردیف ۱۲', 'ریال ایران', 'داخلی'])
+        out = io.BytesIO()
+        wb.save(out)
+        out.seek(0)
+        excel_file = SimpleUploadedFile("test_types.xlsx", out.read(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        ct = ContentType.objects.get_for_model(User)
+        perm_doc, _ = Permission.objects.get_or_create(content_type=ct, codename="perm_doc_approve_action", defaults={'name': "Approve Docs"})
+        self.user_with_perm.user_permissions.add(perm_doc)
+
+        self.client.force_authenticate(user=self.user_with_perm)
+        url = "/api/inventory/items/import_excel/"
+        response = self.client.post(url, {
+            'warehouse_id': self.warehouse.id,
+            'file': excel_file,
+            'is_doc_pre_approved': 'true'
+        }, format='multipart')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        async def _consume(streaming_content):
+            res = []
+            async for chunk in streaming_content:
+                res.append(chunk.decode('utf-8') if isinstance(chunk, bytes) else chunk)
+            return "".join(res)
+
+        import asyncio
+        asyncio.run(_consume(response.streaming_content))
+
+        item = Item.objects.filter(fa_unic_code='TYPE-CONV-TEST').first()
+        self.assertIsNotNone(item)
+        self.assertEqual(item.doc_status, 'done')
+
+        task = DocTask.objects.filter(item=item).first()
+        self.assertIsNotNone(task)
+        self.assertEqual(task.status, 'DOC_FINAL_APPROVED')
+
+        # تاریخ شمسی 1403/05/12 به میلادی تبدیل شده است:
+        expected_g_date = jdatetime.date(1403, 5, 12).togregorian()
+        self.assertEqual(task.invoice_date, expected_g_date)
+
+        # ارقام رشته‌ای فارسی به عدد مثبت تبدیل شده‌اند:
+        self.assertEqual(task.invoice_page, 3)
+        self.assertEqual(task.page_row, 12)
+
+        # ارز به کد مجاز دیتابیس نگاشت شده است:
+        self.assertEqual(task.currency, 'IRR')
+        # نوع فاکتور به کد مجاز نگاشت شده است:
+        self.assertEqual(task.invoice_type, 'domestic')
+
+
+
+
 
 
 

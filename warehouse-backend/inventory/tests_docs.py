@@ -236,7 +236,7 @@ class FinancialDocsCycleTests(TestCase):
 
         # ۵. راستی‌آزمایی تایید نهایی تسک و همگام‌سازی با کالا
         self.assertEqual(task.status, 'DOC_FINAL_APPROVED')
-        self.assertEqual(self.item1.doc_status, 'approved')
+        self.assertEqual(self.item1.doc_status, 'done')
         self.assertEqual(self.item1.price_amount, Decimal('15000000.00'))
         self.assertEqual(self.item1.total_value, Decimal('150000000.00'))
         self.assertEqual(self.item1.inv_rti_number, 'RTI-2026-001')
@@ -640,7 +640,7 @@ class FinancialDocsCycleTests(TestCase):
         task.refresh_from_db()
         self.item1.refresh_from_db()
         self.assertEqual(task.status, 'DOC_FINAL_APPROVED')
-        self.assertEqual(self.item1.doc_status, 'approved')
+        self.assertEqual(self.item1.doc_status, 'done')
 
     # ═══════════════════════════════════════════════════════════════════════
     # سناریو ۱۴: حذف نرم کالا و رفتار تسک‌های مالی (Soft Delete Handling)
@@ -698,7 +698,7 @@ class FinancialDocsCycleTests(TestCase):
         self.assertEqual(approve_resp.status_code, status.HTTP_200_OK)
 
         self.item1.refresh_from_db()
-        self.assertEqual(self.item1.doc_status, 'approved')
+        self.assertEqual(self.item1.doc_status, 'done')
         self.assertEqual(self.item1.price_amount, Decimal('789000.00'))
         self.assertEqual(self.item1.total_value, Decimal('7890000.00'))
         self.assertEqual(self.item1.similar_unit_price, Decimal('750000.00'))

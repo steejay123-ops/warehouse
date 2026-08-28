@@ -33,6 +33,7 @@ from datetime import datetime
 from django.core.cache import cache
 from django.db import transaction
 import logging
+import re
 from decimal import Decimal
 from django.utils import timezone
 import time
@@ -1519,8 +1520,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if is_doc_pre_approved:
             can_pre_approve_docs = (
                 request.user.is_superuser or 
-                request.user.has_perm('accounts.perm_doc_approve_action') or 
-                request.user.has_perm('accounts.view_sys_manager_review')
+                request.user.has_perm('accounts.perm_doc_approve_action')
             )
             if not can_pre_approve_docs:
                 return Response({'error': 'شما مجوز ثبت مستقیم اقلام در وضعیت اسناد تاییدشده را ندارید.'}, status=403)
@@ -1580,7 +1580,10 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 error_details = []
 
                 def _mark_item_as_counted(item, counted_qty, note_reason):
-                    c_task = CountTask.objects.filter(item=item).first()
+                    c_task = CountTask.objects.select_for_update().filter(item=item).first()
+                    prev_status = c_task.status if c_task else None
+                    prev_balance = c_task.counted_balance if c_task else None
+
                     if c_task:
                         c_task.status = 'FINAL_APPROVED'
                         c_task.counted_balance = counted_qty
@@ -1597,42 +1600,118 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             created_by_id=user_id,
                             modified_by_id=user_id
                         )
+
+                    audit_note = note_reason
+                    if prev_status and prev_status != 'FINAL_APPROVED':
+                        audit_note = f"{note_reason} (تغییر وضعیت از: {prev_status}، موجودی قبلی: {prev_balance})"
+
                     CountTaskHistory.objects.create(
                         task=c_task,
                         action_by_id=user_id,
                         action_type='FINAL_APPROVED',
                         counted_balance=counted_qty,
-                        note=note_reason
+                        note=audit_note
                     )
                     return c_task
 
                 def _mark_item_docs_as_approved(item, financial_data, note_reason):
-                    d_task = DocTask.objects.filter(item=item).first()
+                    d_task = DocTask.objects.select_for_update().filter(item=item).first()
+                    prev_status = d_task.status if d_task else None
 
                     def _get_val(key):
+                        # ۱. اولویت اول: مقدار موجود در فایل اکسل جاری
                         if key in financial_data and financial_data[key] is not None and str(financial_data[key]).strip() != '':
                             return financial_data[key]
+                        # ۲. اولویت دوم: حفظ مقدار قبلی ثبت‌شده توسط کاربر در پرونده تسک اسناد
+                        if d_task and getattr(d_task, key, None) is not None and str(getattr(d_task, key, None)).strip() != '':
+                            return getattr(d_task, key, None)
+                        # ۳. اولویت سوم: استفاده از مقدار موجود در مدل کالا
                         return getattr(item, key, None)
 
-                    raw_inv_date = _get_val('invoice_date')
-                    parsed_inv_date = None
-                    if raw_inv_date:
-                        if hasattr(raw_inv_date, 'strftime'):
-                            parsed_inv_date = raw_inv_date
-                        else:
-                            try:
-                                from django.utils.dateparse import parse_date
-                                parsed_inv_date = parse_date(str(raw_inv_date).strip())
-                            except Exception:
-                                parsed_inv_date = None
-
-                    def _parse_int(v):
-                        if v is None or str(v).strip() == '': return None
+                    def _parse_date_flexible(val):
+                        if not val:
+                            return None
+                        if hasattr(val, 'date') and callable(getattr(val, 'date')):
+                            return val.date()
+                        if hasattr(val, 'strftime') and hasattr(val, 'year'):
+                            return val
+                        val_str = str(val).strip()
+                        if not val_str:
+                            return None
+                        # تطبیق تاریخ‌های شمسی یا میلادی چهاررقمی (مانند 1403/05/12 یا 2024-05-12)
+                        match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})', val_str)
+                        if match:
+                            y, m, d = int(match.group(1)), int(match.group(2)), int(match.group(3))
+                            if 1300 <= y <= 1500:
+                                try:
+                                    import jdatetime
+                                    return jdatetime.date(y, m, d).togregorian()
+                                except Exception:
+                                    pass
+                            elif 1900 <= y <= 2100:
+                                try:
+                                    from datetime import date as _dt_date
+                                    return _dt_date(y, m, d)
+                                except Exception:
+                                    pass
                         try:
-                            return int(float(str(v).strip()))
-                        except (ValueError, TypeError):
+                            from django.utils.dateparse import parse_date
+                            return parse_date(val_str)
+                        except Exception:
                             return None
 
+                    def _parse_positive_int(v):
+                        if v is None or str(v).strip() == '':
+                            return None
+                        v_str = str(v).strip()
+                        persian_digits = '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩'
+                        english_digits = '01234567890123456789'
+                        v_str = v_str.translate(str.maketrans(persian_digits, english_digits))
+                        match = re.search(r'\d+', v_str)
+                        if match:
+                            try:
+                                val_int = int(match.group(0))
+                                return val_int if val_int >= 0 else None
+                            except (ValueError, TypeError):
+                                return None
+                        return None
+
+                    def _clean_currency(v):
+                        if not v:
+                            return None
+                        v_str = str(v).strip()
+                        if not v_str:
+                            return None
+                        curr_map = {
+                            'ریال': 'IRR',
+                            'تومان': 'IRR',
+                            'دلار': 'USD',
+                            'یورو': 'EUR',
+                            'درهم': 'OTHER',
+                            'سایر': 'OTHER'
+                        }
+                        for fa_name, code in curr_map.items():
+                            if fa_name in v_str:
+                                return code
+                        return v_str[:10]
+
+                    def _clean_invoice_type(v):
+                        if not v:
+                            return None
+                        v_str = str(v).strip()
+                        if not v_str:
+                            return None
+                        type_map = {
+                            'داخلی': 'domestic',
+                            'خارجی': 'foreign',
+                            'امانی': 'consignment',
+                        }
+                        for fa_name, code in type_map.items():
+                            if fa_name in v_str:
+                                return code
+                        return v_str[:20]
+
+                    # بررسی هوشمند وضعیت مهر اسناد با حفظ مقدار پیشین تسک
                     raw_stamp = _get_val('stamp')
                     parsed_stamp = None
                     if raw_stamp is not None:
@@ -1643,6 +1722,9 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                         elif str(raw_stamp).strip() in ['ندارد', '0', 'false', 'False', 'خیر']:
                             parsed_stamp = False
 
+                    final_stamp = parsed_stamp if parsed_stamp is not None else (d_task.stamp if d_task else False)
+
+                    # بررسی هوشمند وضعیت امضای اسناد با حفظ مقدار پیشین تسک
                     raw_sig = _get_val('signature')
                     parsed_sig = None
                     if raw_sig is not None:
@@ -1653,25 +1735,27 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                         elif str(raw_sig).strip() in ['ندارد', '0', 'false', 'False', 'خیر']:
                             parsed_sig = False
 
+                    final_sig = parsed_sig if parsed_sig is not None else (d_task.signature if d_task else False)
+
                     task_fields = {
                         'status': 'DOC_FINAL_APPROVED',
                         'manager_note': note_reason,
                         'modified_by_id': user_id,
                         'updated_at': timezone.now(),
-                        'added_rti_no': _get_val('added_rti_no'),
-                        'inv_rti_number': _get_val('inv_rti_number'),
-                        'invoice_type': _get_val('invoice_type'),
-                        'invoice_date': parsed_inv_date,
-                        'invoice_page': _parse_int(_get_val('invoice_page')),
-                        'page_row': _parse_int(_get_val('page_row')),
-                        'doc_supplier': _get_val('doc_supplier'),
-                        'total_value': _get_val('total_value'),
-                        'price_amount': _get_val('price_amount'),
-                        'similar_unit_price': _get_val('similar_unit_price'),
-                        'currency': _get_val('currency'),
-                        'folder_address': _get_val('folder_address'),
-                        'stamp': parsed_stamp if parsed_stamp is not None else False,
-                        'signature': parsed_sig if parsed_sig is not None else False,
+                        'added_rti_no': str(_get_val('added_rti_no'))[:100] if _get_val('added_rti_no') else None,
+                        'inv_rti_number': str(_get_val('inv_rti_number'))[:100] if _get_val('inv_rti_number') else None,
+                        'invoice_type': _clean_invoice_type(_get_val('invoice_type')),
+                        'invoice_date': _parse_date_flexible(_get_val('invoice_date')),
+                        'invoice_page': _parse_positive_int(_get_val('invoice_page')),
+                        'page_row': _parse_positive_int(_get_val('page_row')),
+                        'doc_supplier': str(_get_val('doc_supplier'))[:255] if _get_val('doc_supplier') else None,
+                        'total_value': _parse_decimal(_get_val('total_value')),
+                        'price_amount': _parse_decimal(_get_val('price_amount')),
+                        'similar_unit_price': _parse_decimal(_get_val('similar_unit_price')),
+                        'currency': _clean_currency(_get_val('currency')),
+                        'folder_address': str(_get_val('folder_address'))[:500] if _get_val('folder_address') else None,
+                        'stamp': final_stamp,
+                        'signature': final_sig,
                     }
 
                     if d_task:
@@ -1685,11 +1769,15 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             **task_fields
                         )
 
+                    audit_doc_note = note_reason
+                    if prev_status and prev_status != 'DOC_FINAL_APPROVED':
+                        audit_doc_note = f"{note_reason} (تغییر وضعیت از: {prev_status})"
+
                     DocTaskHistory.objects.create(
                         task=d_task,
                         action_by_id=user_id,
                         action_type='DOC_FINAL_APPROVED',
-                        note=note_reason,
+                        note=audit_doc_note,
                         data_snapshot=_create_doc_task_snapshot(d_task)
                     )
                     return d_task
@@ -2309,8 +2397,9 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 for history in histories:
                     if history.action == 'create':
                         if history.item:
-                            # بازگردانی ایجاد = حذف (نرم) رکورد ساخته‌شده
+                            # بازگردانی ایجاد = حذف (نرم) رکورد ساخته‌شده به همراه تسک‌های اسناد ایجادشده
                             _soft_delete_items_cascade(Item.objects.filter(id=history.item_id))
+                            DocTask.objects.filter(item_id=history.item_id).delete()
                     elif history.action == 'update' or history.action == 'delete':
                         if history.previous_state:
                             state = history.previous_state.copy()
@@ -2322,8 +2411,40 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                                     state[f'{fk}_id'] = state.pop(fk)
 
                             if history.action == 'update' and history.item:
-                                # بامپ updated_at تا کلاینت‌های سینک مقادیر بازگردانی‌شده را بگیرند
+                                # بازگردانی مشخصات کالا
                                 Item.all_objects.filter(id=history.item.id).update(**{**state, 'updated_at': timezone.now()})
+
+                                # بازگردانی وضعیت تسک شمارش در صورت لزوم
+                                prev_field_status = state.get('field_status')
+                                if prev_field_status and prev_field_status != 'done':
+                                    c_task = CountTask.objects.filter(item=history.item).first()
+                                    if c_task:
+                                        last_hist = CountTaskHistory.objects.filter(task=c_task).exclude(
+                                            action_by_id=import_log.imported_by_id, action_type='FINAL_APPROVED'
+                                        ).order_by('-created_at').first()
+                                        if last_hist:
+                                            c_task.status = last_hist.action_type
+                                            c_task.counted_balance = last_hist.counted_balance
+                                            c_task.save(update_fields=['status', 'counted_balance', 'updated_at'])
+                                        else:
+                                            c_task.status = 'PENDING_COUNT'
+                                            c_task.counted_balance = None
+                                            c_task.save(update_fields=['status', 'counted_balance', 'updated_at'])
+
+                                # بازگردانی وضعیت تسک اسناد در صورت لزوم
+                                prev_doc_status = state.get('doc_status')
+                                if prev_doc_status and prev_doc_status != 'done':
+                                    d_task = DocTask.objects.filter(item=history.item).first()
+                                    if d_task:
+                                        last_d_hist = DocTaskHistory.objects.filter(task=d_task).exclude(
+                                            action_by_id=import_log.imported_by_id, action_type='DOC_FINAL_APPROVED'
+                                        ).order_by('-created_at').first()
+                                        if last_d_hist:
+                                            d_task.status = last_d_hist.action_type
+                                            d_task.save(update_fields=['status', 'updated_at'])
+                                        else:
+                                            d_task.status = 'PENDING_DOC'
+                                            d_task.save(update_fields=['status', 'updated_at'])
                             elif history.action == 'delete':
                                 # حذف حالا نرم است؛ ردیف tombstone هنوز با همه داده‌ها موجود است
                                 # → فقط احیا می‌شود. اگر (به هر دلیل) واقعاً حذف شده بود، بازسازی.
@@ -2348,6 +2469,17 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             
                 import_log.is_reverted = True
                 import_log.save()
+
+                try:
+                    wh_id = import_log.warehouse_id
+                    if wh_id:
+                        broadcast_count_task_update(warehouse_id=wh_id)
+                        broadcast_doc_task_update(warehouse_id=wh_id)
+                    else:
+                        broadcast_count_task_update()
+                        broadcast_doc_task_update()
+                except Exception as bc_err:
+                    logger.warning(f"Failed to broadcast task updates after revert_import: {bc_err}")
 
                 from accounts.audit_utils import log_audit_event
                 log_audit_event(
@@ -2624,9 +2756,9 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         total_quantity = items.count()
         total_counted = items.exclude(field_status__in=['waiting', 'counting', 'recount', 'در انتظار شمارش', 'بازشماری']).count()
         printed_tags = items.filter(tag_status__in=['printed', 'reprint', 'چاپ شده', 'چاپ مجدد']).count()
-        docs_approved = items.filter(doc_status='done').count()
+        docs_approved = items.filter(doc_status__in=['done', 'approved']).count()
         conflicts = items.filter(Q(has_conflict=True) | Q(field_status='recount')).count()
-        done = items.filter(field_status='done', doc_status='done').count()
+        done = items.filter(field_status='done', doc_status__in=['done', 'approved']).count()
         
         # Days stats (last 7 days)
         weekly_data = []
@@ -2638,8 +2770,8 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             day_items = items.filter(updated_at__gte=d_start, updated_at__lt=d_end)
             
             c_count = day_items.exclude(field_status__in=['waiting', 'counting', 'recount', 'در انتظار شمارش', 'بازشماری']).count()
-            c_docs = day_items.filter(doc_status='done').count()
-            c_feed = day_items.filter(field_status='done', doc_status='done').count()
+            c_docs = day_items.filter(doc_status__in=['done', 'approved']).count()
+            c_feed = day_items.filter(field_status='done', doc_status__in=['done', 'approved']).count()
             
             jdt = jdatetime.datetime.fromgregorian(datetime=d_start)
             day_label = 'امروز' if i == 0 else ('دیروز' if i == 1 else jdt.strftime('%A'))
@@ -3868,30 +4000,6 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = 'attachment; filename="count_tracking_export.xlsx"'
         return response
 
-def _create_doc_task_snapshot(task):
-    """ایجاد اسنپ‌شات از تمام مقادیر ۱۴ فیلد مالی و فیلدهای پویای تسک در لحظه عملیات"""
-    return {
-        'added_rti_no': task.added_rti_no,
-        'inv_rti_number': task.inv_rti_number,
-        'invoice_type': task.invoice_type,
-        'invoice_date': str(task.invoice_date) if task.invoice_date else None,
-        'invoice_page': task.invoice_page,
-        'page_row': task.page_row,
-        'doc_supplier': task.doc_supplier,
-        'total_value': str(task.total_value) if task.total_value is not None else None,
-        'price_amount': str(task.price_amount) if task.price_amount is not None else None,
-        'similar_unit_price': str(task.similar_unit_price) if task.similar_unit_price is not None else None,
-        'currency': task.currency,
-        'folder_address': task.folder_address,
-        'stamp': task.stamp,
-        'signature': task.signature,
-        'worker_note': task.worker_note,
-        'supervisor_note': task.supervisor_note,
-        'manager_note': task.manager_note,
-        'status': task.status,
-        'item_dynamic_data': task.item.dynamic_data if (task.item and getattr(task.item, 'dynamic_data', None)) else {}
-    }
-
 
 class DocTaskViewSet(viewsets.ModelViewSet):
     serializer_class = DocTaskSerializer
@@ -4364,7 +4472,7 @@ class DocTaskViewSet(viewsets.ModelViewSet):
                 # انتقال و همگام‌سازی فیلدهای مالی به رکورد کالا (Item)
                 item = task.item
                 if item:
-                    item.doc_status = 'approved'
+                    item.doc_status = 'done'
                     item.price_amount = task.price_amount
                     item.total_value = task.total_value
                     item.similar_unit_price = task.similar_unit_price

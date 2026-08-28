@@ -1,6 +1,7 @@
 from django.db.models import Prefetch
 from rest_framework import serializers
 from common.media_urls import signed_media_url
+from common.date_utils import parse_date_smart
 from .models import Item, ItemPhoto, CountTask, CountTaskHistory, DocTask, DocTaskHistory, ItemFieldDefinition
 
 
@@ -298,21 +299,10 @@ class DocTaskSerializer(serializers.ModelSerializer):
         if inv_date is not None:
             if inv_date == '' or inv_date == 'null':
                 data['invoice_date'] = None
-            elif isinstance(inv_date, str):
-                inv_date_str = inv_date.strip()
-                import re
-                jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
-                if jalali_match:
-                    y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
-                    if 1300 <= y <= 1500:
-                        try:
-                            import jdatetime
-                            g_date = jdatetime.date(y, m, d).togregorian()
-                            data['invoice_date'] = g_date.strftime('%Y-%m-%d')
-                        except Exception:
-                            pass
-                    elif 1900 <= y <= 2100:
-                        data['invoice_date'] = f"{y:04d}-{m:02d}-{d:02d}"
+            elif inv_date:
+                parsed_date = parse_date_smart(inv_date, as_datetime=False, strict=False)
+                if parsed_date:
+                    data['invoice_date'] = parsed_date.strftime('%Y-%m-%d')
 
         # تبدیل مقادیر خالی فیلدهای عددی و انتخابی به None
         nullable_fields = [

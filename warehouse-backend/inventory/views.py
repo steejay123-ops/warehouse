@@ -41,6 +41,7 @@ import time
 logger = logging.getLogger(__name__)
 
 from decimal import Decimal, InvalidOperation
+from common.date_utils import parse_date_smart
 
 def _parse_decimal(val):
     if val is None or str(val).strip() == '':
@@ -51,36 +52,11 @@ def _parse_decimal(val):
         return None
 
 def _parse_date_flexible(val):
-    if not val:
-        return None
-    if hasattr(val, 'date') and callable(getattr(val, 'date')):
-        return val.date()
-    if hasattr(val, 'strftime') and hasattr(val, 'year'):
-        return val
-    val_str = str(val).strip()
-    if not val_str:
-        return None
-    # تطبیق تاریخ‌های شمسی یا میلادی چهاررقمی (مانند 1403/05/12 یا 2024-05-12)
-    match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})', val_str)
-    if match:
-        y, m, d = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        if 1300 <= y <= 1500:
-            try:
-                import jdatetime
-                return jdatetime.date(y, m, d).togregorian()
-            except Exception:
-                pass
-        elif 1900 <= y <= 2100:
-            try:
-                from datetime import date as _dt_date
-                return _dt_date(y, m, d)
-            except Exception:
-                pass
-    try:
-        from django.utils.dateparse import parse_date
-        return parse_date(val_str)
-    except Exception:
-        return None
+    """
+    تحلیل منعطف تاریخ‌ها با استفاده از موتور سراسری هوشمند common.date_utils.
+    پشتیبانی از فرمت‌های استاندارد، ارقام فارسی، طول‌های ۶/۸/۱۲/۱۴ رقم و رفع تداخل تک‌رقمی‌ها.
+    """
+    return parse_date_smart(val, as_datetime=False, strict=False)
 
 def _parse_positive_int(v):
     if v is None or str(v).strip() == '':
@@ -1256,8 +1232,6 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             # Create DocTasks if it's a document dispatch
             if doc_status == 'processing':
                 from .models import DocTask
-                import re
-                from datetime import date as _dt_date
                 
                 # حذف تسک‌های فعال قبلی این کالاها برای جلوگیری از ایجاد تسک‌های تکراری در کارتابل اسناد
                 DocTask.objects.filter(item__in=items_list).exclude(status='DOC_FINAL_APPROVED').delete()
@@ -1283,25 +1257,7 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     sign_val = bool(item.signature) if isinstance(item.signature, bool) else (str(item.signature).lower() in ['true', '1', 'بله', 'دارد', 'yes'])
                     
                     # تاریخ فاکتور
-                    inv_date = None
-                    if item.invoice_date:
-                        inv_date_str = str(item.invoice_date).strip()
-                        jalali_match = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', inv_date_str)
-                        if jalali_match:
-                            y, m, d = int(jalali_match.group(1)), int(jalali_match.group(2)), int(jalali_match.group(3))
-                            if 1300 <= y <= 1500:
-                                try:
-                                    import jdatetime
-                                    inv_date = jdatetime.date(y, m, d).togregorian()
-                                except Exception:
-                                    pass
-                            elif 1900 <= y <= 2100:
-                                try:
-                                    inv_date = _dt_date(y, m, d)
-                                except Exception:
-                                    pass
-                        elif isinstance(item.invoice_date, _dt_date):
-                            inv_date = item.invoice_date
+                    inv_date = _parse_date_flexible(item.invoice_date)
 
                     doc_tasks_to_create.append(DocTask(
                         item=item,

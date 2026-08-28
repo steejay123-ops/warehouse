@@ -79,7 +79,10 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\); console.log\\('karma:', !!\\(p.devDependencies&&p.devDependencies['karma']\\), 'jasmine:', !!\\(p.devDependencies&&p.devDependencies['jasmine-core']\\)\\);\")",
       "Bash(node -e \"const p=require\\('./package.json'\\);console.log\\(p.dependencies['@angular/core'], '| devDeps test-related:', Object.keys\\(p.devDependencies||{}\\).join\\(', '\\)\\)\")",
       "Bash(cd \"E:/warehouse project\" && stat -c '%y  %n' warehouse-backend/communications/*.py warehouse-backend/communications/management/commands/*.py warehouse-backend/common/media_urls.py warehouse-backend/config/settings.py 2>/dev/null | sort -r)",
-      "Bash(cd \"E:/warehouse project/warehouse-front/src/app\" && stat -c '%y  %n' core/services/communication.service.ts core/services/communication.service.spec.ts components/communications/*/*.ts components/communications/*/*.html components/layout/layout.ts 2>/dev/null | sort -r)"
+      "Bash(cd \"E:/warehouse project/warehouse-front/src/app\" && stat -c '%y  %n' core/services/communication.service.ts core/services/communication.service.spec.ts components/communications/*/*.ts components/communications/*/*.html components/layout/layout.ts 2>/dev/null | sort -r)",
+      "Read(//c/Users/Payandeh/.claude/plugins/cache/claude-plugins-official/**)",
+      "Read(//c/Users/Payandeh/.claude/plugins/**)",
+      "Bash(cd \"C:\\\\Users\\\\Payandeh\\\\.claude\\\\plugins\"; ls marketplaces; find marketplaces -name \"*.json\" | head -5)"
     ]
   }
 }

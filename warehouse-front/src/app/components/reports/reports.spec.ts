@@ -60,6 +60,7 @@ describe('Reports Component & ReportStore (Vitest)', () => {
   const mockFieldsResponse: EntityFieldsResponse = {
     entity: 'items',
     label: 'کالاها',
+    warehouse_required_for_dynamic: false,
     fields: mockFields,
     joins: [],
   };

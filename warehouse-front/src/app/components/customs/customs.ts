@@ -22,6 +22,7 @@ import { WarehouseSelectorComponent } from '../../shared/components/warehouse-se
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
 import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
+import { formatToStandardShamsi } from '../../core/utils/date-utils';
 import { ItemPhotoGalleryComponent } from '../../shared/components/item-photo-gallery/item-photo-gallery.component';
 import { ItemPhotoThumbComponent } from '../../shared/components/item-photo-gallery/item-photo-thumb.component';
 import { PhotoGalleryHost } from '../../shared/components/item-photo-gallery/photo-gallery-host';
@@ -1376,27 +1377,7 @@ export class Customs implements OnInit, OnDestroy {
 
   convertToShamsiDateString(val: any): string {
     if (!val) return '';
-    const str = String(val).trim();
-    if (/^1[34]\d{2}[/-]\d{1,2}[/-]\d{1,2}$/.test(str)) {
-      return str.replace(/-/g, '/');
-    }
-    try {
-      const d = new Date(str);
-      if (!isNaN(d.getTime())) {
-        const formatter = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          timeZone: 'Asia/Tehran'
-        });
-        const parts = formatter.formatToParts(d);
-        const y = parts.find(p => p.type === 'year')?.value;
-        const m = parts.find(p => p.type === 'month')?.value;
-        const day = parts.find(p => p.type === 'day')?.value;
-        return `${y}/${m}/${day}`;
-      }
-    } catch {}
-    return str;
+    return formatToStandardShamsi(val) || String(val).trim();
   }
 
   openDetail(task: DocTask, updateUrl = true) {

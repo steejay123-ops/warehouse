@@ -15,6 +15,7 @@ import { NetworkStatusService } from '../../core/services/network-status.service
 import { WarehouseSelectorComponent } from '../../shared/components/warehouse-selector/warehouse-selector.component';
 import { BarcodeScannerComponent } from '../../shared/components/barcode-scanner/barcode-scanner.component';
 import { PersianDatePipe } from '../../shared/pipes/persian-date.pipe';
+import { parseSmartDate, formatToStandardShamsi } from '../../core/utils/date-utils';
 import {
   AuditLog,
   UserLoginLog,
@@ -616,94 +617,14 @@ export class Audit implements OnInit, OnDestroy {
     }
   }
 
-  // ── تبدیل ریاضی دقیق تاریخ میلادی به شمسی (بدون وابستگی خارجی) ──
-  gregorianToJalali(gy: number, gm: number, gd: number): { jy: number; jm: number; jd: number } {
-    const g_d_m = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    const gy2 = (gm > 2) ? (gy + 1) : gy;
-    let days = 355666 + (365 * gy) + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) + gd;
-    for (let i = 0; i < gm; ++i) days += g_d_m[i];
-    let jy = -1595 + (33 * Math.floor(days / 12053));
-    days %= 12053;
-    jy += 4 * Math.floor(days / 1461);
-    days %= 1461;
-    if (days > 365) {
-      jy += Math.floor((days - 1) / 365);
-      days = (days - 1) % 365;
-    }
-    let jm: number;
-    let jd: number;
-    if (days < 186) {
-      jm = 1 + Math.floor(days / 31);
-      jd = 1 + (days % 31);
-    } else {
-      jm = 7 + Math.floor((days - 186) / 30);
-      jd = 1 + ((days - 186) % 30);
-    }
-    return { jy, jm, jd };
-  }
-
   formatDateToShamsiString(date?: Date | string | null): string {
-    if (!date) return '';
-    try {
-      const d = typeof date === 'string' ? new Date(date) : date;
-      if (isNaN(d.getTime())) return '';
-      const j = this.gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
-      const pad = (n: number) => n < 10 ? '0' + n : String(n);
-      return `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
-    } catch {
-      return '';
-    }
-  }
-
-  // ── تبدیل ریاضی دقیق تاریخ شمسی به میلادی بدون وابستگی خارجی ──
-  jalaliToGregorian(jy: number, jm: number, jd: number): { gy: number; gm: number; gd: number } {
-    let gy: number;
-    if (jy > 979) {
-      gy = 1600;
-      jy -= 979;
-    } else {
-      gy = 621;
-    }
-    const days =
-      365 * jy +
-      Math.floor(jy / 33) * 8 +
-      Math.floor(((jy % 33) + 3) / 4) +
-      78 +
-      jd +
-      (jm < 7 ? (jm - 1) * 31 : (jm - 7) * 30 + 186);
-    gy += 400 * Math.floor(days / 146097);
-    let remDays = days % 146097;
-    if (remDays > 36524) {
-      gy += 100 * Math.floor(--remDays / 36524);
-      remDays %= 36524;
-      if (remDays >= 365) remDays++;
-    }
-    gy += 4 * Math.floor(remDays / 1461);
-    remDays %= 1461;
-    if (remDays > 365) {
-      gy += Math.floor((remDays - 1) / 365);
-      remDays = (remDays - 1) % 365;
-    }
-    let gd = remDays + 1;
-    const salA = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let gm = 0;
-    for (gm = 1; gm <= 12; gm++) {
-      if (gd <= salA[gm]) break;
-      gd -= salA[gm];
-    }
-    return { gy, gm, gd };
+    return formatToStandardShamsi(date);
   }
 
   parseShamsiStringToDate(shamsiStr: string): Date | null {
-    if (!shamsiStr) return null;
-    const clean = shamsiStr.replace(/[^\d/]/g, '').replace(/[\u06F0-\u06F9]/g, d => String.fromCharCode(d.charCodeAt(0) - 1728));
-    const parts = clean.split('/').map(p => parseInt(p, 10));
-    if (parts.length === 3 && parts[0] >= 1300 && parts[0] <= 1500 && parts[1] >= 1 && parts[1] <= 12 && parts[2] >= 1 && parts[2] <= 31) {
-      const g = this.jalaliToGregorian(parts[0], parts[1], parts[2]);
-      const date = new Date(Date.UTC(g.gy, g.gm - 1, g.gd));
-      return isNaN(date.getTime()) ? null : date;
-    }
-    return null;
+    const d = parseSmartDate(shamsiStr, { strict: false });
+    if (!d) return null;
+    return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   }
 
   // ── ماسک هوشمند ورود تاریخ شمسی (تبدیل خودکار 14050531 به 1405/05/31) ──

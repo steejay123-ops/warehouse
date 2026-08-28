@@ -82,7 +82,15 @@
       "Bash(cd \"E:/warehouse project/warehouse-front/src/app\" && stat -c '%y  %n' core/services/communication.service.ts core/services/communication.service.spec.ts components/communications/*/*.ts components/communications/*/*.html components/layout/layout.ts 2>/dev/null | sort -r)",
       "Read(//c/Users/Payandeh/.claude/plugins/cache/claude-plugins-official/**)",
       "Read(//c/Users/Payandeh/.claude/plugins/**)",
-      "Bash(cd \"C:\\\\Users\\\\Payandeh\\\\.claude\\\\plugins\"; ls marketplaces; find marketplaces -name \"*.json\" | head -5)"
+      "Bash(cd \"C:\\\\Users\\\\Payandeh\\\\.claude\\\\plugins\"; ls marketplaces; find marketplaces -name \"*.json\" | head -5)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(npx vitest *)",
+      "Bash(venv/Scripts/python.exe manage.py test inventory.tests_security_import)",
+      "Bash(awk '/formatIsoDate\\\\\\(/{f=1} f{print NR\": \"$0} f&&/^  }/{exit}' warehouse-front/src/app/components/audit/audit.ts)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(venv/Scripts/python.exe manage.py test common.tests.test_date_utils)",
+      "Bash(venv/Scripts/python.exe manage.py test inventory.tests_security_import --noinput)",
+      "Bash(grep -E \"^Ran |^OK$|^FAILED|Error\")"
     ]
   }
 }

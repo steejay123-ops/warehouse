@@ -60,4 +60,25 @@ Ran 65 tests in 84.604s
 OK
 ```
 
+---
+
+# 📅 مستند راهنما و نتایج پیاده‌سازی موتور سراسری پارسر تاریخ (Dual-Path Date Parser Engine)
+
+> [!IMPORTANT]
+> **سند مرجع اختصاصی:** [Documents/Global_Date_Parser_Auxiliary/walkthrough_global_date_parser.md](Global_Date_Parser_Auxiliary/walkthrough_global_date_parser.md)  
+> **وضعیت:** پیاده‌سازی کامل و آزمون ۱۰۰٪ موفقیت‌آمیز
+
+### خلاصه‌سازی دستاوردها:
+* **بک‌اند (`common/date_utils.py`):** استقرار `parse_date_smart` بر پایه Fast-Path (زیر ۲ میکروثانیه) و Fallback هوشمند با رعایت کامل ۴ نکته (طول متغیر ۶/۸/۱۲/۱۴ رقم، ارقام فارسی/عربی، پدینگ تک‌رقمی‌ها، و اعتبارسنجی دامنه تقویمی).
+* **فرانت‌اند (`src/app/core/utils/date-utils.ts`):** استقرار `parseSmartDate` و `formatToStandardShamsi` با انطباق کامل بر الگوریتم‌های استاندارد جلالی، اعتبارسنجی طول ماه‌ها (`Utils.monthLength`) و جلوگیری از سرریز بی‌صدا در ماه‌های ۳۰ روزه و سال‌های کبیسه/غیرکبیسه (`1403/07/31`، `1404/12/30` و `2024-02-30`).
+* **یکپارچه‌سازی و رفع باگ حیاتی:**
+  - بازگرداندن متغیر ماژول `logger = logging.getLogger(__name__)` در `inventory/views.py` و رفع خطر خطای ۵۰۰/NameError در ۹ بلوک مدیریت استثنا.
+  - جایگزینی در `inventory/views.py` (`_parse_date_flexible`) و `inventory/serializers.py` (`DocTaskSerializer`).
+* **نتایج آزمون‌ها:**
+  - بک‌اند: ۸ تست واحد ماژول `common.tests.test_date_utils` در ۰.۰۰۱ ثانیه با نتیجه OK.
+  - اینورتری: ۳۶ تست جامع در `inventory.tests_security_import` با نتیجه OK.
+  - فرانت‌اند: ۲۹ تست واحد در `date-utils.spec.ts` در ۲۰۳ میلی‌ثانیه با نتیجه ۱۰۰٪ سبز.
+  - بیلد Angular: خروجی `npm run build` با کد صفر بدون هیچ خطای کامپایل.
+
 </div>
+

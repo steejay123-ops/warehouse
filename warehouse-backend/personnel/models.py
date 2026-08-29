@@ -245,7 +245,9 @@ class MonthlyWorkPeriod(models.Model):
 
     warehouse = models.ForeignKey(
         'warehouses.Warehouse',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='work_periods',
         verbose_name="انبار مربوطه"
     )
@@ -299,7 +301,9 @@ class DailyAttendance(models.Model):
     )
     warehouse = models.ForeignKey(
         'warehouses.Warehouse',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='daily_attendances',
         verbose_name="انبار"
     )
@@ -488,6 +492,10 @@ class PayrollYearlySettings(models.Model):
     
     # تسهیم مازاد ناخالص به اضافه‌کار و سفر/ماموریت
     surplus_overtime_percent = models.DecimalField(max_digits=5, decimal_places=2, default=50.00, verbose_name="درصد تخصیص مازاد به اضافه‌کار (پیش‌فرض ۵۰٪)")
+    
+    # محدودیت بازه زمانی ویرایش کارکرد روزانه توسط مدیر (-۱ به معنای نامحدود، ۰ به معنای فقط امروز)
+    attendance_edit_past_days = models.IntegerField(default=3, verbose_name="حداکثر روزهای گذشته مجاز برای ویرایش کارکرد")
+    attendance_edit_future_days = models.IntegerField(default=0, verbose_name="حداکثر روزهای آینده مجاز برای ثبت کارکرد")
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

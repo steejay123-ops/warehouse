@@ -135,9 +135,28 @@ class AttendanceItemInputSerializer(serializers.Serializer):
 
 
 class BulkAttendanceMatrixSerializer(serializers.Serializer):
-    warehouse_id = serializers.IntegerField()
-    date_shamsi = serializers.CharField(max_length=10)
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    date_shamsi = serializers.CharField(max_length=15)
     items = AttendanceItemInputSerializer(many=True)
+
+
+class MonthlyGridItemInputSerializer(serializers.Serializer):
+    personnel_id = serializers.IntegerField()
+    day = serializers.IntegerField(min_value=1, max_value=31)
+    status = serializers.CharField(max_length=20, required=False, allow_blank=True, default='PRESENT_10H')
+    effective_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    overtime_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    is_friday_work = serializers.BooleanField(default=False)
+    is_mission = serializers.BooleanField(default=False)
+    advance_payment = serializers.DecimalField(max_digits=12, decimal_places=0, default=0)
+    notes = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+
+
+class BulkMonthlyAttendanceGridSerializer(serializers.Serializer):
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    year_month = serializers.CharField(max_length=10)
+    items = MonthlyGridItemInputSerializer(many=True)
+
 
 
 class VehicleTripLogSerializer(serializers.ModelSerializer):

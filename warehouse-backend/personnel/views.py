@@ -9,6 +9,7 @@ import io
 import zipfile
 import openpyxl
 from decimal import Decimal
+from common.date_utils import format_to_shamsi_str, normalize_digits
 
 from .models import (
     PersonnelProfile,
@@ -29,6 +30,8 @@ from .serializers import (
     VehicleDriverProfileSerializer,
     DailyAttendanceSerializer,
     BulkAttendanceMatrixSerializer,
+    BulkMonthlyAttendanceGridSerializer,
+    MonthlyGridItemInputSerializer,
     AttendanceAuditLogSerializer,
     VehicleTripLogSerializer,
     BulkVehicleTripMatrixSerializer,
@@ -262,8 +265,80 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             )
         return qs
 
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+def normalize_attendance_date(date_str: str) -> str:
+    """
+    نرمال‌سازی تاریخ شمسی و پشتیبانی کامل از ورودی‌های پیوسته ۸ رقمی (14050607)
+    و تبدیل خودکار به استاندارد YYYY/MM/DD بدون بروز خطا
+    """
+    if not date_str:
+        return ""
+    cleaned = normalize_digits(str(date_str)).strip()
+    digits_only = ''.join(c for c in cleaned if c.isdigit())
+    if len(digits_only) == 8 and ('/' not in cleaned and '-' not in cleaned):
+        return f"{digits_only[:4]}/{digits_only[4:6]}/{digits_only[6:8]}"
+    shamsi_str = format_to_shamsi_str(cleaned)
+    if shamsi_str and len(shamsi_str.split('/')) == 3:
+        return shamsi_str
+    parts = cleaned.replace('-', '/').split('/')
+    if len(parts) == 3:
+        try:
+            return f"{int(parts[0]):04d}/{int(parts[1]):02d}/{int(parts[2]):02d}"
+        except Exception:
+            pass
+    return date_str
+
+
+def validate_attendance_date_window(date_shamsi: str, user=None):
+    """
+    اعتبارسنجی بازه مجاز ثبت و ویرایش کارکرد بر مبنای تنظیمات سالانه حقوق
+    -1 به معنای نامحدود، 0 به معنای فقط امروز، اعداد مثبت به معنای سقف روز مجاز
+    پشتیبانی کامل از رشته‌های ۸ رقمی پیوسته (مانند 14050607)
+    """
+    import jdatetime
+    from rest_framework.exceptions import ValidationError as DRFValidationError
+    
+    if not date_shamsi:
+        raise DRFValidationError("تاریخ شمسی معتبر نیست.")
+    
+    norm_date = normalize_attendance_date(date_shamsi)
+    try:
+        parts = [int(p) for p in norm_date.split('/')]
+        if len(parts) != 3:
+            raise ValueError
+        target_date = jdatetime.date(parts[0], parts[1], parts[2])
+    except Exception:
+        raise DRFValidationError(f"فرمت تاریخ شمسی نامعتبر است: {date_shamsi}")
+
+    today = jdatetime.date.today()
+    delta_days = (target_date - today).days
+
+    fiscal_year = str(parts[0])
+    settings = PayrollYearlySettings.objects.filter(fiscal_year=fiscal_year, is_active=True).first()
+    if not settings:
+        settings = PayrollYearlySettings.objects.filter(is_active=True).first()
+
+    past_limit = settings.attendance_edit_past_days if settings else 3
+    future_limit = settings.attendance_edit_future_days if settings else 0
+
+    # بررسی روزهای گذشته
+    if delta_days < 0:
+        past_days = abs(delta_days)
+        if past_limit is not None and past_limit != -1:
+            if past_days > past_limit:
+                if past_limit == 0:
+                    raise DRFValidationError(f"طبق تنظیمات سیستم، فقط امکان ثبت کارکرد برای تاریخ امروز ({today.strftime('%Y/%m/%d')}) وجود دارد و ویرایش سوابق گذشته مجاز نیست.")
+                raise DRFValidationError(f"ویرایش کارکرد برای {past_days} روز قبل مجاز نیست. حداکثر سقف مجاز طبق تنظیمات مدیر {past_limit} روز است.")
+
+    # بررسی روزهای آینده
+    elif delta_days > 0:
+        future_days = delta_days
+        if future_limit is not None and future_limit != -1:
+            if future_days > future_limit:
+                if future_limit == 0:
+                    raise DRFValidationError(f"ثبت کارکرد برای تاریخ‌های آینده ({norm_date}) مجاز نیست.")
+                raise DRFValidationError(f"ثبت کارکرد برای {future_days} روز آینده مجاز نیست. حداکثر سقف مجاز طبق تنظیمات مدیر {future_limit} روز است.")
+
+    return True
 
 
 class DailyAttendanceViewSet(viewsets.ModelViewSet):
@@ -288,33 +363,48 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='matrix')
     def get_matrix(self, request):
         """
-        دریافت داده‌های ماتریسی حضور و غیاب برای یک انبار و تاریخ مشخص
+        دریافت داده‌های ماتریسی حضور و غیاب (پشتیبانی از مستقل از انبار یا فیلتر انبار خاص)
+        همراه با استخراج هوشمند آخرین وضعیت ثبت‌شده فرد در روز قبل به عنوان پیش‌فرض
         """
-        warehouse_id = request.query_params.get('warehouse_id')
-        date_shamsi = request.query_params.get('date_shamsi')
-        if not warehouse_id or not date_shamsi:
-            return Response({'error': 'پارامترهای warehouse_id و date_shamsi الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_date = request.query_params.get('date_shamsi')
+        if not raw_date:
+            return Response({'error': 'پارامتر date_shamsi الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # استخراج سال و ماه از تاریخ (مثال: 1404/05/12 -> 1404/05)
+        date_shamsi = normalize_attendance_date(raw_date)
         year_month = date_shamsi[:7]
-        period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
-        is_locked = period.status == 'LOCKED' if period else False
 
-        # پرسنل فعال این انبار
-        personnel_list = PersonnelProfile.objects.filter(
-            Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
-            is_active=True
-        ).order_by('last_name', 'first_name')
+        # بررسی وضعیت قفل دوره
+        if warehouse_id:
+            period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+            is_locked = period.status == 'LOCKED' if period else False
+            period_status = period.status if period else 'OPEN'
+        else:
+            is_locked = False
+            period_status = 'OPEN'
 
-        # رکوردهای ثبت‌شده قبلی برای این تاریخ
-        existing_attendances = {
-            att.personnel_id: att
-            for att in DailyAttendance.objects.filter(
+        # لیست پرسنل فعال (مستقل از انبار یا فیلتر انبار خاص)
+        if warehouse_id:
+            personnel_list = PersonnelProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('last_name', 'first_name')
+            attendances_qs = DailyAttendance.objects.filter(
                 warehouse_id=warehouse_id,
                 date_shamsi=date_shamsi,
                 is_deleted=False
             ).select_related('personnel')
-        }
+        else:
+            personnel_list = PersonnelProfile.objects.filter(
+                is_active=True
+            ).order_by('last_name', 'first_name')
+            attendances_qs = DailyAttendance.objects.filter(
+                date_shamsi=date_shamsi,
+                is_deleted=False
+            ).select_related('personnel')
+
+        existing_attendances = {att.personnel_id: att for att in attendances_qs}
 
         matrix_rows = []
         for p in personnel_list:
@@ -336,29 +426,48 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     'is_existing': True
                 })
             else:
-                # مقدار پیش‌فرض: حاضر ۱۰ ساعته
+                # 🌟 آخرین وضعیت انتخاب شده برای یک فرد همیشه به عنوان پیش فرض روز بعد بارگزاری شود
+                last_att = DailyAttendance.objects.filter(
+                    personnel_id=p.id,
+                    date_shamsi__lt=date_shamsi,
+                    is_deleted=False
+                ).order_by('-date_shamsi').first()
+
+                if last_att:
+                    def_status = last_att.status
+                    def_eff = float(last_att.effective_hours)
+                    def_ovt = float(last_att.overtime_hours)
+                    def_mission = last_att.is_mission
+                    def_friday = last_att.is_friday_work
+                else:
+                    def_status = 'PRESENT_10H'
+                    def_eff = 10.0
+                    def_ovt = 0.0
+                    def_mission = False
+                    def_friday = False
+
                 matrix_rows.append({
                     'personnel_id': p.id,
                     'full_name': p.full_name,
                     'national_code': p.national_code,
                     'job_title': p.job_title,
                     'attendance_id': None,
-                    'status': 'PRESENT_10H',
-                    'effective_hours': 10.0,
-                    'overtime_hours': 0.0,
-                    'is_friday_work': False,
-                    'is_mission': False,
+                    'status': def_status,
+                    'effective_hours': def_eff,
+                    'overtime_hours': def_ovt,
+                    'is_friday_work': def_friday,
+                    'is_mission': def_mission,
                     'advance_payment': 0.0,
                     'notes': '',
                     'is_existing': False
                 })
 
         return Response({
-            'warehouse_id': int(warehouse_id),
+            'warehouse_id': warehouse_id,
             'date_shamsi': date_shamsi,
             'year_month': year_month,
             'is_locked': is_locked,
-            'period_status': period.status if period else 'OPEN',
+            'period_status': period_status,
             'rows': matrix_rows
         })
 
@@ -366,24 +475,36 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
     def bulk_save(self, request):
         """
         ذخیره گروهی و سریع ماتریس حضور و غیاب پرسنل در پایان روز
-        همراه با ایجاد خودکار لاگ ممیزی در صورت ویرایش
+        (پشتیبانی کامل از کارکرد مستقل از انبار و لاگ ممیزی)
         """
         serializer = BulkAttendanceMatrixSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        warehouse_id = serializer.validated_data['warehouse_id']
-        date_shamsi = serializer.validated_data['date_shamsi']
+        raw_wh = serializer.validated_data.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_date = serializer.validated_data['date_shamsi']
+        date_shamsi = normalize_attendance_date(raw_date)
         items = serializer.validated_data['items']
 
-        year_month = date_shamsi[:7]
-        period, _ = MonthlyWorkPeriod.objects.get_or_create(
-            warehouse_id=warehouse_id,
-            year_month=year_month,
-            defaults={'status': 'OPEN'}
-        )
+        # اعتبارسنجی بازه زمانی مجاز بر مبنای تنظیمات مدیر
+        try:
+            validate_attendance_date_window(date_shamsi, user=request.user)
+        except Exception as e:
+            err_msg = getattr(e, 'detail', str(e))
+            if isinstance(err_msg, list):
+                err_msg = err_msg[0]
+            return Response({'error': str(err_msg)}, status=status.HTTP_400_BAD_REQUEST)
 
-        if period.status == 'LOCKED':
-            return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ثبت یا ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+        year_month = date_shamsi[:7]
+        period = None
+        if warehouse_id:
+            period, _ = MonthlyWorkPeriod.objects.get_or_create(
+                warehouse_id=warehouse_id,
+                year_month=year_month,
+                defaults={'status': 'OPEN'}
+            )
+            if period.status == 'LOCKED':
+                return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ثبت یا ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
 
         saved_count = 0
         updated_count = 0
@@ -395,12 +516,19 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 if not p_obj:
                     continue
 
-                att_obj = DailyAttendance.objects.select_for_update().filter(
-                    personnel_id=personnel_id,
-                    warehouse_id=warehouse_id,
-                    date_shamsi=date_shamsi,
-                    is_deleted=False
-                ).first()
+                target_wh = warehouse_id if warehouse_id else p_obj.assigned_warehouse_id
+
+                att_filter = {'personnel_id': personnel_id, 'date_shamsi': date_shamsi, 'is_deleted': False}
+                if target_wh:
+                    att_filter['warehouse_id'] = target_wh
+
+                att_obj = DailyAttendance.objects.select_for_update().filter(**att_filter).first()
+                if not att_obj and not target_wh:
+                    att_obj = DailyAttendance.objects.select_for_update().filter(
+                        personnel_id=personnel_id,
+                        date_shamsi=date_shamsi,
+                        is_deleted=False
+                    ).first()
 
                 if att_obj:
                     # بررسی تغییرات جهت ثبت در Audit Log
@@ -409,7 +537,6 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     for f in fields_to_check:
                         new_val = item.get(f)
                         old_val = getattr(att_obj, f)
-                        # تبدیل به استرینگ جهت مقایسه
                         if str(new_val) != str(old_val):
                             changes.append((f, str(old_val), str(new_val)))
 
@@ -421,8 +548,11 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     att_obj.is_mission = item['is_mission']
                     att_obj.advance_payment = item.get('advance_payment', 0)
                     att_obj.notes = item.get('notes', '')
+                    if target_wh:
+                        att_obj.warehouse_id = target_wh
                     att_obj.modified_by = request.user
-                    att_obj.period = period
+                    if period:
+                        att_obj.period = period
                     att_obj.save()
 
                     # ثبت لاگ‌های ممیزی
@@ -442,7 +572,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     # ایجاد رکورد جدید
                     att_obj = DailyAttendance.objects.create(
                         personnel_id=personnel_id,
-                        warehouse_id=warehouse_id,
+                        warehouse_id=target_wh,
                         date_shamsi=date_shamsi,
                         status=item['status'],
                         effective_hours=item['effective_hours'],
@@ -459,6 +589,329 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         return Response({
             'message': f'اطلاعات کارکرد با موفقیت ذخیره شد ({saved_count} جدید، {updated_count} بروزرسانی).',
+            'saved_count': saved_count,
+            'updated_count': updated_count
+        })
+
+    @action(detail=False, methods=['get'], url_path='monthly-grid')
+    def get_monthly_grid(self, request):
+        """
+        دریافت ماتریس کارکرد ۳۱ روزه کلیه پرسنل در یک ماه مشخص (نمای شیت ماهانه)
+        پشتیبانی کامل از کارکرد مستقل از انبار و اصلاح وضعیت روزهای ثبت‌نشده (نباید به عنوان حاضر بزند)
+        """
+        import jdatetime
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_year_month = request.query_params.get('year_month')
+        if not raw_year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # نرمال‌سازی سال و ماه (پشتیبانی از 140504 یا 1405/04)
+        ym_cleaned = normalize_digits(str(raw_year_month)).strip().replace('-', '/')
+        parts = ym_cleaned.split('/')
+        if len(parts) >= 2:
+            y, m = int(parts[0]), int(parts[1])
+            year_month = f"{y:04d}/{m:02d}"
+        else:
+            digits_only = ''.join(c for c in ym_cleaned if c.isdigit())
+            if len(digits_only) >= 6:
+                y, m = int(digits_only[:4]), int(digits_only[4:6])
+                year_month = f"{y:04d}/{m:02d}"
+            else:
+                return Response({'error': 'فرمت year_month نامعتبر است (مثال: 1405/04).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # محاسبه تعداد روزهای ماه خورشیدی
+        if 1 <= m <= 6:
+            days_in_month = 31
+        elif 7 <= m <= 11:
+            days_in_month = 30
+        elif m == 12:
+            days_in_month = 30 if jdatetime.date(y, 1, 1).isleap() else 29
+        else:
+            return Response({'error': 'شماره ماه باید بین ۱ تا ۱۲ باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        month_names = ["", "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"]
+        month_name = month_names[m] if 1 <= m <= 12 else ""
+
+        is_locked = False
+        period_status = 'OPEN'
+        if warehouse_id:
+            period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+            is_locked = period.status == 'LOCKED' if period else False
+            period_status = period.status if period else 'OPEN'
+
+        # واکشی تنظیمات بازه ویرایش
+        settings = PayrollYearlySettings.objects.filter(fiscal_year=str(y), is_active=True).first()
+        if not settings:
+            settings = PayrollYearlySettings.objects.filter(is_active=True).first()
+        past_limit = settings.attendance_edit_past_days if settings else 3
+        future_limit = settings.attendance_edit_future_days if settings else 0
+
+        today = jdatetime.date.today()
+
+        days_meta = []
+        for d in range(1, days_in_month + 1):
+            target_date = jdatetime.date(y, m, d)
+            weekday = target_date.weekday()  # 0=شنبه ... 6=جمعه
+            is_friday = (weekday == 6)
+            weekday_names = ["ش", "ی", "د", "س", "چ", "پ", "ج"]
+            full_weekday_names = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه"]
+            
+            delta_days = (target_date - today).days
+            is_editable = not is_locked
+            if is_editable:
+                if delta_days < 0 and past_limit is not None and past_limit != -1 and abs(delta_days) > past_limit:
+                    is_editable = False
+                elif delta_days > 0 and future_limit is not None and future_limit != -1 and delta_days > future_limit:
+                    is_editable = False
+
+            date_str = f"{year_month}/{d:02d}"
+            days_meta.append({
+                'day': d,
+                'date_shamsi': date_str,
+                'weekday_short': weekday_names[weekday],
+                'weekday_name': full_weekday_names[weekday],
+                'is_friday': is_friday,
+                'is_editable': is_editable,
+                'is_today': (target_date == today)
+            })
+
+        # پرسنل فعال (مستقل از انبار یا فیلتر انبار خاص)
+        if warehouse_id:
+            personnel_list = PersonnelProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('last_name', 'first_name')
+            attendances = DailyAttendance.objects.filter(
+                warehouse_id=warehouse_id,
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
+        else:
+            personnel_list = PersonnelProfile.objects.filter(
+                is_active=True
+            ).order_by('last_name', 'first_name')
+            attendances = DailyAttendance.objects.filter(
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
+
+        att_map = {}
+        for a in attendances:
+            try:
+                d_num = int(a.date_shamsi.split('/')[2])
+                att_map[(a.personnel_id, d_num)] = a
+            except Exception:
+                continue
+
+        grid_rows = []
+        for p in personnel_list:
+            p_days = []
+            total_hours = 0.0
+            total_overtime = 0.0
+            present_days_count = 0
+            
+            for dm in days_meta:
+                d = dm['day']
+                att = att_map.get((p.id, d))
+                if att:
+                    eff_h = float(att.effective_hours)
+                    ovt_h = float(att.overtime_hours)
+                    p_days.append({
+                        'day': d,
+                        'date_shamsi': dm['date_shamsi'],
+                        'status': att.status,
+                        'effective_hours': eff_h,
+                        'overtime_hours': ovt_h,
+                        'is_friday_work': att.is_friday_work,
+                        'is_mission': att.is_mission,
+                        'advance_payment': float(att.advance_payment),
+                        'notes': att.notes or '',
+                        'is_existing': True,
+                        'attendance_id': att.id
+                    })
+                    total_hours += eff_h
+                    total_overtime += ovt_h
+                    if att.status != 'ABSENT' and eff_h > 0:
+                        present_days_count += 1
+                else:
+                    # 🌟 رفع ایراد شماره ۳: روزهای ثبت‌نشده به عنوان حاضر علامت زده نمی‌شوند
+                    p_days.append({
+                        'day': d,
+                        'date_shamsi': dm['date_shamsi'],
+                        'status': '',
+                        'effective_hours': 0.0,
+                        'overtime_hours': 0.0,
+                        'is_friday_work': False,
+                        'is_mission': False,
+                        'advance_payment': 0.0,
+                        'notes': '',
+                        'is_existing': False,
+                        'attendance_id': None
+                    })
+                    # برای روزهای ثبت‌نشده هیچ مقداری به total_hours یا present_days_count اضافه نمی‌شود
+
+            grid_rows.append({
+                'personnel_id': p.id,
+                'full_name': p.full_name,
+                'national_code': p.national_code,
+                'job_title': p.job_title,
+                'total_hours': round(total_hours, 2),
+                'total_overtime': round(total_overtime, 2),
+                'present_days': present_days_count,
+                'days': p_days
+            })
+
+        return Response({
+            'warehouse_id': warehouse_id,
+            'year_month': year_month,
+            'month_name': month_name,
+            'days_in_month': days_in_month,
+            'is_locked': is_locked,
+            'period_status': period_status,
+            'settings_window': {
+                'past_days': past_limit,
+                'future_days': future_limit
+            },
+            'days_meta': days_meta,
+            'rows': grid_rows
+        })
+
+    @action(detail=False, methods=['post'], url_path='bulk-save-monthly-grid')
+    def bulk_save_monthly_grid(self, request):
+        """
+        ذخیره گروهی سلول‌های تغییریافته شیت ماهانه
+        (پشتیبانی از مستقل از انبار، با اعتبارسنجی بازه تاریخی و ثبت لاگ ممیزی)
+        """
+        serializer = BulkMonthlyAttendanceGridSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        raw_wh = serializer.validated_data.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_ym = serializer.validated_data['year_month']
+        ym_cleaned = normalize_digits(str(raw_ym)).strip().replace('-', '/')
+        parts = ym_cleaned.split('/')
+        if len(parts) >= 2:
+            year_month = f"{int(parts[0]):04d}/{int(parts[1]):02d}"
+        else:
+            year_month = raw_ym
+
+        items = serializer.validated_data['items']
+
+        period = None
+        if warehouse_id:
+            period, _ = MonthlyWorkPeriod.objects.get_or_create(
+                warehouse_id=warehouse_id,
+                year_month=year_month,
+                defaults={'status': 'OPEN'}
+            )
+            if period.status == 'LOCKED':
+                return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # اعتبارسنجی اولیه روزها در برابر بازه مجاز ویرایش
+        for item in items:
+            if not item.get('status') and float(item.get('effective_hours', 0)) == 0:
+                continue
+            day_str = f"{item['day']:02d}"
+            date_shamsi = f"{year_month}/{day_str}"
+            try:
+                validate_attendance_date_window(date_shamsi, user=request.user)
+            except Exception as e:
+                err_msg = getattr(e, 'detail', str(e))
+                if isinstance(err_msg, list):
+                    err_msg = err_msg[0]
+                return Response({'error': f"خطا در روز {item['day']}: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        saved_count = 0
+        updated_count = 0
+
+        with transaction.atomic():
+            for item in items:
+                status_val = item.get('status') or ''
+                eff_h = float(item.get('effective_hours', 0))
+                day_str = f"{item['day']:02d}"
+                date_shamsi = f"{year_month}/{day_str}"
+                personnel_id = item['personnel_id']
+
+                p_obj = PersonnelProfile.objects.filter(id=personnel_id).first()
+                if not p_obj:
+                    continue
+
+                target_wh = warehouse_id if warehouse_id else p_obj.assigned_warehouse_id
+
+                att_filter = {'personnel_id': personnel_id, 'date_shamsi': date_shamsi, 'is_deleted': False}
+                if target_wh:
+                    att_filter['warehouse_id'] = target_wh
+
+                att_obj = DailyAttendance.objects.select_for_update().filter(**att_filter).first()
+                if not att_obj and not target_wh:
+                    att_obj = DailyAttendance.objects.select_for_update().filter(
+                        personnel_id=personnel_id,
+                        date_shamsi=date_shamsi,
+                        is_deleted=False
+                    ).first()
+
+                if not att_obj and not status_val and eff_h == 0:
+                    continue
+
+                if not status_val:
+                    status_val = 'PRESENT_10H' if eff_h >= 10 else ('HALF_5H' if eff_h >= 5 else 'CUSTOM')
+
+                if att_obj:
+                    changes = []
+                    fields_to_check = ['status', 'effective_hours', 'overtime_hours', 'is_friday_work', 'is_mission', 'advance_payment', 'notes']
+                    for f in fields_to_check:
+                        new_val = status_val if f == 'status' else item.get(f)
+                        old_val = getattr(att_obj, f)
+                        if str(new_val) != str(old_val):
+                            changes.append((f, str(old_val), str(new_val)))
+
+                    att_obj.status = status_val
+                    att_obj.effective_hours = item['effective_hours']
+                    att_obj.overtime_hours = item['overtime_hours']
+                    att_obj.is_friday_work = item['is_friday_work']
+                    att_obj.is_mission = item['is_mission']
+                    att_obj.advance_payment = item.get('advance_payment', 0)
+                    att_obj.notes = item.get('notes', '')
+                    if target_wh:
+                        att_obj.warehouse_id = target_wh
+                    att_obj.modified_by = request.user
+                    if period:
+                        att_obj.period = period
+                    att_obj.save()
+
+                    for f_name, o_val, n_val in changes:
+                        AttendanceAuditLog.objects.create(
+                            attendance=att_obj,
+                            personnel_name=p_obj.full_name,
+                            date_shamsi=date_shamsi,
+                            changed_by=request.user,
+                            field_name=f_name,
+                            old_value=o_val,
+                            new_value=n_val,
+                            reason='ویرایش شیت ماهانه کارکرد'
+                        )
+                    updated_count += 1
+                else:
+                    att_obj = DailyAttendance.objects.create(
+                        personnel_id=personnel_id,
+                        warehouse_id=target_wh,
+                        date_shamsi=date_shamsi,
+                        status=status_val,
+                        effective_hours=item['effective_hours'],
+                        overtime_hours=item['overtime_hours'],
+                        is_friday_work=item['is_friday_work'],
+                        is_mission=item['is_mission'],
+                        advance_payment=item.get('advance_payment', 0),
+                        notes=item.get('notes', ''),
+                        period=period,
+                        created_by=request.user,
+                        modified_by=request.user
+                    )
+                    saved_count += 1
+
+        return Response({
+            'message': f'اطلاعات شیت ماهانه با موفقیت ذخیره شد ({saved_count} جدید، {updated_count} بروزرسانی).',
             'saved_count': saved_count,
             'updated_count': updated_count
         })

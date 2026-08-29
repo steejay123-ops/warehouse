@@ -67,7 +67,9 @@ class PersonnelAppTests(TestCase):
 
     def test_matrix_get_and_bulk_save(self):
         """تست واکشی ماتریس و ذخیره سریع گروهی کارکرد"""
-        date_str = '1404/05/10'
+        import jdatetime
+        today = jdatetime.date.today()
+        date_str = f"{today.year:04d}/{today.month:02d}/{today.day:02d}"
         res = self.client.get(f'/api/personnel/attendance/matrix/?warehouse_id={self.warehouse.id}&date_shamsi={date_str}')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.data['rows']), 2)
@@ -388,6 +390,273 @@ class PersonnelAppTests(TestCase):
         self.assertEqual(wh_cols[22], '30000000') # عیدی
         self.assertEqual(wh_cols[26], '15000000') # سنوات
         self.assertEqual(wh_cols[32], '45000000') # بیمه کارگر
+
+
+class PersonnelAttendanceWindowTestCase(TestCase):
+    def setUp(self):
+        import jdatetime
+        self.client = APIClient()
+        self.user = User.objects.create_superuser(
+            username='admin_attendance_test',
+            password='testpassword123',
+            national_code='9876543210'
+        )
+        self.client.force_authenticate(user=self.user)
+        
+        self.warehouse = Warehouse.objects.create(
+            name='انبار عسلویه ۱',
+            code='WH-ASALUYEH-01'
+        )
+        
+        self.personnel = PersonnelProfile.objects.create(
+            first_name='سعید',
+            last_name='مرادی',
+            national_code='1271234567',
+            job_title='انباردار',
+            daily_base_wage=5000000,
+            assigned_warehouse=self.warehouse
+        )
+        
+        today = jdatetime.date.today()
+        self.today_shamsi = today.strftime('%Y/%m/%d')
+        self.year_month = self.today_shamsi[:7]
+        self.current_year = str(today.year)
+        
+        self.settings = PayrollYearlySettings.objects.create(
+            fiscal_year=self.current_year,
+            title=f'تنظیمات سال {self.current_year}',
+            is_active=True,
+            attendance_edit_past_days=3,
+            attendance_edit_future_days=0
+        )
+
+    def test_get_monthly_grid_success(self):
+        """تست استخراج شیت ماهانه کارکرد پرسنل با احتساب جمعه‌ها و تنظیمات بازه"""
+        url = f'/api/personnel/attendance/monthly-grid/?warehouse_id={self.warehouse.id}&year_month={self.year_month}'
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn('days_meta', data)
+        self.assertIn('rows', data)
+        self.assertGreaterEqual(len(data['days_meta']), 29)
+        self.assertEqual(len(data['rows']), 1)
+        self.assertEqual(data['rows'][0]['personnel_id'], self.personnel.id)
+
+    def test_past_date_window_rejection(self):
+        """تست مسدودسازی ثبت کارکرد برای بیش از ۳ روز گذشته"""
+        import jdatetime
+        past_date = (jdatetime.date.today() - jdatetime.timedelta(days=10)).strftime('%Y/%m/%d')
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'date_shamsi': past_date,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 0,
+                'is_friday_work': False,
+                'is_mission': False
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('مجاز نیست', str(res.json()))
+
+    def test_future_date_window_rejection(self):
+        """تست مسدودسازی ثبت کارکرد برای تاریخ آینده وقتی سقف آینده ۰ است"""
+        import jdatetime
+        future_date = (jdatetime.date.today() + jdatetime.timedelta(days=2)).strftime('%Y/%m/%d')
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'date_shamsi': future_date,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 0,
+                'is_friday_work': False,
+                'is_mission': False
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('آینده', str(res.json()))
+
+    def test_today_date_allowed(self):
+        """تست ثبت موفق کارکرد در تاریخ مجاز (امروز)"""
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'date_shamsi': self.today_shamsi,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 2,
+                'is_friday_work': False,
+                'is_mission': False,
+                'advance_payment': 500000,
+                'notes': 'تست حضور روزانه'
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        
+        att = DailyAttendance.objects.filter(
+            warehouse=self.warehouse,
+            personnel=self.personnel,
+            date_shamsi=self.today_shamsi
+        ).first()
+        self.assertIsNotNone(att)
+        self.assertEqual(float(att.effective_hours), 10.0)
+        self.assertEqual(float(att.overtime_hours), 2.0)
+
+    def test_bulk_save_monthly_grid(self):
+        """تست ذخیره گروهی شیت ماهانه در تاریخ مجاز"""
+        import jdatetime
+        today = jdatetime.date.today()
+        today_day = today.day
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'year_month': self.year_month,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'day': today_day,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 3,
+                'is_friday_work': False,
+                'is_mission': False,
+                'advance_payment': 0,
+                'notes': 'ثبت از طریق شیت ماهانه'
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save-monthly-grid/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+        
+        att = DailyAttendance.objects.filter(
+            warehouse=self.warehouse,
+            personnel=self.personnel,
+            date_shamsi=f"{self.year_month}/{today_day:02d}"
+        ).first()
+        self.assertIsNotNone(att)
+        self.assertEqual(float(att.overtime_hours), 3.0)
+
+
+class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_superuser(
+            username='admin_attend_tests',
+            password='testpassword123',
+            national_code='9876543210'
+        )
+        self.client.force_authenticate(user=self.user)
+        call_command('seed_payroll_settings')
+
+        self.warehouse = Warehouse.objects.create(
+            name='انبار جنوب',
+            code='WH-SOUTH-01'
+        )
+        self.personnel = PersonnelProfile.objects.create(
+            first_name='مهرداد',
+            last_name='مرادی',
+            national_code='1112223334',
+            job_title='کارشناس فنی',
+            assigned_warehouse=self.warehouse
+        )
+
+    def test_8_digit_date_format_accepted(self):
+        """تست پذیرش تاریخ ۸ رقمی بدون اسلش مثل 14050607 بدون بروز خطای فرمت نامعتبر"""
+        import jdatetime
+        today = jdatetime.date.today()
+        # تاریخ امروز به صورت ۸ رقم پیوسته
+        today_8_digits = f"{today.year:04d}{today.month:02d}{today.day:02d}"
+        
+        res = self.client.get(f'/api/personnel/attendance/matrix/?warehouse_id={self.warehouse.id}&date_shamsi={today_8_digits}')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['date_shamsi'], f"{today.year:04d}/{today.month:02d}/{today.day:02d}")
+
+    def test_unrecorded_days_not_marked_present_in_monthly_grid(self):
+        """تست اینکه روزهای ثبت‌نشده در شیت ماهانه حاضر زده نمی‌شوند و جمع ساعات صفر است"""
+        import jdatetime
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+
+        res = self.client.get(f'/api/personnel/attendance/monthly-grid/?warehouse_id={self.warehouse.id}&year_month={year_month}')
+        self.assertEqual(res.status_code, 200)
+        p_row = next(r for r in res.data['rows'] if r['personnel_id'] == self.personnel.id)
+        # جمع ساعات روزهای ثبت‌نشده باید صفر باشد
+        self.assertEqual(p_row['total_hours'], 0.0)
+        self.assertEqual(p_row['present_days'], 0)
+        # وضعیت روزهای ثبت‌نشده نباید PRESENT_10H باشد
+        first_day = p_row['days'][0]
+        self.assertEqual(first_day['status'], '')
+        self.assertEqual(first_day['effective_hours'], 0.0)
+        self.assertFalse(first_day['is_existing'])
+
+    def test_sticky_status_carryover_from_previous_day(self):
+        """تست بارگذاری آخرین وضعیت انتخاب‌شده فرد (مثلا مرخصی یا غایب) به عنوان پیش‌فرض روز بعد"""
+        # ثبت وضعیت مرخصی برای دیروز
+        import jdatetime
+        today = jdatetime.date.today()
+        yesterday = today - jdatetime.timedelta(days=1)
+        yesterday_str = f"{yesterday.year:04d}/{yesterday.month:02d}/{yesterday.day:02d}"
+        today_str = f"{today.year:04d}/{today.month:02d}/{today.day:02d}"
+
+        DailyAttendance.objects.create(
+            personnel=self.personnel,
+            warehouse=self.warehouse,
+            date_shamsi=yesterday_str,
+            status='LEAVE',
+            effective_hours=0.0,
+            overtime_hours=0.0
+        )
+
+        # واکشی ماتریس برای امروز (که هنوز ثبت نشده)
+        res = self.client.get(f'/api/personnel/attendance/matrix/?warehouse_id={self.warehouse.id}&date_shamsi={today_str}')
+        self.assertEqual(res.status_code, 200)
+        p_row = next(r for r in res.data['rows'] if r['personnel_id'] == self.personnel.id)
+        self.assertFalse(p_row['is_existing'])
+        # باید وضعیت دیروز (LEAVE) به عنوان پیش‌فرض بارگذاری شده باشد
+        self.assertEqual(p_row['status'], 'LEAVE')
+        self.assertEqual(p_row['effective_hours'], 0.0)
+
+    def test_warehouse_independent_attendance(self):
+        """تست واکشی و ثبت کارکرد مستقل از انبار (بدون warehouse_id)"""
+        import jdatetime
+        today = jdatetime.date.today()
+        today_str = f"{today.year:04d}/{today.month:02d}/{today.day:02d}"
+
+        # فراخوانی بدون warehouse_id
+        res = self.client.get(f'/api/personnel/attendance/matrix/?date_shamsi={today_str}')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(any(r['personnel_id'] == self.personnel.id for r in res.data['rows']))
+
+        # ذخیره کارکرد بدون ارسال انبار
+        payload = {
+            'date_shamsi': today_str,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'MISSION',
+                'effective_hours': 10.0,
+                'overtime_hours': 1.0,
+                'is_friday_work': False,
+                'is_mission': True,
+                'advance_payment': 0,
+                'notes': 'ماموریت خارج شهر'
+            }]
+        }
+        res_save = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res_save.status_code, 200)
+
+        # بررسی در شیت ماهانه مستقل از انبار
+        year_month = f"{today.year:04d}/{today.month:02d}"
+        res_monthly = self.client.get(f'/api/personnel/attendance/monthly-grid/?year_month={year_month}')
+        self.assertEqual(res_monthly.status_code, 200)
+        p_row = next(r for r in res_monthly.data['rows'] if r['personnel_id'] == self.personnel.id)
+        self.assertEqual(p_row['total_hours'], 10.0)
+
+
 
 
 

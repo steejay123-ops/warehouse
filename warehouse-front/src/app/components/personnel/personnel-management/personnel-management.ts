@@ -59,6 +59,33 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   periodStatus = 'OPEN';
   currentPeriodId: number | null = null;
 
+  // Row selection in matrix
+  selectedPersonnelIds = new Set<number>();
+  selectAllChecked = false;
+
+  // Bulk Hours Modal
+  isBulkHoursModalOpen = false;
+  bulkHoursScope: 'selected' | 'present' | 'all' = 'selected';
+  bulkEffectiveHours = 10;
+  bulkOvertimeHours = 0;
+  bulkStatusOption: '' | 'PRESENT_10H' | 'HALF_5H' | 'MISSION' | 'FRIDAY_WORK' = '';
+  bulkAdvancePayment: number | null = null;
+  bulkNotes = '';
+
+  // Excel Smart Paste Modal
+  isExcelPasteModalOpen = false;
+  excelPasteText = '';
+  excelParsedRows: Array<{
+    national_code?: string;
+    full_name?: string;
+    status?: string;
+    effective_hours?: number;
+    overtime_hours?: number;
+    advance_payment?: number;
+    notes?: string;
+    matchedRow?: AttendanceMatrixRow;
+  }> = [];
+
   // Monthly Timesheet Grid
   attendanceViewMode: 'daily' | 'monthly_grid' = 'daily';
   monthlyGridDays: MonthlyGridDayMeta[] = [];
@@ -236,6 +263,8 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   loadAttendanceMatrix(): void {
     if (!this.selectedDateShamsi) return;
     this.isAttendanceLoading = true;
+    this.selectedPersonnelIds.clear();
+    this.selectAllChecked = false;
     this.api.getAttendanceMatrix(this.selectedWarehouseId, this.selectedDateShamsi).subscribe({
       next: (res) => {
         this.attendanceRows = res.rows || [];
@@ -308,10 +337,403 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     }
   }
 
+  // ── مدیریت انتخاب چندگانه سطرها ─────────────────────────────
+  toggleSelectAll(): void {
+    if (this.selectAllChecked) {
+      this.selectedPersonnelIds.clear();
+      this.selectAllChecked = false;
+    } else {
+      this.attendanceRows.forEach(r => this.selectedPersonnelIds.add(r.personnel_id));
+      this.selectAllChecked = true;
+    }
+  }
+
+  toggleRowSelection(personnelId: number): void {
+    if (this.selectedPersonnelIds.has(personnelId)) {
+      this.selectedPersonnelIds.delete(personnelId);
+    } else {
+      this.selectedPersonnelIds.add(personnelId);
+    }
+    this.selectAllChecked = this.attendanceRows.length > 0 && this.selectedPersonnelIds.size === this.attendanceRows.length;
+  }
+
+  isRowSelected(personnelId: number): boolean {
+    return this.selectedPersonnelIds.has(personnelId);
+  }
+
+  getSelectedCount(): number {
+    return this.selectedPersonnelIds.size;
+  }
+
+  clearSelection(): void {
+    this.selectedPersonnelIds.clear();
+    this.selectAllChecked = false;
+  }
+
+  // ── ۱. حاضر کردن همه پرسنل (Mark All Present) ───────────────
   setAllPresent(): void {
-    if (this.isPeriodLocked) return;
-    this.attendanceRows.forEach(row => this.setAttendanceStatus(row, 'PRESENT_10H'));
-    this.toast.show('info', 'وضعیت تمام پرسنل به حاضر ۱۰ ساعت تغییر یافت.');
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است و امکان تغییر وضعیت وجود ندارد.');
+      return;
+    }
+    const targetRows = this.selectedPersonnelIds.size > 0
+      ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
+      : this.attendanceRows;
+
+    if (targetRows.length === 0) {
+      this.toast.show('warning', 'هیچ پرسنلی در جدول یافت نشد.');
+      return;
+    }
+
+    targetRows.forEach(row => {
+      this.setAttendanceStatus(row, 'PRESENT_10H');
+    });
+
+    this.toast.show('success', `وضعیت ${targetRows.length} پرسنل به حاضر (۱۰ ساعت) تغییر یافت.`);
+    this.cdr.detectChanges();
+  }
+
+  // ── ۲. حاضر کردن فقط افراد ثبت‌نشده (Fill Unset as Present) ──
+  fillUnsetAsPresent(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است و امکان تغییر وضعیت وجود ندارد.');
+      return;
+    }
+    const targetRows = this.selectedPersonnelIds.size > 0
+      ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
+      : this.attendanceRows;
+
+    let count = 0;
+    targetRows.forEach(row => {
+      if (!row.status || row.status === '' || (row.status === 'ABSENT' && row.effective_hours === 0 && !row.is_existing)) {
+        this.setAttendanceStatus(row, 'PRESENT_10H');
+        count++;
+      }
+    });
+
+    if (count > 0) {
+      this.toast.show('success', `تعداد ${count} پرسنل بدون وضعیت، به حاضر (۱۰ ساعت) تغییر یافتند.`);
+    } else {
+      this.toast.show('info', 'تمامی پرسنل انتخاب‌شده دارای وضعیت ثبت‌شده هستند.');
+    }
+    this.cdr.detectChanges();
+  }
+
+  // ── ۳. کپی از روز قبل (Copy from Yesterday) ──────────────────
+  copyFromYesterday(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است و امکان تغییر وجود ندارد.');
+      return;
+    }
+    if (!this.selectedDateShamsi) {
+      this.toast.show('warning', 'تاریخ انتخابی نامشخص است.');
+      return;
+    }
+
+    const yesterdayShamsi = this.shiftShamsiDay(this.selectedDateShamsi, -1);
+    this.isAttendanceLoading = true;
+    this.api.getAttendanceMatrix(this.selectedWarehouseId, yesterdayShamsi).subscribe({
+      next: (res) => {
+        this.isAttendanceLoading = false;
+        const yesterdayRows = res.rows || [];
+        if (yesterdayRows.length === 0) {
+          this.toast.show('warning', `هیچ اطلاعات کارکردی برای روز قبل (${yesterdayShamsi}) یافت نشد.`);
+          return;
+        }
+
+        const yesterdayMap = new Map<number, AttendanceMatrixRow>();
+        yesterdayRows.forEach(r => yesterdayMap.set(r.personnel_id, r));
+
+        const targetRows = this.selectedPersonnelIds.size > 0
+          ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
+          : this.attendanceRows;
+
+        let copiedCount = 0;
+        targetRows.forEach(todayRow => {
+          const yRow = yesterdayMap.get(todayRow.personnel_id);
+          if (yRow && (yRow.status || yRow.is_existing)) {
+            todayRow.status = yRow.status;
+            todayRow.effective_hours = yRow.effective_hours;
+            todayRow.overtime_hours = yRow.overtime_hours;
+            todayRow.is_friday_work = yRow.is_friday_work;
+            todayRow.is_mission = yRow.is_mission;
+            todayRow.notes = yRow.notes || '';
+            copiedCount++;
+          }
+        });
+
+        if (copiedCount > 0) {
+          this.toast.show('success', `اطلاعات کارکرد ${copiedCount} نفر از روز قبل (${yesterdayShamsi}) کپی شد. جهت ثبت نهایی، دکمه ذخیره را بزنید.`);
+        } else {
+          this.toast.show('info', `برای پرسنل حاضر در جدول، اطلاعات ثبت‌شده‌ای در روز قبل (${yesterdayShamsi}) یافت نشد.`);
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isAttendanceLoading = false;
+        this.toast.show('error', `خطا در واکشی کارکرد روز قبل (${yesterdayShamsi})`);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ── ۴. اعمال گروهی ساعت کار و اضافه‌کار (Bulk Set Hours) ─────
+  openBulkHoursModal(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است.');
+      return;
+    }
+    this.bulkHoursScope = this.selectedPersonnelIds.size > 0 ? 'selected' : 'present';
+    this.bulkEffectiveHours = 10;
+    this.bulkOvertimeHours = 0;
+    this.bulkStatusOption = '';
+    this.bulkAdvancePayment = null;
+    this.bulkNotes = '';
+    this.isBulkHoursModalOpen = true;
+  }
+
+  closeBulkHoursModal(): void {
+    this.isBulkHoursModalOpen = false;
+  }
+
+  applyBulkHours(): void {
+    let targetRows: AttendanceMatrixRow[] = [];
+    if (this.bulkHoursScope === 'selected') {
+      targetRows = this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id));
+      if (targetRows.length === 0) {
+        this.toast.show('warning', 'هیچ پرسنلی انتخاب نشده است.');
+        return;
+      }
+    } else if (this.bulkHoursScope === 'present') {
+      targetRows = this.attendanceRows.filter(r => r.status === 'PRESENT_10H' || r.status === 'FRIDAY_WORK' || r.status === 'MISSION');
+    } else {
+      targetRows = this.attendanceRows;
+    }
+
+    targetRows.forEach(row => {
+      if (this.bulkStatusOption) {
+        row.status = this.bulkStatusOption;
+        if (this.bulkStatusOption === 'FRIDAY_WORK') row.is_friday_work = true;
+        if (this.bulkStatusOption === 'MISSION') row.is_mission = true;
+      }
+      row.effective_hours = Number(this.bulkEffectiveHours) || 0;
+      row.overtime_hours = Number(this.bulkOvertimeHours) || 0;
+      if (this.bulkAdvancePayment !== null && this.bulkAdvancePayment > 0) {
+        row.advance_payment = Number(this.bulkAdvancePayment);
+      }
+      if (this.bulkNotes.trim()) {
+        row.notes = this.bulkNotes.trim();
+      }
+    });
+
+    this.toast.show('success', `ساعات کارکرد و اضافه‌کار برای ${targetRows.length} پرسنل با موفقیت اعمال گردید.`);
+    this.closeBulkHoursModal();
+    this.cdr.detectChanges();
+  }
+
+  // ── ۵. تنظیم روز تعطیل رسمی / جمعه (Mark Official Holiday) ──
+  markOfficialHoliday(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است.');
+      return;
+    }
+    const targetRows = this.selectedPersonnelIds.size > 0
+      ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
+      : this.attendanceRows;
+
+    targetRows.forEach(row => {
+      row.status = 'LEAVE';
+      row.effective_hours = 0;
+      row.overtime_hours = 0;
+      row.is_friday_work = false;
+      row.is_mission = false;
+      row.notes = 'تعطیل رسمی';
+    });
+
+    this.toast.show('success', `وضعیت ${targetRows.length} پرسنل به تعطیل رسمی (۰ ساعت) تغییر یافت.`);
+    this.cdr.detectChanges();
+  }
+
+  // ── ۶. پاکسازی وضعیت‌های امروز (Clear Day Attendance) ───────
+  async clearDayAttendance(): Promise<void> {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است.');
+      return;
+    }
+    const confirmed = await this.confirmDialog.open({
+      title: `پاکسازی کارکرد تاریخ ${this.selectedDateShamsi}`,
+      message: `آیا از پاکسازی و ریست کردن کارکرد تمام پرسنل در تاریخ جاری (${this.selectedDateShamsi}) اطمینان دارید؟ تغییرات پس از کلیک بر دکمه «ذخیره کارکرد روزانه» در دیتابیس ثبت خواهند شد.`,
+      confirmText: 'بله، پاکسازی شود',
+      cancelText: 'انصراف',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    const targetRows = this.selectedPersonnelIds.size > 0
+      ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
+      : this.attendanceRows;
+
+    targetRows.forEach(row => {
+      row.status = '';
+      row.effective_hours = 0;
+      row.overtime_hours = 0;
+      row.is_friday_work = false;
+      row.is_mission = false;
+      row.advance_payment = 0;
+      row.notes = '';
+    });
+
+    this.toast.show('info', `کارکرد روز جاری برای ${targetRows.length} پرسنل پاکسازی شد.`);
+    this.cdr.detectChanges();
+  }
+
+  // ── ۷. چسباندن هوشمند از اکسل (Excel Smart Paste) ───────────
+  openExcelPasteModal(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل است.');
+      return;
+    }
+    this.excelPasteText = '';
+    this.excelParsedRows = [];
+    this.isExcelPasteModalOpen = true;
+  }
+
+  closeExcelPasteModal(): void {
+    this.isExcelPasteModalOpen = false;
+  }
+
+  onExcelPasteInput(): void {
+    if (!this.excelPasteText.trim()) {
+      this.excelParsedRows = [];
+      return;
+    }
+
+    const lines = this.excelPasteText.trim().split(/\r?\n/);
+    const parsed: typeof this.excelParsedRows = [];
+
+    // نگاشت پرسنل بر اساس کد ملی و نام
+    const nationalMap = new Map<string, AttendanceMatrixRow>();
+    const nameMap = new Map<string, AttendanceMatrixRow>();
+    this.attendanceRows.forEach(r => {
+      if (r.national_code) nationalMap.set(r.national_code.trim(), r);
+      if (r.full_name) nameMap.set(r.full_name.trim().replace(/\s+/g, ' '), r);
+    });
+
+    lines.forEach((line, idx) => {
+      const cols = line.split('\t').map(c => c.trim());
+      if (cols.length === 0 || !cols.some(c => c.length > 0)) return;
+
+      // پرش از هدر جدول در صورت وجود
+      if (idx === 0 && (cols.includes('نام') || cols.includes('کد ملی') || cols.includes('وضعیت') || cols.includes('ساعت'))) {
+        return;
+      }
+
+      let national_code = '';
+      let full_name = '';
+      let status_str = '';
+      let effective_hours: number | undefined;
+      let overtime_hours: number | undefined;
+      let notes = '';
+
+      if (cols.length >= 4) {
+        if (/^\d{10}$/.test(cols[0])) {
+          national_code = cols[0];
+          full_name = cols[1];
+          status_str = cols[2];
+          effective_hours = parseFloat(cols[3]);
+          if (cols[4]) overtime_hours = parseFloat(cols[4]);
+          if (cols[5]) notes = cols[5];
+        } else if (/^\d{10}$/.test(cols[1])) {
+          full_name = cols[0];
+          national_code = cols[1];
+          status_str = cols[2];
+          effective_hours = parseFloat(cols[3]);
+          if (cols[4]) overtime_hours = parseFloat(cols[4]);
+          if (cols[5]) notes = cols[5];
+        } else {
+          full_name = cols[0];
+          status_str = cols[1];
+          effective_hours = parseFloat(cols[2]);
+          if (cols[3]) overtime_hours = parseFloat(cols[3]);
+          if (cols[4]) notes = cols[4];
+        }
+      } else if (cols.length === 3) {
+        full_name = cols[0];
+        status_str = cols[1];
+        effective_hours = parseFloat(cols[2]);
+      } else if (cols.length === 2) {
+        full_name = cols[0];
+        status_str = cols[1];
+      } else if (cols.length === 1) {
+        status_str = cols[0];
+      }
+
+      // تطبیق هوشمند با ردیف‌های جدول
+      let matchedRow: AttendanceMatrixRow | undefined;
+      if (national_code && nationalMap.has(national_code)) {
+        matchedRow = nationalMap.get(national_code);
+      } else if (full_name) {
+        const cleanName = full_name.replace(/\s+/g, ' ');
+        matchedRow = nameMap.get(cleanName) || this.attendanceRows.find(r => r.full_name.includes(cleanName) || cleanName.includes(r.full_name));
+      } else if (idx < this.attendanceRows.length) {
+        matchedRow = this.attendanceRows[idx];
+      }
+
+      // نگاشت وضعیت متنی به کدهای معتبر سیستم
+      let mappedStatus = 'PRESENT_10H';
+      const s = (status_str || '').toLowerCase();
+      if (s.includes('غایب') || s === 'absent' || s === 'a') mappedStatus = 'ABSENT';
+      else if (s.includes('مرخصی') || s === 'leave' || s === 'l') mappedStatus = 'LEAVE';
+      else if (s.includes('ماموریت') || s.includes('مأموریت') || s === 'mission' || s === 'm') mappedStatus = 'MISSION';
+      else if (s.includes('جمعه') || s === 'friday' || s === 'f') mappedStatus = 'FRIDAY_WORK';
+      else if (s.includes('نیمه') || s === 'half' || s === 'h' || effective_hours === 5) mappedStatus = 'HALF_5H';
+      else if (s.includes('حاضر') || s === 'present' || s === 'p' || effective_hours === 10) mappedStatus = 'PRESENT_10H';
+      else if (effective_hours !== undefined && effective_hours > 0) mappedStatus = 'CUSTOM';
+
+      if (effective_hours === undefined || isNaN(effective_hours)) {
+        if (mappedStatus === 'PRESENT_10H' || mappedStatus === 'MISSION' || mappedStatus === 'FRIDAY_WORK') effective_hours = 10;
+        else if (mappedStatus === 'HALF_5H') effective_hours = 5;
+        else effective_hours = 0;
+      }
+
+      parsed.push({
+        national_code: national_code || matchedRow?.national_code,
+        full_name: full_name || matchedRow?.full_name,
+        status: mappedStatus,
+        effective_hours: isNaN(effective_hours) ? 10 : effective_hours,
+        overtime_hours: isNaN(Number(overtime_hours)) ? 0 : overtime_hours,
+        notes,
+        matchedRow
+      });
+    });
+
+    this.excelParsedRows = parsed;
+  }
+
+  applyExcelPaste(): void {
+    if (this.excelParsedRows.length === 0) {
+      this.toast.show('warning', 'هیچ داده‌ای برای چسباندن یافت نشد.');
+      return;
+    }
+
+    let appliedCount = 0;
+    this.excelParsedRows.forEach((item, index) => {
+      const targetRow = item.matchedRow || this.attendanceRows[index];
+      if (targetRow) {
+        targetRow.status = item.status || 'PRESENT_10H';
+        targetRow.effective_hours = item.effective_hours !== undefined ? item.effective_hours : 10;
+        targetRow.overtime_hours = item.overtime_hours || 0;
+        targetRow.is_friday_work = targetRow.status === 'FRIDAY_WORK';
+        targetRow.is_mission = targetRow.status === 'MISSION';
+        if (item.notes) targetRow.notes = item.notes;
+        appliedCount++;
+      }
+    });
+
+    this.toast.show('success', `اطلاعات ${appliedCount} ردیف از اکسل با موفقیت اعمال شد. جهت ثبت، دکمه «ذخیره کارکرد روزانه» را بزنید.`);
+    this.closeExcelPasteModal();
+    this.cdr.detectChanges();
   }
 
   saveAttendanceMatrix(): void {

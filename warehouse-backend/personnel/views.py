@@ -288,12 +288,16 @@ def normalize_attendance_date(date_str: str) -> str:
     return date_str
 
 
-def validate_attendance_date_window(date_shamsi: str, user=None):
+def validate_attendance_date_window(date_shamsi: str, user=None, allow_override: bool = False):
     """
     اعتبارسنجی بازه مجاز ثبت و ویرایش کارکرد بر مبنای تنظیمات سالانه حقوق
     -1 به معنای نامحدود، 0 به معنای فقط امروز، اعداد مثبت به معنای سقف روز مجاز
     پشتیبانی کامل از رشته‌های ۸ رقمی پیوسته (مانند 14050607)
+    مدیر ارشد سیستم (Superuser) با فلگ allow_override می‌تواند محدودیت زمانی را دور بزند.
     """
+    if allow_override and user and (getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False) or user.has_perm('personnel.can_override_attendance_lock')):
+        return True
+
     import jdatetime
     from rest_framework.exceptions import ValidationError as DRFValidationError
     
@@ -406,6 +410,20 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         existing_attendances = {att.personnel_id: att for att in attendances_qs}
 
+        # واکشی یکجای آخرین سوابق پرسنل ثبت‌نشده جهت جلوگیری از مشکل N+1 Query
+        missing_personnel_ids = [p.id for p in personnel_list if p.id not in existing_attendances]
+        last_atts_map = {}
+        if missing_personnel_ids:
+            # واکشی آخرین سوابق با مرتب‌سازی تاریخ نزولی
+            prev_atts = DailyAttendance.objects.filter(
+                personnel_id__in=missing_personnel_ids,
+                date_shamsi__lt=date_shamsi,
+                is_deleted=False
+            ).order_by('personnel_id', '-date_shamsi')
+            for a in prev_atts:
+                if a.personnel_id not in last_atts_map:
+                    last_atts_map[a.personnel_id] = a
+
         matrix_rows = []
         for p in personnel_list:
             att = existing_attendances.get(p.id)
@@ -426,19 +444,20 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     'is_existing': True
                 })
             else:
-                # 🌟 آخرین وضعیت انتخاب شده برای یک فرد همیشه به عنوان پیش فرض روز بعد بارگزاری شود
-                last_att = DailyAttendance.objects.filter(
-                    personnel_id=p.id,
-                    date_shamsi__lt=date_shamsi,
-                    is_deleted=False
-                ).order_by('-date_shamsi').first()
+                # 🌟 آخرین وضعیت انتخاب شده برای یک فرد به عنوان پیش فرض روز بعد بارگزاری شود
+                last_att = last_atts_map.get(p.id)
 
                 if last_att:
                     def_status = last_att.status
+                    # جمعه‌کاری روز قبل نباید به عنوان جمعه‌کاری به روز بعد سرایت کند
+                    if def_status == 'FRIDAY_WORK':
+                        def_status = 'PRESENT_10H'
+                        def_friday = False
+                    else:
+                        def_friday = last_att.is_friday_work
                     def_eff = float(last_att.effective_hours)
                     def_ovt = float(last_att.overtime_hours)
                     def_mission = last_att.is_mission
-                    def_friday = last_att.is_friday_work
                 else:
                     def_status = 'PRESENT_10H'
                     def_eff = 10.0
@@ -486,9 +505,12 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         date_shamsi = normalize_attendance_date(raw_date)
         items = serializer.validated_data['items']
 
+        allow_override = bool(request.data.get('is_override', False) or request.headers.get('X-Admin-Override') == 'true')
+        is_admin_override = allow_override and (getattr(request.user, 'is_superuser', False) or request.user.has_perm('personnel.can_override_attendance_lock'))
+
         # اعتبارسنجی بازه زمانی مجاز بر مبنای تنظیمات مدیر
         try:
-            validate_attendance_date_window(date_shamsi, user=request.user)
+            validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override)
         except Exception as e:
             err_msg = getattr(e, 'detail', str(e))
             if isinstance(err_msg, list):
@@ -503,7 +525,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 year_month=year_month,
                 defaults={'status': 'OPEN'}
             )
-            if period.status == 'LOCKED':
+            if period.status == 'LOCKED' and not is_admin_override:
                 return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ثبت یا ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
 
         saved_count = 0
@@ -517,6 +539,16 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     continue
 
                 target_wh = warehouse_id if warehouse_id else p_obj.assigned_warehouse_id
+
+                target_period = period
+                if not target_period and target_wh:
+                    target_period, _ = MonthlyWorkPeriod.objects.get_or_create(
+                        warehouse_id=target_wh,
+                        year_month=year_month,
+                        defaults={'status': 'OPEN'}
+                    )
+                if target_period and target_period.status == 'LOCKED' and not is_admin_override:
+                    return Response({'error': f'دوره کارکرد {year_month} برای انبار پرسنل ({p_obj.full_name}) قفل شده است.'}, status=status.HTTP_400_BAD_REQUEST)
 
                 att_filter = {'personnel_id': personnel_id, 'date_shamsi': date_shamsi, 'is_deleted': False}
                 if target_wh:
@@ -551,8 +583,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     if target_wh:
                         att_obj.warehouse_id = target_wh
                     att_obj.modified_by = request.user
-                    if period:
-                        att_obj.period = period
+                    if target_period:
+                        att_obj.period = target_period
                     att_obj.save()
 
                     # ثبت لاگ‌های ممیزی
@@ -798,6 +830,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         items = serializer.validated_data['items']
 
+        allow_override = bool(request.data.get('is_override', False) or request.headers.get('X-Admin-Override') == 'true')
+        is_admin_override = allow_override and (getattr(request.user, 'is_superuser', False) or request.user.has_perm('personnel.can_override_attendance_lock'))
         period = None
         if warehouse_id:
             period, _ = MonthlyWorkPeriod.objects.get_or_create(
@@ -805,22 +839,49 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 year_month=year_month,
                 defaults={'status': 'OPEN'}
             )
-            if period.status == 'LOCKED':
+            if period.status == 'LOCKED' and not is_admin_override:
                 return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # اعتبارسنجی اولیه روزها در برابر بازه مجاز ویرایش
+        # واکشی یکجای رکوردهای موجود ماه جاری جهت تشخیص تغییرات (فقط رکوردهای تغییریافته نیاز به ولیدیشن تاریخ دارند)
+        existing_qs = DailyAttendance.objects.filter(
+            date_shamsi__startswith=year_month,
+            is_deleted=False
+        )
+        if warehouse_id:
+            existing_qs = existing_qs.filter(warehouse_id=warehouse_id)
+        existing_map = {(att.personnel_id, att.date_shamsi): att for att in existing_qs}
+
+        # اعتبارسنجی فقط برای روزهای جدید یا تغییریافته
         for item in items:
             if not item.get('status') and float(item.get('effective_hours', 0)) == 0:
                 continue
             day_str = f"{item['day']:02d}"
             date_shamsi = f"{year_month}/{day_str}"
-            try:
-                validate_attendance_date_window(date_shamsi, user=request.user)
-            except Exception as e:
-                err_msg = getattr(e, 'detail', str(e))
-                if isinstance(err_msg, list):
-                    err_msg = err_msg[0]
-                return Response({'error': f"خطا در روز {item['day']}: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
+            personnel_id = item['personnel_id']
+
+            existing_att = existing_map.get((personnel_id, date_shamsi))
+            is_changed = True
+            if existing_att:
+                status_val = item.get('status') or ('PRESENT_10H' if float(item.get('effective_hours', 0)) >= 10 else ('HALF_5H' if float(item.get('effective_hours', 0)) >= 5 else 'CUSTOM'))
+                if (
+                    str(existing_att.status) == str(status_val) and
+                    float(existing_att.effective_hours) == float(item.get('effective_hours', 0)) and
+                    float(existing_att.overtime_hours) == float(item.get('overtime_hours', 0)) and
+                    bool(existing_att.is_friday_work) == bool(item.get('is_friday_work', False)) and
+                    bool(existing_att.is_mission) == bool(item.get('is_mission', False)) and
+                    float(existing_att.advance_payment) == float(item.get('advance_payment', 0)) and
+                    (existing_att.notes or '') == (item.get('notes', '') or '')
+                ):
+                    is_changed = False
+
+            if is_changed and not is_admin_override:
+                try:
+                    validate_attendance_date_window(date_shamsi, user=request.user)
+                except Exception as e:
+                    err_msg = getattr(e, 'detail', str(e))
+                    if isinstance(err_msg, list):
+                        err_msg = err_msg[0]
+                    return Response({'error': f"خطا در روز {item['day']}: {err_msg}"}, status=status.HTTP_400_BAD_REQUEST)
 
         saved_count = 0
         updated_count = 0
@@ -838,6 +899,16 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     continue
 
                 target_wh = warehouse_id if warehouse_id else p_obj.assigned_warehouse_id
+
+                target_period = period
+                if not target_period and target_wh:
+                    target_period, _ = MonthlyWorkPeriod.objects.get_or_create(
+                        warehouse_id=target_wh,
+                        year_month=year_month,
+                        defaults={'status': 'OPEN'}
+                    )
+                if target_period and target_period.status == 'LOCKED' and not is_admin_override:
+                    return Response({'error': f'دوره کارکرد {year_month} برای انبار پرسنل ({p_obj.full_name}) قفل شده است.'}, status=status.HTTP_400_BAD_REQUEST)
 
                 att_filter = {'personnel_id': personnel_id, 'date_shamsi': date_shamsi, 'is_deleted': False}
                 if target_wh:
@@ -866,6 +937,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                         if str(new_val) != str(old_val):
                             changes.append((f, str(old_val), str(new_val)))
 
+                    # اگر تغییری نکرده بود از ذخیره و لاگ تکراری صرف‌نظر می‌کنیم
+                    if not changes:
+                        continue
+
                     att_obj.status = status_val
                     att_obj.effective_hours = item['effective_hours']
                     att_obj.overtime_hours = item['overtime_hours']
@@ -876,8 +951,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     if target_wh:
                         att_obj.warehouse_id = target_wh
                     att_obj.modified_by = request.user
-                    if period:
-                        att_obj.period = period
+                    if target_period:
+                        att_obj.period = target_period
                     att_obj.save()
 
                     for f_name, o_val, n_val in changes:

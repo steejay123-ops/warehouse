@@ -656,6 +656,110 @@ class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
         p_row = next(r for r in res_monthly.data['rows'] if r['personnel_id'] == self.personnel.id)
         self.assertEqual(p_row['total_hours'], 10.0)
 
+    def test_admin_override_date_window(self):
+        """تست دور زدن بازه تاریخی توسط مدیر ارشد با فلگ is_override"""
+        import jdatetime
+        past_date = (jdatetime.date.today() - jdatetime.timedelta(days=20)).strftime('%Y/%m/%d')
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'date_shamsi': past_date,
+            'is_override': True,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 0,
+                'is_friday_work': False,
+                'is_mission': False
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_monthly_grid_save_with_existing_past_records(self):
+        """تست اینکه رکوردهای ثبت‌شده گذشته در شیت ماهانه مانع ذخیره روزهای جاری نمی‌شوند"""
+        import jdatetime
+        today = jdatetime.date.today()
+        past_day = 1
+        past_date = f"{today.year:04d}/{today.month:02d}/{past_day:02d}"
+        
+        # ثبت رکورد قدیمی از قبل
+        DailyAttendance.objects.create(
+            personnel=self.personnel,
+            warehouse=self.warehouse,
+            date_shamsi=past_date,
+            status='PRESENT_10H',
+            effective_hours=10,
+            overtime_hours=0
+        )
+
+        year_month = f"{today.year:04d}/{today.month:02d}"
+        payload = {
+            'warehouse_id': self.warehouse.id,
+            'year_month': year_month,
+            'items': [
+                # رکورد گذشته دست‌نخورده (Unchanged)
+                {
+                    'personnel_id': self.personnel.id,
+                    'day': past_day,
+                    'status': 'PRESENT_10H',
+                    'effective_hours': 10,
+                    'overtime_hours': 0,
+                    'is_friday_work': False,
+                    'is_mission': False,
+                    'advance_payment': 0,
+                    'notes': ''
+                },
+                # رکورد امروز (جدید و مجاز)
+                {
+                    'personnel_id': self.personnel.id,
+                    'day': today.day,
+                    'status': 'PRESENT_10H',
+                    'effective_hours': 10,
+                    'overtime_hours': 2,
+                    'is_friday_work': False,
+                    'is_mission': False,
+                    'advance_payment': 0,
+                    'notes': 'ثبت کارکرد امروز'
+                }
+            ]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save-monthly-grid/', payload, format='json')
+        self.assertEqual(res.status_code, 200)
+
+    def test_lock_enforcement_in_all_warehouses_mode(self):
+        """تست قفل بودن انبار پرسنل حتی در حالت فیلتر تمام انبارها (warehouse_id=None)"""
+        import jdatetime
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+        today_str = f"{today.year:04d}/{today.month:02d}/{today.day:02d}"
+
+        # قفل کردن دوره برای انبار پرسنل
+        period, _ = MonthlyWorkPeriod.objects.get_or_create(
+            warehouse=self.warehouse,
+            year_month=year_month,
+            defaults={'status': 'LOCKED'}
+        )
+        period.status = 'LOCKED'
+        period.save()
+
+        # تلاش برای ثبت بدون warehouse_id
+        payload = {
+            'date_shamsi': today_str,
+            'items': [{
+                'personnel_id': self.personnel.id,
+                'status': 'PRESENT_10H',
+                'effective_hours': 10,
+                'overtime_hours': 0,
+                'is_friday_work': False,
+                'is_mission': False
+            }]
+        }
+        res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('قفل', str(res.json()))
+
+
 
 
 

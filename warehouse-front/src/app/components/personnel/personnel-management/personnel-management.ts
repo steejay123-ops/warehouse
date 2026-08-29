@@ -96,6 +96,18 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   monthName = '';
   daysInMonth = 31;
 
+  // Monthly Timesheet Day Detail Modal
+  isDayDetailModalOpen = false;
+  selectedDayDetailRow: MonthlyGridRow | null = null;
+  selectedDayDetailItem: MonthlyGridPersonnelDay | null = null;
+  dayDetailStatus: string = '';
+  dayDetailEffectiveHours: number = 0;
+  dayDetailOvertimeHours: number = 0;
+  dayDetailIsFridayWork: boolean = false;
+  dayDetailIsMission: boolean = false;
+  dayDetailAdvancePayment: number = 0;
+  dayDetailNotes: string = '';
+
   // Matrix Fleet Trips
   vehicleRows: VehicleMatrixRow[] = [];
   isVehicleLoading = false;
@@ -609,6 +621,13 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       return;
     }
 
+    const normalizeDigits = (str: string): string => {
+      if (!str) return '';
+      return str
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    };
+
     const lines = this.excelPasteText.trim().split(/\r?\n/);
     const parsed: typeof this.excelParsedRows = [];
 
@@ -616,16 +635,22 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     const nationalMap = new Map<string, AttendanceMatrixRow>();
     const nameMap = new Map<string, AttendanceMatrixRow>();
     this.attendanceRows.forEach(r => {
-      if (r.national_code) nationalMap.set(r.national_code.trim(), r);
+      if (r.national_code) nationalMap.set(normalizeDigits(r.national_code).trim(), r);
       if (r.full_name) nameMap.set(r.full_name.trim().replace(/\s+/g, ' '), r);
     });
 
     lines.forEach((line, idx) => {
-      const cols = line.split('\t').map(c => c.trim());
-      if (cols.length === 0 || !cols.some(c => c.length > 0)) return;
+      const rawCols = line.split('\t').map(c => c.trim());
+      if (rawCols.length === 0 || !rawCols.some(c => c.length > 0)) return;
+
+      const cols = rawCols.map(c => normalizeDigits(c));
 
       // پرش از هدر جدول در صورت وجود
-      if (idx === 0 && (cols.includes('نام') || cols.includes('کد ملی') || cols.includes('وضعیت') || cols.includes('ساعت'))) {
+      const isHeader = cols.some(c =>
+        c.includes('نام') || c.includes('کد ملی') || c.includes('پرسنل') ||
+        c.includes('وضعیت') || c.includes('ساعت') || c.includes('اضافه') || c.includes('ردیف')
+      );
+      if (idx === 0 && isHeader) {
         return;
       }
 
@@ -639,45 +664,43 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       if (cols.length >= 4) {
         if (/^\d{10}$/.test(cols[0])) {
           national_code = cols[0];
-          full_name = cols[1];
-          status_str = cols[2];
+          full_name = rawCols[1];
+          status_str = rawCols[2];
           effective_hours = parseFloat(cols[3]);
           if (cols[4]) overtime_hours = parseFloat(cols[4]);
-          if (cols[5]) notes = cols[5];
+          if (rawCols[5]) notes = rawCols[5];
         } else if (/^\d{10}$/.test(cols[1])) {
-          full_name = cols[0];
+          full_name = rawCols[0];
           national_code = cols[1];
-          status_str = cols[2];
+          status_str = rawCols[2];
           effective_hours = parseFloat(cols[3]);
           if (cols[4]) overtime_hours = parseFloat(cols[4]);
-          if (cols[5]) notes = cols[5];
+          if (rawCols[5]) notes = rawCols[5];
         } else {
-          full_name = cols[0];
-          status_str = cols[1];
+          full_name = rawCols[0];
+          status_str = rawCols[1];
           effective_hours = parseFloat(cols[2]);
           if (cols[3]) overtime_hours = parseFloat(cols[3]);
-          if (cols[4]) notes = cols[4];
+          if (rawCols[4]) notes = rawCols[4];
         }
       } else if (cols.length === 3) {
-        full_name = cols[0];
-        status_str = cols[1];
+        full_name = rawCols[0];
+        status_str = rawCols[1];
         effective_hours = parseFloat(cols[2]);
       } else if (cols.length === 2) {
-        full_name = cols[0];
-        status_str = cols[1];
+        full_name = rawCols[0];
+        status_str = rawCols[1];
       } else if (cols.length === 1) {
-        status_str = cols[0];
+        status_str = rawCols[0];
       }
 
-      // تطبیق هوشمند با ردیف‌های جدول
+      // تطبیق هوشمند دقیق بدون Fallback اشتباه بر اساس شماره ردیف
       let matchedRow: AttendanceMatrixRow | undefined;
       if (national_code && nationalMap.has(national_code)) {
         matchedRow = nationalMap.get(national_code);
       } else if (full_name) {
         const cleanName = full_name.replace(/\s+/g, ' ');
         matchedRow = nameMap.get(cleanName) || this.attendanceRows.find(r => r.full_name.includes(cleanName) || cleanName.includes(r.full_name));
-      } else if (idx < this.attendanceRows.length) {
-        matchedRow = this.attendanceRows[idx];
       }
 
       // نگاشت وضعیت متنی به کدهای معتبر سیستم
@@ -718,8 +741,9 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     }
 
     let appliedCount = 0;
-    this.excelParsedRows.forEach((item, index) => {
-      const targetRow = item.matchedRow || this.attendanceRows[index];
+    let unmatchedCount = 0;
+    this.excelParsedRows.forEach(item => {
+      const targetRow = item.matchedRow;
       if (targetRow) {
         targetRow.status = item.status || 'PRESENT_10H';
         targetRow.effective_hours = item.effective_hours !== undefined ? item.effective_hours : 10;
@@ -728,10 +752,21 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         targetRow.is_mission = targetRow.status === 'MISSION';
         if (item.notes) targetRow.notes = item.notes;
         appliedCount++;
+      } else {
+        unmatchedCount++;
       }
     });
 
-    this.toast.show('success', `اطلاعات ${appliedCount} ردیف از اکسل با موفقیت اعمال شد. جهت ثبت، دکمه «ذخیره کارکرد روزانه» را بزنید.`);
+    if (appliedCount === 0) {
+      this.toast.show('error', 'هیچ‌یک از ردیف‌های پیست‌شده با پرسنل سیستم تطبیق داده نشد.');
+      return;
+    }
+
+    let msg = `اطلاعات ${appliedCount} پرسنل تطبیق‌یافته اعمال شد.`;
+    if (unmatchedCount > 0) {
+      msg += ` (${unmatchedCount} ردیف تطبیق‌نیافته نادیده گرفته شد)`;
+    }
+    this.toast.show('success', msg + ' جهت ثبت در دیتابیس، دکمه «ذخیره کارکرد روزانه» را بزنید.');
     this.closeExcelPasteModal();
     this.cdr.detectChanges();
   }
@@ -890,6 +925,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     }
     row.total_hours = row.days.reduce((acc, d) => acc + (parseFloat(d.effective_hours as any) || 0), 0);
     row.total_overtime = row.days.reduce((acc, d) => acc + (parseFloat(d.overtime_hours as any) || 0), 0);
+    row.present_days = row.days.filter(d => d.status && d.status !== 'ABSENT' && (parseFloat(d.effective_hours as any) || 0) > 0).length;
   }
 
   cycleDayStatus(row: MonthlyGridRow, dayItem: MonthlyGridPersonnelDay): void {
@@ -931,6 +967,47 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       dayItem.is_mission = false;
     }
     this.onMonthlyCellHoursChange(row, dayItem);
+  }
+
+  // ── مودال جزئیات کارکرد روزانه در شیت ماهانه ────────────────
+  openDayDetailModal(row: MonthlyGridRow, dayItem: MonthlyGridPersonnelDay): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره کارکرد قفل شده است.');
+      return;
+    }
+    this.selectedDayDetailRow = row;
+    this.selectedDayDetailItem = dayItem;
+    this.dayDetailStatus = dayItem.status || 'PRESENT_10H';
+    this.dayDetailEffectiveHours = dayItem.effective_hours || 0;
+    this.dayDetailOvertimeHours = dayItem.overtime_hours || 0;
+    this.dayDetailIsFridayWork = dayItem.is_friday_work || false;
+    this.dayDetailIsMission = dayItem.is_mission || false;
+    this.dayDetailAdvancePayment = dayItem.advance_payment || 0;
+    this.dayDetailNotes = dayItem.notes || '';
+    this.isDayDetailModalOpen = true;
+  }
+
+  closeDayDetailModal(): void {
+    this.isDayDetailModalOpen = false;
+    this.selectedDayDetailRow = null;
+    this.selectedDayDetailItem = null;
+  }
+
+  saveDayDetail(): void {
+    if (!this.selectedDayDetailRow || !this.selectedDayDetailItem) return;
+    const d = this.selectedDayDetailItem;
+    d.status = this.dayDetailStatus as any;
+    d.effective_hours = this.dayDetailEffectiveHours;
+    d.overtime_hours = this.dayDetailOvertimeHours;
+    d.is_friday_work = this.dayDetailIsFridayWork;
+    d.is_mission = this.dayDetailIsMission;
+    d.advance_payment = this.dayDetailAdvancePayment;
+    d.notes = this.dayDetailNotes;
+
+    this.onMonthlyCellHoursChange(this.selectedDayDetailRow, d);
+    this.closeDayDetailModal();
+    this.toast.show('success', 'جزئیات کارکرد روز با موفقیت روی شیت اعمال شد.');
+    this.cdr.detectChanges();
   }
 
   saveMonthlyGrid(): void {

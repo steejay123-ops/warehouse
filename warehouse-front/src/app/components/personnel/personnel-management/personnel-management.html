@@ -921,24 +921,34 @@
                   )
                 )
               ]" class="p-1 text-center border-l border-slate-200 transition-colors">
-                <div class="flex flex-col items-center gap-0.5">
-                  <!-- Quick Status Toggle Chip -->
-                  <button type="button" (click)="cycleDayStatus(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="text-[9px] font-black px-1 py-0.5 rounded cursor-pointer transition-transform active:scale-95 disabled:cursor-not-allowed" [ngClass]="
-                    !d.status ? 'text-slate-400 font-normal hover:bg-slate-100' : (
-                      d.status === 'PRESENT_10H' ? 'text-emerald-700 hover:bg-emerald-200/50' : (
-                        d.status === 'HALF_5H' ? 'text-blue-700 hover:bg-blue-200/50' : (
-                          d.status === 'ABSENT' ? 'text-rose-700 hover:bg-rose-200/50' : (
-                            d.status === 'LEAVE' ? 'text-amber-700 hover:bg-amber-200/50' : 'text-purple-700 hover:bg-purple-200/50'
+                <div class="flex flex-col items-center gap-0.5 relative group">
+                  <!-- Quick Status Toggle Chip & Detail Button -->
+                  <div class="flex items-center gap-0.5">
+                    <button type="button" (click)="cycleDayStatus(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="text-[9px] font-black px-1 py-0.5 rounded cursor-pointer transition-transform active:scale-95 disabled:cursor-not-allowed" [ngClass]="
+                      !d.status ? 'text-slate-400 font-normal hover:bg-slate-100' : (
+                        d.status === 'PRESENT_10H' ? 'text-emerald-700 hover:bg-emerald-200/50' : (
+                          d.status === 'HALF_5H' ? 'text-blue-700 hover:bg-blue-200/50' : (
+                            d.status === 'ABSENT' ? 'text-rose-700 hover:bg-rose-200/50' : (
+                              d.status === 'LEAVE' ? 'text-amber-700 hover:bg-amber-200/50' : 'text-purple-700 hover:bg-purple-200/50'
+                            )
                           )
                         )
                       )
-                    )
-                  " title="کلیک برای تغییر وضعیت">
-                    {{ !d.status ? '—' : (d.status === 'PRESENT_10H' ? 'حاضر' : (d.status === 'HALF_5H' ? 'نیمه' : (d.status === 'ABSENT' ? 'غایب' : (d.status === 'LEAVE' ? 'مرخصی' : (d.status === 'MISSION' ? 'مامور' : 'جمعه'))))) }}
-                  </button>
+                    " title="کلیک برای تغییر وضعیت">
+                      {{ !d.status ? '—' : (d.status === 'PRESENT_10H' ? 'حاضر' : (d.status === 'HALF_5H' ? 'نیمه' : (d.status === 'ABSENT' ? 'غایب' : (d.status === 'LEAVE' ? 'مرخصی' : (d.status === 'MISSION' ? 'مامور' : 'جمعه'))))) }}
+                    </button>
+                    <!-- Detail Icon for Overtime / Advance / Notes -->
+                    <button type="button" (click)="openDayDetailModal(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="text-[8px] text-slate-400 hover:text-indigo-600 p-0.5 rounded cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity" [class.opacity-100]="d.overtime_hours > 0 || d.advance_payment > 0 || d.notes" title="ویرایش کامل روز (اضافه‌کار، مساعده، توضیحات)">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </button>
+                  </div>
 
                   <!-- Direct Hour Input -->
-                  <input type="number" min="0" max="24" step="0.5" [(ngModel)]="d.effective_hours" (ngModelChange)="onMonthlyCellHoursChange(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="w-10 text-center font-mono font-black text-xs py-0.5 px-0.5 rounded border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none disabled:bg-transparent disabled:text-slate-500" [placeholder]="!d.status ? '—' : '0'" />
+                  <div class="relative flex items-center justify-center">
+                    <input type="number" min="0" max="24" step="0.5" [(ngModel)]="d.effective_hours" (ngModelChange)="onMonthlyCellHoursChange(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="w-10 text-center font-mono font-black text-xs py-0.5 px-0.5 rounded border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none disabled:bg-transparent disabled:text-slate-500" [placeholder]="!d.status ? '—' : '0'" />
+                    <!-- Small indicator if overtime or notes exist -->
+                    <span *ngIf="d.overtime_hours > 0" class="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-500" title="اضافه‌کار: {{d.overtime_hours}} ساعت"></span>
+                  </div>
                 </div>
               </td>
 
@@ -1899,11 +1909,12 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
-                <tr *ngFor="let item of excelParsedRows; let i = index" [class.bg-teal-50]="item.matchedRow">
+                <tr *ngFor="let item of excelParsedRows; let i = index" [class.bg-teal-50/80]="item.matchedRow" [class.bg-rose-50/60]="!item.matchedRow">
                   <td class="p-2 text-slate-400">{{ i + 1 }}</td>
                   <td class="p-2 font-bold text-slate-800">
                     {{ item.matchedRow ? item.matchedRow.full_name : (item.full_name || 'نامشخص') }}
-                    <span *ngIf="item.matchedRow" class="text-[9px] text-emerald-600 mr-1 font-normal">✓ تطبیق یافت</span>
+                    <span *ngIf="item.matchedRow" class="text-[9px] text-emerald-600 mr-1 font-bold">✓ تطبیق یافت</span>
+                    <span *ngIf="!item.matchedRow" class="text-[9px] text-rose-600 mr-1 font-bold bg-rose-100 px-1.5 py-0.5 rounded">⚠️ تطبیق نیافت (نادیده گرفته می‌شود)</span>
                   </td>
                   <td class="p-2 font-mono text-slate-500">{{ item.national_code || '---' }}</td>
                   <td class="p-2 text-center font-bold">{{ item.status }}</td>
@@ -1920,6 +1931,85 @@
         <button (click)="closeExcelPasteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
         <button (click)="applyExcelPaste()" [disabled]="excelParsedRows.length === 0" class="px-5 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-black rounded-xl shadow-md shadow-teal-500/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5">
           <span>چسباندن روی جدول کارکرد</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۸. مودال جزئیات کارکرد روز در شیت ماهانه (Monthly Day Detail) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isDayDetailModalOpen && selectedDayDetailRow && selectedDayDetailItem" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5 border border-slate-100">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          </div>
+          <div>
+            <h2 class="text-sm font-black text-slate-800">جزئیات کارکرد روز {{ selectedDayDetailItem.day }} {{ monthName }}</h2>
+            <p class="text-[11px] text-slate-500">{{ selectedDayDetailRow.full_name }} ({{ selectedDayDetailRow.job_title || 'پرسنل' }})</p>
+          </div>
+        </div>
+        <button (click)="closeDayDetailModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- وضعیت حضور -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">وضعیت حضور در این روز:</label>
+          <select [(ngModel)]="dayDetailStatus" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="PRESENT_10H">حاضر کامل (۱۰ ساعت)</option>
+            <option value="HALF_5H">نیمه‌وقت (۵ ساعت)</option>
+            <option value="ABSENT">غایب (۰ ساعت)</option>
+            <option value="LEAVE">مرخصی</option>
+            <option value="MISSION">مأموریت کاری</option>
+            <option value="FRIDAY_WORK">جمعه‌کاری / تعطیل‌کاری</option>
+            <option value="CUSTOM">ساعت سفارشی</option>
+          </select>
+        </div>
+
+        <!-- ساعات کارکرد و اضافه‌کار -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت موثر پایه:</label>
+            <input type="number" min="0" max="24" step="0.5" [(ngModel)]="dayDetailEffectiveHours" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت اضافه‌کار:</label>
+            <input type="number" min="0" max="24" step="0.5" [(ngModel)]="dayDetailOvertimeHours" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          </div>
+        </div>
+
+        <!-- چک‌باکس‌های مأموریت و جمعه‌کاری -->
+        <div class="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <label class="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 text-[11px]">
+            <input type="checkbox" [(ngModel)]="dayDetailIsMission" class="rounded text-indigo-600 focus:ring-indigo-500" />
+            <span>مأموریت اداری</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer font-bold text-slate-700 text-[11px]">
+            <input type="checkbox" [(ngModel)]="dayDetailIsFridayWork" class="rounded text-indigo-600 focus:ring-indigo-500" />
+            <span>جمعه‌کاری / روز تعطیل</span>
+          </label>
+        </div>
+
+        <!-- مساعده روزانه -->
+        <div *ngIf="portalPerspective === 'accountant'">
+          <label class="block font-bold text-slate-700 mb-1">مساعده دریافتی در این روز (ریال):</label>
+          <input type="number" [(ngModel)]="dayDetailAdvancePayment" placeholder="۰" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+
+        <!-- یادداشت و توضیحات -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">توضیحات و علت غیبت / مأموریت / اضافه‌کار:</label>
+          <input type="text" [(ngModel)]="dayDetailNotes" placeholder="توضیحات سرپرست یا حسابدار..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+        <button (click)="closeDayDetailModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
+        <button (click)="saveDayDetail()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-500/20 cursor-pointer flex items-center gap-1.5">
+          <span>اعمال روی شیت ماهانه</span>
         </button>
       </div>
     </div>

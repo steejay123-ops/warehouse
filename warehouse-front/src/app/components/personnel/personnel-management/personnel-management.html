@@ -352,22 +352,26 @@
       </div>
     </div>
 
-    <!-- 5 Sub-Tabs -->
-    <div class="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/60 overflow-x-auto">
-      <button (click)="settingsSubTab = 'grades'" [class.active-subtab]="settingsSubTab === 'grades'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
-        ۱. جدول ۲۰ گروه شغلی (مزد روزانه و سنوات)
+    <!-- 6 Sub-Tabs -->
+    <div class="flex items-center bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/60 overflow-x-auto gap-1">
+      <button (click)="settingsSubTab = 'grades'" [class.active-subtab]="settingsSubTab === 'grades'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all whitespace-nowrap">
+        ۱. جدول ۲۰ گروه شغلی (مزد و سنوات)
       </button>
-      <button (click)="settingsSubTab = 'labor'" [class.active-subtab]="settingsSubTab === 'labor'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
-        ۲. اقلام قانون کار و ضرایب فوق‌العاده
+      <button (click)="settingsSubTab = 'labor'" [class.active-subtab]="settingsSubTab === 'labor'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all whitespace-nowrap">
+        ۲. اقلام قانون کار و ضرایب
       </button>
-      <button (click)="settingsSubTab = 'dsk'" [class.active-subtab]="settingsSubTab === 'dsk'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
-        ۳. تنظیمات دیسکت بیمه (DSK)
+      <button (click)="settingsSubTab = 'attendance_window'" [class.active-subtab]="settingsSubTab === 'attendance_window'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-black text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 transition-all whitespace-nowrap flex items-center gap-1.5 shadow-xs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>۳. بازه زمانی مجاز ویرایش کارکرد</span>
       </button>
-      <button (click)="settingsSubTab = 'tax'" [class.active-subtab]="settingsSubTab === 'tax'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
-        ۴. تنظیمات مالیات حقوق (WH/WP)
+      <button (click)="settingsSubTab = 'dsk'" [class.active-subtab]="settingsSubTab === 'dsk'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all whitespace-nowrap">
+        ۴. تنظیمات دیسکت بیمه (DSK)
       </button>
-      <button (click)="settingsSubTab = 'bank'" [class.active-subtab]="settingsSubTab === 'bank'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all">
-        ۵. تنظیمات واریز بانک ملی
+      <button (click)="settingsSubTab = 'tax'" [class.active-subtab]="settingsSubTab === 'tax'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all whitespace-nowrap">
+        ۵. تنظیمات مالیات حقوق (WH/WP)
+      </button>
+      <button (click)="settingsSubTab = 'bank'" [class.active-subtab]="settingsSubTab === 'bank'" class="subtab-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-600 transition-all whitespace-nowrap">
+        ۶. تنظیمات واریز بانک ملی
       </button>
     </div>
 
@@ -463,6 +467,83 @@
       </div>
     </div>
 
+    <!-- Sub-Tab 3: Attendance Edit Window (تنظیمات بازه زمانی مجاز ویرایش کارکرد) -->
+    <div *ngIf="settingsSubTab === 'attendance_window' && yearlySettings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <div class="border-b border-slate-100 pb-4">
+        <div class="flex items-center gap-2 text-indigo-700 mb-1">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <h3 class="text-sm font-black text-slate-800">تنظیمات بازه زمانی مجاز برای ثبت و ویرایش کارکرد پرسنل</h3>
+        </div>
+        <p class="text-xs text-slate-500">
+          مدیر سیستم در این قسمت تعیین می‌کند که انبارداران و سرپرستان تا چند روز قبل و یا بعد از تاریخ جاری، مجاز به ثبت و ویرایش کارکرد پرسنل در ماتریس روزانه و شیت ماهانه هستند.
+        </p>
+      </div>
+
+      <!-- Quick Preset Cards -->
+      <div class="space-y-2">
+        <label class="block text-xs font-bold text-slate-700">الگوهای آماده و پیشنهادی:</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button type="button" (click)="setAttendanceWindowPreset(0, 0)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+            <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🔒 فوق‌العاده دقیق</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">فقط تاریخ امروز مجاز</div>
+          </button>
+          <button type="button" (click)="setAttendanceWindowPreset(3, 0)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+            <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">⚡ استاندارد شرکتی</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">تا ۳ روز قبل مجاز، آینده ممنوع</div>
+          </button>
+          <button type="button" (click)="setAttendanceWindowPreset(7, 7)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+            <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🗓️ هفتگی انعطاف‌پذیر</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">۷ روز قبل + ۷ روز بعد</div>
+          </button>
+          <button type="button" (click)="setAttendanceWindowPreset(-1, -1)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+            <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🔓 بدون محدودیت</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">تمام تاریخ‌ها مجاز</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Input Controls -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+        <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-black text-slate-800">حداکثر روزهای گذشته مجاز (روزهای قبل):</label>
+            <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-mono font-black text-xs rounded-lg">
+              {{ yearlySettings.attendance_edit_past_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_past_days === 0 ? 'فقط امروز' : yearlySettings.attendance_edit_past_days + ' روز') }}
+            </span>
+          </div>
+          <input type="number" [(ngModel)]="yearlySettings.attendance_edit_past_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۳" />
+          <p class="text-[11px] text-slate-500 leading-relaxed">
+            • عدد <b class="text-indigo-600">۰</b>: فقط روز جاری قابل ویرایش است.<br/>
+            • عدد <b class="text-indigo-600">مثبت (مثلاً ۳)</b>: حداکثر تا ۳ روز قبل از امروز امکان ویرایش وجود دارد.<br/>
+            • عدد <b class="text-indigo-600">۱-</b>: هیچ محدودیتی برای روزهای گذشته وجود ندارد.
+          </p>
+        </div>
+
+        <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-black text-slate-800">حداکثر روزهای آینده مجاز (روزهای بعد):</label>
+            <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-mono font-black text-xs rounded-lg">
+              {{ yearlySettings.attendance_edit_future_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_future_days === 0 ? 'ممنوع' : yearlySettings.attendance_edit_future_days + ' روز') }}
+            </span>
+          </div>
+          <input type="number" [(ngModel)]="yearlySettings.attendance_edit_future_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۰" />
+          <p class="text-[11px] text-slate-500 leading-relaxed">
+            • عدد <b class="text-indigo-600">۰</b>: ثبت کارکرد برای روزهای آینده کاملاً مسدود است.<br/>
+            • عدد <b class="text-indigo-600">مثبت (مثلاً ۷)</b>: پیش‌ثبت کارکرد تا سقف ۷ روز آینده مجاز است.<br/>
+            • عدد <b class="text-indigo-600">۱-</b>: هیچ محدودیتی برای روزهای آینده وجود ندارد.
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Confirmation Note -->
+      <div class="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-amber-800">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+        <div>
+          <span class="font-bold">یادآوری:</span> پس از تغییر مقادیر فوق، جهت اعمال قطعی قوانین روی سیستم، دکمه <b>«ذخیره تمام تنظیمات سال {{ fiscalYear }}»</b> را در بالای صفحه کلیک فرمایید.
+        </div>
+      </div>
+    </div>
+
     <!-- Sub-Tab 3: DSK Insurance Settings -->
     <div *ngIf="settingsSubTab === 'dsk' && yearlySettings && yearlySettings.workshop_insurance" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
       <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات کارگاه و فایل‌های DSK تأمین اجتماعی</h3>
@@ -522,21 +603,88 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- ۱. ماتریس کارکرد پرسنل (حضور و غیاب سریع) -->
+  <!-- ۱. ماتریس کارکرد پرسنل (حضور و غیاب سریع و شیت ماهانه) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="activeTab === 'attendance'" class="space-y-6">
+    <!-- Filter & Action Header -->
     <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4">
       <div class="flex flex-wrap items-center gap-3">
+        <!-- View Mode Segmented Control -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <button type="button" (click)="setAttendanceViewMode('daily')" [ngClass]="attendanceViewMode === 'daily' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 font-bold hover:text-slate-800'" class="px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>ثبت روزانه</span>
+          </button>
+          <button type="button" (click)="setAttendanceViewMode('monthly_grid')" [ngClass]="attendanceViewMode === 'monthly_grid' ? 'bg-white text-indigo-700 shadow-sm font-black' : 'text-slate-600 font-bold hover:text-slate-800'" class="px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+            <span>شیت ماهانه پرسنل (تقویم)</span>
+          </button>
+        </div>
+
+        <!-- Warehouse Selector (مستقل از انبار / فیلتر انبار) -->
         <div class="flex items-center gap-2">
           <label class="text-xs font-bold text-slate-600">انبار:</label>
           <select [(ngModel)]="selectedWarehouseId" (change)="onWarehouseChange()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+            <option [ngValue]="null">🌐 همه پرسنل (مستقل از انبار)</option>
             <option *ngFor="let wh of warehouses" [value]="wh.id">{{wh.name}}</option>
           </select>
         </div>
 
-        <div class="flex items-center gap-2">
-          <label class="text-xs font-bold text-slate-600">تاریخ ثبت:</label>
-          <input type="text" [(ngModel)]="selectedDateShamsi" (change)="onDateChange()" placeholder="۱۴۰۵/۰۴/۰۱" class="w-32 text-center bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        <!-- Quick Date Navigator (Daily Mode) همراه با تقویم تصویری شمسی و تایپ پیوسته ۸ رقمی -->
+        <div *ngIf="attendanceViewMode === 'daily'" class="flex items-center gap-1.5">
+          <label class="text-xs font-bold text-slate-600 ml-1">تاریخ:</label>
+          <button (click)="goToNextDay()" title="روز بعد" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          
+          <div class="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20">
+            <ng-persian-datepicker
+              [(uiIsVisible)]="isAttendanceDatePickerOpen"
+              (dateOnSelect)="onAttendanceDateSelect($event)"
+              class="cursor-pointer relative block">
+              <input
+                type="text"
+                [formControl]="attendanceDateControl"
+                (input)="onAttendanceDateInput($event)"
+                (click)="openAttendanceDatePicker()"
+                placeholder="۱۴۰۵۰۶۰۷"
+                title="انتخاب از تقویم یا تایپ مستقیم ۸ رقمی (مثلاً 14050607)"
+                class="w-24 text-center bg-transparent text-slate-800 text-xs font-bold font-mono focus:outline-none cursor-pointer" />
+            </ng-persian-datepicker>
+            <button
+              type="button"
+              (click)="toggleAttendanceDatePicker($event)"
+              title="باز کردن تقویم شمسی"
+              class="p-1 hover:bg-slate-200 text-slate-500 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer mr-0.5 shrink-0">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </button>
+          </div>
+
+          <button (click)="goToPrevDay()" title="روز قبل" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <div class="flex items-center gap-1 mr-1">
+            <button (click)="goToToday()" class="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold rounded-lg transition-all cursor-pointer">امروز</button>
+            <button (click)="goToYesterday()" class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] font-bold rounded-lg transition-all cursor-pointer">دیروز</button>
+          </div>
+        </div>
+
+        <!-- Quick Month Navigator (Monthly Grid Mode) -->
+        <div *ngIf="attendanceViewMode === 'monthly_grid'" class="flex items-center gap-1.5">
+          <label class="text-xs font-bold text-slate-600 ml-1">ماه:</label>
+          <button (click)="goToNextMonth()" title="ماه بعد" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <input type="text" [(ngModel)]="selectedYearMonth" (change)="onYearMonthChange()" placeholder="۱۴۰۵/۰۴" class="w-24 text-center bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-2 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          <button (click)="goToPrevMonth()" title="ماه قبل" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <span *ngIf="monthName" class="px-2.5 py-1.5 bg-indigo-50 text-indigo-800 text-xs font-black rounded-lg mr-1">{{ monthName }}</span>
         </div>
 
         <div *ngIf="isPeriodLocked" class="bg-amber-50 text-amber-700 border border-amber-200/80 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5">
@@ -545,21 +693,39 @@
         </div>
       </div>
 
+      <!-- Actions -->
       <div class="flex items-center gap-2">
-        <button (click)="setAllPresent()" [disabled]="isPeriodLocked" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>حاضر همه (۱۰ ساعت)</span>
-        </button>
+        <!-- Daily Actions -->
+        <ng-container *ngIf="attendanceViewMode === 'daily'">
+          <button (click)="setAllPresent()" [disabled]="isPeriodLocked" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>حاضر همه (۱۰ ساعت)</span>
+          </button>
 
-        <button (click)="saveAttendanceMatrix()" [disabled]="isSavingAttendance || isPeriodLocked" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
-          <span *ngIf="!isSavingAttendance">ذخیره کارکرد روزانه (۱ کلیک)</span>
-          <span *ngIf="isSavingAttendance">در حال ذخیره...</span>
-        </button>
+          <button (click)="saveAttendanceMatrix()" [disabled]="isSavingAttendance || isPeriodLocked" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+            <span *ngIf="!isSavingAttendance">ذخیره کارکرد روزانه (۱ کلیک)</span>
+            <span *ngIf="isSavingAttendance">در حال ذخیره...</span>
+          </button>
+        </ng-container>
+
+        <!-- Monthly Grid Actions -->
+        <ng-container *ngIf="attendanceViewMode === 'monthly_grid'">
+          <button (click)="loadMonthlyAttendanceGrid()" [disabled]="isMonthlyGridLoading" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>بازخوانی</span>
+          </button>
+
+          <button (click)="saveMonthlyGrid()" [disabled]="isSavingMonthlyGrid || isPeriodLocked" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            <span *ngIf="!isSavingMonthlyGrid">ذخیره تغییرات ماهانه</span>
+            <span *ngIf="isSavingMonthlyGrid">در حال ذخیره شیت ماه...</span>
+          </button>
+        </ng-container>
       </div>
     </div>
 
-    <!-- Attendance Grid -->
-    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <!-- 1. Daily Attendance Grid Table -->
+    <div *ngIf="attendanceViewMode === 'daily'" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-right text-xs">
           <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200">
@@ -605,6 +771,120 @@
               </td>
               <td class="p-3.5">
                 <input type="text" [(ngModel)]="row.notes" [disabled]="isPeriodLocked" placeholder="توضیحات..." class="w-full bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2. Monthly Timesheet Grid (تقویم ۳۱ روزه) -->
+    <div *ngIf="attendanceViewMode === 'monthly_grid'" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <!-- Helper Banner / Legend -->
+      <div class="px-5 py-3 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center gap-4 flex-wrap">
+          <span class="font-black text-slate-700">راهنمای شیت ماهانه:</span>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-emerald-500 inline-block"></span><span>حاضر ۱۰س</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-blue-500 inline-block"></span><span>نیمه‌وقت ۵س</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-rose-500 inline-block"></span><span>غایب ۰س</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-amber-500 inline-block"></span><span>مرخصی</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-purple-500 inline-block"></span><span>ماموریت / جمعه‌کاری</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded bg-slate-200 inline-block"></span><span>غیرقابل ویرایش (خارج از بازه)</span></div>
+        </div>
+        <div class="text-[11px] text-slate-500 flex items-center gap-1">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          <span>روی برچسب وضعیت کلیک کنید تا تغییر یابد، یا ساعت را در کادر ویرایش کنید.</span>
+        </div>
+      </div>
+
+      <!-- Scrollable Timesheet Matrix Table -->
+      <div class="overflow-x-auto max-h-[70vh]">
+        <table class="w-full text-right text-xs monthly-grid-table">
+          <thead class="sticky-header bg-slate-100/95 backdrop-blur-sm text-slate-700 border-b border-slate-200">
+            <tr>
+              <!-- Sticky Columns Header -->
+              <th class="p-2.5 w-12 text-center sticky-col-1 sticky-header-corner bg-slate-100 border-l border-slate-200">#</th>
+              <th class="p-2.5 min-w-[180px] sticky-col-2 sticky-header-corner bg-slate-100 border-l border-slate-200">پرسنل</th>
+              <th class="p-2.5 min-w-[120px] sticky-col-3 sticky-header-corner bg-slate-100 border-l border-slate-300 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">سمت</th>
+
+              <!-- Dynamic Days (1..N) Header -->
+              <th *ngFor="let dm of monthlyGridDays" [ngClass]="dm.is_friday ? 'friday-col-bg text-purple-900 border-purple-200' : 'text-slate-700'" class="p-1.5 text-center min-w-[54px] max-w-[54px] border-l border-slate-200">
+                <div class="flex flex-col items-center">
+                  <div class="flex items-center gap-0.5">
+                    <span class="font-black text-[13px] font-mono">{{ dm.day }}</span>
+                    <span *ngIf="!dm.is_editable" title="خارج از بازه مجاز ویرایش" class="text-slate-400">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                    </span>
+                  </div>
+                  <span class="text-[10px] font-bold" [ngClass]="dm.is_friday ? 'text-purple-700' : 'text-slate-400'">{{ dm.weekday_short }}</span>
+                </div>
+              </th>
+
+              <!-- Monthly Totals Header -->
+              <th class="p-2.5 min-w-[90px] text-center font-black bg-indigo-50/70 text-indigo-900 border-l border-indigo-200">جمع ساعت</th>
+              <th class="p-2.5 min-w-[80px] text-center font-black bg-slate-50 text-slate-700 border-l border-slate-200">اضافه‌کار</th>
+              <th class="p-2.5 min-w-[75px] text-center font-black bg-slate-50 text-slate-700">روز حضور</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let row of monthlyGridRows; let idx = index" class="hover:bg-slate-50/50 transition-colors">
+              <!-- Sticky Columns Body -->
+              <td class="p-2 text-center text-slate-400 font-bold sticky-col-1 bg-white border-l border-slate-200">{{ idx + 1 }}</td>
+              <td class="p-2 font-bold text-slate-800 sticky-col-2 bg-white border-l border-slate-200">
+                <div class="truncate max-w-[170px]" [title]="row.full_name">{{ row.full_name }}</div>
+                <div class="text-[10px] text-slate-400 font-mono">{{ row.national_code }}</div>
+              </td>
+              <td class="p-2 text-slate-600 text-[11px] sticky-col-3 bg-white border-l border-slate-300 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.05)]">
+                <div class="truncate max-w-[110px]" [title]="row.job_title">{{ row.job_title }}</div>
+              </td>
+
+              <!-- Days Cells -->
+              <td *ngFor="let d of row.days; let dayIdx = index" [ngClass]="[
+                monthlyGridDays[dayIdx]?.is_friday ? 'friday-col-bg' : '',
+                !monthlyGridDays[dayIdx]?.is_editable ? 'cell-locked' : (
+                  !d.status ? 'cell-empty' : (
+                    d.status === 'PRESENT_10H' ? 'cell-present' : (
+                      d.status === 'HALF_5H' ? 'cell-half' : (
+                        d.status === 'ABSENT' ? 'cell-absent' : (
+                          d.status === 'LEAVE' ? 'cell-leave' : (
+                            d.status === 'MISSION' ? 'cell-mission' : 'cell-friday-work'
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              ]" class="p-1 text-center border-l border-slate-200 transition-colors">
+                <div class="flex flex-col items-center gap-0.5">
+                  <!-- Quick Status Toggle Chip -->
+                  <button type="button" (click)="cycleDayStatus(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="text-[9px] font-black px-1 py-0.5 rounded cursor-pointer transition-transform active:scale-95 disabled:cursor-not-allowed" [ngClass]="
+                    !d.status ? 'text-slate-400 font-normal hover:bg-slate-100' : (
+                      d.status === 'PRESENT_10H' ? 'text-emerald-700 hover:bg-emerald-200/50' : (
+                        d.status === 'HALF_5H' ? 'text-blue-700 hover:bg-blue-200/50' : (
+                          d.status === 'ABSENT' ? 'text-rose-700 hover:bg-rose-200/50' : (
+                            d.status === 'LEAVE' ? 'text-amber-700 hover:bg-amber-200/50' : 'text-purple-700 hover:bg-purple-200/50'
+                          )
+                        )
+                      )
+                    )
+                  " title="کلیک برای تغییر وضعیت">
+                    {{ !d.status ? '—' : (d.status === 'PRESENT_10H' ? 'حاضر' : (d.status === 'HALF_5H' ? 'نیمه' : (d.status === 'ABSENT' ? 'غایب' : (d.status === 'LEAVE' ? 'مرخصی' : (d.status === 'MISSION' ? 'مامور' : 'جمعه'))))) }}
+                  </button>
+
+                  <!-- Direct Hour Input -->
+                  <input type="number" min="0" max="24" step="0.5" [(ngModel)]="d.effective_hours" (ngModelChange)="onMonthlyCellHoursChange(row, d)" [disabled]="isPeriodLocked || !monthlyGridDays[dayIdx]?.is_editable" class="w-10 text-center font-mono font-black text-xs py-0.5 px-0.5 rounded border border-transparent hover:border-slate-300 focus:border-indigo-500 focus:bg-white focus:outline-none disabled:bg-transparent disabled:text-slate-500" [placeholder]="!d.status ? '—' : '0'" />
+                </div>
+              </td>
+
+              <!-- Summary Totals per Row -->
+              <td class="p-2 text-center font-mono font-black text-xs text-indigo-700 bg-indigo-50/40 border-l border-indigo-100">
+                {{ row.total_hours | number:'1.0-1' }}
+              </td>
+              <td class="p-2 text-center font-mono text-xs text-slate-700 border-l border-slate-200">
+                {{ row.total_overtime | number:'1.0-1' }}
+              </td>
+              <td class="p-2 text-center font-mono text-xs text-slate-700">
+                {{ row.present_days }}
               </td>
             </tr>
           </tbody>

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { StateService } from '../../../services/state.service';
 import { ToastService } from '../../../services/toast.service';
@@ -16,13 +16,19 @@ import {
   VehicleSummaryRow,
   PayrollYearlySettings,
   JobGradeTier,
-  MonthlyPayrollRecord
+  MonthlyPayrollRecord,
+  MonthlyGridDayMeta,
+  MonthlyGridPersonnelDay,
+  MonthlyGridRow,
+  MonthlyGridResponse
 } from '../../../core/models/personnel.model';
+import { jalaliToGregorian, gregorianToJalali } from '../../../core/utils/date-utils';
+import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
 
 @Component({
   selector: 'app-personnel-management',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgPersianDatepickerModule],
   templateUrl: './personnel-management.html',
   styleUrl: './personnel-management.css'
 })
@@ -34,7 +40,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   activeTab = 'attendance';
   profileSubTab: 'personnel' | 'vehicles' = 'personnel';
   reportSubTab: 'personnel' | 'fleet' = 'personnel';
-  settingsSubTab: 'grades' | 'labor' | 'dsk' | 'tax' | 'bank' = 'grades';
+  settingsSubTab: 'grades' | 'labor' | 'attendance_window' | 'dsk' | 'tax' | 'bank' = 'grades';
 
   // Filters & State
   selectedWarehouseId: number | null = null;
@@ -42,6 +48,8 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   selectedDateShamsi = '';
   selectedYearMonth = '';
   fiscalYear = '1405';
+  isAttendanceDatePickerOpen = false;
+  attendanceDateControl = new FormControl('');
 
   // Matrix Attendance
   attendanceRows: AttendanceMatrixRow[] = [];
@@ -50,6 +58,16 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   isPeriodLocked = false;
   periodStatus = 'OPEN';
   currentPeriodId: number | null = null;
+
+  // Monthly Timesheet Grid
+  attendanceViewMode: 'daily' | 'monthly_grid' = 'daily';
+  monthlyGridDays: MonthlyGridDayMeta[] = [];
+  monthlyGridRows: MonthlyGridRow[] = [];
+  isMonthlyGridLoading = false;
+  isSavingMonthlyGrid = false;
+  monthlyGridSettingsWindow = { past_days: 3, future_days: 0 };
+  monthName = '';
+  daysInMonth = 31;
 
   // Matrix Fleet Trips
   vehicleRows: VehicleMatrixRow[] = [];
@@ -146,10 +164,12 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       this.selectedDateShamsi = `${y}/${m}/${d}`;
       this.selectedYearMonth = `${y}/${m}`;
       this.fiscalYear = y;
+      this.attendanceDateControl.setValue(this.selectedDateShamsi, { emitEvent: false });
     } catch {
       this.selectedDateShamsi = '1405/04/01';
       this.selectedYearMonth = '1405/04';
       this.fiscalYear = '1405';
+      this.attendanceDateControl.setValue('1405/04/01', { emitEvent: false });
     }
   }
 
@@ -157,12 +177,8 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     this.whService.getAll().subscribe({
       next: (whs: any[]) => {
         this.warehouses = whs || [];
-        const activeWhId = this.state.appState.activeWarehouseId;
-        if (activeWhId && activeWhId !== 'ALL') {
-          this.selectedWarehouseId = Number(activeWhId);
-        } else if (this.warehouses.length > 0) {
-          this.selectedWarehouseId = this.warehouses[0].id;
-        }
+        // پیش‌فرض سیستم برای ثبت و مشاهده کارکرد: همه پرسنل (مستقل از انبار)
+        this.selectedWarehouseId = null;
         this.onWarehouseChange();
         this.cdr.detectChanges();
       },
@@ -173,15 +189,25 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   onWarehouseChange(): void {
-    if (!this.selectedWarehouseId) return;
     if (this.activeTab === 'attendance') {
-      this.loadAttendanceMatrix();
-    } else if (this.activeTab === 'fleet') {
-      this.loadVehicleMatrix();
+      if (this.attendanceViewMode === 'daily') {
+        this.loadAttendanceMatrix();
+      } else {
+        this.loadMonthlyAttendanceGrid();
+      }
+      return;
+    }
+
+    if (this.activeTab === 'fleet') {
+      if (this.selectedWarehouseId) {
+        this.loadVehicleMatrix();
+      } else {
+        this.vehicleRows = [];
+      }
     } else if (this.activeTab === 'payroll') {
-      this.loadMonthlyPayroll();
+      if (this.selectedWarehouseId) this.loadMonthlyPayroll();
     } else if (this.activeTab === 'reports') {
-      this.loadMonthlyReports();
+      if (this.selectedWarehouseId) this.loadMonthlyReports();
     } else if (this.activeTab === 'profiles') {
       this.loadProfiles();
     } else if (this.activeTab === 'settings') {
@@ -208,7 +234,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   // ۱. حضور و غیاب ماتریسی پرسنل (انباردار)
   // ─────────────────────────────────────────────────────────────
   loadAttendanceMatrix(): void {
-    if (!this.selectedWarehouseId || !this.selectedDateShamsi) return;
+    if (!this.selectedDateShamsi) return;
     this.isAttendanceLoading = true;
     this.api.getAttendanceMatrix(this.selectedWarehouseId, this.selectedDateShamsi).subscribe({
       next: (res) => {
@@ -228,8 +254,15 @@ export class PersonnelManagement implements OnInit, OnDestroy {
 
   onDateChange(): void {
     if (this.selectedDateShamsi) {
+      this.attendanceDateControl.setValue(this.selectedDateShamsi, { emitEvent: false });
       this.selectedYearMonth = this.selectedDateShamsi.slice(0, 7);
-      if (this.activeTab === 'attendance') this.loadAttendanceMatrix();
+      if (this.activeTab === 'attendance') {
+        if (this.attendanceViewMode === 'daily') {
+          this.loadAttendanceMatrix();
+        } else {
+          this.loadMonthlyAttendanceGrid();
+        }
+      }
       if (this.activeTab === 'fleet') this.loadVehicleMatrix();
     }
   }
@@ -237,6 +270,9 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   onYearMonthChange(): void {
     if (this.selectedYearMonth) {
       this.fiscalYear = this.selectedYearMonth.split('/')[0];
+      if (this.activeTab === 'attendance' && this.attendanceViewMode === 'monthly_grid') {
+        this.loadMonthlyAttendanceGrid();
+      }
       if (this.activeTab === 'payroll') this.loadMonthlyPayroll();
       if (this.activeTab === 'reports') this.loadMonthlyReports();
     }
@@ -279,7 +315,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   saveAttendanceMatrix(): void {
-    if (!this.selectedWarehouseId || !this.selectedDateShamsi) return;
+    if (!this.selectedDateShamsi) return;
     if (this.isPeriodLocked) {
       this.toast.show('error', 'دوره قفل است و امکان ذخیره وجود ندارد.');
       return;
@@ -311,6 +347,282 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         this.toast.show('error', err?.error?.error || 'خطا در ذخیره کارکرد روزانه');
       }
     });
+  }
+
+  // ── ناوبری سریع تاریخ ──────────────────────────────────────
+  goToPrevDay(): void {
+    this.selectedDateShamsi = this.shiftShamsiDay(this.selectedDateShamsi, -1);
+    this.onDateChange();
+  }
+
+  goToNextDay(): void {
+    this.selectedDateShamsi = this.shiftShamsiDay(this.selectedDateShamsi, 1);
+    this.onDateChange();
+  }
+
+  goToToday(): void {
+    this.selectedDateShamsi = this.getTodayShamsi();
+    this.onDateChange();
+  }
+
+  goToYesterday(): void {
+    this.selectedDateShamsi = this.shiftShamsiDay(this.getTodayShamsi(), -1);
+    this.onDateChange();
+  }
+
+  goToPrevMonth(): void {
+    this.selectedYearMonth = this.shiftShamsiMonth(this.selectedYearMonth, -1);
+    this.onYearMonthChange();
+  }
+
+  goToNextMonth(): void {
+    this.selectedYearMonth = this.shiftShamsiMonth(this.selectedYearMonth, 1);
+    this.onYearMonthChange();
+  }
+
+  private shiftShamsiDay(dateStr: string, deltaDays: number): string {
+    try {
+      const parts = dateStr.split('/').map(p => parseInt(p, 10));
+      if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) return dateStr;
+      const g = jalaliToGregorian(parts[0], parts[1], parts[2]);
+      const d = new Date(g.gy, g.gm - 1, g.gd);
+      d.setDate(d.getDate() + deltaDays);
+      const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const pad = (n: number) => n < 10 ? '0' + n : String(n);
+      return `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
+    } catch {
+      return dateStr;
+    }
+  }
+
+  private shiftShamsiMonth(yearMonth: string, deltaMonths: number): string {
+    try {
+      const parts = yearMonth.split('/').map(p => parseInt(p, 10));
+      if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return yearMonth;
+      let y = parts[0];
+      let m = parts[1] + deltaMonths;
+      while (m > 12) {
+        m -= 12;
+        y += 1;
+      }
+      while (m < 1) {
+        m += 12;
+        y -= 1;
+      }
+      const pad = (n: number) => n < 10 ? '0' + n : String(n);
+      return `${y}/${pad(m)}`;
+    } catch {
+      return yearMonth;
+    }
+  }
+
+  private getTodayShamsi(): string {
+    const d = new Date();
+    const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    const pad = (n: number) => n < 10 ? '0' + n : String(n);
+    return `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
+  }
+
+  setAttendanceViewMode(mode: 'daily' | 'monthly_grid'): void {
+    this.attendanceViewMode = mode;
+    if (mode === 'daily') {
+      this.loadAttendanceMatrix();
+    } else {
+      this.loadMonthlyAttendanceGrid();
+    }
+  }
+
+  loadMonthlyAttendanceGrid(): void {
+    if (!this.selectedYearMonth) return;
+    this.isMonthlyGridLoading = true;
+    this.api.getMonthlyAttendanceGrid(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
+      next: (res) => {
+        this.monthlyGridDays = res.days_meta || [];
+        this.monthlyGridRows = res.rows || [];
+        this.isPeriodLocked = res.is_locked;
+        this.periodStatus = res.period_status;
+        this.monthlyGridSettingsWindow = res.settings_window || { past_days: 3, future_days: 0 };
+        this.monthName = res.month_name || '';
+        this.daysInMonth = res.days_in_month || 31;
+        this.isMonthlyGridLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isMonthlyGridLoading = false;
+        const msg = err?.error?.error || 'خطا در بارگذاری شیت ماهانه کارکرد پرسنل';
+        this.toast.show('error', msg);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onMonthlyCellHoursChange(row: MonthlyGridRow, dayItem: MonthlyGridPersonnelDay): void {
+    let h = parseFloat(dayItem.effective_hours as any) || 0;
+    if (h < 0) h = 0;
+    if (h > 24) h = 24;
+    dayItem.effective_hours = h;
+    if (h === 0 && dayItem.status === 'PRESENT_10H') {
+      dayItem.status = 'ABSENT';
+    } else if (h > 0 && (!dayItem.status || dayItem.status === 'ABSENT')) {
+      dayItem.status = h === 10 ? 'PRESENT_10H' : (h === 5 ? 'HALF_5H' : 'CUSTOM');
+    }
+    row.total_hours = row.days.reduce((acc, d) => acc + (parseFloat(d.effective_hours as any) || 0), 0);
+    row.total_overtime = row.days.reduce((acc, d) => acc + (parseFloat(d.overtime_hours as any) || 0), 0);
+  }
+
+  cycleDayStatus(row: MonthlyGridRow, dayItem: MonthlyGridPersonnelDay): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره کارکرد قفل شده است.');
+      return;
+    }
+    const dayMeta = this.monthlyGridDays.find(d => d.day === dayItem.day);
+    if (dayMeta && !dayMeta.is_editable) {
+      this.toast.show('warning', 'این تاریخ خارج از بازه مجاز ویرایش تنظیم‌شده توسط مدیر است.');
+      return;
+    }
+    if (!dayItem.status) {
+      dayItem.status = 'PRESENT_10H';
+      dayItem.effective_hours = 10;
+    } else if (dayItem.status === 'PRESENT_10H') {
+      dayItem.status = 'HALF_5H';
+      dayItem.effective_hours = 5;
+    } else if (dayItem.status === 'HALF_5H') {
+      dayItem.status = 'ABSENT';
+      dayItem.effective_hours = 0;
+    } else if (dayItem.status === 'ABSENT') {
+      dayItem.status = 'LEAVE';
+      dayItem.effective_hours = 0;
+    } else if (dayItem.status === 'LEAVE') {
+      if (dayMeta?.is_friday) {
+        dayItem.status = 'FRIDAY_WORK';
+        dayItem.effective_hours = 10;
+        dayItem.is_friday_work = true;
+      } else {
+        dayItem.status = 'MISSION';
+        dayItem.effective_hours = 10;
+        dayItem.is_mission = true;
+      }
+    } else {
+      dayItem.status = '';
+      dayItem.effective_hours = 0;
+      dayItem.is_friday_work = false;
+      dayItem.is_mission = false;
+    }
+    this.onMonthlyCellHoursChange(row, dayItem);
+  }
+
+  saveMonthlyGrid(): void {
+    if (!this.selectedYearMonth) return;
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره کارکرد قفل شده است و امکان ذخیره وجود ندارد.');
+      return;
+    }
+    this.isSavingMonthlyGrid = true;
+    const items: any[] = [];
+    for (const row of this.monthlyGridRows) {
+      for (const d of row.days) {
+        if (d.status || d.effective_hours > 0 || d.is_existing) {
+          items.push({
+            personnel_id: row.personnel_id,
+            day: d.day,
+            status: d.status || 'PRESENT_10H',
+            effective_hours: d.effective_hours,
+            overtime_hours: d.overtime_hours,
+            is_friday_work: d.is_friday_work,
+            is_mission: d.is_mission,
+            advance_payment: d.advance_payment || 0,
+            notes: d.notes || ''
+          });
+        }
+      }
+    }
+    this.api.bulkSaveMonthlyGrid({
+      warehouse_id: this.selectedWarehouseId,
+      year_month: this.selectedYearMonth,
+      items
+    }).subscribe({
+      next: (res) => {
+        this.isSavingMonthlyGrid = false;
+        this.toast.show('success', res.message || 'شیت ماهانه با موفقیت ذخیره شد.');
+        this.loadMonthlyAttendanceGrid();
+      },
+      error: (err) => {
+        this.isSavingMonthlyGrid = false;
+        const msg = err?.error?.error || 'خطا در ذخیره شیت ماهانه کارکرد';
+        this.toast.show('error', msg);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ── انتخابگر هوشمند تاریخ و تقویم شمسی ───────────────────────
+  onAttendanceDateInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input) return;
+    let val = input.value || '';
+    
+    // تبدیل ارقام فارسی و عربی به انگلیسی
+    val = val.replace(/[\u06F0-\u06F9]/g, d => String.fromCharCode(d.charCodeAt(0) - 1728))
+             .replace(/[\u0660-\u0669]/g, d => String.fromCharCode(d.charCodeAt(0) - 1584));
+    
+    const digitsOnly = val.replace(/\D/g, '');
+
+    if (digitsOnly.length === 8) {
+      const y = digitsOnly.substring(0, 4);
+      const m = digitsOnly.substring(4, 6);
+      const d = digitsOnly.substring(6, 8);
+      const formatted = `${y}/${m}/${d}`;
+      input.value = formatted;
+      this.selectedDateShamsi = formatted;
+      this.attendanceDateControl.setValue(formatted, { emitEvent: false });
+      this.onDateChange();
+    } else {
+      this.selectedDateShamsi = val;
+      this.attendanceDateControl.setValue(val, { emitEvent: false });
+    }
+  }
+
+  toggleAttendanceDatePicker(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.isAttendanceDatePickerOpen = !this.isAttendanceDatePickerOpen;
+    this.cdr.detectChanges();
+  }
+
+  openAttendanceDatePicker(): void {
+    this.isAttendanceDatePickerOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closeAttendanceDatePicker(): void {
+    this.isAttendanceDatePickerOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  onAttendanceDateSelect(event: any): void {
+    if (!event) return;
+    this.closeAttendanceDatePicker();
+    if (event.shamsi) {
+      this.selectedDateShamsi = event.shamsi;
+      this.attendanceDateControl.setValue(event.shamsi, { emitEvent: false });
+      this.onDateChange();
+    } else if (event.gregorian) {
+      const d = new Date(event.gregorian);
+      const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const pad = (n: number) => n < 10 ? '0' + n : String(n);
+      const formatted = `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
+      this.selectedDateShamsi = formatted;
+      this.attendanceDateControl.setValue(formatted, { emitEvent: false });
+      this.onDateChange();
+    }
+  }
+
+  setAttendanceWindowPreset(past: number, future: number): void {
+    if (!this.yearlySettings) return;
+    this.yearlySettings.attendance_edit_past_days = past;
+    this.yearlySettings.attendance_edit_future_days = future;
+    this.toast.show('info', `الگو اعمال شد: ${past === -1 ? 'نامحدود' : past + ' روز'} قبل، ${future === -1 ? 'نامحدود' : future + ' روز'} بعد`);
   }
 
   // ─────────────────────────────────────────────────────────────

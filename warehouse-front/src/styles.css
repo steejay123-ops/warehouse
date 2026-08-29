@@ -113,7 +113,8 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
 /* ==========================================================================
    PERSIAN DATEPICKER GLOBAL POPUP STYLES
    ========================================================================== */
-.ng-persian-datepicker {
+.ng-persian-datepicker,
+ng-persian-datepicker {
   position: relative;
   display: block;
   width: 100%;

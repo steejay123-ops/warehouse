@@ -8,7 +8,8 @@ import {
   VehicleMatrixResponse,
   AttendanceSummaryRow,
   VehicleSummaryRow,
-  MonthlyWorkPeriod
+  MonthlyWorkPeriod,
+  MonthlyGridResponse
 } from '../models/personnel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -64,15 +65,16 @@ export class PersonnelApiService {
   }
 
   // --- ماتریس ثبت کارکرد پرسنل ---
-  getAttendanceMatrix(warehouseId: number, dateShamsi: string): Observable<AttendanceMatrixResponse> {
-    return this.api.get<AttendanceMatrixResponse>(`${this.baseUrl}/attendance/matrix`, {
-      warehouse_id: warehouseId,
-      date_shamsi: dateShamsi
-    });
+  getAttendanceMatrix(warehouseId: number | null | undefined, dateShamsi: string): Observable<AttendanceMatrixResponse> {
+    const params: any = { date_shamsi: dateShamsi };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.get<AttendanceMatrixResponse>(`${this.baseUrl}/attendance/matrix`, params);
   }
 
   saveAttendanceBulk(payload: {
-    warehouse_id: number;
+    warehouse_id?: number | null;
     date_shamsi: string;
     items: Array<{
       personnel_id: number;
@@ -91,23 +93,53 @@ export class PersonnelApiService {
     );
   }
 
-  getAttendanceMonthlySummary(warehouseId: number, yearMonth: string): Observable<{
-    warehouse_id: number;
+  getAttendanceMonthlySummary(warehouseId: number | null | undefined, yearMonth: string): Observable<{
+    warehouse_id?: number | null;
     year_month: string;
     period_status: string;
     is_locked: boolean;
     summary: AttendanceSummaryRow[];
   }> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
     return this.api.get<{
-      warehouse_id: number;
+      warehouse_id?: number | null;
       year_month: string;
       period_status: string;
       is_locked: boolean;
       summary: AttendanceSummaryRow[];
-    }>(`${this.baseUrl}/attendance/monthly-summary`, {
-      warehouse_id: warehouseId,
-      year_month: yearMonth
-    });
+    }>(`${this.baseUrl}/attendance/monthly-summary`, params);
+  }
+
+  getMonthlyAttendanceGrid(warehouseId: number | null | undefined, yearMonth: string): Observable<MonthlyGridResponse> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.get<MonthlyGridResponse>(`${this.baseUrl}/attendance/monthly-grid`, params);
+  }
+
+  bulkSaveMonthlyGrid(payload: {
+    warehouse_id?: number | null;
+    year_month: string;
+    items: Array<{
+      personnel_id: number;
+      day: number;
+      status: string;
+      effective_hours: number;
+      overtime_hours: number;
+      is_friday_work: boolean;
+      is_mission: boolean;
+      advance_payment: number;
+      notes?: string;
+    }>;
+  }): Observable<{ message: string; saved_count: number; updated_count: number }> {
+    return this.api.post<{ message: string; saved_count: number; updated_count: number }>(
+      `${this.baseUrl}/attendance/bulk-save-monthly-grid/`,
+      payload
+    );
   }
 
   // --- ماتریس ثبت سرویس‌های خودرو ---

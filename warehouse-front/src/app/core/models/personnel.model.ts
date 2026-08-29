@@ -126,7 +126,7 @@ export interface AttendanceMatrixRow {
   national_code: string;
   job_title: string;
   attendance_id?: number | null;
-  status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK' | 'CUSTOM';
+  status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK' | 'CUSTOM' | '' | string;
   effective_hours: number;
   overtime_hours: number;
   is_friday_work: boolean;
@@ -137,7 +137,7 @@ export interface AttendanceMatrixRow {
 }
 
 export interface AttendanceMatrixResponse {
-  warehouse_id: number;
+  warehouse_id?: number | null;
   date_shamsi: string;
   year_month: string;
   is_locked: boolean;
@@ -280,6 +280,10 @@ export interface PayrollYearlySettings {
   // تسهیم مازاد
   surplus_overtime_percent?: number;
 
+  // محدودیت بازه زمانی ویرایش کارکرد
+  attendance_edit_past_days?: number;
+  attendance_edit_future_days?: number;
+
   // Nested
   job_grades: JobGradeTier[];
   workshop_insurance?: WorkshopInsuranceSettings;
@@ -355,4 +359,55 @@ export interface MonthlyPayrollRecord {
   is_tax_imported?: boolean;
   is_manually_overridden: boolean;
 }
+
+export interface MonthlyGridDayMeta {
+  day: number;
+  date_shamsi: string;
+  weekday_short: string;
+  weekday_name: string;
+  is_friday: boolean;
+  is_editable: boolean;
+  is_today: boolean;
+}
+
+export interface MonthlyGridPersonnelDay {
+  day: number;
+  date_shamsi: string;
+  status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK' | 'CUSTOM' | '' | string;
+  effective_hours: number;
+  overtime_hours: number;
+  is_friday_work: boolean;
+  is_mission: boolean;
+  advance_payment: number;
+  notes: string;
+  is_existing: boolean;
+  attendance_id: number | null;
+}
+
+export interface MonthlyGridRow {
+  personnel_id: number;
+  full_name: string;
+  national_code: string;
+  job_title: string;
+  total_hours: number;
+  total_overtime: number;
+  present_days: number;
+  days: MonthlyGridPersonnelDay[];
+}
+
+export interface MonthlyGridResponse {
+  warehouse_id?: number | null;
+  year_month: string;
+  month_name: string;
+  days_in_month: number;
+  is_locked: boolean;
+  period_status: string;
+  settings_window: {
+    past_days: number;
+    future_days: number;
+  };
+  days_meta: MonthlyGridDayMeta[];
+  rows: MonthlyGridRow[];
+}
+
 

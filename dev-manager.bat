@@ -121,7 +121,7 @@ goto MENU
 
 :DO_OMNI
 echo Launching Omniroute in a new tab...
-wt -w 0 new-tab -d "%USERPROFILE%" --title "Omniroute" cmd /k "cd C:\Users\Payandeh\Documents\OmniRoute  && npm start"
+wt -w 0 new-tab -d "%USERPROFILE%" --title "Omniroute" cmd /k "omniroute"
 goto MENU
 
 :DO_MIGRATE

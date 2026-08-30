@@ -6,6 +6,7 @@ Includes dynamic insurance days optimization and parametric surplus allocation.
 """
 from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
+from django.db.models import Q
 from .models import (
     MonthlyWorkPeriod,
     MonthlyPayrollRecord,
@@ -362,9 +363,14 @@ class PayrollCalculationEngine:
             for jg in settings.job_grades.all():
                 job_grades[str(jg.grade_number)] = (jg.daily_base_wage, jg.daily_seniority_bonus)
 
-        personnel_qs = PersonnelProfile.objects.filter(is_active=True).order_by('last_name', 'first_name')
+        # پرسنل فعال یا پرسنلی که در این دوره کارکرد ثبت‌شده دارند
+        personnel_qs = PersonnelProfile.objects.filter(
+            Q(is_active=True) | Q(daily_attendances__date_shamsi__startswith=period.year_month, daily_attendances__is_deleted=False)
+        ).distinct().order_by('last_name', 'first_name')
         if period.warehouse:
-            wh_personnel = personnel_qs.filter(assigned_warehouse=period.warehouse)
+            wh_personnel = personnel_qs.filter(
+                Q(assigned_warehouse=period.warehouse) | Q(daily_attendances__warehouse=period.warehouse, daily_attendances__date_shamsi__startswith=period.year_month)
+            ).distinct()
             if wh_personnel.exists():
                 personnel_qs = wh_personnel
 

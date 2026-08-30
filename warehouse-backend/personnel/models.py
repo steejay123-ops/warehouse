@@ -239,7 +239,9 @@ class MonthlyWorkPeriod(models.Model):
     """
     PERIOD_STATUS_CHOICES = (
         ('OPEN', 'باز (امکان ثبت و ویرایش)'),
-        ('LOCKED', 'قفل‌شده (غیرقابل ویرایش توسط کاربران عادی)'),
+        ('SUBMITTED', 'ارسال‌شده جهت بررسی مالی'),
+        ('LOCKED', 'تایید نهایی و قفل‌شده'),
+        ('REJECTED', 'رد شده و نیازمند بازبینی'),
         ('FINALIZED', 'قطعی و تسویه‌شده'),
     )
 
@@ -254,6 +256,19 @@ class MonthlyWorkPeriod(models.Model):
     year_month = models.CharField(max_length=7, db_index=True, verbose_name="سال و ماه (مثال ۱۴۰۴/۰۵)")
     status = models.CharField(max_length=15, choices=PERIOD_STATUS_CHOICES, default='OPEN', verbose_name="وضعیت دوره")
     
+    # چرخه بررسی دو مرحله‌ای
+    submitted_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان ارسال جهت بررسی")
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submitted_work_periods',
+        verbose_name="ارسال‌کننده جهت بررسی"
+    )
+    submission_notes = models.TextField(blank=True, null=True, verbose_name="یادداشت سرپرست هنگام ارسال")
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="علت رد توسط حسابداری")
+
     locked_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان قفل")
     locked_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

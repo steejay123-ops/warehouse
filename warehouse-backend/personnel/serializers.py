@@ -125,8 +125,9 @@ class DailyAttendanceSerializer(serializers.ModelSerializer):
 
 class AttendanceItemInputSerializer(serializers.Serializer):
     personnel_id = serializers.IntegerField()
-    status = serializers.ChoiceField(choices=DailyAttendance.STATUS_CHOICES, default='PRESENT_10H')
-    effective_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=10.00)
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    status = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
+    effective_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     overtime_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     is_friday_work = serializers.BooleanField(default=False)
     is_mission = serializers.BooleanField(default=False)
@@ -137,6 +138,7 @@ class AttendanceItemInputSerializer(serializers.Serializer):
 class BulkAttendanceMatrixSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
     date_shamsi = serializers.CharField(max_length=15)
+    client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = AttendanceItemInputSerializer(many=True)
 
 
@@ -155,6 +157,7 @@ class MonthlyGridItemInputSerializer(serializers.Serializer):
 class BulkMonthlyAttendanceGridSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
     year_month = serializers.CharField(max_length=10)
+    client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = MonthlyGridItemInputSerializer(many=True)
 
 
@@ -181,7 +184,7 @@ class VehicleTripItemInputSerializer(serializers.Serializer):
 
 
 class BulkVehicleTripMatrixSerializer(serializers.Serializer):
-    warehouse_id = serializers.IntegerField()
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
     date_shamsi = serializers.CharField(max_length=10)
     items = VehicleTripItemInputSerializer(many=True)
 
@@ -190,13 +193,19 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     locked_by_name = serializers.SerializerMethodField()
+    submitted_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MonthlyWorkPeriod
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'locked_at', 'locked_by']
+        read_only_fields = ['created_at', 'updated_at', 'locked_at', 'locked_by', 'submitted_at', 'submitted_by']
 
     def get_locked_by_name(self, obj):
         if obj.locked_by:
             return f"{obj.locked_by.first_name} {obj.locked_by.last_name}".strip() or obj.locked_by.username
+        return None
+
+    def get_submitted_by_name(self, obj):
+        if obj.submitted_by:
+            return f"{obj.submitted_by.first_name} {obj.submitted_by.last_name}".strip() or obj.submitted_by.username
         return None

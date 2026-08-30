@@ -182,9 +182,11 @@ def generate_dskwor_bytes(
         # 15. DSW_OCP (C 50) - IranSystem Job Title
         r_bytes.extend(encode_dbf_string(p.job_title or '', 50, is_persian=True))
         # 16. DSW_SDATE (C 8) - Start Date
-        r_bytes.extend(encode_dbf_string(p.start_date or '14040901', 8, is_persian=False))
+        start_d = (p.start_date or '14040901').replace('/', '').replace('-', '').strip()[:8]
+        r_bytes.extend(encode_dbf_string(start_d, 8, is_persian=False))
         # 17. DSW_EDATE (C 8) - End Date
-        r_bytes.extend(encode_dbf_string(p.end_date or '0', 8, is_persian=False))
+        end_d = (p.end_date or '0').replace('/', '').replace('-', '').strip()[:8]
+        r_bytes.extend(encode_dbf_string(end_d, 8, is_persian=False))
         # 18. DSW_DD (N 2) - Insurance Days
         r_bytes.extend(encode_dbf_number(rec.insurance_days, 2))
         # 19. DSW_ROOZ (N 12) - Daily Base Wage

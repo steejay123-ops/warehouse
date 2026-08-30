@@ -57,7 +57,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'type': type_str,
                 'event': type_str,
             }
-            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats'):
+            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats', 'date_shamsi', 'year_month', 'attendance_data', 'sender_id', 'client_tab_id'):
                 if k in event:
                     out_data[k] = event[k]
 

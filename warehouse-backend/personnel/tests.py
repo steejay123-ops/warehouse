@@ -73,7 +73,9 @@ class PersonnelAppTests(TestCase):
         res = self.client.get(f'/api/personnel/attendance/matrix/?warehouse_id={self.warehouse.id}&date_shamsi={date_str}')
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.data['rows']), 2)
-        self.assertEqual(res.data['rows'][0]['status'], 'PRESENT_10H')
+        self.assertEqual(res.data['rows'][0]['status'], '')
+        self.assertEqual(res.data['rows'][0]['effective_hours'], 0.0)
+        self.assertFalse(res.data['rows'][0]['is_existing'])
 
         # ذخیره گروهی
         save_payload = {
@@ -594,9 +596,8 @@ class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
         self.assertEqual(first_day['effective_hours'], 0.0)
         self.assertFalse(first_day['is_existing'])
 
-    def test_sticky_status_carryover_from_previous_day(self):
-        """تست بارگذاری آخرین وضعیت انتخاب‌شده فرد (مثلا مرخصی یا غایب) به عنوان پیش‌فرض روز بعد"""
-        # ثبت وضعیت مرخصی برای دیروز
+    def test_unrecorded_days_clean_slate_in_matrix(self):
+        """تست اینکه روزهای ثبت‌نشده یا پاکسازی‌شده با وضعیت خالی و ساعات صفر لود می‌شوند و مقادیر کهنه بازنمی‌گردند"""
         import jdatetime
         today = jdatetime.date.today()
         yesterday = today - jdatetime.timedelta(days=1)
@@ -612,13 +613,13 @@ class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
             overtime_hours=0.0
         )
 
-        # واکشی ماتریس برای امروز (که هنوز ثبت نشده)
+        # واکشی ماتریس برای امروز (که هنوز ثبت نشده یا پاکسازی شده)
         res = self.client.get(f'/api/personnel/attendance/matrix/?warehouse_id={self.warehouse.id}&date_shamsi={today_str}')
         self.assertEqual(res.status_code, 200)
         p_row = next(r for r in res.data['rows'] if r['personnel_id'] == self.personnel.id)
         self.assertFalse(p_row['is_existing'])
-        # باید وضعیت دیروز (LEAVE) به عنوان پیش‌فرض بارگذاری شده باشد
-        self.assertEqual(p_row['status'], 'LEAVE')
+        # باید وضعیت تمیز و خالی باشد تا دکمه پاکسازی یا لود روزهای ثبت‌نشده بدون دستکاری عمل کند
+        self.assertEqual(p_row['status'], '')
         self.assertEqual(p_row['effective_hours'], 0.0)
 
     def test_warehouse_independent_attendance(self):
@@ -758,6 +759,178 @@ class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
         res = self.client.post('/api/personnel/attendance/bulk-save/', payload, format='json')
         self.assertEqual(res.status_code, 400)
         self.assertIn('قفل', str(res.json()))
+
+    def test_two_step_approval_workflow(self):
+        """تست گردش کار دو مرحله‌ای تایید کارکرد (ارسال، تایید، رد و بازگشایی)"""
+        import jdatetime
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+
+        # ۱. سرپرست ارسال می‌کند (submit)
+        res_submit = self.client.post('/api/personnel/periods/workflow-action/', {
+            'warehouse_id': self.warehouse.id,
+            'year_month': year_month,
+            'action': 'submit',
+            'notes': 'کارکرد تیرماه آماده بررسی مالی است'
+        }, format='json')
+        self.assertEqual(res_submit.status_code, 200)
+        self.assertEqual(res_submit.data['period']['status'], 'SUBMITTED')
+
+        # ۲. مدیر مالی رد می‌کند با ذکر علت (reject)
+        res_reject = self.client.post('/api/personnel/periods/workflow-action/', {
+            'warehouse_id': self.warehouse.id,
+            'year_month': year_month,
+            'action': 'reject',
+            'notes': 'اضافه‌کار روز ۱۵ نامعتبر است'
+        }, format='json')
+        self.assertEqual(res_reject.status_code, 200)
+        self.assertEqual(res_reject.data['period']['status'], 'REJECTED')
+        self.assertEqual(res_reject.data['period']['rejection_reason'], 'اضافه‌کار روز ۱۵ نامعتبر است')
+
+        # ۳. سرپرست اصلاح کرده و دوباره ارسال می‌کند
+        res_submit2 = self.client.post('/api/personnel/periods/workflow-action/', {
+            'warehouse_id': self.warehouse.id,
+            'year_month': year_month,
+            'action': 'submit',
+            'notes': 'اصلاح انجام شد'
+        }, format='json')
+        self.assertEqual(res_submit2.status_code, 200)
+        self.assertEqual(res_submit2.data['period']['status'], 'SUBMITTED')
+
+        # ۴. مدیر مالی تایید نهایی و قفل می‌کند (approve)
+        res_approve = self.client.post('/api/personnel/periods/workflow-action/', {
+            'warehouse_id': self.warehouse.id,
+            'year_month': year_month,
+            'action': 'approve'
+        }, format='json')
+        self.assertEqual(res_approve.status_code, 200)
+        self.assertEqual(res_approve.data['period']['status'], 'LOCKED')
+
+    def test_export_monthly_grid_excel(self):
+        """تست خروجی فایل اکسل استاندارد دو سطری شیت ماهانه"""
+        import jdatetime
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+
+        res = self.client.get(f'/api/personnel/attendance/export-monthly-excel/?warehouse_id={self.warehouse.id}&year_month={year_month}')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        self.assertIn('Timesheet_', res['Content-Disposition'])
+
+    def test_monthly_grid_anomaly_detection(self):
+        """تست شناسایی خودکار ناهنجاری‌ها مانند کارکرد بیش از ۱۶ ساعت در شیت ماهانه"""
+        import jdatetime
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+        date_str = f"{year_month}/10"
+
+        # ثبت کارکرد ۱۸ ساعته (بیش از سقف ۱۶ ساعت)
+        DailyAttendance.objects.create(
+            personnel=self.personnel,
+            warehouse=self.warehouse,
+            date_shamsi=date_str,
+            status='PRESENT_10H',
+            effective_hours=10,
+            overtime_hours=8  # ۱۰ + ۸ = ۱۸ ساعت
+        )
+
+        res = self.client.get(f'/api/personnel/attendance/monthly-grid/?warehouse_id={self.warehouse.id}&year_month={year_month}')
+        self.assertEqual(res.status_code, 200)
+        anomalies = res.data.get('anomalies', [])
+        self.assertTrue(any(a['type'] == 'EXCESSIVE_HOURS' for a in anomalies))
+
+    def test_import_monthly_excel_leading_zeros_and_audit(self):
+        """تست درون‌ریزی اکسل با کد ملی دارای صفر ابتدایی، انتساب پریود و ثبت لاگ ممیزی"""
+        import io
+        import openpyxl
+        import jdatetime
+
+        today = jdatetime.date.today()
+        year_month = f"{today.year:04d}/{today.month:02d}"
+
+        # به پرسنل تست یک کد ملی با صفر اول می‌دهیم
+        self.personnel.national_code = '0012345678'
+        self.personnel.save()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=1, column=1, value='ردیف')
+        ws.cell(row=1, column=2, value='کد ملی')
+        ws.cell(row=1, column=3, value='نام پرسنل')
+        ws.cell(row=1, column=4, value='سمت')
+        ws.cell(row=1, column=5, value='انبار')
+        ws.cell(row=1, column=6, value='روز ۰۱')
+
+        ws.cell(row=2, column=1, value='row_num')
+        ws.cell(row=2, column=2, value='national_code')
+        ws.cell(row=2, column=3, value='full_name')
+        ws.cell(row=2, column=4, value='job_title')
+        ws.cell(row=2, column=5, value='warehouse_name')
+        ws.cell(row=2, column=6, value='day_01')
+
+        # ردیف ۳: اکسل صفر اول را می‌اندازد و ۱۲۳۴۵۶۷۸ ذخیره می‌کند
+        ws.cell(row=3, column=1, value=1)
+        ws.cell(row=3, column=2, value=12345678)  # عددی بدون صفر اول
+        ws.cell(row=3, column=3, value=self.personnel.full_name)
+        ws.cell(row=3, column=4, value='کارگر')
+        ws.cell(row=3, column=5, value=self.warehouse.name)
+        ws.cell(row=3, column=6, value=10)
+
+        stream = io.BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        excel_file = SimpleUploadedFile(
+            'timesheet.xlsx',
+            stream.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+        res = self.client.post('/api/personnel/attendance/import-monthly-excel/', {
+            'file': excel_file,
+            'year_month': year_month,
+            'warehouse_id': self.warehouse.id,
+            'is_override': 'true'
+        }, format='multipart')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['matched_personnel_count'], 1)
+        self.assertEqual(res.data['updated_cells'], 1)
+
+        # بررسی ایجاد رکورد، انتساب period و ثبت لاگ ممیزی
+        att = DailyAttendance.objects.filter(personnel=self.personnel, date_shamsi=f"{year_month}/01").first()
+        self.assertIsNotNone(att)
+        self.assertIsNotNone(att.period)
+        self.assertEqual(float(att.effective_hours), 10.0)
+
+        # بررسی ثبت لاگ
+        logs = AttendanceAuditLog.objects.filter(attendance=att)
+        self.assertTrue(logs.exists())
+
+    def test_rejected_period_date_window_bypass(self):
+        """تست لغو سقف روزهای گذشته در صورت REJECTED بودن دوره کارکرد"""
+        from personnel.views import validate_attendance_date_window
+        import jdatetime
+        today = jdatetime.date.today()
+        # تاریخی در ۲۰ روز قبل
+        past_date = today - jdatetime.timedelta(days=20)
+        year_month = f"{past_date.year:04d}/{past_date.month:02d}"
+        date_str = f"{year_month}/{past_date.day:02d}"
+
+        # دوره‌ای با وضعیت REJECTED ایجاد می‌کنیم
+        MonthlyWorkPeriod.objects.create(
+            warehouse=self.warehouse,
+            year_month=year_month,
+            status='REJECTED',
+            rejection_reason='لطفا اصلاح فرمایید'
+        )
+
+        # نباید خطای سقف روز گذشته بدهد
+        is_valid = validate_attendance_date_window(date_str, user=self.user, warehouse_id=self.warehouse.id)
+        self.assertTrue(is_valid)
+
+
 
 
 

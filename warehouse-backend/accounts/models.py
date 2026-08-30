@@ -41,7 +41,11 @@ class CustomUser(AbstractUser):
             ("view_sys_recounts", "بررسی مغایرت و بازشماری"),
             ("view_sys_settings", "تنظیمات سیستم"),
             ("view_sys_reports", "گزارش‌ساز"),
-            ("view_sys_personnel", "مدیریت پرسنل و ناوگان"),
+            ("view_sys_personnel", "مدیریت پرسنل و کارگزینی"),
+            ("view_sys_personnel_attendance", "ثبت کارکرد پرسنل"),
+            ("view_sys_fleet_attendance", "ثبت کارکرد ناوگان و ماشین‌آلات"),
+            ("view_sys_payroll", "محاسبات حقوق و دستمزد پرسنل"),
+            ("view_sys_fleet_settlement", "تسویه و محاسبات مالی ناوگان"),
             
             # Warehouse Tabs (منوی انبار)
             ("view_wh_dashboard", "داشبورد انبار"),

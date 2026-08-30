@@ -420,7 +420,9 @@ class VehicleTripLog(models.Model):
     )
     warehouse = models.ForeignKey(
         'warehouses.Warehouse',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='vehicle_trip_logs',
         verbose_name="انبار"
     )
@@ -470,6 +472,41 @@ class VehicleTripLog(models.Model):
 
     def __str__(self):
         return f"{self.vehicle.driver_name} | {self.date_shamsi} | {self.trip_count} سرویس ({self.total_amount:,} ریال)"
+
+
+class VehicleTripAuditLog(models.Model):
+    """
+    لاگ ممیزی و تاریخچه تغییرات تردد و سرویس‌های ناوگان (بدون حذف، جهت نظارت مدیر)
+    """
+    trip = models.ForeignKey(
+        VehicleTripLog,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+        verbose_name="رکورد سرویس ناوگان"
+    )
+    driver_name = models.CharField(max_length=150, verbose_name="نام راننده")
+    plate_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="پلاک")
+    date_shamsi = models.CharField(max_length=10, verbose_name="تاریخ کارکرد")
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="کاربر ویرایش‌کننده"
+    )
+    changed_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان تغییر")
+    field_name = models.CharField(max_length=100, verbose_name="نام فیلد")
+    old_value = models.TextField(blank=True, null=True, verbose_name="مقدار قبلی")
+    new_value = models.TextField(blank=True, null=True, verbose_name="مقدار جدید")
+    reason = models.CharField(max_length=255, blank=True, null=True, verbose_name="دلیل ویرایش")
+
+    class Meta:
+        verbose_name = "لاگ ممیزی ناوگان"
+        verbose_name_plural = "لاگ‌های ممیزی ناوگان"
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"تغییر {self.field_name} برای {self.driver_name} در {self.date_shamsi}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

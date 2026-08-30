@@ -19,6 +19,7 @@ from .models import (
     DailyAttendance,
     AttendanceAuditLog,
     VehicleTripLog,
+    VehicleTripAuditLog,
     PayrollYearlySettings,
     JobGradeTier,
     WorkshopInsuranceSettings,
@@ -35,7 +36,11 @@ from .serializers import (
     MonthlyGridItemInputSerializer,
     AttendanceAuditLogSerializer,
     VehicleTripLogSerializer,
+    VehicleTripAuditLogSerializer,
     BulkVehicleTripMatrixSerializer,
+    VehicleDayTripUpdateSerializer,
+    VehicleMonthlyGridItemInputSerializer,
+    BulkVehicleMonthlyGridSerializer,
     MonthlyWorkPeriodSerializer,
     PayrollYearlySettingsSerializer,
     JobGradeTierSerializer,
@@ -48,6 +53,8 @@ from .payroll_engine import calculate_monthly_payroll_for_period
 from .dbf_generator import generate_dskkar_bytes, generate_dskwor_bytes
 from .tax_bank_exporter import generate_wh_tax_content, generate_wp_tax_content, generate_bank_meli_excel
 from .payroll_excel_exporter import generate_monthly_payroll_excel
+from .fleet_excel_engine import export_fleet_monthly_excel, import_fleet_monthly_excel
+from .fleet_settlement_engine import calculate_monthly_fleet_settlement, generate_fleet_bank_meli_excel
 
 
 class PersonnelProfileViewSet(viewsets.ModelViewSet):
@@ -1881,24 +1888,36 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
     def get_matrix(self, request):
         """
         دریافت لیست سریع خودروها برای ثبت سرویس روزانه
+        (پشتیبانی از فیلتر انبار و همچنین حالت سراسری کلیه خودروها)
         """
-        warehouse_id = request.query_params.get('warehouse_id')
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
         date_shamsi = request.query_params.get('date_shamsi')
-        if not warehouse_id or not date_shamsi:
-            return Response({'error': 'warehouse_id و date_shamsi الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not date_shamsi:
+            return Response({'error': 'پارامتر date_shamsi الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        vehicles = VehicleDriverProfile.objects.filter(
-            Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
-            is_active=True
-        ).order_by('driver_name')
-
-        existing_trips = {
-            t.vehicle_id: t
-            for t in VehicleTripLog.objects.filter(
+        if warehouse_id:
+            vehicles = VehicleDriverProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('driver_name')
+            trip_qs = VehicleTripLog.objects.filter(
                 warehouse_id=warehouse_id,
                 date_shamsi=date_shamsi,
                 is_deleted=False
             )
+        else:
+            vehicles = VehicleDriverProfile.objects.filter(
+                is_active=True
+            ).order_by('driver_name')
+            trip_qs = VehicleTripLog.objects.filter(
+                date_shamsi=date_shamsi,
+                is_deleted=False
+            )
+
+        existing_trips = {
+            t.vehicle_id: t
+            for t in trip_qs
         }
 
         matrix_rows = []
@@ -1938,7 +1957,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                 })
 
         return Response({
-            'warehouse_id': int(warehouse_id),
+            'warehouse_id': warehouse_id,
             'date_shamsi': date_shamsi,
             'rows': matrix_rows
         })
@@ -2021,7 +2040,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                             origin_destination=item.get('origin_destination', ''),
                             notes=item.get('notes', ''),
                             period=target_period,
-                            created_by=request.user
+                            created_by=request.user if (request.user and request.user.is_authenticated) else None
                         )
                     saved_count += 1
                 else:
@@ -2064,21 +2083,30 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         """
         گزارش کاردکس و عملکرد ماهانه خودروها
         """
-        warehouse_id = request.query_params.get('warehouse_id')
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
         year_month = request.query_params.get('year_month')
-        if not warehouse_id or not year_month:
-            return Response({'error': 'warehouse_id و year_month الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        vehicles = VehicleDriverProfile.objects.filter(
-            Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
-            is_active=True
-        ).order_by('driver_name')
-
-        trips = VehicleTripLog.objects.filter(
-            warehouse_id=warehouse_id,
-            date_shamsi__startswith=year_month,
-            is_deleted=False
-        )
+        if warehouse_id:
+            vehicles = VehicleDriverProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('driver_name')
+            trips = VehicleTripLog.objects.filter(
+                warehouse_id=warehouse_id,
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
+        else:
+            vehicles = VehicleDriverProfile.objects.filter(
+                is_active=True
+            ).order_by('driver_name')
+            trips = VehicleTripLog.objects.filter(
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
 
         summary_rows = []
         for v in vehicles:
@@ -2100,10 +2128,482 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
             })
 
         return Response({
-            'warehouse_id': int(warehouse_id),
+            'warehouse_id': warehouse_id,
             'year_month': year_month,
             'summary': summary_rows
         })
+
+    @action(detail=False, methods=['get'], url_path='monthly-grid')
+    def get_monthly_grid(self, request):
+        """
+        دریافت ماتریس تردد ۳۱ روزه کلیه خودروها در یک ماه مشخص (نمای شیت ماهانه ناوگان)
+        """
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_year_month = request.query_params.get('year_month')
+        if not raw_year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # نرمال‌سازی سال و ماه
+        ym_cleaned = normalize_digits(str(raw_year_month)).strip().replace('-', '/')
+        parts = ym_cleaned.split('/')
+        if len(parts) >= 2:
+            y, m = int(parts[0]), int(parts[1])
+            year_month = f"{y:04d}/{m:02d}"
+        else:
+            digits_only = ''.join(c for c in ym_cleaned if c.isdigit())
+            if len(digits_only) >= 6:
+                y, m = int(digits_only[:4]), int(digits_only[4:6])
+                year_month = f"{y:04d}/{m:02d}"
+            else:
+                return Response({'error': 'فرمت year_month نامعتبر است (مثال: 1405/04).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if 1 <= m <= 6:
+            days_in_month = 31
+        elif 7 <= m <= 11:
+            days_in_month = 30
+        elif m == 12:
+            days_in_month = 30 if jdatetime.date(y, 1, 1).isleap() else 29
+        else:
+            return Response({'error': 'شماره ماه باید بین ۱ تا ۱۲ باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        month_names = ["", "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"]
+        month_name = month_names[m] if 1 <= m <= 12 else ""
+
+        is_locked = False
+        period_status = 'OPEN'
+        if warehouse_id:
+            period_obj = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+            if period_obj:
+                period_status = period_obj.status
+                is_locked = period_obj.status in ['LOCKED', 'SUBMITTED', 'FINALIZED']
+
+        today = jdatetime.date.today()
+        days_meta = []
+        weekday_names = ["ش", "ی", "د", "س", "چ", "پ", "ج"]
+        full_weekday_names = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه"]
+
+        for d in range(1, days_in_month + 1):
+            target_date = jdatetime.date(y, m, d)
+            weekday = target_date.weekday()
+            is_friday = (weekday == 6)
+            date_str = f"{year_month}/{d:02d}"
+            days_meta.append({
+                'day': d,
+                'date_shamsi': date_str,
+                'weekday_short': weekday_names[weekday],
+                'weekday_name': full_weekday_names[weekday],
+                'is_friday': is_friday,
+                'is_editable': not is_locked,
+                'is_today': (target_date == today)
+            })
+
+        if warehouse_id:
+            vehicles = VehicleDriverProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('driver_name')
+        else:
+            vehicles = VehicleDriverProfile.objects.filter(
+                is_active=True
+            ).order_by('driver_name')
+
+        trips = VehicleTripLog.objects.filter(
+            date_shamsi__startswith=year_month,
+            is_deleted=False
+        )
+        if warehouse_id:
+            trips = trips.filter(warehouse_id=warehouse_id)
+
+        trip_map = {}
+        for t in trips:
+            try:
+                d_num = int(t.date_shamsi.split('/')[2])
+                trip_map[(t.vehicle_id, d_num)] = t
+            except Exception:
+                continue
+
+        grid_rows = []
+        for v in vehicles:
+            v_days = []
+            total_trips = 0
+            total_amount = 0.0
+            active_days_count = 0
+
+            for dm in days_meta:
+                d = dm['day']
+                date_str = dm['date_shamsi']
+                t = trip_map.get((v.id, d))
+                if t:
+                    c = t.trip_count
+                    rate = float(t.unit_rate)
+                    amt = float(t.total_amount)
+                    total_trips += c
+                    if v.ownership_type in ['contract', 'personal']:
+                        total_amount += amt
+                    if c > 0:
+                        active_days_count += 1
+
+                    v_days.append({
+                        'day': d,
+                        'date_shamsi': date_str,
+                        'trip_id': t.id,
+                        'trip_count': c,
+                        'unit_rate': rate,
+                        'total_amount': amt,
+                        'dispatch_reference': t.dispatch_reference or '',
+                        'origin_destination': t.origin_destination or '',
+                        'notes': t.notes or '',
+                        'is_existing': True
+                    })
+                else:
+                    def_rate = float(v.default_service_rate)
+                    v_days.append({
+                        'day': d,
+                        'date_shamsi': date_str,
+                        'trip_id': None,
+                        'trip_count': 0,
+                        'unit_rate': def_rate,
+                        'total_amount': 0.0,
+                        'dispatch_reference': '',
+                        'origin_destination': '',
+                        'notes': '',
+                        'is_existing': False
+                    })
+
+            grid_rows.append({
+                'vehicle_id': v.id,
+                'driver_name': v.driver_name,
+                'plate_number': v.plate_number,
+                'vehicle_type': v.vehicle_type,
+                'vehicle_type_display': v.get_vehicle_type_display(),
+                'ownership_type': v.ownership_type,
+                'ownership_type_display': v.get_ownership_type_display(),
+                'default_rate': float(v.default_service_rate),
+                'sheba_number': v.sheba_number or '',
+                'total_trips': total_trips,
+                'total_amount': total_amount,
+                'active_days': active_days_count,
+                'days': v_days
+            })
+
+        return Response({
+            'warehouse_id': warehouse_id,
+            'year_month': year_month,
+            'month_name': month_name,
+            'days_in_month': days_in_month,
+            'days_meta': days_meta,
+            'is_locked': is_locked,
+            'period_status': period_status,
+            'rows': grid_rows
+        })
+
+    @action(detail=False, methods=['post'], url_path='update-day-trip')
+    def update_day_trip(self, request):
+        """
+        ویرایش یا ثبت سریع سرویس یک روز خاص از تقویم ماهانه
+        """
+        serializer = VehicleDayTripUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        vehicle_id = serializer.validated_data['vehicle_id']
+        raw_wh = serializer.validated_data.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        date_shamsi = serializer.validated_data['date_shamsi']
+        trip_count = serializer.validated_data.get('trip_count', 0)
+        unit_rate = serializer.validated_data.get('unit_rate')
+        dispatch_ref = serializer.validated_data.get('dispatch_reference', '') or ''
+        orig_dest = serializer.validated_data.get('origin_destination', '') or ''
+        notes = serializer.validated_data.get('notes', '') or ''
+        client_tab_id = serializer.validated_data.get('client_tab_id')
+
+        v_obj = VehicleDriverProfile.objects.filter(id=vehicle_id).first()
+        if not v_obj:
+            return Response({'error': 'خودرو یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if unit_rate is None:
+            unit_rate = v_obj.default_service_rate
+
+        target_wh = warehouse_id if warehouse_id else v_obj.assigned_warehouse_id
+        year_month = date_shamsi[:7]
+
+        allow_override = bool(request.data.get('is_override', False) or request.headers.get('X-Admin-Override') == 'true')
+        is_admin_override = allow_override and (getattr(request.user, 'is_superuser', False) or request.user.has_perm('personnel.can_override_attendance_lock'))
+
+        # بررسی قفل دوره
+        if target_wh and not is_admin_override:
+            period = MonthlyWorkPeriod.objects.filter(warehouse_id=target_wh, year_month=year_month).first()
+            if period and period.status in ['LOCKED', 'SUBMITTED', 'FINALIZED']:
+                return Response({'error': f'دوره کارکرد {year_month} قفل شده است و امکان ویرایش وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            trip_obj = VehicleTripLog.objects.filter(
+                vehicle_id=vehicle_id,
+                warehouse_id=target_wh,
+                date_shamsi=date_shamsi,
+                is_deleted=False
+            ).first()
+
+            if trip_count > 0:
+                total_amount = unit_rate * trip_count
+                if trip_obj:
+                    old_trips = trip_obj.trip_count
+                    old_rate = trip_obj.unit_rate
+                    if old_trips != trip_count:
+                        VehicleTripAuditLog.objects.create(
+                            trip=trip_obj,
+                            driver_name=v_obj.driver_name,
+                            plate_number=v_obj.plate_number,
+                            date_shamsi=date_shamsi,
+                            changed_by=request.user if request.user.is_authenticated else None,
+                            field_name='trip_count',
+                            old_value=str(old_trips),
+                            new_value=str(trip_count),
+                            reason=notes or 'ویرایش سریع روزانه'
+                        )
+                    if old_rate != unit_rate:
+                        VehicleTripAuditLog.objects.create(
+                            trip=trip_obj,
+                            driver_name=v_obj.driver_name,
+                            plate_number=v_obj.plate_number,
+                            date_shamsi=date_shamsi,
+                            changed_by=request.user if request.user.is_authenticated else None,
+                            field_name='unit_rate',
+                            old_value=str(old_rate),
+                            new_value=str(unit_rate),
+                            reason=notes or 'تغییر نرخ سرویس'
+                        )
+                    trip_obj.trip_count = trip_count
+                    trip_obj.unit_rate = unit_rate
+                    trip_obj.total_amount = total_amount
+                    trip_obj.dispatch_reference = dispatch_ref
+                    trip_obj.origin_destination = orig_dest
+                    trip_obj.notes = notes
+                    trip_obj.is_deleted = False
+                    trip_obj.save()
+                else:
+                    trip_obj = VehicleTripLog.objects.create(
+                        vehicle_id=vehicle_id,
+                        warehouse_id=target_wh,
+                        date_shamsi=date_shamsi,
+                        trip_count=trip_count,
+                        unit_rate=unit_rate,
+                        total_amount=total_amount,
+                        dispatch_reference=dispatch_ref,
+                        origin_destination=orig_dest,
+                        notes=notes,
+                        created_by=request.user if request.user.is_authenticated else None
+                    )
+                    VehicleTripAuditLog.objects.create(
+                        trip=trip_obj,
+                        driver_name=v_obj.driver_name,
+                        plate_number=v_obj.plate_number,
+                        date_shamsi=date_shamsi,
+                        changed_by=request.user if request.user.is_authenticated else None,
+                        field_name='create',
+                        old_value='0',
+                        new_value=str(trip_count),
+                        reason=notes or 'ثبت اولیه تردد'
+                    )
+            else:
+                if trip_obj:
+                    VehicleTripAuditLog.objects.create(
+                        trip=trip_obj,
+                        driver_name=v_obj.driver_name,
+                        plate_number=v_obj.plate_number,
+                        date_shamsi=date_shamsi,
+                        changed_by=request.user if request.user.is_authenticated else None,
+                        field_name='delete',
+                        old_value=str(trip_obj.trip_count),
+                        new_value='0',
+                        reason='حذف تردد'
+                    )
+                    trip_obj.is_deleted = True
+                    trip_obj.save()
+
+        # ارسال برودکست وب‌سوکت
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    'global_notifications',
+                    {
+                        'type': 'send_notification',
+                        'type_str': 'fleet_trips_updated',
+                        'message': f'تردد خودرو {v_obj.driver_name} در تاریخ {date_shamsi} به‌روزرسانی شد.',
+                        'warehouse_id': warehouse_id,
+                        'date_shamsi': date_shamsi,
+                        'year_month': year_month,
+                        'sender_id': request.user.id if request.user and request.user.is_authenticated else None,
+                        'client_tab_id': client_tab_id
+                    }
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting fleet_trips_updated: {e}")
+
+        return Response({
+            'message': f'تردد خودرو {v_obj.driver_name} برای تاریخ {date_shamsi} با موفقیت ثبت شد.',
+            'trip_id': trip_obj.id if (trip_count > 0 and trip_obj) else None
+        })
+
+    @action(detail=False, methods=['get'], url_path='audit-logs')
+    def audit_logs(self, request):
+        """
+        لیست تاریخچه و ممیزی تغییرات تردد ناوگان
+        """
+        vehicle_id = request.query_params.get('vehicle_id')
+        year_month = request.query_params.get('year_month')
+        qs = VehicleTripAuditLog.objects.all().select_related('changed_by')
+        if vehicle_id:
+            qs = qs.filter(trip__vehicle_id=vehicle_id)
+        if year_month:
+            qs = qs.filter(date_shamsi__startswith=year_month)
+
+        serializer = VehicleTripAuditLogSerializer(qs[:100], many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='bulk-save-monthly-grid')
+    def bulk_save_monthly_grid(self, request):
+        """
+        ثبت دسته‌جمعی ماتریس ۳۱ روزه ناوگان
+        """
+        serializer = BulkVehicleMonthlyGridSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        raw_wh = serializer.validated_data.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        year_month = serializer.validated_data['year_month']
+        items = serializer.validated_data['items']
+        client_tab_id = serializer.validated_data.get('client_tab_id')
+
+        if warehouse_id:
+            period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+            if period and period.status in ['LOCKED', 'SUBMITTED', 'FINALIZED']:
+                return Response({'error': f'دوره کارکرد {year_month} قفل شده است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        saved_count = 0
+        with transaction.atomic():
+            for item in items:
+                v_id = item['vehicle_id']
+                day = item['day']
+                trip_count = item.get('trip_count', 0)
+                v_obj = VehicleDriverProfile.objects.filter(id=v_id).first()
+                if not v_obj:
+                    continue
+
+                target_wh = warehouse_id if warehouse_id else v_obj.assigned_warehouse_id
+                date_shamsi = f"{year_month}/{day:02d}"
+                unit_rate = item.get('unit_rate') or v_obj.default_service_rate
+                total_amount = unit_rate * trip_count
+
+                trip_obj = VehicleTripLog.objects.filter(
+                    vehicle_id=v_id,
+                    warehouse_id=target_wh,
+                    date_shamsi=date_shamsi,
+                    is_deleted=False
+                ).first()
+
+                if trip_count > 0:
+                    if trip_obj:
+                        trip_obj.trip_count = trip_count
+                        trip_obj.unit_rate = unit_rate
+                        trip_obj.total_amount = total_amount
+                        trip_obj.dispatch_reference = item.get('dispatch_reference', '') or ''
+                        trip_obj.origin_destination = item.get('origin_destination', '') or ''
+                        trip_obj.notes = item.get('notes', '') or ''
+                        trip_obj.save()
+                    else:
+                        VehicleTripLog.objects.create(
+                            vehicle_id=v_id,
+                            warehouse_id=target_wh,
+                            date_shamsi=date_shamsi,
+                            trip_count=trip_count,
+                            unit_rate=unit_rate,
+                            total_amount=total_amount,
+                            dispatch_reference=item.get('dispatch_reference', '') or '',
+                            origin_destination=item.get('origin_destination', '') or '',
+                            notes=item.get('notes', '') or '',
+                            created_by=request.user
+                        )
+                    saved_count += 1
+                else:
+                    if trip_obj:
+                        trip_obj.is_deleted = True
+                        trip_obj.save()
+
+        # وب‌سوکت
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    'global_notifications',
+                    {
+                        'type': 'send_notification',
+                        'type_str': 'fleet_trips_updated',
+                        'message': f'ماتریس ۳۱ روزه ناوگان برای دوره {year_month} ذخیره شد.',
+                        'warehouse_id': warehouse_id,
+                        'year_month': year_month,
+                        'sender_id': request.user.id if request.user and request.user.is_authenticated else None,
+                        'client_tab_id': client_tab_id
+                    }
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting fleet_trips_updated: {e}")
+
+        return Response({
+            'message': f'ماتریس ۳۱ روزه ناوگان برای دوره {year_month} با موفقیت ذخیره شد.',
+            'saved_count': saved_count
+        })
+
+    @action(detail=False, methods=['get'], url_path='export-monthly-excel')
+    def export_monthly_excel(self, request):
+        """
+        دانلود فایل اکسل ۳۱ روزه استاندارد کارکرد و تردد ناوگان
+        """
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        year_month = request.query_params.get('year_month')
+        if not year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        excel_buffer = export_fleet_monthly_excel(warehouse_id=warehouse_id, year_month=year_month)
+        filename = f"Fleet_Timesheet_{year_month.replace('/', '_')}.xlsx"
+        response = HttpResponse(
+            excel_buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=['post'], url_path='import-monthly-excel')
+    def import_monthly_excel(self, request):
+        """
+        درون‌ریزی فایل اکسل ۳۱ روزه کارکرد ناوگان
+        """
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایل اکسل الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        raw_wh = request.data.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        year_month = request.data.get('year_month')
+
+        try:
+            result = import_fleet_monthly_excel(
+                file_obj=file_obj,
+                warehouse_id=warehouse_id,
+                year_month=year_month,
+                user=request.user
+            )
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
@@ -2754,5 +3254,52 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
             return Response({
                 'error': f'خطا در پردازش فایل اکسل مالیات: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FleetSettlementViewSet(viewsets.ViewSet):
+    """
+    ویوست تسویه و محاسبات مالی ناوگان خودرویی
+    - محاسبه مبالغ تسویه ماهانه
+    - تولید فایل پرداخت گروهی بانک ملی
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['get'], url_path='calculate')
+    def calculate(self, request):
+        year_month = request.query_params.get('year_month')
+        warehouse_id = request.query_params.get('warehouse_id')
+        if not year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wh_id = int(warehouse_id) if (warehouse_id and warehouse_id.isdigit()) else None
+        try:
+            data = calculate_monthly_fleet_settlement(warehouse_id=wh_id, year_month=year_month)
+            return Response(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': f'خطا در محاسبه تسویه ناوگان: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], url_path='export-bank-excel')
+    def export_bank_excel(self, request):
+        year_month = request.query_params.get('year_month')
+        warehouse_id = request.query_params.get('warehouse_id')
+        if not year_month:
+            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wh_id = int(warehouse_id) if (warehouse_id and warehouse_id.isdigit()) else None
+        try:
+            data = calculate_monthly_fleet_settlement(warehouse_id=wh_id, year_month=year_month)
+            excel_file = generate_fleet_bank_meli_excel(data, year_month)
+
+            clean_ym = year_month.replace('/', '_')
+            filename = f"fleet_bank_payment_{clean_ym}.xlsx"
+            response = HttpResponse(
+                excel_file.getvalue(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response({'error': f'خطا در تولید فایل اکسل پرداخت بانک ملی: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 

@@ -22,6 +22,11 @@ class Command(BaseCommand):
             {'codename': 'view_sys_recounts', 'name': 'بررسی مغایرت و بازشماری'},
             {'codename': 'view_sys_settings', 'name': 'تنظیمات سیستم'},
             {'codename': 'view_sys_reports', 'name': 'گزارش‌ساز'},
+            {'codename': 'view_sys_personnel', 'name': 'مدیریت پرسنل و کارگزینی'},
+            {'codename': 'view_sys_personnel_attendance', 'name': 'ثبت کارکرد پرسنل'},
+            {'codename': 'view_sys_fleet_attendance', 'name': 'ثبت کارکرد ناوگان و ماشین‌آلات'},
+            {'codename': 'view_sys_payroll', 'name': 'محاسبات حقوق و دستمزد پرسنل'},
+            {'codename': 'view_sys_fleet_settlement', 'name': 'تسویه و محاسبات مالی ناوگان'},
             {'codename': 'perm_sys_settings', 'name': 'تنظیمات کلان سیستم'},
             {'codename': 'perm_sys_logs', 'name': 'مشاهده لاگ‌های امنیتی (Audit)'},
             

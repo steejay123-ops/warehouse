@@ -8,6 +8,7 @@ from .models import (
     DailyAttendance,
     AttendanceAuditLog,
     VehicleTripLog,
+    VehicleTripAuditLog,
     PayrollYearlySettings,
     JobGradeTier,
     WorkshopInsuranceSettings,
@@ -15,6 +16,20 @@ from .models import (
     BankExportSettings,
     MonthlyPayrollRecord
 )
+from .sheba_utils import validate_sheba, clean_sheba, get_bank_from_sheba
+
+
+class VehicleTripAuditLogSerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VehicleTripAuditLog
+        fields = '__all__'
+
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return f"{obj.changed_by.first_name} {obj.changed_by.last_name}".strip() or obj.changed_by.username
+        return 'سیستم'
 
 
 class JobGradeTierSerializer(serializers.ModelSerializer):
@@ -83,6 +98,15 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("کد ملی باید دقیقاً ۱۰ رقم عددی باشد.")
         return clean_code
 
+    def validate_sheba_number(self, value):
+        if not value or not str(value).strip():
+            return value
+        cleaned = clean_sheba(value)
+        is_valid, err_msg, _ = validate_sheba(cleaned)
+        if not is_valid:
+            raise serializers.ValidationError(err_msg or "شماره شبا نامعتبر است.")
+        return cleaned
+
 
 class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     vehicle_type_display = serializers.CharField(source='get_vehicle_type_display', read_only=True)
@@ -94,6 +118,24 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
         model = VehicleDriverProfile
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+    def validate_sheba_number(self, value):
+        if not value or not str(value).strip():
+            return value
+        cleaned = clean_sheba(value)
+        is_valid, err_msg, _ = validate_sheba(cleaned)
+        if not is_valid:
+            raise serializers.ValidationError(err_msg or "شماره شبا نامعتبر است.")
+        return cleaned
+
+    def validate(self, data):
+        sheba = data.get('sheba_number')
+        bank_name = data.get('bank_name')
+        if sheba and not bank_name:
+            bank_info = get_bank_from_sheba(sheba)
+            if bank_info:
+                data['bank_name'] = bank_info['name']
+        return data
 
 
 class AttendanceAuditLogSerializer(serializers.ModelSerializer):
@@ -185,8 +227,38 @@ class VehicleTripItemInputSerializer(serializers.Serializer):
 
 class BulkVehicleTripMatrixSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
-    date_shamsi = serializers.CharField(max_length=10)
+    date_shamsi = serializers.CharField(max_length=15)
+    client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = VehicleTripItemInputSerializer(many=True)
+
+
+class VehicleDayTripUpdateSerializer(serializers.Serializer):
+    vehicle_id = serializers.IntegerField()
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    date_shamsi = serializers.CharField(max_length=15)
+    trip_count = serializers.IntegerField(default=0)
+    unit_rate = serializers.DecimalField(max_digits=14, decimal_places=0, required=False, allow_null=True)
+    dispatch_reference = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    origin_destination = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
+
+
+class VehicleMonthlyGridItemInputSerializer(serializers.Serializer):
+    vehicle_id = serializers.IntegerField()
+    day = serializers.IntegerField(min_value=1, max_value=31)
+    trip_count = serializers.IntegerField(default=0)
+    unit_rate = serializers.DecimalField(max_digits=14, decimal_places=0, required=False, allow_null=True)
+    dispatch_reference = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    origin_destination = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+
+class BulkVehicleMonthlyGridSerializer(serializers.Serializer):
+    warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    year_month = serializers.CharField(max_length=10)
+    client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
+    items = VehicleMonthlyGridItemInputSerializer(many=True)
 
 
 class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):

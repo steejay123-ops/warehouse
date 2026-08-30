@@ -20,6 +20,9 @@
 - **Excel & Export Standards:** Exports MUST follow the 2-row header architecture (Row 1: Persian display titles, Row 2: Database field keys in light slate font), with `freeze_panes = 'A3'`, and all timestamps converted to Shamsi (`YYYY/MM/DD HH:MM:SS`) via server localtime.
 - **Graceful Offline Degradation:** In offline or Lie-Fi states, NEVER throw blocking red error toasts for read/stats endpoints. Use `SKIP_GLOBAL_ERROR_TOAST: true` and preserve local pending records (`_offlinePending`).
 - **Real-Time WebSocket Integrity:** Live WebSocket handlers MUST update records in-place without full page reloads, and ALWAYS verify `warehouse_id` before patching.
+- **WebSocket Echo & Tab Isolation:** WebSocket echo filtering MUST compare browser client tab/connection IDs (not solely `user_id`), ensuring multi-device usage by the same user updates smoothly without throwing false conflict alerts.
+- **PostgreSQL Field Truncation & Rollback Safety:** When restoring, mapping, or rolling back data across different models (e.g. from `Item` to `DocTask`), always clean and truncate string/decimal fields to match destination schema lengths to prevent PostgreSQL `DataError: value too long` aborting transactions.
+- **Shamsi Date Parsing Robustness:** Global date utilities must gracefully handle unseparated 8-digit strings (e.g., `14050607`) into standard Shamsi `YYYY/MM/DD` without crashing datepickers or serializers.
 - **Sensitive RBAC Protection:** The 6 sensitive permissions (rollback, backup, hard-delete, purge-logs, freeze, factory-reset) MUST remain Superuser-only, excluded from 'Select All', and require explicit confirmation.
 
 ### 4. Chat Interactions
@@ -33,4 +36,15 @@
 ### 6. Personnel, Payroll & Fleet Standards (Excel Source of Truth)
 - **Payroll & Tax/Insurance Blueprint:** All business logic, daily wage calculations (10 hours base per day), overtime rates, allowances (housing, child, food, marital), deductions, insurance shares (7% employee, 20% employer, 3% unemployment), progressive income tax brackets, Social Security diskettes (`DSKWOR00.DBF`, `DSKKAR00.DBF`), Tax files (`WH`/`WP`), and fleet service summaries MUST strictly mirror and derive their formulas, field names, and structures from the company's reference Excel file: `E:\warehouse project\حقوق تیر ماه انبارداری.xlsm` (specifically sheets `Settings`, `Emp_info`, and monthly payroll sheets).
 - **Zero Deviation in Calculations:** Any new calculation engine, payslip generation, or fiscal diskette generator in the `personnel` app must directly conform to this Excel blueprint without ad-hoc formula inventing.
+- **Global Personnel Decoupling:** Personnel management and timesheets are organization-wide modules independent of specific warehouses; warehouse selection is strictly a floating tag/filter and never a hard database constraint blocking cross-warehouse personnel tracking.
+- **Holiday & Friday Attendance Invariants:** Friday work (`جمعه‌کاری`) and official holidays (`تعطیل‌کاری`) are NOT 0-hour days; they represent effective legal baseline hours (10 hours base) with legal overtime/allowances.
+- **Leave & Absence Hour Invariants:** When status is `LEAVE` or `ABSENT`, work hours and overtime hours MUST be strictly set to 0.
+- **Attendance Mutation & Ghost Data Prevention:** Clearing an attendance record must persist the null/empty status to the backend; saving empty states must be treated as valid updates rather than reverting to stale state on reload.
+
+### 7. UI/UX & Responsive Ergonomics (Personnel & Data Grids)
+- **Keyboard Table Ergonomics:** Grid entry forms MUST support `Enter` (next row/commit), `Escape` (cancel/blur), and Arrow keys for traversing status badges.
+- **Toggleable Status Badges:** Re-clicking an already-selected status badge MUST toggle it off back to an unset (`null`) state.
+- **RTL Calendar Flow:** Persian date navigators must strictly follow RTL reading direction (Next/Prev day alignments).
+- **DRY Mobile Responsive Architecture:** Mobile views should use ergonomic cards rather than squeezed tables, but MUST connect directly to the existing component TypeScript methods without duplicating state or business logic.
+- **URL Query Param Synchronization:** Filter tabs, selected Shamsi dates, and scope filters in personnel/attendance must reflect in URL query params for persistent refresh states.
 

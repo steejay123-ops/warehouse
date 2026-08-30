@@ -11,6 +11,9 @@ export class WebSocketService implements OnDestroy {
   public notifications$ = new Subject<any>();
   public connected$ = new BehaviorSubject<boolean>(false);
 
+  // شناسه یکتای تب مرورگر جهت جلوگیری از اکو روی همان تب بدون بلاک کردن سایر دستگاه‌های کاربر
+  public readonly tabId: string = 'tab_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+
   private isExplicitlyClosed = false;
   private reconnectTimeout: any = null;
   private reconnectAttempts = 0;

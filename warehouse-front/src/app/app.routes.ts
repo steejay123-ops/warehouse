@@ -22,6 +22,7 @@ import { CountTracking } from './components/count-tracking/count-tracking';
 import { Reports } from './components/reports/reports';
 import { VerifyCard } from './components/verify-card/verify-card';
 import { PersonnelManagement } from './components/personnel/personnel-management/personnel-management';
+import { WarehouseAttendance } from './components/personnel/warehouse-attendance/warehouse-attendance';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
 import { settingsLeaveGuard } from './core/guards/settings-leave.guard';
@@ -67,7 +68,8 @@ export const routes: Routes = [
       { path: 'count-tracking', component: CountTracking, data: { reuse: true } },
       { path: 'reports', component: Reports },
       { path: 'personnel', component: PersonnelManagement },
-      { path: 'attendance', component: PersonnelManagement },
+      { path: 'payroll', component: PersonnelManagement },
+      { path: 'attendance', component: WarehouseAttendance },
       { path: 'tasks', component: Placeholders },
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },

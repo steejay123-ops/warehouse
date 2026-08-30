@@ -422,12 +422,11 @@ export class OfflineSyncService {
   async invalidateCache(urlPatternOrExact: string): Promise<void> {
     try {
       await offlineDb.apiCache.delete(urlPatternOrExact);
-      const matching = await offlineDb.apiCache
-        .where('url')
-        .startsWith(urlPatternOrExact)
+      const matchingKeys = await offlineDb.apiCache
+        .filter(entry => entry.url.startsWith(urlPatternOrExact) || entry.url.includes(urlPatternOrExact))
         .primaryKeys();
-      if (matching.length > 0) {
-        await offlineDb.apiCache.bulkDelete(matching as string[]);
+      if (matchingKeys.length > 0) {
+        await offlineDb.apiCache.bulkDelete(matchingKeys as string[]);
       }
     } catch (err) {
       console.warn('[OfflineSync] خطا در ابطال کش:', err);

@@ -65,17 +65,22 @@ export class PersonnelApiService {
   }
 
   // --- ماتریس ثبت کارکرد پرسنل ---
-  getAttendanceMatrix(warehouseId: number | null | undefined, dateShamsi: string): Observable<AttendanceMatrixResponse> {
+  getAttendanceMatrix(
+    warehouseId: number | null | undefined,
+    dateShamsi: string,
+    options?: { context?: import('@angular/common/http').HttpContext }
+  ): Observable<AttendanceMatrixResponse> {
     const params: any = { date_shamsi: dateShamsi };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
     }
-    return this.api.get<AttendanceMatrixResponse>(`${this.baseUrl}/attendance/matrix`, params);
+    return this.api.get<AttendanceMatrixResponse>(`${this.baseUrl}/attendance/matrix`, params, options);
   }
 
   saveAttendanceBulk(payload: {
     warehouse_id?: number | null;
     date_shamsi: string;
+    client_tab_id?: string;
     items: Array<{
       personnel_id: number;
       status: string;
@@ -89,6 +94,18 @@ export class PersonnelApiService {
   }): Observable<{ message: string; saved_count: number; updated_count: number }> {
     return this.api.post<{ message: string; saved_count: number; updated_count: number }>(
       `${this.baseUrl}/attendance/bulk-save`,
+      payload
+    );
+  }
+
+  clearAttendanceDay(payload: {
+    warehouse_id?: number | null;
+    date_shamsi: string;
+    client_tab_id?: string;
+    personnel_ids?: number[];
+  }): Observable<{ message: string; cleared_count: number }> {
+    return this.api.post<{ message: string; cleared_count: number }>(
+      `${this.baseUrl}/attendance/clear-day`,
       payload
     );
   }
@@ -113,17 +130,22 @@ export class PersonnelApiService {
     }>(`${this.baseUrl}/attendance/monthly-summary`, params);
   }
 
-  getMonthlyAttendanceGrid(warehouseId: number | null | undefined, yearMonth: string): Observable<MonthlyGridResponse> {
+  getMonthlyAttendanceGrid(
+    warehouseId: number | null | undefined,
+    yearMonth: string,
+    options?: { context?: import('@angular/common/http').HttpContext }
+  ): Observable<MonthlyGridResponse> {
     const params: any = { year_month: yearMonth };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
     }
-    return this.api.get<MonthlyGridResponse>(`${this.baseUrl}/attendance/monthly-grid`, params);
+    return this.api.get<MonthlyGridResponse>(`${this.baseUrl}/attendance/monthly-grid`, params, options);
   }
 
   bulkSaveMonthlyGrid(payload: {
     warehouse_id?: number | null;
     year_month: string;
+    client_tab_id?: string;
     items: Array<{
       personnel_id: number;
       day: number;
@@ -142,17 +164,46 @@ export class PersonnelApiService {
     );
   }
 
+  // --- گردش کار دو مرحله‌ای تایید کارکرد ---
+  periodWorkflowAction(payload: {
+    warehouse_id?: number | null;
+    year_month: string;
+    action: 'submit' | 'approve' | 'reject' | 'unlock';
+    notes?: string;
+  }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/periods/workflow-action/`, payload);
+  }
+
+  // --- خروجی و بارگذاری دوطرفه اکسل شیت ماهانه ---
+  exportMonthlyAttendanceExcel(warehouseId: number | null | undefined, yearMonth: string): Observable<Blob> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.download(`${this.baseUrl}/attendance/export-monthly-excel/`, params);
+  }
+
+  importMonthlyAttendanceExcel(formData: FormData): Observable<any> {
+    return this.api.upload<any>(`${this.baseUrl}/attendance/import-monthly-excel/`, formData);
+  }
+
   // --- ماتریس ثبت سرویس‌های خودرو ---
-  getVehicleMatrix(warehouseId: number, dateShamsi: string): Observable<VehicleMatrixResponse> {
-    return this.api.get<VehicleMatrixResponse>(`${this.baseUrl}/trips/matrix`, {
-      warehouse_id: warehouseId,
-      date_shamsi: dateShamsi
-    });
+  getVehicleMatrix(
+    warehouseId: number | null | undefined,
+    dateShamsi: string,
+    options?: { context?: import('@angular/common/http').HttpContext }
+  ): Observable<VehicleMatrixResponse> {
+    const params: any = { date_shamsi: dateShamsi };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.get<VehicleMatrixResponse>(`${this.baseUrl}/trips/matrix`, params, options);
   }
 
   saveVehicleTripsBulk(payload: {
-    warehouse_id: number;
+    warehouse_id?: number | null;
     date_shamsi: string;
+    client_tab_id?: string;
     items: Array<{
       vehicle_id: number;
       trip_count: number;
@@ -168,19 +219,20 @@ export class PersonnelApiService {
     );
   }
 
-  getVehicleMonthlySummary(warehouseId: number, yearMonth: string): Observable<{
+  getVehicleMonthlySummary(warehouseId: number | null | undefined, yearMonth: string): Observable<{
     warehouse_id: number;
     year_month: string;
     summary: VehicleSummaryRow[];
   }> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
     return this.api.get<{
       warehouse_id: number;
       year_month: string;
       summary: VehicleSummaryRow[];
-    }>(`${this.baseUrl}/trips/monthly-summary`, {
-      warehouse_id: warehouseId,
-      year_month: yearMonth
-    });
+    }>(`${this.baseUrl}/trips/monthly-summary`, params);
   }
 
   // --- دوره‌های ماهانه و قفل ---
@@ -211,7 +263,7 @@ export class PersonnelApiService {
   }
 
   // --- محاسبه ماهانه ۵۸ ستون حقوق و دیسکت‌ها ---
-  calculateMonthlyPayroll(warehouseId: number, yearMonth: string): Observable<{
+  calculateMonthlyPayroll(warehouseId: number | null | undefined, yearMonth: string): Observable<{
     message: string;
     period_id: number;
     period_status: string;
@@ -230,7 +282,7 @@ export class PersonnelApiService {
     });
   }
 
-  getMonthlyPayrollRecords(params: { period_id?: number; warehouse_id?: number; year_month?: string }): Observable<any[]> {
+  getMonthlyPayrollRecords(params: { period_id?: number | null; warehouse_id?: number | null; year_month?: string }): Observable<any[]> {
     return this.api.get<any[]>(`${this.baseUrl}/monthly-payroll/`, params as Record<string, unknown>);
   }
 

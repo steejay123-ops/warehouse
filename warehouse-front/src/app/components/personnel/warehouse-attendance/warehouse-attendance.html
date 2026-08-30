@@ -1,0 +1,1029 @@
+<div class="p-3 md:p-5 space-y-4 max-w-[1500px] mx-auto pb-32" dir="rtl">
+
+  <!-- Real-Time WebSocket Remote Conflict Alert Banner -->
+  <div *ngIf="hasRemoteConflict" class="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-amber-900 text-xs font-bold shadow-xs animate-pulse">
+    <div class="flex items-center gap-2">
+      <span class="text-lg">⚠️</span>
+      <span>اطلاعات کارکرد توسط کاربر دیگری در سرور تغییر کرده است. شما تغییرات ذخیره‌نشده دارید.</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" (click)="reloadWithRemote()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs">
+        🔄 دریافت آخرین نسخه از سرور
+      </button>
+      <button type="button" (click)="dismissRemoteConflict()" class="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-all cursor-pointer">
+        ادامه با تغییرات فعلی
+      </button>
+    </div>
+  </div>
+
+  <!-- Hidden Excel File Input for Direct Import -->
+  <input type="file" #excelFileInput (change)="onExcelFileSelected($event)" accept=".xlsx, .xls" class="hidden" />
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱. نوار ابزار اصلی و فشرده هدر (Unified Compact Top Header) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs space-y-3">
+    
+    <!-- Top Row: Title + Primary Main Section Switch (پرسنل vs ناوگان) in RIGHT; Lock Badge in LEFT -->
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+      <!-- Title & Main Section Switch (All grouped together on the Right) -->
+      <div class="flex items-center gap-4 flex-wrap">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-sm shrink-0">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-base font-black text-slate-800 tracking-tight">ثبت کارکرد و مدیریت ناوگان</h1>
+            <p class="text-[11px] text-slate-500 font-medium">حضور و غیاب پرسنل، ساعات موثر و تردد ناوگان</p>
+          </div>
+        </div>
+
+        <!-- Main Section Tabs: 👥 کارکرد پرسنل | 🚛 مدیریت ناوگان (Placed right beside title) -->
+        <div class="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center shadow-inner">
+          <button type="button" (click)="setMainTab('personnel')" [ngClass]="mainSectionTab === 'personnel' ? 'bg-white text-emerald-800 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-4 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span>👥 کارکرد پرسنل</span>
+          </button>
+          <button type="button" (click)="setMainTab('fleet')" [ngClass]="mainSectionTab === 'fleet' ? 'bg-white text-emerald-800 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-4 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+            <span>🚛 مدیریت و سرویس‌های ناوگان</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Left Side: Lock Badge -->
+      <div *ngIf="isPeriodLocked" class="bg-amber-50 text-amber-800 border border-amber-300 px-3 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <span>دوره قفل شده</span>
+      </div>
+    </div>
+
+    <!-- Bottom Row: Sequential Flow (From Right to Left: Sub-modes ➡️ Warehouse ➡️ Date ➡️ Save Button on far left) -->
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Right Side Filters & Navigators (پیوسته از راست به چپ) -->
+      <div class="flex items-center gap-2.5 flex-wrap">
+        
+        <!-- Sub-modes for Personnel: ثبت روزانه | تقویم ماهانه -->
+        <div *ngIf="mainSectionTab === 'personnel'" class="bg-slate-100 p-1 rounded-xl border border-slate-200/80 flex items-center shadow-inner">
+          <button (click)="setMode('daily')" [class.active-mode-tab]="activeMode === 'daily'" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 flex items-center gap-1 cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            <span>ثبت روزانه</span>
+          </button>
+          <button (click)="setMode('monthly_grid')" [class.active-mode-tab]="activeMode === 'monthly_grid'" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 flex items-center gap-1 cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>تقویم ماهانه</span>
+          </button>
+        </div>
+
+        <div *ngIf="mainSectionTab === 'fleet'" class="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1">
+          <span>ثبت سرویس‌های روزانه ناوگان</span>
+        </div>
+
+        <!-- Compact Warehouse Filter Button & Popover -->
+        <div class="relative" (click)="$event.stopPropagation()">
+          <button type="button" (click)="toggleWarehouseMenu($event)" class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs">
+            <span>🏢</span>
+            <span>{{ getSelectedWarehouseName() }}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+          
+          <!-- Warehouse Popover Menu -->
+          <div *ngIf="isWarehouseMenuOpen" class="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-40 space-y-0.5 text-xs font-bold">
+            <button type="button" (click)="selectWarehouse(null)" class="w-full text-right px-3 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 flex items-center justify-between cursor-pointer">
+              <span>🌐 همه پرسنل</span>
+              <span *ngIf="selectedWarehouseId === null" class="text-emerald-600">✓</span>
+            </button>
+            <button *ngFor="let wh of warehouses" type="button" (click)="selectWarehouse(wh.id)" class="w-full text-right px-3 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 flex items-center justify-between cursor-pointer">
+              <span>🏢 {{ wh.name }}</span>
+              <span *ngIf="selectedWarehouseId === wh.id" class="text-emerald-600">✓</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- RTL Daily Date Controls (راست = روز قبل، چپ = روز بعد) -->
+        <div *ngIf="activeMode === 'daily' || activeMode === 'fleet'" class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+          <!-- راست: روز قبل -->
+          <button (click)="goToPrevDay()" title="روز قبل" class="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <div class="relative">
+            <input type="text" [formControl]="attendanceDateControl" (change)="onDateChanged(attendanceDateControl.value || '')" placeholder="۱۴۰۵/۰۶/۰۸" class="w-24 text-center bg-white border border-slate-200 text-slate-800 text-xs font-mono font-bold rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer" />
+          </div>
+          <!-- چپ: روز بعد -->
+          <button (click)="goToNextDay()" title="روز بعد" class="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button (click)="goToToday()" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-md transition-all cursor-pointer">امروز</button>
+          <button (click)="goToYesterday()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-md transition-all cursor-pointer">دیروز</button>
+        </div>
+
+        <!-- 3-State Smart Day Status Badge (Full / Partial / Draft) -->
+        <div *ngIf="activeMode === 'daily'" class="flex items-center">
+          <!-- Full -->
+          <div *ngIf="attendanceRegistrationState.status === 'full'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>{{ attendanceRegistrationState.label }}</span>
+          </div>
+          <!-- Partial -->
+          <div *ngIf="attendanceRegistrationState.status === 'partial'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-sky-50 text-sky-800 border border-sky-300 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+            <span>{{ attendanceRegistrationState.label }}</span>
+          </div>
+          <!-- Draft (None) -->
+          <div *ngIf="attendanceRegistrationState.status === 'none'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs animate-pulse">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            <span>{{ attendanceRegistrationState.label }}</span>
+          </div>
+        </div>
+
+        <!-- Monthly Grid Month Picker Popover -->
+        <div *ngIf="activeMode === 'monthly_grid'" class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 relative" (click)="$event.stopPropagation()">
+          <input type="text" [(ngModel)]="selectedYearMonth" (change)="onFilterChange()" placeholder="۱۴۰۵/۰۴" class="w-20 text-center bg-white border border-slate-200 text-slate-800 text-xs font-mono font-bold rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          
+          <!-- Month Name Clickable Badge -->
+          <button type="button" (click)="toggleMonthPicker($event)" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer" title="کلیک برای انتخاب سریع ماه">
+            <span>{{ monthName || 'انتخاب ماه' }}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </button>
+
+          <!-- 12-Month Popover Grid -->
+          <div *ngIf="isMonthPickerOpen" class="absolute right-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2.5 z-50 space-y-2">
+            <div class="text-[11px] font-black text-slate-500 border-b border-slate-100 pb-1 flex items-center justify-between">
+              <span>انتخاب ماه شمسی:</span>
+              <span class="text-[10px] text-emerald-700 font-mono">{{ selectedYearMonth }}</span>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button *ngFor="let m of PERSIAN_MONTHS" type="button" (click)="selectMonth(m.num)" class="py-1.5 px-2 text-xs font-bold rounded-xl hover:bg-emerald-50 hover:text-emerald-800 transition-all text-slate-700 bg-slate-50 border border-slate-100 cursor-pointer">
+                {{ m.name }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Left Side Action Button (دکمه ذخیره نهایی در انتهای سمت چپ) -->
+      <div class="flex items-center gap-2">
+        <!-- Primary Smart Save/Update Button for Daily Attendance -->
+        <button *ngIf="activeMode === 'daily'" (click)="saveAttendanceMatrix()" [disabled]="!hasUnsavedChanges || isSavingAttendance || isPeriodLocked" [ngClass]="!hasUnsavedChanges ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : (hasExistingAttendance ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/50 shadow-md shadow-blue-500/20' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20')" class="px-5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+          <svg *ngIf="!isSavingAttendance" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span *ngIf="!isSavingAttendance">{{ hasExistingAttendance ? 'به‌روزرسانی کارکرد' : 'ثبت کارکرد روزانه' }}</span>
+          <span *ngIf="isSavingAttendance">{{ hasExistingAttendance ? 'در حال به‌روزرسانی...' : 'در حال ثبت...' }}</span>
+          <span *ngIf="hasUnsavedChanges" class="w-2 h-2 rounded-full bg-amber-300 animate-ping"></span>
+        </button>
+
+        <!-- Primary Save Button for Fleet Mode -->
+        <button *ngIf="activeMode === 'fleet'" (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+          <svg *ngIf="!isSavingVehicles" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span *ngIf="!isSavingVehicles">ذخیره ناوگان</span>
+          <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۲. حالت ثبت کارکرد روزانه (Daily Attendance Matrix) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeMode === 'daily'" class="space-y-3">
+    
+    <!-- Compact Bulk Actions Toolbar with Concise Button Labels -->
+    <div class="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-xs font-black text-slate-700 ml-1 flex items-center gap-1">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>گروهی:</span>
+        </span>
+
+        <!-- ۱. حاضر -->
+        <button type="button" (click)="setBulkAttendanceStatus('PRESENT_10H')" [disabled]="isPeriodLocked" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="حاضر ۱۰ ساعت (برای انتخاب‌شده‌ها یا همه)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>حاضر (۱۰س)</span>
+        </button>
+
+        <!-- ۲. نیمه‌وقت -->
+        <button type="button" (click)="setBulkAttendanceStatus('HALF_5H')" [disabled]="isPeriodLocked" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="نیمه‌وقت ۵ ساعت">
+          <span>نیمه‌وقت (۵س)</span>
+        </button>
+
+        <!-- ۳. مرخصی -->
+        <button type="button" (click)="setBulkAttendanceStatus('LEAVE')" [disabled]="isPeriodLocked" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="مرخصی">
+          <span>مرخصی</span>
+        </button>
+
+        <!-- ۴. غایب -->
+        <button type="button" (click)="setBulkAttendanceStatus('ABSENT')" [disabled]="isPeriodLocked" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="غایب ۰ ساعت">
+          <span>غایب</span>
+        </button>
+
+        <span *ngIf="isSelectedDateFriday" class="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black rounded-lg flex items-center gap-1">
+          <span>⭐ روز جمعه تقویمی (جمعه‌کاری خودکار)</span>
+        </span>
+
+        <span class="w-px h-4 bg-slate-200 mx-0.5"></span>
+
+        <!-- ۵. کپی دیروز -->
+        <button type="button" (click)="copyFromYesterday()" [disabled]="isPeriodLocked || isAttendanceLoading" class="px-2 py-1 bg-slate-100 hover:bg-indigo-50 text-indigo-700 border border-slate-200 hover:border-indigo-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="کپی کارکرد روز قبل">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span>کپی دیروز</span>
+        </button>
+
+        <!-- ۶. ساعت/اضافه -->
+        <button type="button" (click)="openBulkHoursModal()" [disabled]="isPeriodLocked" class="px-2 py-1 bg-slate-100 hover:bg-amber-50 text-amber-800 border border-slate-200 hover:border-amber-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="تنظیم ساعات کارکرد و اضافه‌کار">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>ساعت/اضافه</span>
+        </button>
+
+        <!-- ۷. تعطیل رسمی -->
+        <button type="button" (click)="markOfficialHoliday()" [disabled]="isPeriodLocked" class="px-2 py-1 bg-slate-100 hover:bg-cyan-50 text-cyan-800 border border-slate-200 hover:border-cyan-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50">
+          <span>تعطیل رسمی</span>
+        </button>
+
+        <!-- ۸. پیست اکسل -->
+        <button type="button" (click)="openExcelPasteModal()" [disabled]="isPeriodLocked" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 text-teal-800 border border-slate-200 hover:border-teal-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="پیست متنی از اکسل">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          <span>پیست اکسل</span>
+        </button>
+
+        <!-- ۹. بارگذاری اکسل (Direct Excel Upload) -->
+        <button type="button" (click)="triggerExcelImport()" [disabled]="isPeriodLocked || isImportingExcel" class="px-2 py-1 bg-slate-100 hover:bg-emerald-50 text-emerald-800 border border-slate-200 hover:border-emerald-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="بارگذاری مستقیم فایل اکسل کارکرد">
+          <svg *ngIf="!isImportingExcel" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span *ngIf="!isImportingExcel">📥 بارگذاری اکسل</span>
+          <span *ngIf="isImportingExcel">در حال پردازش...</span>
+        </button>
+
+        <!-- ۱۰. پاکسازی -->
+        <button type="button" (click)="clearDayAttendance()" [disabled]="isPeriodLocked" class="px-2 py-1 bg-slate-100 hover:bg-rose-50 text-rose-700 border border-slate-200 hover:border-rose-300 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50" title="پاکسازی روز">
+          <span>🗑️ پاکسازی</span>
+        </button>
+      </div>
+
+      <!-- Search & Selection Status -->
+      <div class="flex items-center gap-2">
+        <span *ngIf="selectedPersonnelIds.size > 0" class="text-[11px] bg-indigo-50 text-indigo-800 px-2 py-1 rounded-md font-bold border border-indigo-200">
+          ✓ {{ selectedPersonnelIds.size }} نفر انتخاب شده
+        </span>
+        <div class="relative">
+          <input type="text" [(ngModel)]="searchQuery" (input)="applySearchFilter()" placeholder="جستجوی نام یا کد ملی..." class="w-40 bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance Matrix Data Table (Desktop & Tablet Layout) -->
+    <div class="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
+            <tr>
+              <th class="p-2.5 w-10 text-center">
+                <input type="checkbox" [checked]="selectAllChecked" (change)="toggleSelectAll()" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+              </th>
+              <th class="p-2.5 w-10 text-center">#</th>
+              <th class="p-2.5 w-44 text-right">نام و مشخصات پرسنل</th>
+              <th class="p-2.5 w-60 text-center">وضعیت حضور (تک‌کلیک)</th>
+              <th class="p-2.5 w-20 text-center">ساعت موثر</th>
+              <th class="p-2.5 w-20 text-center">اضافه‌کار</th>
+              <th class="p-2.5 w-20 text-center bg-slate-100/70">مجموع ساعات</th>
+              <th class="p-2.5 min-w-[180px]">توضیحات روزانه</th>
+              <th class="p-2.5 w-32 text-center">تگ انبار</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <!-- Loading Indicator -->
+            <tr *ngIf="isAttendanceLoading">
+              <td colspan="9" class="p-8 text-center text-slate-400 font-bold">
+                <div class="flex items-center justify-center gap-2">
+                  <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
+                  <span>در حال بارگذاری کارکرد روزانه...</span>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Empty State -->
+            <tr *ngIf="!isAttendanceLoading && filteredAttendanceRows.length === 0">
+              <td colspan="9" class="p-8 text-center text-slate-400 font-medium">
+                هیچ پرسنلی در این فیلتر یا انبار ثبت نشده است.
+              </td>
+            </tr>
+
+            <!-- Data Rows -->
+            <tr *ngFor="let row of filteredAttendanceRows; let idx = index" class="hover:bg-slate-50/70 transition-colors" [class.bg-emerald-50/30]="isRowSelected(row.personnel_id)">
+              <td class="p-2.5 text-center">
+                <input [id]="'chk-' + idx" type="checkbox" [checked]="isRowSelected(row.personnel_id)" (change)="toggleRowSelection(row.personnel_id)" (keydown)="onAttendanceGridKeydown($event, 'status', idx, 'PRESENT_10H', row)" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+              </td>
+              <td class="p-2.5 text-center text-slate-400 font-bold text-xs">{{ idx + 1 }}</td>
+              <td class="p-2.5 w-44">
+                <div class="leading-tight">
+                  <div class="text-xs font-black text-slate-800 flex items-center gap-1.5 flex-wrap">
+                    <span>{{ row.full_name }}</span>
+                    <span *ngIf="row.is_active === false" class="px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200/80 rounded text-[9px] font-bold shrink-0" title="پرسنل غیرفعال / ترک‌کار">غیرفعال</span>
+                    <span *ngIf="!row.is_existing" class="px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200/80 rounded text-[9px] font-bold shrink-0" title="این سطر هنوز در سرور ذخیره نشده است">پیش‌نویس</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 font-mono font-medium mt-0.5">{{ row.national_code }}</div>
+                </div>
+              </td>
+
+              <!-- Ergonomic 1-Click Status Selector with Arrow Key Navigation -->
+              <td class="p-2 w-60">
+                <div class="flex items-center justify-center gap-1">
+                  <!-- حاضر -->
+                  <button [id]="'btn-status-PRESENT_10H-' + idx" type="button" (click)="setAttendanceStatus(row, 'PRESENT_10H')" (keydown)="onAttendanceGridKeydown($event, 'status', idx, 'PRESENT_10H', row)" [ngClass]="row.status === 'PRESENT_10H' ? 'bg-emerald-600 text-white font-black shadow-xs ring-2 ring-emerald-400/50' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200/60'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    حاضر
+                  </button>
+
+                  <!-- نیمه‌وقت -->
+                  <button [id]="'btn-status-HALF_5H-' + idx" type="button" (click)="setAttendanceStatus(row, 'HALF_5H')" (keydown)="onAttendanceGridKeydown($event, 'status', idx, 'HALF_5H', row)" [ngClass]="row.status === 'HALF_5H' ? 'bg-blue-600 text-white font-black shadow-xs ring-2 ring-blue-400/50' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/60'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    نیمه‌وقت
+                  </button>
+
+                  <!-- مرخصی -->
+                  <button [id]="'btn-status-LEAVE-' + idx" type="button" (click)="setAttendanceStatus(row, 'LEAVE')" (keydown)="onAttendanceGridKeydown($event, 'status', idx, 'LEAVE', row)" [ngClass]="row.status === 'LEAVE' ? 'bg-cyan-600 text-white font-black shadow-xs ring-2 ring-cyan-400/50' : 'bg-slate-100 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 border border-slate-200/60'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    مرخصی
+                  </button>
+
+                  <!-- غایب -->
+                  <button [id]="'btn-status-ABSENT-' + idx" type="button" (click)="setAttendanceStatus(row, 'ABSENT')" (keydown)="onAttendanceGridKeydown($event, 'status', idx, 'ABSENT', row)" [ngClass]="row.status === 'ABSENT' ? 'bg-rose-600 text-white font-black shadow-xs ring-2 ring-rose-400/50' : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700 border border-slate-200/60'" class="px-2.5 py-1 rounded-lg text-[11px] transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500">
+                    غایب
+                  </button>
+                </div>
+              </td>
+
+              <!-- Effective Hours -->
+              <td class="p-2 w-20 text-center">
+                <input [id]="'input-eff-' + idx" type="number" [(ngModel)]="row.effective_hours" (ngModelChange)="onAttendanceCellChange(row)" (keydown)="onAttendanceGridKeydown($event, 'eff', idx, undefined, row)" [disabled]="isPeriodLocked || row.status === 'ABSENT' || row.status === 'LEAVE'" [class.opacity-40]="row.status === 'ABSENT' || row.status === 'LEAVE'" [class.cursor-not-allowed]="row.status === 'ABSENT' || row.status === 'LEAVE'" class="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg py-1 px-1 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+
+              <!-- Overtime Hours -->
+              <td class="p-2 w-20 text-center">
+                <input [id]="'input-ot-' + idx" type="number" [(ngModel)]="row.overtime_hours" (ngModelChange)="onAttendanceCellChange(row)" (keydown)="onAttendanceGridKeydown($event, 'ot', idx, undefined, row)" [disabled]="isPeriodLocked || row.status === 'ABSENT' || row.status === 'LEAVE'" [class.opacity-40]="row.status === 'ABSENT' || row.status === 'LEAVE'" [class.cursor-not-allowed]="row.status === 'ABSENT' || row.status === 'LEAVE'" class="w-14 text-center bg-slate-50 border border-slate-200 rounded-lg py-1 px-1 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+
+              <!-- Total Daily Hours -->
+              <td class="p-2 w-20 text-center font-mono font-black text-slate-700 bg-slate-50/50">
+                {{ (row.effective_hours || 0) + (row.overtime_hours || 0) }}
+              </td>
+
+              <!-- Notes -->
+              <td class="p-2 min-w-[180px]">
+                <input [id]="'input-note-' + idx" type="text" [(ngModel)]="row.notes" (ngModelChange)="onAttendanceCellChange(row)" (keydown)="onAttendanceGridKeydown($event, 'note', idx, undefined, row)" [disabled]="isPeriodLocked" placeholder="توضیحات روزانه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+
+              <!-- تگ انبار (ستون آخر) -->
+              <td class="p-2 w-32">
+                <select [id]="'select-wh-' + idx" [(ngModel)]="row.warehouse_id" (ngModelChange)="onAttendanceCellChange(row)" (keydown)="onAttendanceGridKeydown($event, 'wh', idx, undefined, row)" [disabled]="isPeriodLocked" class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                  <option [ngValue]="null">🌐 شناور</option>
+                  <option *ngFor="let wh of warehouses" [ngValue]="wh.id">{{ wh.name }}</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Attendance Matrix Cards List (Mobile Layout - Touch-First Ergonomic Cards) -->
+    <div class="block md:hidden space-y-3">
+      <!-- Loading Indicator for Mobile -->
+      <div *ngIf="isAttendanceLoading" class="p-8 bg-white rounded-2xl border border-slate-200/80 text-center text-slate-400 font-bold shadow-xs">
+        <div class="flex items-center justify-center gap-2">
+          <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
+          <span class="text-xs">در حال بارگذاری کارکرد روزانه...</span>
+        </div>
+      </div>
+
+      <!-- Empty State for Mobile -->
+      <div *ngIf="!isAttendanceLoading && filteredAttendanceRows.length === 0" class="p-8 bg-white rounded-2xl border border-slate-200/80 text-center text-slate-400 text-xs font-medium shadow-xs">
+        هیچ پرسنلی در این فیلتر یا انبار ثبت نشده است.
+      </div>
+
+      <!-- Mobile Touch Cards -->
+      <div *ngFor="let row of filteredAttendanceRows; let idx = index" class="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs space-y-3 transition-all" [class.border-emerald-400]="isRowSelected(row.personnel_id)" [class.bg-emerald-50/20]="isRowSelected(row.personnel_id)">
+        
+        <!-- Card Header: Checkbox, Name, National Code, Warehouse Selector & Status Badge -->
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2.5">
+            <input [id]="'m-chk-' + idx" type="checkbox" [checked]="isRowSelected(row.personnel_id)" (change)="toggleRowSelection(row.personnel_id)" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer w-4 h-4" />
+            <div>
+              <div class="text-xs font-black text-slate-800 flex items-center gap-1.5 flex-wrap">
+                <span>{{ row.full_name }}</span>
+                <span *ngIf="row.is_active === false" class="px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200/80 rounded text-[9px] font-bold shrink-0" title="پرسنل غیرفعال / ترک‌کار">غیرفعال</span>
+                <span *ngIf="!row.is_existing" class="px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200/80 rounded text-[9px] font-bold shrink-0">پیش‌نویس</span>
+              </div>
+              <div class="text-[10px] text-slate-400 font-mono font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <span>{{ row.national_code }}</span>
+                <span *ngIf="row.job_title" class="text-slate-500 font-sans">• {{ row.job_title }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mobile Warehouse Tag Dropdown -->
+          <div class="shrink-0">
+            <select [id]="'m-select-wh-' + idx" [(ngModel)]="row.warehouse_id" (ngModelChange)="onAttendanceCellChange(row)" [disabled]="isPeriodLocked" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <option [ngValue]="null">🌐 شناور</option>
+              <option *ngFor="let wh of warehouses" [ngValue]="wh.id">{{ wh.name }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Touch-Friendly 1-Click Status Selector (4 Large Buttons) -->
+        <div class="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-100">
+          <!-- حاضر -->
+          <button [id]="'m-btn-status-PRESENT_10H-' + idx" type="button" (click)="setAttendanceStatus(row, 'PRESENT_10H')" [ngClass]="row.status === 'PRESENT_10H' ? 'bg-emerald-600 text-white font-black shadow-xs ring-2 ring-emerald-400/50' : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200/60'" class="py-2 rounded-xl text-[11px] font-bold transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer">
+            <span>حاضر</span>
+            <span class="text-[9px] opacity-75">۱۰س</span>
+          </button>
+
+          <!-- نیمه‌وقت -->
+          <button [id]="'m-btn-status-HALF_5H-' + idx" type="button" (click)="setAttendanceStatus(row, 'HALF_5H')" [ngClass]="row.status === 'HALF_5H' ? 'bg-blue-600 text-white font-black shadow-xs ring-2 ring-blue-400/50' : 'bg-slate-100 text-slate-600 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/60'" class="py-2 rounded-xl text-[11px] font-bold transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer">
+            <span>نیمه‌وقت</span>
+            <span class="text-[9px] opacity-75">۵س</span>
+          </button>
+
+          <!-- مرخصی -->
+          <button [id]="'m-btn-status-LEAVE-' + idx" type="button" (click)="setAttendanceStatus(row, 'LEAVE')" [ngClass]="row.status === 'LEAVE' ? 'bg-cyan-600 text-white font-black shadow-xs ring-2 ring-cyan-400/50' : 'bg-slate-100 text-slate-600 hover:bg-cyan-50 hover:text-cyan-700 border border-slate-200/60'" class="py-2 rounded-xl text-[11px] font-bold transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer">
+            <span>مرخصی</span>
+            <span class="text-[9px] opacity-75">۰س</span>
+          </button>
+
+          <!-- غایب -->
+          <button [id]="'m-btn-status-ABSENT-' + idx" type="button" (click)="setAttendanceStatus(row, 'ABSENT')" [ngClass]="row.status === 'ABSENT' ? 'bg-rose-600 text-white font-black shadow-xs ring-2 ring-rose-400/50' : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700 border border-slate-200/60'" class="py-2 rounded-xl text-[11px] font-bold transition-all text-center flex flex-col items-center justify-center gap-0.5 cursor-pointer">
+            <span>غایب</span>
+            <span class="text-[9px] opacity-75">۰س</span>
+          </button>
+        </div>
+
+        <!-- Hours & Notes Grid on Mobile -->
+        <div class="grid grid-cols-12 gap-2 pt-1 border-t border-slate-100 items-center text-[11px]">
+          <!-- Effective Hours -->
+          <div class="col-span-3 flex flex-col items-center gap-0.5">
+            <span class="text-[9px] text-slate-400 font-bold">ساعت موثر</span>
+            <input [id]="'m-input-eff-' + idx" type="number" [(ngModel)]="row.effective_hours" (ngModelChange)="onAttendanceCellChange(row)" [disabled]="isPeriodLocked || row.status === 'ABSENT' || row.status === 'LEAVE'" [class.opacity-40]="row.status === 'ABSENT' || row.status === 'LEAVE'" class="w-full text-center bg-slate-50 border border-slate-200 rounded-lg py-1 px-1 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+
+          <!-- Overtime Hours -->
+          <div class="col-span-3 flex flex-col items-center gap-0.5">
+            <span class="text-[9px] text-slate-400 font-bold">اضافه‌کار</span>
+            <input [id]="'m-input-ot-' + idx" type="number" [(ngModel)]="row.overtime_hours" (ngModelChange)="onAttendanceCellChange(row)" [disabled]="isPeriodLocked || row.status === 'ABSENT' || row.status === 'LEAVE'" [class.opacity-40]="row.status === 'ABSENT' || row.status === 'LEAVE'" class="w-full text-center bg-slate-50 border border-slate-200 rounded-lg py-1 px-1 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+
+          <!-- Total Daily Hours Display -->
+          <div class="col-span-2 flex flex-col items-center gap-0.5">
+            <span class="text-[9px] text-slate-400 font-bold">مجموع</span>
+            <span class="py-1 px-1 w-full text-center font-mono font-black text-xs text-slate-700 bg-slate-100/70 rounded-lg">
+              {{ (row.effective_hours || 0) + (row.overtime_hours || 0) }}
+            </span>
+          </div>
+
+          <!-- Daily Notes Input -->
+          <div class="col-span-4 flex flex-col gap-0.5">
+            <span class="text-[9px] text-slate-400 font-bold">توضیحات</span>
+            <input [id]="'m-input-note-' + idx" type="text" [(ngModel)]="row.notes" (ngModelChange)="onAttendanceCellChange(row)" [disabled]="isPeriodLocked" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Mobile Sticky Floating Bottom Action Bar (ثابت در پایین موبایل) -->
+    <div *ngIf="activeMode === 'daily'" class="md:hidden fixed bottom-3 left-3 right-3 z-30 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-2.5 shadow-xl flex items-center justify-between gap-2">
+      <div class="text-[11px] font-bold text-slate-700 leading-tight">
+        <div>{{ attendanceCounts.present }} حاضر • {{ attendanceCounts.totalEffectiveHours }}س موثر</div>
+        <div *ngIf="hasUnsavedChanges" class="text-amber-600 font-black text-[10px] flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+          <span>تغییرات ذخیره‌نشده</span>
+        </div>
+      </div>
+      <button (click)="saveAttendanceMatrix()" [disabled]="!hasUnsavedChanges || isSavingAttendance || isPeriodLocked" [ngClass]="!hasUnsavedChanges ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : (hasExistingAttendance ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/50 shadow-md shadow-blue-500/20' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20')" class="px-4 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shrink-0">
+        <svg *ngIf="!isSavingAttendance" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span>{{ isSavingAttendance ? 'در حال ثبت...' : (hasExistingAttendance ? 'به‌روزرسانی' : 'ثبت کارکرد') }}</span>
+      </button>
+    </div>
+
+    <!-- Clean In-Flow Bottom Summary Footer -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <!-- Live Summary Badges -->
+      <div class="flex items-center gap-2 text-xs font-bold flex-wrap">
+        <span class="text-slate-500 font-bold">خلاصه کارکرد روز:</span>
+        <span class="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>{{ attendanceCounts.present }} حاضر</span>
+        </span>
+        <span *ngIf="attendanceCounts.half > 0" class="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-800 border border-sky-200 font-mono flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+          <span>{{ attendanceCounts.half }} نیمه‌وقت</span>
+        </span>
+        <span class="px-2.5 py-1 rounded-xl bg-cyan-50 text-cyan-800 border border-cyan-200 font-mono flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+          <span>{{ attendanceCounts.leave }} مرخصی</span>
+        </span>
+        <span class="px-2.5 py-1 rounded-xl bg-rose-50 text-rose-800 border border-rose-200 font-mono flex items-center gap-1">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span>{{ attendanceCounts.absent }} غایب</span>
+        </span>
+        <span class="px-2.5 py-1 rounded-xl bg-slate-50 text-slate-700 border border-slate-200 font-mono">
+          ⏱️ جمع ساعات موثر: <b>{{ attendanceCounts.totalEffectiveHours }}</b> س
+        </span>
+        <span *ngIf="attendanceCounts.totalOvertimeHours > 0" class="px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+          ⚡ اضافه‌کار: <b>{{ attendanceCounts.totalOvertimeHours }}</b> س
+        </span>
+        <span *ngIf="hasUnsavedChanges" class="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold animate-pulse">
+          ⚠️ تغییرات ذخیره‌نشده دارید
+        </span>
+      </div>
+
+      <!-- Bottom Smart Save/Update Action Button -->
+      <button (click)="saveAttendanceMatrix()" [disabled]="!hasUnsavedChanges || isSavingAttendance || isPeriodLocked" [ngClass]="!hasUnsavedChanges ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : (hasExistingAttendance ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/50 shadow-md shadow-blue-500/20' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20')" class="px-5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-2 cursor-pointer">
+        <svg *ngIf="!isSavingAttendance" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span *ngIf="!isSavingAttendance">{{ hasExistingAttendance ? 'به‌روزرسانی کارکرد' : 'ثبت کارکرد روزانه' }}</span>
+        <span *ngIf="isSavingAttendance">{{ hasExistingAttendance ? 'در حال به‌روزرسانی...' : 'در حال ثبت...' }}</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۳. حالت تقویم ۳۱ روزه ماهانه (Monthly Timesheet Grid) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeMode === 'monthly_grid'" class="space-y-3">
+    <!-- Workflow Status & Actions Bar -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <!-- Workflow Status Badge -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs font-bold text-slate-500">وضعیت گردش کار دوره:</span>
+        <span *ngIf="periodStatus === 'OPEN'" class="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>دوره باز (در حال ثبت کارکرد)</span>
+        </span>
+        <span *ngIf="periodStatus === 'SUBMITTED'" class="px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-300 text-xs font-bold flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span>ارسال‌شده جهت بررسی مالی</span>
+        </span>
+        <span *ngIf="periodStatus === 'LOCKED'" class="px-3 py-1 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-bold flex items-center gap-1.5">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span>تایید نهایی و قفل مالی</span>
+        </span>
+      </div>
+
+      <!-- Actions (اعمال کارکرد در بازه زمانی، اکسل، ارسال مالی و ذخیره هوشمند) -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- دکمه اعمال کارکرد در بازه زمانی مشخص -->
+        <button (click)="openRangeModal()" [disabled]="isPeriodLocked" class="px-3.5 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50" title="اعمال کارکرد دلخواه روی بازه مشخصی از روزهای ماه">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>⚡ اعمال کارکرد در بازه زمانی</span>
+        </button>
+
+        <button (click)="triggerExcelImport()" [disabled]="isPeriodLocked || isImportingExcel" class="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50" title="بارگذاری اکسل کارکرد پرسنل">
+          <svg *ngIf="!isImportingExcel" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span *ngIf="!isImportingExcel">📥 بارگذاری اکسل</span>
+          <span *ngIf="isImportingExcel">در حال بارگذاری...</span>
+        </button>
+
+        <button (click)="exportMonthlyExcel()" [disabled]="isExportingMonthlyExcel" class="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>📤 دانلود اکسل تقویم</span>
+        </button>
+
+        <button *ngIf="periodStatus === 'OPEN'" (click)="openSubmitModal()" [disabled]="isPeriodLocked" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          <span>ارسال کارکرد ماهانه جهت بررسی مالی</span>
+        </button>
+
+        <button (click)="saveMonthlyGrid()" [disabled]="!hasUnsavedMonthlyGrid || isSavingMonthlyGrid || isPeriodLocked" [ngClass]="!hasUnsavedMonthlyGrid ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20'" class="px-4 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+          <svg *ngIf="!isSavingMonthlyGrid" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          <span *ngIf="!isSavingMonthlyGrid">ذخیره تغییرات ماهانه</span>
+          <span *ngIf="isSavingMonthlyGrid">در حال ذخیره‌سازی...</span>
+          <span *ngIf="hasUnsavedMonthlyGrid" class="w-2 h-2 rounded-full bg-amber-300 animate-ping"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Compact Collapsible Anomaly Alerts Banner -->
+    <div *ngIf="anomalies && anomalies.length > 0" class="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 text-xs shadow-xs transition-all">
+      <div class="flex items-center justify-between font-bold text-amber-900 cursor-pointer" (click)="showAnomalies = !showAnomalies">
+        <div class="flex items-center gap-2">
+          <span class="p-1 rounded-lg bg-amber-100 text-amber-700 text-sm leading-none">⚠️</span>
+          <span>هشدارهای مغایرت و ناهمگونی کارکرد ({{ anomalies.length }} مورد شناسایی شد)</span>
+        </div>
+        <button type="button" class="text-xs text-amber-800 bg-white hover:bg-amber-100 border border-amber-300 px-3 py-1 rounded-xl transition-all font-bold flex items-center gap-1 cursor-pointer">
+          <span>{{ showAnomalies ? 'بستن لیست' : 'مشاهده موارد' }}</span>
+          <span>{{ showAnomalies ? '▲' : '▼' }}</span>
+        </button>
+      </div>
+
+      <div *ngIf="showAnomalies" class="mt-3 pt-3 border-t border-amber-200/80 max-h-56 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div *ngFor="let anom of anomalies" class="bg-white/95 border border-amber-200 rounded-xl p-2.5 flex items-start gap-2 text-[11px] shadow-2xs">
+          <span class="text-amber-500 font-bold text-base leading-none mt-0.5">•</span>
+          <div class="flex-1">
+            <span class="font-bold text-slate-800">{{ anom.full_name }}: </span>
+            <span class="text-slate-600">{{ anom.message || anom.type }}</span>
+            <span *ngIf="anom.day" class="text-amber-700 font-mono text-[10px] mr-1">(روز {{ anom.day }})</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Grid Interactive Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+        <table class="w-full text-right text-[11px] border-collapse">
+          <thead class="bg-slate-100 text-slate-700 sticky top-0 z-10 font-black">
+            <tr>
+              <th class="p-2 text-center sticky right-0 bg-slate-100 z-20 w-10 border-l border-slate-200">#</th>
+              <th class="p-2 sticky right-10 bg-slate-100 z-20 min-w-[150px] border-l border-slate-200">نام پرسنل</th>
+              <!-- 31 Days Columns -->
+              <th *ngFor="let d of monthlyGridDays" [class.bg-rose-50]="d.is_friday" [class.text-rose-700]="d.is_friday" class="p-1.5 text-center min-w-[34px] border-l border-slate-200">
+                <div>{{ d.day }}</div>
+                <div class="text-[9px] font-normal text-slate-400">{{ d.weekday_short }}</div>
+              </th>
+              <!-- Summary Columns -->
+              <th class="p-2 text-center min-w-[50px] bg-emerald-50 text-emerald-900 border-l border-slate-200">حاضر</th>
+              <th class="p-2 text-center min-w-[50px] bg-amber-50 text-amber-900 border-l border-slate-200">اضافه‌کار</th>
+              <th class="p-2 text-center min-w-[60px] bg-indigo-50 text-indigo-900">ساعت کار</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let row of monthlyGridRows; let idx = index" class="hover:bg-slate-50/80 transition-colors">
+              <td class="p-2 text-center sticky right-0 bg-white z-10 border-l border-slate-100 font-bold text-slate-400">{{ idx + 1 }}</td>
+              <td class="p-2 sticky right-10 bg-white z-10 border-l border-slate-100 font-bold text-slate-800">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="truncate">{{ row.full_name }}</span>
+                  <span *ngIf="row.is_active === false" class="px-1.5 py-0.2 bg-rose-50 text-rose-700 border border-rose-200/80 rounded text-[9px] font-bold shrink-0" title="پرسنل غیرفعال / ترک‌کار">غیرفعال</span>
+                </div>
+              </td>
+              
+              <!-- 31 Day Cells -->
+              <td *ngFor="let item of row.days; let dayIdx = index" (click)="openDayDetailModal(row, item)" [class.bg-rose-50/40]="monthlyGridDays[dayIdx]?.is_friday" class="p-1 text-center border-l border-slate-100 cursor-pointer hover:bg-emerald-50 transition-all font-mono">
+                <span *ngIf="item.status === 'PRESENT_10H' && item.effective_hours > 0" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]" [title]="'حاضر: ' + item.effective_hours + ' ساعت'">{{ item.effective_hours }}</span>
+                <span *ngIf="item.status === 'HALF_5H' && item.effective_hours > 0" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-blue-100 text-blue-800 font-bold text-[10px]" [title]="'نیمه‌وقت: ' + item.effective_hours + ' ساعت'">{{ item.effective_hours }}</span>
+                <span *ngIf="item.status === 'FRIDAY_WORK' && item.effective_hours > 0" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-amber-100 text-amber-800 font-bold text-[10px]" [title]="'جمعه‌کاری: ' + item.effective_hours + ' ساعت'">{{ item.effective_hours }}</span>
+                <span *ngIf="item.status === 'MISSION' && item.effective_hours > 0" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-purple-100 text-purple-800 font-bold text-[10px]" [title]="'ماموریت: ' + item.effective_hours + ' ساعت'">مام</span>
+                <span *ngIf="item.status === 'ABSENT'" class="inline-block w-6 h-6 leading-6 rounded bg-rose-100 text-rose-800 font-bold text-[10px]" title="غایب">غ</span>
+                <span *ngIf="item.status === 'LEAVE'" class="inline-block w-6 h-6 leading-6 rounded bg-cyan-100 text-cyan-800 font-bold text-[10px]" title="مرخصی">م</span>
+                <span *ngIf="item.effective_hours > 0 && item.status !== 'PRESENT_10H' && item.status !== 'HALF_5H' && item.status !== 'FRIDAY_WORK' && item.status !== 'MISSION' && item.status !== 'ABSENT' && item.status !== 'LEAVE'" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-emerald-50 text-emerald-900 border border-emerald-200 font-bold text-[10px]" [title]="(item.status_display || 'کارکرد') + ': ' + item.effective_hours + ' ساعت'">{{ item.effective_hours }}</span>
+                <span *ngIf="!item.status || (item.effective_hours === 0 && item.status !== 'ABSENT' && item.status !== 'LEAVE')" class="text-slate-300">·</span>
+              </td>
+
+              <!-- Summary Totals -->
+              <td class="p-2 text-center font-mono font-bold bg-emerald-50/50 text-emerald-900 border-l border-slate-100">{{ row.present_days }}</td>
+              <td class="p-2 text-center font-mono font-bold bg-amber-50/50 text-amber-900 border-l border-slate-100">{{ row.total_overtime }}</td>
+              <td class="p-2 text-center font-mono font-bold bg-indigo-50/50 text-indigo-900">{{ row.total_hours }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۴. حالت مدیریت و سرویس‌های ناوگان (Fleet Trips Matrix) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="mainSectionTab === 'fleet' || activeMode === 'fleet'" class="space-y-3">
+    
+    <!-- Fleet Header Toolbar -->
+    <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+          <span>سرویس‌های ثبت‌شده ناوگان در تاریخ {{ selectedDateShamsi }}:</span>
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button (click)="loadVehicleMatrix()" [disabled]="isVehicleLoading" class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <span>بروزرسانی</span>
+        </button>
+        <button (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+          <span *ngIf="!isSavingVehicles">💾 ذخیره ناوگان</span>
+          <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Fleet Data Table -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
+            <tr>
+              <th class="p-3 w-12 text-center">#</th>
+              <th class="p-3 min-w-[160px]">راننده و خودرو</th>
+              <th class="p-3 min-w-[120px]">پلاک انتظامی</th>
+              <th class="p-3 w-28 text-center">تعداد سرویس</th>
+              <th class="p-3 w-36 text-center">نرخ پایه هر سرویس</th>
+              <th class="p-3 min-w-[160px]">شماره بارنامه / حواله</th>
+              <th class="p-3 min-w-[180px]">مبدا و مقصد</th>
+              <th class="p-3 min-w-[200px]">توضیحات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <!-- Loading Indicator -->
+            <tr *ngIf="isVehicleLoading">
+              <td colspan="8" class="p-8 text-center text-slate-400 font-bold">
+                <div class="flex items-center justify-center gap-2">
+                  <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
+                  <span>در حال بارگذاری سرویس‌های ناوگان...</span>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Empty State -->
+            <tr *ngIf="!isVehicleLoading && vehicleRows.length === 0">
+              <td colspan="8" class="p-8 text-center text-slate-400 font-medium">
+                هیچ خودرو یا راننده‌ای در سیستم تعریف نشده است.
+              </td>
+            </tr>
+
+            <!-- Fleet Rows -->
+            <tr *ngFor="let v of vehicleRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+              <td class="p-3 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
+              <td class="p-3 font-bold text-slate-800">
+                <div>{{ v.driver_name || 'راننده ثبت‌نشده' }}</div>
+                <div class="text-[10px] text-slate-400 font-normal">{{ v.vehicle_type_display || 'خودرو' }}</div>
+              </td>
+              <td class="p-3 text-slate-700 font-mono font-bold">{{ v.plate_number || '—' }}</td>
+              <td class="p-3 text-center">
+                <input [id]="'input-trip-' + idx" type="number" [(ngModel)]="v.trip_count" min="0" (keydown)="onFleetGridKeydown($event, 'trip', idx)" class="w-20 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+              <td class="p-3 text-center">
+                <input [id]="'input-rate-' + idx" type="number" [(ngModel)]="v.unit_rate" (keydown)="onFleetGridKeydown($event, 'rate', idx)" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+              <td class="p-3">
+                <input [id]="'input-dispatch-' + idx" type="text" [(ngModel)]="v.dispatch_reference" (keydown)="onFleetGridKeydown($event, 'dispatch', idx)" placeholder="شماره بارنامه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+              <td class="p-3">
+                <input [id]="'input-dest-' + idx" type="text" [(ngModel)]="v.origin_destination" (keydown)="onFleetGridKeydown($event, 'dest', idx)" placeholder="مثلاً: انبار مرکزی به شعبه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+              <td class="p-3">
+                <input [id]="'input-vnote-' + idx" type="text" [(ngModel)]="v.notes" (keydown)="onFleetGridKeydown($event, 'vnote', idx)" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۶. مودال اعمال گروهی ساعت کارکرد (Bulk Hours Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isBulkHoursModalOpen" (keydown.escape)="isBulkHoursModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-800">⏱️ اعمال گروهی ساعت و اضافه‌کار</h3>
+        <button (click)="isBulkHoursModalOpen = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">محدوده اعمال:</label>
+          <select [(ngModel)]="bulkHoursScope" (keydown.escape)="isBulkHoursModalOpen = false" (keydown.enter)="applyBulkHours()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <option value="selected">فقط افراد انتخاب‌شده ({{ selectedPersonnelIds.size }} نفر)</option>
+            <option value="present">تمام افراد حاضر</option>
+            <option value="all">تمام پرسنل لیست</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت موثر:</label>
+            <input type="number" [(ngModel)]="bulkEffectiveHours" (keydown.escape)="isBulkHoursModalOpen = false" (keydown.enter)="applyBulkHours()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت اضافه‌کار:</label>
+            <input type="number" [(ngModel)]="bulkOvertimeHours" (keydown.escape)="isBulkHoursModalOpen = false" (keydown.enter)="applyBulkHours()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">توضیحات (اختیاری):</label>
+          <input type="text" [(ngModel)]="bulkNotes" (keydown.escape)="isBulkHoursModalOpen = false" (keydown.enter)="applyBulkHours()" placeholder="مثلاً: شیفت فوق‌العاده" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isBulkHoursModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl">انصراف (Esc)</button>
+        <button (click)="applyBulkHours()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">اعمال گروهی (Enter)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۷. مودال پیست هوشمند از اکسل (Excel Paste Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isExcelPasteModalOpen" (keydown.escape)="isExcelPasteModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-800">📋 پیست مستقیم داده‌ها از فایل اکسل</h3>
+        <button (click)="isExcelPasteModalOpen = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-500">
+        سطرهای کپی‌شده از اکسل (ستون اول: کد ملی یا نام، ستون دوم: وضعیت، ستون سوم: ساعت موثر، ستون چهارم: اضافه‌کار) را در کادر زیر Paste کنید:
+      </p>
+
+      <textarea [(ngModel)]="excelPasteText" (input)="parseExcelPasteText()" (keydown.escape)="isExcelPasteModalOpen = false" rows="5" placeholder="داده‌ها را اینجا Paste نمایید..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+
+      <!-- Preview parsed rows -->
+      <div *ngIf="excelParsedRows.length > 0" class="max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50 text-[11px]">
+        <div class="font-bold text-slate-700 mb-1">پیش‌نمایش ({{ excelParsedRows.length }} سطر شناسایی شد):</div>
+        <div *ngFor="let pr of excelParsedRows" class="flex items-center justify-between py-1 border-b border-slate-200 last:border-none">
+          <span [class.text-emerald-700]="pr.matchedRow" [class.text-rose-600]="!pr.matchedRow" class="font-bold">
+            {{ pr.full_name }} ({{ pr.national_code }})
+          </span>
+          <span class="text-slate-500">{{ pr.status }} | ساعت: {{ pr.effective_hours }}</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isExcelPasteModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl">انصراف (Esc)</button>
+        <button (click)="applyExcelPaste()" [disabled]="excelParsedRows.length === 0" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl disabled:opacity-50">اعمال در جدول</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۸. مودال ویرایش جزئیات روز در تقویم ۳۱ روزه -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isDayDetailModalOpen" (keydown.escape)="isDayDetailModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="text-sm font-black text-slate-800">{{ selectedDayDetailRow?.full_name }}</h3>
+          <p class="text-[11px] text-slate-500">روز {{ selectedDayDetailItem?.day }} از ماه {{ selectedYearMonth }}</p>
+        </div>
+        <button (click)="isDayDetailModalOpen = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="font-bold text-slate-700">وضعیت حضور:</label>
+            <span *ngIf="isSelectedDayDetailFriday" class="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-bold">
+              ⭐ روز جمعه (جمعه‌کاری خودکار)
+            </span>
+          </div>
+          <select [(ngModel)]="dayDetailStatus" (ngModelChange)="onDayDetailStatusChange()" (keydown.escape)="isDayDetailModalOpen = false" (keydown.enter)="saveDayDetail()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+            <option value="PRESENT_10H">حاضر عادی (۱۰ ساعت)</option>
+            <option value="HALF_5H">نیمه‌وقت (۵ ساعت)</option>
+            <option value="LEAVE">مرخصی</option>
+            <option value="ABSENT">غایب</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت موثر:</label>
+            <input type="number" [(ngModel)]="dayDetailEffectiveHours" (keydown.escape)="isDayDetailModalOpen = false" (keydown.enter)="saveDayDetail()" [disabled]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" [class.opacity-40]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" [class.cursor-not-allowed]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت اضافه‌کار:</label>
+            <input type="number" [(ngModel)]="dayDetailOvertimeHours" (keydown.escape)="isDayDetailModalOpen = false" (keydown.enter)="saveDayDetail()" [disabled]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" [class.opacity-40]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" [class.cursor-not-allowed]="dayDetailStatus === 'ABSENT' || dayDetailStatus === 'LEAVE'" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs" />
+          </div>
+        </div>
+
+        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
+          <span class="font-bold text-slate-600">مجموع ساعات این روز:</span>
+          <span class="font-mono font-black text-slate-800 text-sm">
+            {{ (dayDetailEffectiveHours || 0) + (dayDetailOvertimeHours || 0) }} ساعت
+          </span>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">یادداشت روز:</label>
+          <input type="text" [(ngModel)]="dayDetailNotes" (keydown.escape)="isDayDetailModalOpen = false" (keydown.enter)="saveDayDetail()" placeholder="توضیحات..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isDayDetailModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl">انصراف (Esc)</button>
+        <button (click)="saveDayDetail()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">ثبت و ذخیره (Enter)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۹. مودال ارسال دوره به سرپرست جهت بررسی مالی -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isSubmitModalOpen" (keydown.escape)="isSubmitModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-800">ارسال کارکرد به واحد مالی</h3>
+        <button (click)="isSubmitModalOpen = false" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-600 leading-relaxed">
+        آیا از اتمام ثبت کارکرد پرسنل برای دوره <span class="font-bold text-indigo-700">{{ selectedYearMonth }}</span> اطمینان دارید؟ با ارسال دوره، واحد مالی از تکمیل کارکرد مطلع خواهد شد.
+      </p>
+
+      <div>
+        <label class="block font-bold text-xs text-slate-700 mb-1">یادداشت برای واحد مالی (اختیاری):</label>
+        <textarea [(ngModel)]="submitNotes" (keydown.escape)="isSubmitModalOpen = false" rows="3" placeholder="توضیحات درباره کارکرد این ماه..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isSubmitModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl">انصراف (Esc)</button>
+        <button (click)="submitPeriodForReview()" [disabled]="isSubmittingWorkflow" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl disabled:opacity-50">
+          <span *ngIf="!isSubmittingWorkflow">ارسال نهایی (Enter)</span>
+          <span *ngIf="isSubmittingWorkflow">در حال ارسال...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۰. مودال اعمال کارکرد در بازه زمانی مشخص (Date Range Applicator) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isRangeModalOpen" (keydown.escape)="isRangeModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center font-black">⚡</div>
+          <div>
+            <h3 class="text-sm font-black text-slate-800">اعمال کارکرد در بازه زمانی مشخص</h3>
+            <p class="text-[11px] text-slate-500 font-medium">ماه: {{ selectedYearMonth }} ({{ monthName }})</p>
+          </div>
+        </div>
+        <button (click)="isRangeModalOpen = false" class="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <!-- بازه روزها -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">بازه روزهای ماه:</label>
+          <div class="grid grid-cols-2 gap-3 items-center">
+            <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <span class="text-slate-500 font-bold whitespace-nowrap">از روز:</span>
+              <input type="number" [(ngModel)]="rangeStartDay" min="1" [max]="rangeEndDay" class="w-full bg-transparent font-mono font-bold text-slate-800 text-center focus:outline-none" />
+            </div>
+            <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              <span class="text-slate-500 font-bold whitespace-nowrap">تا روز:</span>
+              <input type="number" [(ngModel)]="rangeEndDay" [min]="rangeStartDay" [max]="daysInMonth" class="w-full bg-transparent font-mono font-bold text-slate-800 text-center focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- پرسنل هدف -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1.5">پرسنل هدف:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer" [ngClass]="rangeTargetScope === 'all' ? 'bg-indigo-50 border-indigo-300 text-indigo-800 font-black' : 'bg-slate-50 text-slate-700'">
+              <input type="radio" [(ngModel)]="rangeTargetScope" value="all" class="text-indigo-600" />
+              <span>همه پرسنل انبار ({{ monthlyGridRows.length }} نفر)</span>
+            </label>
+            <label class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 cursor-pointer" [ngClass]="rangeTargetScope === 'selected' ? 'bg-indigo-50 border-indigo-300 text-indigo-800 font-black' : 'bg-slate-50 text-slate-700'">
+              <input type="radio" [(ngModel)]="rangeTargetScope" value="selected" class="text-indigo-600" />
+              <span>پرسنل انتخاب‌شده ({{ selectedPersonnelIds.size }} نفر)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- وضعیت و ساعت کاری -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">وضعیت حضور:</label>
+            <select [(ngModel)]="rangeStatus" (ngModelChange)="onRangeStatusChange()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none cursor-pointer">
+              <option value="PRESENT_10H">حاضر (۱۰ ساعت)</option>
+              <option value="HALF_5H">نیمه‌وقت (۵ ساعت)</option>
+              <option value="FRIDAY_WORK">جمعه‌کاری (۱۰ ساعت)</option>
+              <option value="MISSION">ماموریت (۱۰ ساعت)</option>
+              <option value="LEAVE">مرخصی (۰ ساعت)</option>
+              <option value="ABSENT">غایب (۰ ساعت)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ساعت موثر:</label>
+            <input type="number" [(ngModel)]="rangeEffectiveHours" min="0" max="24" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <!-- گزینه‌های هوشمند -->
+        <div class="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-700 font-bold">
+            <input type="checkbox" [(ngModel)]="rangeSkipFridays" class="rounded text-sky-600 focus:ring-sky-500" />
+            <span>جمعه‌ها نادیده گرفته شوند (عدم ثبت کارکرد در جمعه‌ها)</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-700 font-bold">
+            <input type="checkbox" [(ngModel)]="rangeOnlyEmptyDays" class="rounded text-sky-600 focus:ring-sky-500" />
+            <span>فقط روزهای خالی و ثبت‌نشده پر شوند (حفظ روزهای ثبت‌شده قبلی)</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isRangeModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">انصراف (Esc)</button>
+        <button (click)="applyDateRangeAttendance()" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-black rounded-xl shadow-md shadow-sky-500/20 flex items-center gap-1.5 cursor-pointer transition-all">
+          <span>⚡ اعمال کارکرد در تقویم</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

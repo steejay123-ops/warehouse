@@ -126,6 +126,8 @@ export interface AttendanceMatrixRow {
   national_code: string;
   job_title: string;
   attendance_id?: number | null;
+  warehouse_id?: number | null;
+  warehouse_name?: string;
   status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK' | 'CUSTOM' | '' | string;
   effective_hours: number;
   overtime_hours: number;
@@ -134,6 +136,8 @@ export interface AttendanceMatrixRow {
   advance_payment: number;
   notes: string;
   is_existing: boolean;
+  _isDirty?: boolean;
+  is_active?: boolean;
 }
 
 export interface AttendanceMatrixResponse {
@@ -159,6 +163,7 @@ export interface VehicleMatrixRow {
   origin_destination: string;
   notes: string;
   is_existing: boolean;
+  warehouse_name?: string;
 }
 
 export interface VehicleMatrixResponse {
@@ -205,8 +210,12 @@ export interface MonthlyWorkPeriod {
   warehouse: number;
   warehouse_name?: string;
   year_month: string;
-  status: 'OPEN' | 'LOCKED' | 'FINALIZED';
+  status: 'OPEN' | 'SUBMITTED' | 'LOCKED' | 'REJECTED' | 'FINALIZED' | string;
   status_display?: string;
+  submitted_at?: string;
+  submitted_by_name?: string;
+  submission_notes?: string;
+  rejection_reason?: string;
   locked_at?: string;
   locked_by_name?: string;
   notes?: string;
@@ -374,6 +383,7 @@ export interface MonthlyGridPersonnelDay {
   day: number;
   date_shamsi: string;
   status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK' | 'CUSTOM' | '' | string;
+  status_display?: string;
   effective_hours: number;
   overtime_hours: number;
   is_friday_work: boolean;
@@ -392,7 +402,17 @@ export interface MonthlyGridRow {
   total_hours: number;
   total_overtime: number;
   present_days: number;
+  is_active?: boolean;
   days: MonthlyGridPersonnelDay[];
+}
+
+export interface AttendanceAnomaly {
+  type: 'EXCESSIVE_HOURS' | 'CONFLICT_OVERTIME' | 'ADVANCE_ABSENT' | 'GAP_DAY' | string;
+  severity: 'high' | 'medium' | 'low';
+  personnel_id: number;
+  full_name: string;
+  day: number;
+  message: string;
 }
 
 export interface MonthlyGridResponse {
@@ -402,12 +422,26 @@ export interface MonthlyGridResponse {
   days_in_month: number;
   is_locked: boolean;
   period_status: string;
+  period_info?: {
+    id: number | null;
+    status: string;
+    status_display: string;
+    is_locked: boolean;
+    submitted_at?: string | null;
+    submitted_by_name?: string | null;
+    submission_notes?: string;
+    rejection_reason?: string;
+    locked_at?: string | null;
+    locked_by_name?: string | null;
+  };
   settings_window: {
     past_days: number;
     future_days: number;
   };
   days_meta: MonthlyGridDayMeta[];
   rows: MonthlyGridRow[];
+  anomalies?: AttendanceAnomaly[];
 }
+
 
 

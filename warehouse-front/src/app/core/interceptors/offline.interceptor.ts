@@ -336,8 +336,20 @@ export const offlineInterceptor: HttpInterceptorFn = (
   if (network.isBrowserOnline) {
     return next(req).pipe(
       tap((event) => {
-        if (event instanceof HttpResponse) {
+        if (event instanceof HttpResponse && event.status >= 200 && event.status < 300) {
           network.reportServerReachable();
+          try {
+            const rawUrl = req.url.split('?')[0];
+            const cleanUrl = rawUrl.replace(/\/+$/, '');
+            const lastSlash = cleanUrl.lastIndexOf('/');
+            if (lastSlash > 0) {
+              const parentUrl = cleanUrl.substring(0, lastSlash);
+              syncService.invalidateCache(parentUrl);
+            }
+            syncService.invalidateCache(cleanUrl);
+          } catch (e) {
+            console.warn('[OfflineInterceptor] Error invalidating cache on mutation:', e);
+          }
         }
       }),
       catchError((error: HttpErrorResponse) => {

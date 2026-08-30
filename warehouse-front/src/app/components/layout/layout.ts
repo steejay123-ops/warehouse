@@ -486,7 +486,8 @@ export class Layout implements OnInit, OnDestroy {
 
   private SYSTEM_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
-    {id:'personnel', label:'پرسنل و ناوگان', icon:'truck', permission: 'view_sys_personnel'},
+    {id:'attendance', label:'ثبت کارکرد و ناوگان', icon:'truck', permission: 'view_sys_personnel'},
+    {id:'personnel', label:'حقوق و دستمزد و دیسکت‌ها', icon:'users', permission: 'view_sys_personnel'},
     {id:'users', label:'کاربران و نقش ها', icon:'users', permission: 'view_sys_users'},
     {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
@@ -501,7 +502,6 @@ export class Layout implements OnInit, OnDestroy {
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد انبار', icon:'grid', permission: 'view_wh_dashboard'},
-    {id:'attendance', label:'کارکرد و ناوگان انبار', icon:'truck', permission: 'view_wh_attendance'},
     {id:'docs', label:'مدیریت کالا', icon:'upload-cloud', permission: 'view_wh_docs'},
     {id:'dispatch', label:'تخصیص کالا', icon:'clipboard', permission: 'view_wh_dispatch'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
@@ -1137,7 +1137,7 @@ export class Layout implements OnInit, OnDestroy {
       'wh-settings': 'تنظیمات انبار',
       'count-tracking': 'پیگیری وضعیت شمارش',
       reports: 'گزارش‌ساز پویا',
-      personnel: 'مدیریت پرسنل و ناوگان',
+      personnel: 'مدیریت حقوق و دستمزد و دیسکت‌ها',
       attendance: 'ثبت کارکرد و ناوگان انبار'
     };
     this.currentTitle = titles[tab] || tab;

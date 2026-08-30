@@ -104,14 +104,42 @@
         </div>
 
         <!-- RTL Daily Date Controls (راست = روز قبل، چپ = روز بعد) -->
-        <div *ngIf="activeMode === 'daily' || activeMode === 'fleet'" class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+        <div *ngIf="activeMode === 'daily' || activeMode === 'fleet'" class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1 relative">
           <!-- راست: روز قبل -->
           <button (click)="goToPrevDay()" title="روز قبل" class="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
           </button>
-          <div class="relative">
-            <input type="text" [formControl]="attendanceDateControl" (change)="onDateChanged(attendanceDateControl.value || '')" placeholder="۱۴۰۵/۰۶/۰۸" class="w-24 text-center bg-white border border-slate-200 text-slate-800 text-xs font-mono font-bold rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer" />
+          
+          <!-- Persian Datepicker & Input Wrapper -->
+          <div class="relative flex items-center bg-white border border-slate-200 rounded-lg px-1.5 py-0.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20" (click)="$event.stopPropagation()">
+            <ng-persian-datepicker
+              [(uiIsVisible)]="isAttendanceDatePickerOpen"
+              (dateOnSelect)="onAttendanceDateSelect($event)"
+              [dateInitValue]="false"
+              class="cursor-pointer relative block">
+              <input
+                type="text"
+                [formControl]="attendanceDateControl"
+                (input)="onAttendanceDateInput($event)"
+                (click)="openAttendanceDatePicker()"
+                placeholder="۱۴۰۵/۰۶/۰۸"
+                title="انتخاب از تقویم یا تایپ تاریخ (مثلاً 14050608)"
+                class="w-24 text-center bg-transparent text-slate-800 text-xs font-mono font-bold focus:outline-none cursor-pointer" />
+            </ng-persian-datepicker>
+            <button
+              type="button"
+              (click)="toggleAttendanceDatePicker($event)"
+              title="باز کردن تقویم شمسی"
+              class="p-1 hover:bg-slate-100 text-slate-500 hover:text-emerald-700 rounded-md transition-colors cursor-pointer mr-0.5 shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </button>
           </div>
+
           <!-- چپ: روز بعد -->
           <button (click)="goToNextDay()" title="روز بعد" class="p-1.5 hover:bg-slate-200 text-slate-600 rounded-lg transition-all cursor-pointer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>

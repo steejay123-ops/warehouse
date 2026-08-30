@@ -493,10 +493,15 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     this.openSpecialMenuRowId = null;
     this.isMonthPickerOpen = false;
     this.isWarehouseMenuOpen = false;
+    this.isAttendanceDatePickerOpen = false;
   }
 
   @HostListener('window:keydown.escape')
   onGlobalEscape(): void {
+    if (this.isAttendanceDatePickerOpen) {
+      this.isAttendanceDatePickerOpen = false;
+      return;
+    }
     if (this.isRangeModalOpen) {
       this.isRangeModalOpen = false;
       return;
@@ -761,6 +766,82 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       this.fiscalYear = parts[0];
     }
     this.onFilterChange();
+  }
+
+  toggleAttendanceDatePicker(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.isAttendanceDatePickerOpen = !this.isAttendanceDatePickerOpen;
+    this.isMonthPickerOpen = false;
+    this.isWarehouseMenuOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  openAttendanceDatePicker(): void {
+    this.isAttendanceDatePickerOpen = true;
+    this.isMonthPickerOpen = false;
+    this.isWarehouseMenuOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  closeAttendanceDatePicker(): void {
+    this.isAttendanceDatePickerOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  onAttendanceDateInput(event: any): void {
+    const rawVal = (event?.target?.value || '').trim();
+    if (!rawVal) return;
+
+    // تبدیل ارقام فارسی به انگلیسی
+    const enVal = rawVal.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+
+    // پشتیبانی از فرمت ۸ رقمی بدون اسلش مانند 14050608
+    const digitsOnly = enVal.replace(/\D/g, '');
+    if (digitsOnly.length === 8) {
+      const y = digitsOnly.substring(0, 4);
+      const m = digitsOnly.substring(4, 6);
+      const d = digitsOnly.substring(6, 8);
+      const formatted = `${y}/${m}/${d}`;
+      this.selectedDateShamsi = formatted;
+      this.attendanceDateControl.setValue(formatted, { emitEvent: false });
+      this.syncYearMonthFromDailyDate();
+      this.onFilterChange();
+      return;
+    }
+
+    if (enVal.includes('/') && enVal.length >= 8) {
+      this.selectedDateShamsi = enVal;
+      this.syncYearMonthFromDailyDate();
+      this.onFilterChange();
+    }
+  }
+
+  onAttendanceDateSelect(event: any): void {
+    if (!event) return;
+    this.closeAttendanceDatePicker();
+    if (event.shamsi) {
+      let rawShamsi = event.shamsi.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+      const parts = rawShamsi.split('/');
+      if (parts.length === 3) {
+        const pad = (n: string) => n.length === 1 ? '0' + n : n;
+        rawShamsi = `${parts[0]}/${pad(parts[1])}/${pad(parts[2])}`;
+      }
+      this.selectedDateShamsi = rawShamsi;
+      this.attendanceDateControl.setValue(rawShamsi, { emitEvent: false });
+      this.syncYearMonthFromDailyDate();
+      this.onFilterChange();
+    } else if (event.gregorian) {
+      const d = new Date(event.gregorian);
+      const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const pad = (n: number) => n < 10 ? '0' + n : String(n);
+      const formatted = `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
+      this.selectedDateShamsi = formatted;
+      this.attendanceDateControl.setValue(formatted, { emitEvent: false });
+      this.syncYearMonthFromDailyDate();
+      this.onFilterChange();
+    }
   }
 
   goToPrevDay(): void {

@@ -1,3 +1,4 @@
+- [Fleet and Personnel Complete Synergy Planned](Fleet_And_Personnel_Complete_Synergy/implementation_plan_fleet_synergy.md)
 - [Attendance Ergonomics and Fleet Split Completed](Attendance_Ergonomics_And_Fleet_Split/walkthrough_attendance_ergonomics.md)
 - [Attendance Ergonomics and Fleet Split Planned](Attendance_Ergonomics_And_Fleet_Split/implementation_plan_attendance_ergonomics.md)
 - [Attendance UI and Bulk Actions Completed](Attendance_UI_BulkActions_Refactor/walkthrough_attendance_ui.md)

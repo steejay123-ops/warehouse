@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { StateService } from '../../../services/state.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { PersonnelApiService } from '../../../core/api/personnel-api.service';
@@ -20,7 +21,8 @@ import {
   MonthlyGridDayMeta,
   MonthlyGridPersonnelDay,
   MonthlyGridRow,
-  MonthlyGridResponse
+  MonthlyGridResponse,
+  AttendanceAnomaly
 } from '../../../core/models/personnel.model';
 import { jalaliToGregorian, gregorianToJalali } from '../../../core/utils/date-utils';
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
@@ -37,7 +39,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   portalPerspective: 'warehouse' | 'accountant' = 'accountant';
 
   // Active Main Tab
-  activeTab = 'attendance';
+  activeTab: string = 'payroll';
   profileSubTab: 'personnel' | 'vehicles' = 'personnel';
   reportSubTab: 'personnel' | 'fleet' = 'personnel';
   settingsSubTab: 'grades' | 'labor' | 'attendance_window' | 'dsk' | 'tax' | 'bank' = 'grades';
@@ -108,6 +110,29 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   dayDetailAdvancePayment: number = 0;
   dayDetailNotes: string = '';
 
+  // ── گردش کار تایید دو مرحله‌ای (Two-Step Approval Workflow) ──
+  periodInfo: any = null;
+  isSubmittingWorkflow = false;
+  isRejectModalOpen = false;
+  rejectReason = '';
+  isSubmitModalOpen = false;
+  submitNotes = '';
+
+  // ── هشدارهای هوشمند ناهنجاری‌ها (Anomaly & Conflict Alerts) ──
+  anomalies: AttendanceAnomaly[] = [];
+  isAnomaliesPanelOpen = false;
+  highlightPersonnelId: number | null = null;
+  highlightDay: number | null = null;
+
+  // ── خروجی چاپی شیت ماهانه جهت امضا و اثر انگشت (Printable Timesheet) ──
+  isPrintModalOpen = false;
+
+  // ── خروجی و ورود دو طرفه اکسل شیت ماهانه (Two-Way Timesheet Excel) ──
+  isExportingMonthlyExcel = false;
+  isImportingMonthlyExcel = false;
+  isExcelImportModalOpen = false;
+  selectedExcelImportFile: File | null = null;
+
   // Matrix Fleet Trips
   vehicleRows: VehicleMatrixRow[] = [];
   isVehicleLoading = false;
@@ -162,6 +187,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
 
   constructor(
     public state: StateService,
+    public auth: AuthService,
     private api: PersonnelApiService,
     private whService: WarehouseHttpService,
     private toast: ToastService,
@@ -171,6 +197,14 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     private router: Router
   ) {}
 
+  get canUnlockPeriod(): boolean {
+    const u = this.auth.user();
+    if (!u) return false;
+    return !!u.is_superuser ||
+      (u.roles && (u.roles.includes('admin') || u.roles.includes('manager'))) ||
+      (u.permissions && (u.permissions.includes('can_override_attendance_lock') || u.permissions.includes('perm_sys_settings')));
+  }
+
   ngOnInit(): void {
     this.initDefaultDate();
     this.loadWarehouses();
@@ -178,12 +212,50 @@ export class PersonnelManagement implements OnInit, OnDestroy {
 
     // Check query params if any tab or perspective requested
     this.route.queryParams.subscribe(params => {
+      let shouldReload = false;
       if (params['perspective']) {
         this.portalPerspective = params['perspective'] === 'warehouse' ? 'warehouse' : 'accountant';
       }
       if (params['tab']) {
         this.activeTab = params['tab'];
       }
+      if (params['subtab']) {
+        if (this.activeTab === 'profiles') this.profileSubTab = params['subtab'];
+        else if (this.activeTab === 'reports') this.reportSubTab = params['subtab'];
+        else if (this.activeTab === 'settings') this.settingsSubTab = params['subtab'];
+      }
+      if (params['wh'] !== undefined) {
+        const whId = params['wh'] ? Number(params['wh']) : null;
+        if (this.selectedWarehouseId !== whId) {
+          this.selectedWarehouseId = whId;
+          shouldReload = true;
+        }
+      }
+      if (params['month'] && params['month'] !== this.selectedYearMonth) {
+        this.selectedYearMonth = params['month'];
+        shouldReload = true;
+      }
+      if (shouldReload && this.warehouses.length > 0) {
+        this.onWarehouseChange();
+      }
+    });
+  }
+
+  updateUrlParams(): void {
+    const sub = this.activeTab === 'profiles' ? this.profileSubTab : (this.activeTab === 'reports' ? this.reportSubTab : (this.activeTab === 'settings' ? this.settingsSubTab : null));
+    const queryParams: any = {
+      perspective: this.portalPerspective,
+      tab: this.activeTab,
+      subtab: sub || null,
+      wh: this.selectedWarehouseId !== null ? this.selectedWarehouseId : null,
+      month: this.selectedYearMonth || null,
+      year: this.fiscalYear || null
+    };
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
     });
   }
 
@@ -228,6 +300,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   onWarehouseChange(): void {
+    this.updateUrlParams();
     if (this.activeTab === 'attendance') {
       if (this.attendanceViewMode === 'daily') {
         this.loadAttendanceMatrix();
@@ -265,6 +338,14 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   setTab(tab: string): void {
+    if (tab === 'attendance') {
+      this.router.navigate(['/attendance']);
+      return;
+    }
+    if (tab === 'fleet') {
+      this.router.navigate(['/attendance'], { queryParams: { mode: 'fleet' } });
+      return;
+    }
     this.activeTab = tab;
     this.onWarehouseChange();
   }
@@ -382,8 +463,8 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     this.selectAllChecked = false;
   }
 
-  // ── ۱. حاضر کردن همه پرسنل (Mark All Present) ───────────────
-  setAllPresent(): void {
+  // ── ۱. تغییر وضعیت دسته‌جمعی هوشمند (Bulk Attendance Status) ────────
+  setBulkAttendanceStatus(status: 'PRESENT_10H' | 'HALF_5H' | 'ABSENT' | 'LEAVE' | 'MISSION' | 'FRIDAY_WORK'): void {
     if (this.isPeriodLocked) {
       this.toast.show('warning', 'دوره قفل است و امکان تغییر وضعیت وجود ندارد.');
       return;
@@ -393,41 +474,16 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       : this.attendanceRows;
 
     if (targetRows.length === 0) {
-      this.toast.show('warning', 'هیچ پرسنلی در جدول یافت نشد.');
+      this.toast.show('info', 'هیچ پرسنلی برای تغییر وضعیت یافت نشد.');
       return;
     }
 
     targetRows.forEach(row => {
-      this.setAttendanceStatus(row, 'PRESENT_10H');
+      this.setAttendanceStatus(row, status);
     });
 
-    this.toast.show('success', `وضعیت ${targetRows.length} پرسنل به حاضر (۱۰ ساعت) تغییر یافت.`);
-    this.cdr.detectChanges();
-  }
-
-  // ── ۲. حاضر کردن فقط افراد ثبت‌نشده (Fill Unset as Present) ──
-  fillUnsetAsPresent(): void {
-    if (this.isPeriodLocked) {
-      this.toast.show('warning', 'دوره قفل است و امکان تغییر وضعیت وجود ندارد.');
-      return;
-    }
-    const targetRows = this.selectedPersonnelIds.size > 0
-      ? this.attendanceRows.filter(r => this.selectedPersonnelIds.has(r.personnel_id))
-      : this.attendanceRows;
-
-    let count = 0;
-    targetRows.forEach(row => {
-      if (!row.status || row.status === '' || (row.status === 'ABSENT' && row.effective_hours === 0 && !row.is_existing)) {
-        this.setAttendanceStatus(row, 'PRESENT_10H');
-        count++;
-      }
-    });
-
-    if (count > 0) {
-      this.toast.show('success', `تعداد ${count} پرسنل بدون وضعیت، به حاضر (۱۰ ساعت) تغییر یافتند.`);
-    } else {
-      this.toast.show('info', 'تمامی پرسنل انتخاب‌شده دارای وضعیت ثبت‌شده هستند.');
-    }
+    const scopeText = this.selectedPersonnelIds.size > 0 ? `${targetRows.length} نفر انتخاب‌شده` : `تمام پرسنل (${targetRows.length} نفر)`;
+    this.toast.show('success', `وضعیت ${scopeText} به‌روز شد.`);
     this.cdr.detectChanges();
   }
 
@@ -898,6 +954,8 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         this.monthlyGridRows = res.rows || [];
         this.isPeriodLocked = res.is_locked;
         this.periodStatus = res.period_status;
+        this.periodInfo = res.period_info || null;
+        this.anomalies = res.anomalies || [];
         this.monthlyGridSettingsWindow = res.settings_window || { past_days: 3, future_days: 0 };
         this.monthName = res.month_name || '';
         this.daysInMonth = res.days_in_month || 31;
@@ -1054,6 +1112,265 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     });
   }
 
+  // ── گردش کار دو مرحله‌ای تایید کارکرد (Two-Step Approval) ──
+  getSelectedWarehouseName(): string {
+    if (!this.selectedWarehouseId) return 'تمام انبارها';
+    const wh = this.warehouses.find(w => w.id === this.selectedWarehouseId);
+    return wh ? wh.name : 'انبار';
+  }
+
+  openSubmitModal(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره در حال حاضر قفل یا ارسال شده است.');
+      return;
+    }
+    if (!this.selectedWarehouseId) {
+      this.toast.show('warning', 'جهت ارسال کارکرد برای تایید مالی، ابتدا باید یک انبار مشخص را انتخاب کنید.');
+      return;
+    }
+    this.submitNotes = '';
+    this.isSubmitModalOpen = true;
+  }
+
+  closeSubmitModal(): void {
+    this.isSubmitModalOpen = false;
+  }
+
+  confirmSubmitForReview(): void {
+    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    this.isSubmittingWorkflow = true;
+    this.api.periodWorkflowAction({
+      warehouse_id: this.selectedWarehouseId,
+      year_month: this.selectedYearMonth,
+      action: 'submit',
+      notes: this.submitNotes
+    }).subscribe({
+      next: (res) => {
+        this.isSubmittingWorkflow = false;
+        this.isSubmitModalOpen = false;
+        this.toast.show('success', res.message || 'کارکرد با موفقیت جهت بررسی مالی ارسال گردید.');
+        this.loadMonthlyAttendanceGrid();
+      },
+      error: (err) => {
+        this.isSubmittingWorkflow = false;
+        this.toast.show('error', err?.error?.error || 'خطا در ارسال کارکرد');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  async approveAndLockPeriod(): Promise<void> {
+    if (!this.selectedWarehouseId || !this.selectedYearMonth) {
+      this.toast.show('warning', 'لطفاً انبار مورد نظر را انتخاب کنید.');
+      return;
+    }
+    const confirmed = await this.confirmDialog.open({
+      title: 'تایید نهایی و قفل دوره کارکرد',
+      message: `آیا از تایید نهایی و قفل قطعی دوره کارکرد ${this.selectedYearMonth} اطمینان دارید؟ پس از قفل، امکان تغییر کارکرد توسط سرپرستان وجود نخواهد داشت.`,
+      confirmText: 'تایید نهایی و قفل',
+      cancelText: 'انصراف',
+      type: 'warning'
+    });
+
+    if (confirmed) {
+      this.isSubmittingWorkflow = true;
+      this.api.periodWorkflowAction({
+        warehouse_id: this.selectedWarehouseId,
+        year_month: this.selectedYearMonth,
+        action: 'approve'
+      }).subscribe({
+        next: (res) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('success', res.message || 'دوره کارکرد تایید نهایی و قفل شد.');
+          this.loadMonthlyAttendanceGrid();
+        },
+        error: (err) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('error', err?.error?.error || 'خطا در تایید دوره');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  openRejectModal(): void {
+    if (!this.selectedWarehouseId) {
+      this.toast.show('warning', 'لطفاً انبار مورد نظر را انتخاب کنید.');
+      return;
+    }
+    this.rejectReason = '';
+    this.isRejectModalOpen = true;
+  }
+
+  closeRejectModal(): void {
+    this.isRejectModalOpen = false;
+  }
+
+  confirmRejectPeriod(): void {
+    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    if (!this.rejectReason.trim()) {
+      this.toast.show('warning', 'درج علت رد دوره الزامی است.');
+      return;
+    }
+    this.isSubmittingWorkflow = true;
+    this.api.periodWorkflowAction({
+      warehouse_id: this.selectedWarehouseId,
+      year_month: this.selectedYearMonth,
+      action: 'reject',
+      notes: this.rejectReason.trim()
+    }).subscribe({
+      next: (res) => {
+        this.isSubmittingWorkflow = false;
+        this.isRejectModalOpen = false;
+        this.toast.show('info', res.message || 'دوره کارکرد رد شد و جهت بازبینی به سرپرست بازگشت.');
+        this.loadMonthlyAttendanceGrid();
+      },
+      error: (err) => {
+        this.isSubmittingWorkflow = false;
+        this.toast.show('error', err?.error?.error || 'خطا در رد دوره');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  async unlockPeriodWorkflow(): Promise<void> {
+    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    const confirmed = await this.confirmDialog.open({
+      title: 'بازگشایی مجدد دوره کارکرد',
+      message: `آیا از بازگشایی قفل دوره کارکرد ${this.selectedYearMonth} اطمینان دارید؟`,
+      confirmText: 'بازگشایی',
+      cancelText: 'انصراف',
+      type: 'info'
+    });
+
+    if (confirmed) {
+      this.isSubmittingWorkflow = true;
+      this.api.periodWorkflowAction({
+        warehouse_id: this.selectedWarehouseId,
+        year_month: this.selectedYearMonth,
+        action: 'unlock'
+      }).subscribe({
+        next: (res) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('success', res.message || 'دوره با موفقیت بازگشایی شد.');
+          this.loadMonthlyAttendanceGrid();
+        },
+        error: (err) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('error', err?.error?.error || 'خطا در بازگشایی دوره');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  // ── هشدارهای هوشمند ناهنجاری‌ها (Anomaly & Conflict Alerts) ──
+  toggleAnomaliesPanel(): void {
+    this.isAnomaliesPanelOpen = !this.isAnomaliesPanelOpen;
+  }
+
+  focusAnomaly(anomaly: AttendanceAnomaly): void {
+    this.highlightPersonnelId = anomaly.personnel_id;
+    this.highlightDay = anomaly.day;
+    setTimeout(() => {
+      const rowElem = document.getElementById(`grid-row-${anomaly.personnel_id}`);
+      if (rowElem) {
+        rowElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  }
+
+  clearHighlight(): void {
+    this.highlightPersonnelId = null;
+    this.highlightDay = null;
+  }
+
+  // ── خروجی چاپی شیت ماهانه (Printable Timesheet) ──
+  openPrintTimesheetModal(): void {
+    this.isPrintModalOpen = true;
+  }
+
+  closePrintTimesheetModal(): void {
+    this.isPrintModalOpen = false;
+  }
+
+  triggerPrint(): void {
+    window.print();
+  }
+
+  // ── خروجی و ورود دو طرفه اکسل شیت ماهانه (Two-Way Timesheet Excel) ──
+  exportMonthlyTimesheetExcel(): void {
+    if (!this.selectedYearMonth) return;
+    this.isExportingMonthlyExcel = true;
+    this.toast.show('info', 'در حال آماده‌سازی فایل اکسل شیت ماهانه...');
+    this.api.exportMonthlyAttendanceExcel(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
+      next: (blob) => {
+        this.isExportingMonthlyExcel = false;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const whName = this.getSelectedWarehouseName() || 'all_warehouses';
+        a.download = `Timesheet_${this.selectedYearMonth.replace('/', '_')}_${whName}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.toast.show('success', 'فایل اکسل شیت ماهانه با موفقیت دانلود شد.');
+      },
+      error: (err) => {
+        this.isExportingMonthlyExcel = false;
+        this.toast.show('error', 'خطا در دریافت فایل اکسل شیت ماهانه.');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openExcelImportModal(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره کارکرد قفل شده است و امکان بارگذاری وجود ندارد.');
+      return;
+    }
+    this.selectedExcelImportFile = null;
+    this.isExcelImportModalOpen = true;
+  }
+
+  closeExcelImportModal(): void {
+    this.isExcelImportModalOpen = false;
+    this.selectedExcelImportFile = null;
+  }
+
+  onExcelImportFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (file) {
+      this.selectedExcelImportFile = file;
+    }
+  }
+
+  uploadMonthlyTimesheetExcel(): void {
+    if (!this.selectedExcelImportFile || !this.selectedYearMonth) return;
+    this.isImportingMonthlyExcel = true;
+    const formData = new FormData();
+    formData.append('file', this.selectedExcelImportFile);
+    if (this.selectedWarehouseId) {
+      formData.append('warehouse_id', this.selectedWarehouseId.toString());
+    }
+    formData.append('year_month', this.selectedYearMonth);
+
+    this.api.importMonthlyAttendanceExcel(formData).subscribe({
+      next: (res) => {
+        this.isImportingMonthlyExcel = false;
+        this.closeExcelImportModal();
+        this.toast.show('success', res.message || 'شیت کارکرد با موفقیت از فایل اکسل بارگذاری شد.');
+        this.loadMonthlyAttendanceGrid();
+      },
+      error: (err) => {
+        this.isImportingMonthlyExcel = false;
+        this.toast.show('error', err?.error?.error || 'خطا در بارگذاری فایل اکسل');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   // ── انتخابگر هوشمند تاریخ و تقویم شمسی ───────────────────────
   onAttendanceDateInput(event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -1180,7 +1497,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   // ۳. محاسبه ماهانه ۵۸ ستون حقوق و دیسکت‌ها (حسابدار)
   // ─────────────────────────────────────────────────────────────
   loadMonthlyPayroll(): void {
-    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    if (!this.selectedYearMonth) return;
     this.isPayrollLoading = true;
     this.api.getMonthlyPayrollRecords({
       warehouse_id: this.selectedWarehouseId,
@@ -1204,7 +1521,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   calculateMonthlyPayroll(): void {
-    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    if (!this.selectedYearMonth) return;
     this.isCalculatingPayroll = true;
     this.api.calculateMonthlyPayroll(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
       next: (res) => {
@@ -1611,6 +1928,47 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  async deletePersonnel(p: Partial<PersonnelProfile> | PersonnelProfile): Promise<void> {
+    if (!p.id) return;
+    const confirmed = await this.confirmDialog.open({
+      title: 'حذف پرونده پرسنلی',
+      message: `آیا از حذف پرونده پرسنل «${p.full_name || ((p.first_name || '') + ' ' + (p.last_name || ''))}» اطمینان دارید؟\n(نکته: در صورتی که کارکردی برای این فرد ثبت نشده باشد حذف می‌گردد، در غیر این صورت باید غیرفعال شود.)`,
+      confirmText: 'بله، حذف کن',
+      cancelText: 'انصراف',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    this.api.deletePersonnelProfile(p.id).subscribe({
+      next: () => {
+        this.toast.show('success', `پرونده پرسنل «${p.full_name || p.first_name}» با موفقیت حذف گردید.`);
+        if (this.isPersonnelModalOpen) {
+          this.closePersonnelModal();
+        }
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'امکان حذف این پرسنل وجود ندارد (دارای سابقه کارکرد یا حقوق است).');
+      }
+    });
+  }
+
+  togglePersonnelActive(p: PersonnelProfile): void {
+    if (!p.id) return;
+    const newStatus = !p.is_active;
+    this.api.updatePersonnelProfile(p.id, { is_active: newStatus }).subscribe({
+      next: () => {
+        p.is_active = newStatus;
+        this.toast.show('success', `وضعیت پرسنل به «${newStatus ? 'فعال' : 'غیرفعال'}» تغییر یافت.`);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در تغییر وضعیت پرسنل');
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────

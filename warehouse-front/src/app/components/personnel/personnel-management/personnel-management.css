@@ -176,3 +176,25 @@
   display: none !important;
 }
 
+/* ═══════════════════════════════════════════════════════════════ */
+/* استایل‌های اختصاصی چاپ شیت رسمی کارکرد ماهانه (A4 افقی)        */
+/* ═══════════════════════════════════════════════════════════════ */
+@media print {
+  #printable-timesheet-area {
+    position: absolute !important;
+    right: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 2mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 10px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+

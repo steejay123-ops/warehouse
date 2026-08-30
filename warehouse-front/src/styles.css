@@ -92,7 +92,8 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
   }
 
   /* Force display ONLY of the isolated print container */
-  #id-cards-print-sheet {
+  #id-cards-print-sheet,
+  #printable-timesheet-area {
     display: block !important;
     visibility: visible !important;
     position: absolute !important;
@@ -103,11 +104,18 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
     padding: 0 !important;
     background: #ffffff !important;
     z-index: 99999 !important;
+    page: timesheet;
   }
 
-  #id-cards-print-sheet * {
+  #id-cards-print-sheet *,
+  #printable-timesheet-area * {
     visibility: visible !important;
   }
+}
+
+@page timesheet {
+  size: A4 landscape;
+  margin: 5mm;
 }
 
 /* ==========================================================================

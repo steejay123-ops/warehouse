@@ -479,15 +479,25 @@ export class Layout implements OnInit, OnDestroy {
     database: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
     activity: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>`,
     'bar-chart-2': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`,
-    truck: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`
+    truck: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>`,
+    'dollar-sign': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`,
+    'credit-card': `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>`,
+    briefcase: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>`
   };
 
   icons: any = {};
 
+  isAccountingMenuOpen = localStorage.getItem('isAccountingMenuOpen') !== 'false';
+
+  toggleAccountingMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isAccountingMenuOpen = !this.isAccountingMenuOpen;
+    localStorage.setItem('isAccountingMenuOpen', String(this.isAccountingMenuOpen));
+    this.cdr.detectChanges();
+  }
+
   private SYSTEM_NAV_ITEMS: any[] = [
     {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
-    {id:'attendance', label:'ثبت کارکرد و ناوگان', icon:'truck', permission: 'view_sys_personnel'},
-    {id:'personnel', label:'حقوق و دستمزد و دیسکت‌ها', icon:'users', permission: 'view_sys_personnel'},
     {id:'users', label:'کاربران و نقش ها', icon:'users', permission: 'view_sys_users'},
     {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
     {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
@@ -497,7 +507,12 @@ export class Layout implements OnInit, OnDestroy {
     {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
     {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
-    {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'}
+    {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'},
+    // بخش کارکرد و حسابداری (در پایین تنظیمات)
+    {id:'attendance', label:'ثبت کارکرد پرسنل', icon:'check-square', permission: 'view_sys_personnel_attendance', isAccounting: true},
+    {id:'fleet', label:'ثبت کارکرد ناوگان و ماشین‌آلات', icon:'truck', permission: 'view_sys_fleet_attendance', isAccounting: true},
+    {id:'personnel', label:'حقوق و دستمزد پرسنل (دیسکت‌ها)', icon:'users', permission: 'view_sys_payroll', isAccounting: true},
+    {id:'fleet-settlement', label:'تسویه و محاسبات مالی ناوگان', icon:'dollar-sign', permission: 'view_sys_fleet_settlement', isAccounting: true}
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
@@ -540,6 +555,9 @@ export class Layout implements OnInit, OnDestroy {
     const initialTab = initialClean.split('/')[1] || 'dashboard';
     this.store.setCurrentTab(initialTab);
     this.updateTitle(initialTab);
+    if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement'].includes(initialTab)) {
+      this.isAccountingMenuOpen = true;
+    }
 
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd)
@@ -548,6 +566,9 @@ export class Layout implements OnInit, OnDestroy {
       const tab = cleanUrl.split('/')[1] || 'dashboard';
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
+      if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement'].includes(tab)) {
+        this.isAccountingMenuOpen = true;
+      }
     });
   }
 
@@ -979,15 +1000,15 @@ export class Layout implements OnInit, OnDestroy {
     return date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  /** ──── Sidebar ──── */
-  readonly navItems = computed(() => {
+  /** ──── Sidebar Navigation Signals ──── */
+  readonly primaryNavItems = computed(() => {
     const userPerms = this.auth.userPermissions();
     const isAdmin = userPerms.includes('admin_all');
     
     let items = this.store.isWarehouseContext() ? this.WAREHOUSE_NAV_ITEMS : this.SYSTEM_NAV_ITEMS;
     
-    // Filter items based on permissions
     return items.filter(item => {
+      if (item.isAccounting) return false;
       if (isAdmin) return true;
       if (item.id === 'audit') {
         return userPerms.includes('view_wh_audit') || userPerms.includes('perm_sys_logs');
@@ -1004,6 +1025,26 @@ export class Layout implements OnInit, OnDestroy {
       return userPerms.includes(item.permission);
     });
   });
+
+  readonly accountingNavItems = computed(() => {
+    if (this.store.isWarehouseContext()) return [];
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    
+    return this.SYSTEM_NAV_ITEMS.filter(item => {
+      if (!item.isAccounting) return false;
+      if (isAdmin) return true;
+      if (item.permission === 'view_sys_personnel_attendance' || 
+          item.permission === 'view_sys_fleet_attendance' || 
+          item.permission === 'view_sys_payroll' || 
+          item.permission === 'view_sys_fleet_settlement') {
+        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel');
+      }
+      return userPerms.includes(item.permission);
+    });
+  });
+
+  readonly navItems = computed(() => [...this.primaryNavItems(), ...this.accountingNavItems()]);
   
   get isSidebarOpen() { return this.store.isSidebarOpen(); }
   get currentTab() { return this.store.currentTab(); }
@@ -1137,8 +1178,12 @@ export class Layout implements OnInit, OnDestroy {
       'wh-settings': 'تنظیمات انبار',
       'count-tracking': 'پیگیری وضعیت شمارش',
       reports: 'گزارش‌ساز پویا',
-      personnel: 'مدیریت حقوق و دستمزد و دیسکت‌ها',
-      attendance: 'ثبت کارکرد و ناوگان انبار'
+      personnel: 'حقوق و دستمزد پرسنل (دیسکت‌ها)',
+      payroll: 'حقوق و دستمزد پرسنل (دیسکت‌ها)',
+      'fleet-settlement': 'تسویه و محاسبات مالی ناوگان',
+      attendance: 'ثبت و بازبینی کارکرد پرسنل',
+      fleet: 'مدیریت و ثبت تردد ناوگان و ماشین‌آلات',
+      'fleet-attendance': 'مدیریت و ثبت تردد ناوگان و ماشین‌آلات'
     };
     this.currentTitle = titles[tab] || tab;
   }

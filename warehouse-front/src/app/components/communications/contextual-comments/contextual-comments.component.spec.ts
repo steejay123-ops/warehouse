@@ -114,7 +114,8 @@ describe('ContextualCommentsComponent', () => {
       'لطفاً بررسی شود @[10:علی محمدی]',
       [10],
       undefined,
-      'inventory'
+      'inventory',
+      expect.any(String)
     );
     expect(component.comments().some(c => c.id === 'cmt-2')).toBe(true);
   });

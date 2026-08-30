@@ -172,6 +172,69 @@ export interface VehicleMatrixResponse {
   rows: VehicleMatrixRow[];
 }
 
+export interface VehicleMonthlyGridDay {
+  day: number;
+  date_shamsi: string;
+  trip_id: number | null;
+  trip_count: number;
+  unit_rate: number;
+  total_amount: number;
+  dispatch_reference: string;
+  origin_destination: string;
+  notes: string;
+  is_existing: boolean;
+}
+
+export interface VehicleMonthlyGridRow {
+  vehicle_id: number;
+  driver_name: string;
+  plate_number: string;
+  vehicle_type: string;
+  vehicle_type_display: string;
+  ownership_type: string;
+  ownership_type_display: string;
+  default_rate: number;
+  sheba_number: string;
+  total_trips: number;
+  total_amount: number;
+  active_days: number;
+  days: VehicleMonthlyGridDay[];
+}
+
+export interface VehicleMonthlyGridResponse {
+  warehouse_id: number | null;
+  year_month: string;
+  month_name: string;
+  days_in_month: number;
+  days_meta: Array<{
+    day: number;
+    date_shamsi: string;
+    weekday_short: string;
+    weekday_name: string;
+    is_friday: boolean;
+    is_editable: boolean;
+    is_today: boolean;
+  }>;
+  is_locked: boolean;
+  period_status: string;
+  rows: VehicleMonthlyGridRow[];
+}
+
+export interface VehicleTripAuditLog {
+  id: number;
+  trip: number;
+  driver_name: string;
+  plate_number?: string;
+  date_shamsi: string;
+  changed_by?: number;
+  changed_by_name?: string;
+  changed_at: string;
+  field_name: string;
+  old_value: string;
+  new_value: string;
+  reason?: string;
+}
+
 export interface AttendanceSummaryRow {
   personnel_id: number;
   full_name: string;

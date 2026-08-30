@@ -158,6 +158,11 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     total_tax: 0
   };
 
+  // Fleet Settlement
+  fleetSettlementSummary: any = null;
+  fleetSettlementRecords: any[] = [];
+  isFleetSettlementLoading = false;
+
   // Yearly Settings & 20 Job Grades
   yearlySettings: PayrollYearlySettings | null = null;
   isSettingsLoading = false;
@@ -239,6 +244,15 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         this.onWarehouseChange();
       }
     });
+
+    this.route.data.subscribe(data => {
+      if (data && data['defaultTab']) {
+        this.activeTab = data['defaultTab'];
+        if (this.warehouses.length > 0) {
+          this.onWarehouseChange();
+        }
+      }
+    });
   }
 
   updateUrlParams(): void {
@@ -317,7 +331,9 @@ export class PersonnelManagement implements OnInit, OnDestroy {
         this.vehicleRows = [];
       }
     } else if (this.activeTab === 'payroll') {
-      if (this.selectedWarehouseId) this.loadMonthlyPayroll();
+      this.loadMonthlyPayroll();
+    } else if (this.activeTab === 'fleet_settlement') {
+      this.loadFleetSettlement();
     } else if (this.activeTab === 'reports') {
       if (this.selectedWarehouseId) this.loadMonthlyReports();
     } else if (this.activeTab === 'profiles') {
@@ -343,11 +359,47 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       return;
     }
     if (tab === 'fleet') {
-      this.router.navigate(['/attendance'], { queryParams: { mode: 'fleet' } });
+      this.router.navigate(['/fleet']);
+      return;
+    }
+    if (tab === 'fleet_settlement') {
+      this.activeTab = 'fleet_settlement';
+      this.loadFleetSettlement();
+      this.updateUrlParams();
       return;
     }
     this.activeTab = tab;
     this.onWarehouseChange();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // ۰. محاسبات و تسویه مالی ناوگان و فایل بانک ملی
+  // ─────────────────────────────────────────────────────────────
+  loadFleetSettlement(): void {
+    if (!this.selectedYearMonth) return;
+    this.isFleetSettlementLoading = true;
+    this.api.calculateFleetSettlement(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
+      next: (res: any) => {
+        this.fleetSettlementSummary = res.summary || null;
+        this.fleetSettlementRecords = res.records || [];
+        this.isFleetSettlementLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isFleetSettlementLoading = false;
+        this.toast.show('error', err?.error?.error || 'خطا در واکشی محاسبات تسویه ناوگان');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  downloadFleetBankExcel(): void {
+    if (!this.selectedYearMonth) {
+      this.toast.show('error', 'لطفاً ابتدا سال و ماه را انتخاب کنید.');
+      return;
+    }
+    const url = this.api.getFleetBankExcelDownloadUrl(this.selectedWarehouseId, this.selectedYearMonth);
+    window.open(url, '_blank');
   }
 
   // ─────────────────────────────────────────────────────────────

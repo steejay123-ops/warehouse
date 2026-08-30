@@ -9,7 +9,9 @@ import {
   AttendanceSummaryRow,
   VehicleSummaryRow,
   MonthlyWorkPeriod,
-  MonthlyGridResponse
+  MonthlyGridResponse,
+  VehicleMonthlyGridResponse,
+  VehicleTripAuditLog
 } from '../models/personnel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -52,12 +54,24 @@ export class PersonnelApiService {
     return this.api.get<VehicleDriverProfile>(`${this.baseUrl}/vehicles/${id}`);
   }
 
+  getVehicleDriverProfile(id: number): Observable<VehicleDriverProfile> {
+    return this.getVehicleProfile(id);
+  }
+
   createVehicleProfile(data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
     return this.api.post<VehicleDriverProfile>(`${this.baseUrl}/vehicles`, data);
   }
 
+  createVehicleDriverProfile(data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
+    return this.createVehicleProfile(data);
+  }
+
   updateVehicleProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
     return this.api.patch<VehicleDriverProfile>(`${this.baseUrl}/vehicles/${id}`, data);
+  }
+
+  updateVehicleDriverProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
+    return this.updateVehicleProfile(id, data);
   }
 
   deleteVehicleProfile(id: number): Observable<void> {
@@ -235,6 +249,55 @@ export class PersonnelApiService {
     }>(`${this.baseUrl}/trips/monthly-summary`, params);
   }
 
+  getVehicleMonthlyGrid(
+    warehouseId: number | null | undefined,
+    yearMonth: string,
+    options?: { context?: import('@angular/common/http').HttpContext }
+  ): Observable<VehicleMonthlyGridResponse> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.get<VehicleMonthlyGridResponse>(`${this.baseUrl}/trips/monthly-grid`, params, options);
+  }
+
+  updateVehicleDayTrip(payload: {
+    vehicle_id: number;
+    warehouse_id?: number | null;
+    date_shamsi: string;
+    trip_count: number;
+    unit_rate?: number;
+    dispatch_reference?: string;
+    origin_destination?: string;
+    notes?: string;
+    client_tab_id?: string;
+  }): Observable<{ message: string; trip_id: number | null }> {
+    return this.api.post<{ message: string; trip_id: number | null }>(
+      `${this.baseUrl}/trips/update-day-trip/`,
+      payload
+    );
+  }
+
+  saveVehicleMonthlyGridBulk(payload: {
+    warehouse_id?: number | null;
+    year_month: string;
+    client_tab_id?: string;
+    items: Array<{
+      vehicle_id: number;
+      day: number;
+      trip_count: number;
+      unit_rate?: number;
+      dispatch_reference?: string;
+      origin_destination?: string;
+      notes?: string;
+    }>;
+  }): Observable<{ message: string; saved_count: number }> {
+    return this.api.post<{ message: string; saved_count: number }>(
+      `${this.baseUrl}/trips/bulk-save-monthly-grid/`,
+      payload
+    );
+  }
+
   // --- دوره‌های ماهانه و قفل ---
   lockPeriod(periodId: number): Observable<{ message: string }> {
     return this.api.post<{ message: string }>(`${this.baseUrl}/periods/${periodId}/lock/`, {});
@@ -316,6 +379,33 @@ export class PersonnelApiService {
 
   getMonthlyExcelDownloadUrl(periodId: number): string {
     return `/api/personnel/monthly-payroll/export-monthly-excel/?period_id=${periodId}`;
+  }
+
+  getFleetMonthlyExcelDownloadUrl(warehouseId: number | null | undefined, yearMonth: string): string {
+    const whParam = warehouseId ? `&warehouse_id=${warehouseId}` : '';
+    return `/api/personnel/trips/export-monthly-excel/?year_month=${yearMonth}${whParam}`;
+  }
+
+  importFleetMonthlyExcel(formData: FormData): Observable<any> {
+    return this.api.upload<any>(`${this.baseUrl}/trips/import-monthly-excel/`, formData);
+  }
+
+  getVehicleTripAuditLogs(params?: { vehicle_id?: number; year_month?: string }): Observable<VehicleTripAuditLog[]> {
+    return this.api.get<VehicleTripAuditLog[]>(`${this.baseUrl}/trips/audit-logs/`, params as Record<string, unknown>);
+  }
+
+  // --- محاسبات و تسویه مالی ناوگان ---
+  calculateFleetSettlement(warehouseId: number | null | undefined, yearMonth: string): Observable<any> {
+    const params: any = { year_month: yearMonth };
+    if (warehouseId) {
+      params.warehouse_id = warehouseId;
+    }
+    return this.api.get<any>(`${this.baseUrl}/fleet-settlement/calculate/`, params);
+  }
+
+  getFleetBankExcelDownloadUrl(warehouseId: number | null | undefined, yearMonth: string): string {
+    const whParam = warehouseId ? `&warehouse_id=${warehouseId}` : '';
+    return `/api/personnel/fleet-settlement/export-bank-excel/?year_month=${yearMonth}${whParam}`;
   }
 }
 

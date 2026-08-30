@@ -276,6 +276,7 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
     });
 
     it('should call backend bulk-save and reset unsaved changes flag on success', () => {
+      component.attendanceRows[0]._isDirty = true;
       component.hasUnsavedChanges = true;
       component.saveAttendanceMatrix();
 

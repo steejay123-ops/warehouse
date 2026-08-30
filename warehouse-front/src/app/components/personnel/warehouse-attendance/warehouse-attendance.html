@@ -24,32 +24,42 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs space-y-3">
     
-    <!-- Top Row: Title + Primary Main Section Switch (پرسنل vs ناوگان) in RIGHT; Lock Badge in LEFT -->
+    <!-- Top Row: Title + Status + Lock Badge (Completely Isolated per Route) -->
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-      <!-- Title & Main Section Switch (All grouped together on the Right) -->
-      <div class="flex items-center gap-4 flex-wrap">
-        <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-sm shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-            </svg>
-          </div>
-          <div>
-            <h1 class="text-base font-black text-slate-800 tracking-tight">ثبت کارکرد و مدیریت ناوگان</h1>
-            <p class="text-[11px] text-slate-500 font-medium">حضور و غیاب پرسنل، ساعات موثر و تردد ناوگان</p>
-          </div>
+      
+      <!-- Personnel Dedicated Header -->
+      <div *ngIf="mainSectionTab === 'personnel'" class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-sm shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
         </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-black text-slate-800 tracking-tight">ثبت و بازبینی کارکرد پرسنل</h1>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              پرتال ثبت کارکرد پرسنل
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 font-medium">حضور و غیاب پرسنل، ساعات موثر، اضافه‌کار و تقویم ۳۱ روزه ماهانه</p>
+        </div>
+      </div>
 
-        <!-- Main Section Tabs: 👥 کارکرد پرسنل | 🚛 مدیریت ناوگان (Placed right beside title) -->
-        <div class="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center shadow-inner">
-          <button type="button" (click)="setMainTab('personnel')" [ngClass]="mainSectionTab === 'personnel' ? 'bg-white text-emerald-800 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-4 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-            <span>👥 کارکرد پرسنل</span>
-          </button>
-          <button type="button" (click)="setMainTab('fleet')" [ngClass]="mainSectionTab === 'fleet' ? 'bg-white text-emerald-800 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-4 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-            <span>🚛 مدیریت و سرویس‌های ناوگان</span>
-          </button>
+      <!-- Fleet Dedicated Header -->
+      <div *ngIf="mainSectionTab === 'fleet'" class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-sm shrink-0">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-black text-slate-800 tracking-tight">مدیریت و ثبت تردد ناوگان و ماشین‌آلات</h1>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200">
+              پرتال تردد و کارکرد ناوگان
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 font-medium">ثبت تردد روزانه ناوگان، تقویم ۳۱ روزه، پرونده رانندگان و نسخه چاپی A4</p>
         </div>
       </div>
 
@@ -66,20 +76,16 @@
       <!-- Right Side Filters & Navigators (پیوسته از راست به چپ) -->
       <div class="flex items-center gap-2.5 flex-wrap">
         
-        <!-- Sub-modes for Personnel: ثبت روزانه | تقویم ماهانه -->
-        <div *ngIf="mainSectionTab === 'personnel'" class="bg-slate-100 p-1 rounded-xl border border-slate-200/80 flex items-center shadow-inner">
+        <!-- Sub-modes: ثبت روزانه | تقویم ماهانه ۳۱ روزه -->
+        <div class="bg-slate-100 p-1 rounded-xl border border-slate-200/80 flex items-center shadow-inner">
           <button (click)="setMode('daily')" [class.active-mode-tab]="activeMode === 'daily'" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 flex items-center gap-1 cursor-pointer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             <span>ثبت روزانه</span>
           </button>
           <button (click)="setMode('monthly_grid')" [class.active-mode-tab]="activeMode === 'monthly_grid'" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-600 flex items-center gap-1 cursor-pointer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            <span>تقویم ماهانه</span>
+            <span>تقویم ماهانه ۳۱ روزه</span>
           </button>
-        </div>
-
-        <div *ngIf="mainSectionTab === 'fleet'" class="text-xs font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1">
-          <span>ثبت سرویس‌های روزانه ناوگان</span>
         </div>
 
         <!-- Compact Warehouse Filter Button & Popover -->
@@ -93,7 +99,7 @@
           <!-- Warehouse Popover Menu -->
           <div *ngIf="isWarehouseMenuOpen" class="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-40 space-y-0.5 text-xs font-bold">
             <button type="button" (click)="selectWarehouse(null)" class="w-full text-right px-3 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 flex items-center justify-between cursor-pointer">
-              <span>🌐 همه پرسنل</span>
+              <span>🏢 {{ mainSectionTab === 'fleet' ? 'همه ناوگان (سراسری)' : 'همه پرسنل' }}</span>
               <span *ngIf="selectedWarehouseId === null" class="text-emerald-600">✓</span>
             </button>
             <button *ngFor="let wh of warehouses" type="button" (click)="selectWarehouse(wh.id)" class="w-full text-right px-3 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 flex items-center justify-between cursor-pointer">
@@ -148,8 +154,8 @@
           <button (click)="goToYesterday()" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-md transition-all cursor-pointer">دیروز</button>
         </div>
 
-        <!-- 3-State Smart Day Status Badge (Full / Partial / Draft) -->
-        <div *ngIf="activeMode === 'daily'" class="flex items-center">
+        <!-- 3-State Smart Day Status Badge for Personnel (Full / Partial / Draft) -->
+        <div *ngIf="mainSectionTab === 'personnel' && activeMode === 'daily'" class="flex items-center">
           <!-- Full -->
           <div *ngIf="attendanceRegistrationState.status === 'full'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
             <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -164,6 +170,18 @@
           <div *ngIf="attendanceRegistrationState.status === 'none'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs animate-pulse">
             <span class="w-2 h-2 rounded-full bg-amber-500"></span>
             <span>{{ attendanceRegistrationState.label }}</span>
+          </div>
+        </div>
+
+        <!-- Smart Day Status Badge for Fleet -->
+        <div *ngIf="mainSectionTab === 'fleet' && activeMode === 'daily'" class="flex items-center">
+          <div *ngIf="fleetRegistrationState.status === 'full'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>{{ fleetRegistrationState.label }}</span>
+          </div>
+          <div *ngIf="fleetRegistrationState.status === 'none'" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-black bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+            <span>{{ fleetRegistrationState.label }}</span>
           </div>
         </div>
 
@@ -196,7 +214,7 @@
       <!-- Left Side Action Button (دکمه ذخیره نهایی در انتهای سمت چپ) -->
       <div class="flex items-center gap-2">
         <!-- Primary Smart Save/Update Button for Daily Attendance -->
-        <button *ngIf="activeMode === 'daily'" (click)="saveAttendanceMatrix()" [disabled]="!hasUnsavedChanges || isSavingAttendance || isPeriodLocked" [ngClass]="!hasUnsavedChanges ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : (hasExistingAttendance ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/50 shadow-md shadow-blue-500/20' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20')" class="px-5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+        <button *ngIf="mainSectionTab === 'personnel' && activeMode === 'daily'" (click)="saveAttendanceMatrix()" [disabled]="!hasUnsavedChanges || isSavingAttendance || isPeriodLocked" [ngClass]="!hasUnsavedChanges ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : (hasExistingAttendance ? 'bg-blue-600 hover:bg-blue-700 text-white ring-2 ring-blue-400/50 shadow-md shadow-blue-500/20' : 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400/50 shadow-md shadow-emerald-500/20')" class="px-5 py-2 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
           <svg *ngIf="!isSavingAttendance" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
           <span *ngIf="!isSavingAttendance">{{ hasExistingAttendance ? 'به‌روزرسانی کارکرد' : 'ثبت کارکرد روزانه' }}</span>
           <span *ngIf="isSavingAttendance">{{ hasExistingAttendance ? 'در حال به‌روزرسانی...' : 'در حال ثبت...' }}</span>
@@ -204,7 +222,7 @@
         </button>
 
         <!-- Primary Save Button for Fleet Mode -->
-        <button *ngIf="activeMode === 'fleet'" (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+        <button *ngIf="mainSectionTab === 'fleet' && activeMode === 'daily'" (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
           <svg *ngIf="!isSavingVehicles" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
           <span *ngIf="!isSavingVehicles">ذخیره ناوگان</span>
           <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
@@ -217,7 +235,7 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۲. حالت ثبت کارکرد روزانه (Daily Attendance Matrix) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="activeMode === 'daily'" class="space-y-3">
+  <div *ngIf="mainSectionTab === 'personnel' && activeMode === 'daily'" class="space-y-3">
     
     <!-- Compact Bulk Actions Toolbar with Concise Button Labels -->
     <div class="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-2">
@@ -576,7 +594,7 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۳. حالت تقویم ۳۱ روزه ماهانه (Monthly Timesheet Grid) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="activeMode === 'monthly_grid'" class="space-y-3">
+  <div *ngIf="mainSectionTab === 'personnel' && activeMode === 'monthly_grid'" class="space-y-3">
     <!-- Workflow Status & Actions Bar -->
     <div class="bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
       <!-- Workflow Status Badge -->
@@ -710,89 +728,220 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۴. حالت مدیریت و سرویس‌های ناوگان (Fleet Trips Matrix) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="mainSectionTab === 'fleet' || activeMode === 'fleet'" class="space-y-3">
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۴. حالت مدیریت و سرویس‌های ناوگان (Fleet Operations Section) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="mainSectionTab === 'fleet'" class="space-y-3">
     
-    <!-- Fleet Header Toolbar -->
-    <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-          <span>سرویس‌های ثبت‌شده ناوگان در تاریخ {{ selectedDateShamsi }}:</span>
-        </span>
+    <!-- 4.1: ثبت ماتریسی روزانه ناوگان -->
+    <div *ngIf="activeMode === 'daily'" class="space-y-3">
+      <!-- Fleet Header Toolbar -->
+      <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+            <span>سرویس‌های ثبت‌شده ناوگان در تاریخ {{ selectedDateShamsi }}:</span>
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button (click)="openNewVehicleProfileModal()" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <span>➕ راننده و خودرو جدید</span>
+          </button>
+          <button (click)="openFleetAuditLogs()" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <span>📜 لاگ ممیزی</span>
+          </button>
+          <button (click)="openFleetExcelPasteModal()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <span>📋 چسباندن از اکسل</span>
+          </button>
+          <button (click)="loadVehicleMatrix()" [disabled]="isVehicleLoading" class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>بروزرسانی</span>
+          </button>
+          <button (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+            <span *ngIf="!isSavingVehicles">💾 ذخیره ناوگان</span>
+            <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
+          </button>
+        </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <button (click)="loadVehicleMatrix()" [disabled]="isVehicleLoading" class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-          <span>بروزرسانی</span>
-        </button>
-        <button (click)="saveVehicleMatrix()" [disabled]="isSavingVehicles" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
-          <span *ngIf="!isSavingVehicles">💾 ذخیره ناوگان</span>
-          <span *ngIf="isSavingVehicles">در حال ذخیره...</span>
-        </button>
+      <!-- Fleet Data Table -->
+      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+          <table class="w-full text-right text-xs">
+            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
+              <tr>
+                <th class="p-3 w-12 text-center">#</th>
+                <th class="p-3 min-w-[160px]">راننده و خودرو</th>
+                <th class="p-3 min-w-[120px]">پلاک انتظامی</th>
+                <th class="p-3 w-28 text-center">تعداد سرویس</th>
+                <th class="p-3 w-36 text-center">نرخ پایه هر سرویس</th>
+                <th class="p-3 min-w-[160px]">شماره بارنامه / حواله</th>
+                <th class="p-3 min-w-[180px]">مبدا و مقصد</th>
+                <th class="p-3 min-w-[200px]">توضیحات</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr *ngIf="isVehicleLoading">
+                <td colspan="8" class="p-8 text-center text-slate-400 font-bold">
+                  <div class="flex items-center justify-center gap-2">
+                    <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
+                    <span>در حال بارگذاری سرویس‌های ناوگان...</span>
+                  </div>
+                </td>
+              </tr>
+              <tr *ngIf="!isVehicleLoading && vehicleRows.length === 0">
+                <td colspan="8" class="p-8 text-center text-slate-400 font-medium">
+                  هیچ خودرو یا راننده‌ای در سیستم تعریف نشده است.
+                </td>
+              </tr>
+              <tr *ngFor="let v of vehicleRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+                <td class="p-3 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
+                <td class="p-3 font-bold text-slate-800">
+                  <div>{{ v.driver_name || 'راننده ثبت‌نشده' }}</div>
+                  <div class="text-[10px] text-slate-400 font-normal">{{ v.vehicle_type_display || 'خودرو' }}</div>
+                </td>
+                <td class="p-3 text-slate-700 font-mono font-bold">{{ v.plate_number || '—' }}</td>
+                <td class="p-3 text-center">
+                  <input [id]="'input-trip-' + idx" type="number" [(ngModel)]="v.trip_count" min="0" (keydown)="onFleetGridKeydown($event, 'trip', idx)" class="w-20 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </td>
+                <td class="p-3 text-center">
+                  <input [id]="'input-rate-' + idx" type="number" [(ngModel)]="v.unit_rate" (keydown)="onFleetGridKeydown($event, 'rate', idx)" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </td>
+                <td class="p-3">
+                  <input [id]="'input-dispatch-' + idx" type="text" [(ngModel)]="v.dispatch_reference" (keydown)="onFleetGridKeydown($event, 'dispatch', idx)" placeholder="شماره بارنامه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </td>
+                <td class="p-3">
+                  <input [id]="'input-dest-' + idx" type="text" [(ngModel)]="v.origin_destination" (keydown)="onFleetGridKeydown($event, 'dest', idx)" placeholder="مثلاً: انبار مرکزی به شعبه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </td>
+                <td class="p-3">
+                  <input [id]="'input-vnote-' + idx" type="text" [(ngModel)]="v.notes" (keydown)="onFleetGridKeydown($event, 'vnote', idx)" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <!-- Fleet Data Table -->
-    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-      <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
-        <table class="w-full text-right text-xs">
-          <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
-            <tr>
-              <th class="p-3 w-12 text-center">#</th>
-              <th class="p-3 min-w-[160px]">راننده و خودرو</th>
-              <th class="p-3 min-w-[120px]">پلاک انتظامی</th>
-              <th class="p-3 w-28 text-center">تعداد سرویس</th>
-              <th class="p-3 w-36 text-center">نرخ پایه هر سرویس</th>
-              <th class="p-3 min-w-[160px]">شماره بارنامه / حواله</th>
-              <th class="p-3 min-w-[180px]">مبدا و مقصد</th>
-              <th class="p-3 min-w-[200px]">توضیحات</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-slate-100">
-            <!-- Loading Indicator -->
-            <tr *ngIf="isVehicleLoading">
-              <td colspan="8" class="p-8 text-center text-slate-400 font-bold">
-                <div class="flex items-center justify-center gap-2">
-                  <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
-                  <span>در حال بارگذاری سرویس‌های ناوگان...</span>
-                </div>
-              </td>
-            </tr>
+    <!-- 4.2: تقویم ۳۱ روزه ماهانه ناوگان (31-Day Fleet Monthly Grid) -->
+    <div *ngIf="activeMode === 'monthly_grid'" class="space-y-3">
+      <!-- Toolbar -->
+      <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
+            <span>🚛 تقویم و شیت ماهانه ۳۱ روزه تردد ناوگان (ماه {{ monthName || selectedYearMonth }}):</span>
+          </span>
+          <span *ngIf="isPeriodLocked" class="bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-lg text-[10px] font-bold">دوره قفل شده</span>
+        </div>
 
-            <!-- Empty State -->
-            <tr *ngIf="!isVehicleLoading && vehicleRows.length === 0">
-              <td colspan="8" class="p-8 text-center text-slate-400 font-medium">
-                هیچ خودرو یا راننده‌ای در سیستم تعریف نشده است.
-              </td>
-            </tr>
+        <div class="flex items-center gap-2 flex-wrap">
+          <!-- پرونده ناوگان و لاگ -->
+          <button (click)="openNewVehicleProfileModal()" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <span>➕ راننده و خودرو جدید</span>
+          </button>
+          <button (click)="openFleetAuditLogs()" class="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <span>📜 لاگ ممیزی</span>
+          </button>
 
-            <!-- Fleet Rows -->
-            <tr *ngFor="let v of vehicleRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
-              <td class="p-3 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
-              <td class="p-3 font-bold text-slate-800">
-                <div>{{ v.driver_name || 'راننده ثبت‌نشده' }}</div>
-                <div class="text-[10px] text-slate-400 font-normal">{{ v.vehicle_type_display || 'خودرو' }}</div>
-              </td>
-              <td class="p-3 text-slate-700 font-mono font-bold">{{ v.plate_number || '—' }}</td>
-              <td class="p-3 text-center">
-                <input [id]="'input-trip-' + idx" type="number" [(ngModel)]="v.trip_count" min="0" (keydown)="onFleetGridKeydown($event, 'trip', idx)" class="w-20 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </td>
-              <td class="p-3 text-center">
-                <input [id]="'input-rate-' + idx" type="number" [(ngModel)]="v.unit_rate" (keydown)="onFleetGridKeydown($event, 'rate', idx)" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </td>
-              <td class="p-3">
-                <input [id]="'input-dispatch-' + idx" type="text" [(ngModel)]="v.dispatch_reference" (keydown)="onFleetGridKeydown($event, 'dispatch', idx)" placeholder="شماره بارنامه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </td>
-              <td class="p-3">
-                <input [id]="'input-dest-' + idx" type="text" [(ngModel)]="v.origin_destination" (keydown)="onFleetGridKeydown($event, 'dest', idx)" placeholder="مثلاً: انبار مرکزی به شعبه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </td>
-              <td class="p-3">
-                <input [id]="'input-vnote-' + idx" type="text" [(ngModel)]="v.notes" (keydown)="onFleetGridKeydown($event, 'vnote', idx)" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <!-- خروجی اکسل استاندارد -->
+          <button (click)="downloadFleetMonthlyExcel()" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>خروجی اکسل</span>
+          </button>
+
+          <!-- ورودی اکسل -->
+          <label class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <span>بارگذاری اکسل</span>
+            <input type="file" (change)="onFleetExcelFileSelected($event)" accept=".xlsx,.xls" class="hidden" />
+          </label>
+
+          <!-- چاپ شیت رسمی -->
+          <button (click)="openFleetPrintModal()" class="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            <span>نسخه چاپی A4</span>
+          </button>
+
+          <!-- بروزرسانی -->
+          <button (click)="loadFleetMonthlyGrid()" [disabled]="isFleetMonthlyGridLoading" class="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1 cursor-pointer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            <span>بروزرسانی</span>
+          </button>
+
+          <!-- ذخیره تغییرات -->
+          <button (click)="saveFleetMonthlyGrid()" [disabled]="isSavingFleetMonthlyGrid || isPeriodLocked" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+            <span *ngIf="!isSavingFleetMonthlyGrid">💾 ذخیره تغییرات شیت</span>
+            <span *ngIf="isSavingFleetMonthlyGrid">در حال ذخیره...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 31-Day Grid Table -->
+      <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div class="overflow-x-auto max-h-[620px] overflow-y-auto">
+          <table class="w-full text-right text-xs border-collapse">
+            <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10 text-[11px]">
+              <tr>
+                <th class="p-2 w-10 text-center sticky right-0 bg-slate-50 z-20 shadow-xs border-l border-slate-200">#</th>
+                <th class="p-2 min-w-[140px] sticky right-10 bg-slate-50 z-20 shadow-xs border-l border-slate-200">راننده و خودرو</th>
+                <th class="p-2 min-w-[100px] border-l border-slate-200 text-center">پلاک</th>
+                <th class="p-2 min-w-[90px] border-l border-slate-200 text-center">نوع مالکیت</th>
+                <!-- 31 Day Headers -->
+                <th *ngFor="let day of monthlyGridDays" [class.bg-rose-50]="day.is_friday" [class.text-rose-600]="day.is_friday" class="p-1 text-center min-w-[32px] border-l border-slate-200 font-mono">
+                  <div class="text-[9px]">{{ day.weekday_short }}</div>
+                  <div>{{ day.day }}</div>
+                </th>
+                <!-- Summary Column Headers -->
+                <th class="p-2 min-w-[70px] text-center bg-indigo-50/80 text-indigo-900 border-l border-slate-200">جمع سرویس</th>
+                <th class="p-2 min-w-[110px] text-center bg-emerald-50/80 text-emerald-900 border-l border-slate-200">جمع کرایه (تومان)</th>
+                <th class="p-2 min-w-[140px] text-center bg-slate-50 text-slate-700">شماره شبا</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr *ngIf="isFleetMonthlyGridLoading">
+                <td [attr.colspan]="35 + monthlyGridDays.length" class="p-8 text-center text-slate-400 font-bold">
+                  <div class="flex items-center justify-center gap-2">
+                    <span class="w-4 h-4 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></span>
+                    <span>در حال بارگذاری تقویم ماهانه ناوگان...</span>
+                  </div>
+                </td>
+              </tr>
+              <tr *ngIf="!isFleetMonthlyGridLoading && fleetMonthlyGridRows.length === 0">
+                <td [attr.colspan]="35 + monthlyGridDays.length" class="p-8 text-center text-slate-400 font-medium">
+                  هیچ رکوردی برای ناوگان در این ماه یافت نشد.
+                </td>
+              </tr>
+              <tr *ngFor="let row of fleetMonthlyGridRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+                <td class="p-2 text-center text-slate-400 font-bold sticky right-0 bg-white z-10 border-l border-slate-100">{{ idx + 1 }}</td>
+                <td class="p-2 font-bold text-slate-800 sticky right-10 bg-white z-10 border-l border-slate-100">
+                  <div class="truncate">{{ row.driver_name }}</div>
+                  <div class="text-[9px] text-slate-400 font-normal">{{ row.vehicle_type_display }}</div>
+                </td>
+                <td class="p-2 text-slate-700 font-mono font-bold text-center border-l border-slate-100 text-[10px]">{{ row.plate_number || '—' }}</td>
+                <td class="p-2 text-center border-l border-slate-100">
+                  <span [ngClass]="row.ownership_type === 'company' ? 'bg-slate-100 text-slate-700 border-slate-200' : 'bg-amber-50 text-amber-800 border-amber-200'" class="px-2 py-0.5 rounded-full text-[9px] font-bold border">
+                    {{ row.ownership_type_display || 'استیجاری' }}
+                  </span>
+                </td>
+                <!-- 31 Day Cells -->
+                <td *ngFor="let item of row.days; let dayIdx = index" (click)="openFleetDayDetailModal(row, item)" [class.bg-rose-50/40]="monthlyGridDays[dayIdx]?.is_friday" class="p-1 text-center border-l border-slate-100 cursor-pointer hover:bg-indigo-50 transition-all font-mono">
+                  <span *ngIf="item.trip_count > 0" class="inline-block min-w-[24px] h-6 leading-6 px-1 rounded bg-indigo-100 text-indigo-800 font-bold text-[10px]" [title]="'تعداد سرویس: ' + item.trip_count + ' (بارنامه: ' + (item.dispatch_reference || 'ندارد') + ')'">
+                    {{ item.trip_count }}
+                  </span>
+                  <span *ngIf="!item.trip_count || item.trip_count === 0" class="text-slate-300">·</span>
+                </td>
+                <!-- Totals -->
+                <td class="p-2 text-center font-mono font-bold bg-indigo-50/50 text-indigo-900 border-l border-slate-100">{{ row.total_trips }}</td>
+                <td class="p-2 text-center font-mono font-bold bg-emerald-50/50 text-emerald-900 border-l border-slate-100">
+                  <span *ngIf="row.ownership_type !== 'company'">{{ row.total_amount | number }}</span>
+                  <span *ngIf="row.ownership_type === 'company'" class="text-slate-400 text-[10px]">شرکتی (۰)</span>
+                </td>
+                <td class="p-2 text-center font-mono text-[10px] text-slate-600 truncate">{{ row.sheba_number || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -967,6 +1116,95 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۰. مودال ویرایش جزئیات روز در تقویم ۳۱ روزه ناوگان -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isFleetDayDetailModalOpen" (keydown.escape)="isFleetDayDetailModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h3 class="text-sm font-black text-slate-800">{{ selectedFleetDayDetailRow?.driver_name }} ({{ selectedFleetDayDetailRow?.plate_number }})</h3>
+          <p class="text-[11px] text-slate-500">روز {{ selectedFleetDayDetailItem?.day }} از ماه {{ selectedYearMonth }}</p>
+        </div>
+        <button (click)="isFleetDayDetailModalOpen = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">تعداد سرویس:</label>
+            <input type="number" [(ngModel)]="fleetDayDetailTripCount" min="0" (keydown.escape)="isFleetDayDetailModalOpen = false" (keydown.enter)="saveFleetDayDetail()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">نرخ هر سرویس (تومان):</label>
+            <input type="number" [(ngModel)]="fleetDayDetailUnitRate" min="0" (keydown.escape)="isFleetDayDetailModalOpen = false" (keydown.enter)="saveFleetDayDetail()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">شماره بارنامه / حواله:</label>
+          <input type="text" [(ngModel)]="fleetDayDetailDispatchRef" (keydown.escape)="isFleetDayDetailModalOpen = false" (keydown.enter)="saveFleetDayDetail()" placeholder="مثلاً: BL-9842" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">مبدا و مقصد:</label>
+          <input type="text" [(ngModel)]="fleetDayDetailOrigDest" (keydown.escape)="isFleetDayDetailModalOpen = false" (keydown.enter)="saveFleetDayDetail()" placeholder="مثلاً: انبار مرکزی به شعبه جنوب..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">توضیحات و یادداشت:</label>
+          <input type="text" [(ngModel)]="fleetDayDetailNotes" (keydown.escape)="isFleetDayDetailModalOpen = false" (keydown.enter)="saveFleetDayDetail()" placeholder="توضیحات..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+        </div>
+
+        <div class="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-bold text-slate-700">
+          <span>مبلغ کل این روز:</span>
+          <span class="font-mono font-black text-emerald-700 text-sm">
+            {{ (fleetDayDetailTripCount * fleetDayDetailUnitRate) | number }} تومان
+          </span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isFleetDayDetailModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">انصراف (Esc)</button>
+        <button (click)="saveFleetDayDetail()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl cursor-pointer">ثبت و ذخیره (Enter)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۱. مودال پیست هوشمند اکسل برای ناوگان (Fleet Excel Paste) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isFleetExcelPasteModalOpen" (keydown.escape)="isFleetExcelPasteModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-800">📋 چسباندن اطلاعات سرویس‌های ناوگان از اکسل (Smart Paste)</h3>
+        <button (click)="isFleetExcelPasteModalOpen = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-600 leading-relaxed">
+        ستون‌های جدول اکسل خود را کپی کرده و در کادر زیر Paste کنید. (فرمت ستون‌ها: <span class="font-bold text-indigo-700">پلاک یا نام راننده | تعداد سرویس | نرخ | شماره بارنامه | مسیر | یادداشت</span>)
+      </p>
+
+      <textarea [(ngModel)]="fleetExcelPasteText" (input)="parseFleetExcelPaste()" (keydown.escape)="isFleetExcelPasteModalOpen = false" rows="5" placeholder="داده‌های کپی‌شده از اکسل را اینجا Paste کنید..." class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+
+      <!-- Preview parsed rows -->
+      <div *ngIf="fleetExcelParsedRows.length > 0" class="max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-2 bg-slate-50 text-[11px]">
+        <div class="font-bold text-slate-700 mb-1">پیش‌نمایش ({{ fleetExcelParsedRows.length }} سطر شناسایی شد):</div>
+        <div *ngFor="let pr of fleetExcelParsedRows" class="flex items-center justify-between py-1 border-b border-slate-200 last:border-none">
+          <span [class.text-emerald-700]="pr.matchedRow" [class.text-rose-600]="!pr.matchedRow" class="font-bold">
+            {{ pr.matchedRow?.driver_name || pr.identifier }} ({{ pr.matchedRow?.plate_number || 'ناشناس' }})
+          </span>
+          <span class="text-slate-500 font-mono">سرویس: {{ pr.trip_count }} | بارنامه: {{ pr.dispatch_reference || '—' }}</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isFleetExcelPasteModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">انصراف (Esc)</button>
+        <button (click)="applyFleetExcelPaste()" [disabled]="fleetExcelParsedRows.length === 0" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl disabled:opacity-50 cursor-pointer">اعمال در جدول</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۱۰. مودال اعمال کارکرد در بازه زمانی مشخص (Date Range Applicator) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="isRangeModalOpen" (keydown.escape)="isRangeModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -1050,6 +1288,400 @@
         <button (click)="applyDateRangeAttendance()" class="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-black rounded-xl shadow-md shadow-sky-500/20 flex items-center gap-1.5 cursor-pointer transition-all">
           <span>⚡ اعمال کارکرد در تقویم</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۲. مودال برگه چاپی رسمی ناوگان در قطع A4 افقی (Printable Sheet) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isFleetPrintModalOpen" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 overflow-y-auto p-4 flex items-start justify-center print:p-0 print:static print:bg-white print:z-auto">
+    <div class="bg-white rounded-3xl p-6 max-w-5xl w-full shadow-2xl border border-slate-200 space-y-6 my-6 print:m-0 print:p-0 print:border-none print:shadow-none">
+      
+      <!-- Print Actions (Hidden when printing) -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 print:hidden">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-black text-slate-800">🖨️ پیش‌نمایش برگه چاپی رسمی ناوگان و ماشین‌آلات</span>
+          <span class="text-xs text-slate-500 font-mono">({{ selectedYearMonth }})</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button (click)="closeFleetPrintModal()" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">بستن (Esc)</button>
+          <button (click)="printFleetSheet()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl flex items-center gap-1.5 shadow-md shadow-indigo-500/20 cursor-pointer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            <span>چاپ برگه (Print)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Official Sheet Content -->
+      <div class="space-y-4 text-slate-800 print:text-black">
+        
+        <!-- Header -->
+        <div class="border-2 border-slate-800 rounded-2xl p-4 flex items-center justify-between text-xs">
+          <div class="space-y-1">
+            <h2 class="text-base font-black">شرکت انبارداری و خدمات لجستیک</h2>
+            <div class="font-bold text-slate-600">فرم کارکرد، تردد و تسویه ماهانه ناوگان و رانندگان</div>
+            <div class="text-[11px]">انبار: <span class="font-bold">{{ getSelectedWarehouseName() }}</span></div>
+          </div>
+
+          <div class="text-center space-y-1">
+            <div class="text-xs font-bold bg-slate-100 px-3 py-1 rounded-lg border border-slate-300">
+              دوره عملکرد: <span class="font-mono font-bold">{{ monthName }} {{ selectedYearMonth }}</span>
+            </div>
+            <div class="text-[10px] text-slate-500">تعداد ناوگان فعال: {{ fleetMonthlyGridRows.length }} دستگاه</div>
+          </div>
+
+          <div class="text-left font-mono text-[10px] space-y-0.5 text-slate-500">
+            <div>شماره فرم: FL-REP-{{ selectedYearMonth.replace('/', '') }}</div>
+            <div>تاریخ چاپ: {{ fleetPrintTimestamp }}</div>
+            <div>صفحه: ۱ از ۱</div>
+          </div>
+        </div>
+
+        <!-- Matrix Table -->
+        <div class="overflow-x-auto border border-slate-800 rounded-xl">
+          <table class="w-full text-right text-[10px] border-collapse">
+            <thead class="bg-slate-100 font-bold border-b border-slate-800 text-center">
+              <tr>
+                <th class="p-1.5 border-l border-slate-300 w-7">#</th>
+                <th class="p-1.5 border-l border-slate-300 min-w-[110px] text-right">نام راننده / پیمانکار</th>
+                <th class="p-1.5 border-l border-slate-300 min-w-[85px]">پلاک انتظامی</th>
+                <th class="p-1.5 border-l border-slate-300 w-16">نوع مالکیت</th>
+                <th *ngFor="let day of monthlyGridDays" [class.bg-rose-100]="day.is_friday" class="p-0.5 border-l border-slate-300 min-w-[20px] font-mono">
+                  {{ day.day }}
+                </th>
+                <th class="p-1.5 border-l border-slate-300 w-14 bg-slate-200">جمع سرویس</th>
+                <th class="p-1.5 border-l border-slate-300 min-w-[90px] bg-slate-200">جمع کرایه (تومان)</th>
+                <th class="p-1.5 min-w-[120px]">شماره شبا</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              <tr *ngFor="let row of fleetMonthlyGridRows; let idx = index" class="text-center">
+                <td class="p-1 border-l border-slate-200 font-bold">{{ idx + 1 }}</td>
+                <td class="p-1 border-l border-slate-200 font-bold text-right truncate">{{ row.driver_name }}</td>
+                <td class="p-1 border-l border-slate-200 font-mono text-[9px]">{{ row.plate_number || '—' }}</td>
+                <td class="p-1 border-l border-slate-200 text-[9px]">{{ row.ownership_type_display }}</td>
+                <td *ngFor="let item of row.days; let dIdx = index" [class.bg-rose-50]="monthlyGridDays[dIdx]?.is_friday" class="p-0.5 border-l border-slate-200 font-mono">
+                  <span *ngIf="item.trip_count > 0" class="font-bold">{{ item.trip_count }}</span>
+                  <span *ngIf="!item.trip_count || item.trip_count === 0" class="text-slate-300">-</span>
+                </td>
+                <td class="p-1 border-l border-slate-200 font-mono font-bold bg-slate-50">{{ row.total_trips }}</td>
+                <td class="p-1 border-l border-slate-200 font-mono font-bold bg-slate-50">
+                  <span *ngIf="row.ownership_type !== 'company'">{{ row.total_amount | number }}</span>
+                  <span *ngIf="row.ownership_type === 'company'" class="text-slate-400">شرکتی</span>
+                </td>
+                <td class="p-1 font-mono text-[9px] truncate">{{ row.sheba_number || '—' }}</td>
+              </tr>
+              <!-- Summary Footer Row -->
+              <tr class="bg-slate-100 font-bold text-center border-t-2 border-slate-800">
+                <td colspan="4" class="p-2 border-l border-slate-300 text-right font-black">جمع کل دوره:</td>
+                <td [attr.colspan]="monthlyGridDays.length" class="p-1 border-l border-slate-300 text-slate-500 text-[9px]">مجموع سرویس‌های کلیه ناوگان</td>
+                <td class="p-2 border-l border-slate-300 font-mono font-black text-xs text-indigo-900">{{ totalFleetMonthlyTrips }}</td>
+                <td class="p-2 border-l border-slate-300 font-mono font-black text-xs text-emerald-900">{{ totalFleetMonthlyAmount | number }}</td>
+                <td class="p-2 text-slate-400 text-[9px]">---</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Signature Boxes -->
+        <div class="grid grid-cols-3 gap-4 pt-6 border-t-2 border-slate-800 text-xs text-center font-bold">
+          <div class="border border-slate-300 rounded-xl p-3 h-24 flex flex-col justify-between">
+            <span class="text-slate-600">۱. متصدی حمل و نقل و ثبت کارکرد</span>
+            <span class="text-[10px] text-slate-400">امضا و تاریخ: ............................</span>
+          </div>
+          <div class="border border-slate-300 rounded-xl p-3 h-24 flex flex-col justify-between">
+            <span class="text-slate-600">۲. سرپرست انبار</span>
+            <span class="text-[10px] text-slate-400">امضا و تاریخ: ............................</span>
+          </div>
+          <div class="border border-slate-300 rounded-xl p-3 h-24 flex flex-col justify-between">
+            <span class="text-slate-600">۳. مدیریت مالی و اداری</span>
+            <span class="text-[10px] text-slate-400">امضا و تاریخ: ............................</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۳. مودال پرونده و تعریف راننده/خودرو جدید (Vehicle Profile Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isVehicleProfileModalOpen" (keydown.escape)="isVehicleProfileModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-800">
+          {{ isEditingVehicleProfile ? '✏️ ویرایش اطلاعات راننده و خودرو' : '➕ تعریف راننده و خودرو جدید' }}
+        </h3>
+        <button (click)="isVehicleProfileModalOpen = false" class="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">نام و نام خانوادگی راننده: <span class="text-rose-500">*</span></label>
+            <input type="text" [(ngModel)]="selectedVehicleProfile.driver_name" placeholder="مثلاً: علی صادقی" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">کد ملی راننده:</label>
+            <input type="text" [(ngModel)]="selectedVehicleProfile.driver_national_code" placeholder="۱۰ رقم کد ملی" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">شماره پلاک انتظامی: <span class="text-rose-500">*</span></label>
+            <input type="text" [(ngModel)]="selectedVehicleProfile.plate_number" placeholder="مثلاً: ۱۲ع۳۴۵-۶۷" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">شماره همراه راننده:</label>
+            <input type="text" [(ngModel)]="selectedVehicleProfile.driver_phone" placeholder="۰۹۱۲..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">نوع خودرو / ناوگان:</label>
+            <select [(ngModel)]="selectedVehicleProfile.vehicle_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+              <option value="pickup">وانت بار</option>
+              <option value="nissan">وانت نیسان</option>
+              <option value="khavar">خاور / کامیونت</option>
+              <option value="sedan">سواری</option>
+              <option value="truck">کامیون تک/جفت</option>
+              <option value="trailer">تریلی / کفی</option>
+              <option value="other">سایر / لیفتراک</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">نوع مالکیت:</label>
+            <select [(ngModel)]="selectedVehicleProfile.ownership_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer">
+              <option value="contract">استیجاری (پیمانکار)</option>
+              <option value="personal">ملکی راننده (شخصی)</option>
+              <option value="company">شرکتی (سازمانی - بدون تسویه کرایه)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">نرخ پایه هر سرویس (تومان):</label>
+          <input type="number" [(ngModel)]="selectedVehicleProfile.default_service_rate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono font-bold text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+        </div>
+
+        <!-- 1. PRIMARY SECTION: Sheba Number (Top Priority with Star) -->
+        <div class="space-y-1 pt-1 border-t border-slate-100">
+          <div class="flex items-center justify-between">
+            <label class="block font-black text-slate-800 text-xs flex items-center gap-1.5">
+              <span>شماره شبا (روش اصلی و توصیه‌شده جهت تسویه پایا و بانکی)</span>
+              <span class="text-amber-500 text-sm" title="اولویت اصلی تسویه بانکی">⭐</span>
+            </label>
+          </div>
+
+          <!-- Smart Sheba Input with Fixed IR Badge (Left) and Internal Action Buttons (Right) -->
+          <div dir="ltr" class="flex items-center rounded-xl overflow-hidden border transition-all"
+            [ngClass]="{
+              'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20': shebaValidationResult?.isValid,
+              'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/20': shebaDigitsDisplay && !shebaValidationResult?.isValid,
+              'border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500': !shebaDigitsDisplay
+            }">
+            
+            <!-- Fixed IR Prefix Badge on Left -->
+            <div class="px-3 py-2 bg-slate-200/80 border-r border-slate-300 text-slate-700 font-mono font-black text-xs select-none flex items-center shrink-0">
+              <span>IR</span>
+            </div>
+
+            <!-- 24-Digit Input -->
+            <div class="relative flex-1">
+              <input 
+                type="text" 
+                [value]="shebaDigitsDisplay" 
+                (input)="onShebaInput($event)"
+                (paste)="onShebaPaste($event)"
+                (copy)="onShebaCopy($event)"
+                maxlength="35"
+                dir="ltr"
+                placeholder="-- ---- ---- ---- ---- ----" 
+                class="w-full bg-transparent border-0 text-left font-mono tracking-widest text-xs px-3 py-2 pr-16 focus:outline-none text-slate-800"
+              />
+
+              <!-- Internal Status Icon & Copy Button on Right inside Sheba Input Box -->
+              <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <!-- 1-Click Copy Sheba Button (Icon-Only) -->
+                <button *ngIf="selectedVehicleProfile.sheba_number" type="button" (click)="copyShebaToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isShebaCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white/90 hover:bg-white text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره شبا به صورت یکپارچه و بدون فاصله">
+                  <span>{{ isShebaCopied ? '✓' : '📋' }}</span>
+                </button>
+
+                <!-- Live Status Icon on the Right of input field -->
+                <span *ngIf="shebaValidationResult?.isValid" class="text-emerald-600 font-black text-sm" title="شماره شبا معتبر است">✓</span>
+                <span *ngIf="shebaDigitsDisplay && !shebaValidationResult?.isValid" class="text-rose-500 font-black text-sm" title="شماره شبا نامعتبر است">✕</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Validation Message / Feedback Banner -->
+          <div *ngIf="shebaDigitsDisplay" class="pt-0.5">
+            <div *ngIf="shebaValidationResult?.isValid" class="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+              <span>✓ شماره شبا معتبر و تایید شد (الگوریتم ISO 7064 Mod 97)</span>
+            </div>
+            <div *ngIf="!shebaValidationResult?.isValid && shebaValidationResult?.errorMessage" class="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+              <span>⚠ {{ shebaValidationResult?.errorMessage }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. SECONDARY / SUPPORTING ROW: Searchable Bank Combobox (Opens Upwards) & Account Number -->
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <!-- Searchable Bank Combobox (Opens Upwards without extra text box) -->
+          <div class="relative">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-700 text-xs">انتخاب بانک عامل:</label>
+            </div>
+            <div class="relative">
+              <input 
+                type="text" 
+                [value]="isBankDropdownOpen ? bankSearchQuery : (selectedVehicleProfile.bank_name || '')" 
+                (focus)="isBankDropdownOpen = true; bankSearchQuery = ''" 
+                (input)="bankSearchQuery = $any($event.target).value; isBankDropdownOpen = true" 
+                placeholder="-- جستجو و انتخاب بانک --" 
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer placeholder:text-slate-400 placeholder:font-sans" 
+              />
+              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[9px]">▲</span>
+
+              <!-- Transparent Click-Outside Overlay -->
+              <div *ngIf="isBankDropdownOpen" (click)="isBankDropdownOpen = false" class="fixed inset-0 z-40 bg-transparent"></div>
+
+              <!-- Upward Dropdown List (bottom-full mb-1.5) -->
+              <div *ngIf="isBankDropdownOpen" class="absolute bottom-full mb-1.5 left-0 right-0 max-h-52 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-2xl z-50 py-1 divide-y divide-slate-50">
+                <div *ngFor="let b of filteredBanks" (click)="selectBankFromDropdown(b, $event)" class="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between transition-colors" [ngClass]="{'bg-blue-50 font-black text-blue-700': selectedVehicleProfile.bank_name === b.name}">
+                  <span class="text-xs flex items-center gap-1.5">
+                    <span>{{ b.icon }}</span>
+                    <span>{{ b.name }}</span>
+                  </span>
+                  <span class="text-[10px] font-mono text-slate-400 font-normal">کد {{ b.code }}</span>
+                </div>
+                <div *ngIf="filteredBanks.length === 0" class="px-3 py-3 text-center text-xs text-slate-400">
+                  بانکی با این مشخصات یافت نشد
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Account Number Field -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-700 text-xs">شماره حساب (تکمیل خودکار از شبا):</label>
+            </div>
+
+            <!-- Account Input with Icon-Only Action Buttons on Right -->
+            <div dir="ltr" class="relative flex items-center rounded-xl overflow-hidden border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+              <input 
+                type="text" 
+                [value]="selectedVehicleProfile.account_number || ''" 
+                (input)="onAccountNumberInput($event)"
+                (paste)="onAccountNumberPaste($event)"
+                (copy)="onAccountNumberCopy($event)"
+                placeholder="مثال: 0101111111001" 
+                dir="ltr"
+                class="w-full bg-transparent border-0 text-left font-mono text-xs px-3 py-2 pr-16 focus:outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans"
+              />
+              
+              <!-- Internal Icon-Only Buttons inside Account Input Box -->
+              <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <!-- 1-Click Copy Account Button (Icon-Only) -->
+                <button *ngIf="selectedVehicleProfile.account_number" type="button" (click)="copyAccountNumberToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isAccountCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره حساب">
+                  <span>{{ isAccountCopied ? '✓' : '📋' }}</span>
+                </button>
+
+                <!-- Convert to Sheba Button (Icon-Only) -->
+                <button *ngIf="selectedVehicleProfile.account_number && selectedVehicleProfile.bank_name" type="button" (click)="convertAccountToShebaNow()" class="w-6 h-6 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-all flex items-center justify-center cursor-pointer shadow-2xs text-xs font-bold" title="تولید مجدد شماره شبا">
+                  <span>⚡</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+            <input type="checkbox" [(ngModel)]="selectedVehicleProfile.is_active" class="rounded text-blue-600" />
+            <span>ناوگان فعال در سیستم</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button (click)="isVehicleProfileModalOpen = false" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">انصراف (Esc)</button>
+        <button (click)="saveVehicleProfileForm()" [disabled]="isSavingVehicleProfile" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl cursor-pointer disabled:opacity-50">
+          <span *ngIf="!isSavingVehicleProfile">ذخیره پرونده (Enter)</span>
+          <span *ngIf="isSavingVehicleProfile">در حال ذخیره...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۴. مودال لاگ‌های ممیزی ناوگان (Fleet Audit Logs Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isFleetAuditLogsModalOpen" (keydown.escape)="isFleetAuditLogsModalOpen = false" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-3xl w-full shadow-2xl border border-slate-200 space-y-4 max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-black text-slate-800">📜 تاریخچه و لاگ‌های ممیزی تردد ناوگان</h3>
+          <span class="text-xs text-slate-500 font-mono">({{ selectedYearMonth }})</span>
+        </div>
+        <button (click)="closeFleetAuditLogs()" class="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
+      </div>
+
+      <div class="overflow-y-auto flex-1 text-xs">
+        <div *ngIf="isLoadingFleetAuditLogs" class="p-8 text-center text-slate-400 font-bold">
+          <span class="w-4 h-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin inline-block mr-2"></span>
+          <span>در حال بارگذاری لاگ‌ها...</span>
+        </div>
+
+        <div *ngIf="!isLoadingFleetAuditLogs && fleetAuditLogs.length === 0" class="p-8 text-center text-slate-400 font-medium">
+          هیچ لاگ ویرایشی برای تردد ناوگان در این دوره ثبت نشده است.
+        </div>
+
+        <table *ngIf="!isLoadingFleetAuditLogs && fleetAuditLogs.length > 0" class="w-full text-right border-collapse">
+          <thead class="bg-slate-50 text-slate-600 font-bold border-b border-slate-200 sticky top-0">
+            <tr>
+              <th class="p-2.5 w-10 text-center">#</th>
+              <th class="p-2.5">راننده و پلاک</th>
+              <th class="p-2.5 text-center">تاریخ تردد</th>
+              <th class="p-2.5 text-center">نوع تغییر</th>
+              <th class="p-2.5 text-center">مقدار قبلی</th>
+              <th class="p-2.5 text-center">مقدار جدید</th>
+              <th class="p-2.5">کاربر ویرایشگر</th>
+              <th class="p-2.5">دلیل / زمان</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let log of fleetAuditLogs; let idx = index" class="hover:bg-slate-50/70">
+              <td class="p-2 text-center text-slate-400">{{ idx + 1 }}</td>
+              <td class="p-2 font-bold text-slate-800">
+                <div>{{ log.driver_name }}</div>
+                <div class="text-[10px] text-slate-400 font-mono">{{ log.plate_number || '—' }}</div>
+              </td>
+              <td class="p-2 text-center font-mono font-bold">{{ log.date_shamsi }}</td>
+              <td class="p-2 text-center">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  {{ log.field_name }}
+                </span>
+              </td>
+              <td class="p-2 text-center font-mono text-rose-600 font-bold">{{ log.old_value }}</td>
+              <td class="p-2 text-center font-mono text-emerald-600 font-bold">{{ log.new_value }}</td>
+              <td class="p-2 text-slate-700 font-bold">{{ log.changed_by_name || 'سیستم' }}</td>
+              <td class="p-2 text-[10px] text-slate-500">
+                <div>{{ log.reason || '—' }}</div>
+                <div class="text-slate-400 font-mono">{{ log.changed_at | date:'yyyy/MM/dd HH:mm' }}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex items-center justify-end pt-3 border-t border-slate-100 shrink-0">
+        <button (click)="closeFleetAuditLogs()" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">بستن (Esc)</button>
       </div>
     </div>
   </div>

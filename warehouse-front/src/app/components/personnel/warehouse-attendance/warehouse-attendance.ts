@@ -15,13 +15,19 @@ import { WebSocketService } from '../../../core/http/websocket.service';
 import {
   AttendanceMatrixRow,
   VehicleMatrixRow,
+  VehicleDriverProfile,
   MonthlyGridDayMeta,
   MonthlyGridPersonnelDay,
   MonthlyGridRow,
   MonthlyGridResponse,
+  VehicleMonthlyGridDay,
+  VehicleMonthlyGridRow,
+  VehicleMonthlyGridResponse,
+  VehicleTripAuditLog,
   AttendanceAnomaly
 } from '../../../core/models/personnel.model';
 import { jalaliToGregorian, gregorianToJalali } from '../../../core/utils/date-utils';
+import { IRANIAN_BANKS, IranianBankInfo, validateSheba, ShebaValidationResult, formatShebaDisplay, cleanShebaInput, extractShebaDigits, generateShebaFromAccount, getBankByName, validateAccountNumber } from '../../../core/utils/sheba-utils';
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
 
 @Component({
@@ -166,10 +172,53 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   // Two-Way Timesheet Excel
   isExportingMonthlyExcel = false;
 
-  // Matrix Fleet Trips
+  // Matrix Fleet Trips (Daily & 31-day Monthly Grid)
   vehicleRows: VehicleMatrixRow[] = [];
   isVehicleLoading = false;
   isSavingVehicles = false;
+
+  fleetMonthlyGridRows: VehicleMonthlyGridRow[] = [];
+  isFleetMonthlyGridLoading = false;
+  isSavingFleetMonthlyGrid = false;
+  hasUnsavedFleetMonthlyGrid = false;
+
+  // Fleet Day Detail Modal
+  isFleetDayDetailModalOpen = false;
+  selectedFleetDayDetailRow: VehicleMonthlyGridRow | null = null;
+  selectedFleetDayDetailItem: VehicleMonthlyGridDay | null = null;
+  fleetDayDetailTripCount = 0;
+  fleetDayDetailUnitRate = 0;
+  fleetDayDetailDispatchRef = '';
+  fleetDayDetailOrigDest = '';
+  fleetDayDetailNotes = '';
+
+  // Fleet Excel Smart Paste
+  isFleetExcelPasteModalOpen = false;
+  fleetExcelPasteText = '';
+  fleetExcelParsedRows: Array<{
+    identifier: string;
+    trip_count: number;
+    unit_rate: number;
+    dispatch_reference: string;
+    origin_destination: string;
+    notes: string;
+    matchedRow?: VehicleMatrixRow;
+  }> = [];
+
+  // Fleet Printable Sheet Modal
+  isFleetPrintModalOpen = false;
+  fleetPrintTimestamp = '';
+
+  // Fleet Driver/Vehicle Profiles Management
+  isVehicleProfileModalOpen = false;
+  isEditingVehicleProfile = false;
+  selectedVehicleProfile: Partial<VehicleDriverProfile> = {};
+  isSavingVehicleProfile = false;
+
+  // Fleet Audit Logs Modal
+  isFleetAuditLogsModalOpen = false;
+  fleetAuditLogs: VehicleTripAuditLog[] = [];
+  isLoadingFleetAuditLogs = false;
 
   // WebSocket Live Subscription
   private wsSub?: Subscription;
@@ -306,7 +355,17 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       }
     });
 
-    // خواندن و سینک کامل تمام تب‌ها، حالت‌ها و فیلترها از روی URL مرورگر
+    // تعیین بخش اصلی بر اساس روت ورودی (/attendance یا /fleet)
+    this.route.data.subscribe(data => {
+      if (data && data['defaultTab']) {
+        this.mainSectionTab = data['defaultTab'] === 'fleet' ? 'fleet' : 'personnel';
+      } else {
+        const url = this.router.url || '';
+        this.mainSectionTab = url.includes('/fleet') ? 'fleet' : 'personnel';
+      }
+    });
+
+    // خواندن و سینک کامل حالت‌ها و فیلترها از روی URL مرورگر
     this.route.queryParams.subscribe(params => {
       let shouldReload = false;
       if (params['tab']) {
@@ -343,7 +402,6 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   updateUrlParams(): void {
     const queryParams: any = {
-      tab: this.mainSectionTab,
       mode: this.activeMode,
       wh: this.selectedWarehouseId !== null ? this.selectedWarehouseId : null,
       date: this.selectedDateShamsi || null,
@@ -433,18 +491,32 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     }
   }
 
+  get fleetRegistrationState(): {
+    status: 'none' | 'partial' | 'full';
+    savedCount: number;
+    totalCount: number;
+    label: string;
+  } {
+    const total = this.vehicleRows.length;
+    if (total === 0) {
+      return { status: 'none', savedCount: 0, totalCount: 0, label: 'بدون ناوگان' };
+    }
+    const saved = this.vehicleRows.filter(r => (Number(r.trip_count) > 0) || !!r.is_existing).length;
+    if (saved === 0) {
+      return { status: 'none', savedCount: 0, totalCount: total, label: 'پیش‌نویس (بدون سرویس ثبت‌شده)' };
+    } else {
+      return { status: 'full', savedCount: saved, totalCount: total, label: `سرویس ثبت‌شده (${saved} از ${total} خودرو)` };
+    }
+  }
+
   get hasExistingAttendance(): boolean {
     return (this.attendanceRows || []).some(r => !!r.is_existing || !!r.attendance_id);
   }
 
   setMainTab(tab: 'personnel' | 'fleet'): void {
     this.mainSectionTab = tab;
-    if (tab === 'personnel') {
-      if (this.activeMode === 'fleet') {
-        this.activeMode = 'daily';
-      }
-    } else {
-      this.activeMode = 'fleet';
+    if (this.activeMode === 'fleet') {
+      this.activeMode = 'daily';
     }
     this.onFilterChange();
   }
@@ -483,9 +555,10 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   }
 
   getSelectedWarehouseName(): string {
-    if (!this.selectedWarehouseId) return 'همه پرسنل';
+    const defaultLabel = this.mainSectionTab === 'fleet' ? 'همه ناوگان' : 'همه پرسنل';
+    if (!this.selectedWarehouseId) return defaultLabel;
     const wh = this.warehouses.find(w => w.id === this.selectedWarehouseId);
-    return wh ? wh.name : 'همه پرسنل';
+    return wh ? wh.name : defaultLabel;
   }
 
   @HostListener('document:click', ['$event'])
@@ -737,23 +810,24 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   setMode(mode: 'daily' | 'monthly_grid' | 'fleet'): void {
     this.activeMode = mode;
-    if (mode === 'fleet') {
-      this.mainSectionTab = 'fleet';
-    } else {
-      this.mainSectionTab = 'personnel';
-    }
     this.onFilterChange();
   }
 
   onFilterChange(): void {
     this.closeSpecialMenu();
     this.updateUrlParams();
-    if (this.activeMode === 'daily') {
-      this.loadAttendanceMatrix();
-    } else if (this.activeMode === 'monthly_grid') {
-      this.loadMonthlyAttendanceGrid();
-    } else if (this.activeMode === 'fleet') {
-      this.loadVehicleMatrix();
+    if (this.mainSectionTab === 'fleet') {
+      if (this.activeMode === 'monthly_grid') {
+        this.loadFleetMonthlyGrid();
+      } else {
+        this.loadVehicleMatrix();
+      }
+    } else {
+      if (this.activeMode === 'monthly_grid') {
+        this.loadMonthlyAttendanceGrid();
+      } else {
+        this.loadAttendanceMatrix();
+      }
     }
   }
 
@@ -1930,5 +2004,618 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  // --- تقویم ۳۱ روزه ماهانه ناوگان (Fleet 31-Day Monthly Grid) ---
+  loadFleetMonthlyGrid(): void {
+    if (!this.selectedYearMonth) return;
+    this.isFleetMonthlyGridLoading = true;
+    this.api.getVehicleMonthlyGrid(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
+      next: res => {
+        this.fleetMonthlyGridRows = res.rows || [];
+        this.monthName = res.month_name || '';
+        this.daysInMonth = res.days_in_month || 31;
+        this.monthlyGridDays = (res.days_meta || []) as any;
+        this.isPeriodLocked = !!res.is_locked;
+        this.periodStatus = res.period_status || 'OPEN';
+        this.isFleetMonthlyGridLoading = false;
+        this.hasUnsavedFleetMonthlyGrid = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isFleetMonthlyGridLoading = false;
+        this.toast.show('error', err?.error?.detail || err?.error?.error || 'خطا در بارگذاری تقویم ماهانه ناوگان');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  refreshFleetMonthlyGridSilently(forceFresh = true): void {
+    if (!this.selectedYearMonth) return;
+    const context = forceFresh ? new HttpContext().set(SKIP_OFFLINE, true) : undefined;
+    this.api.getVehicleMonthlyGrid(this.selectedWarehouseId, this.selectedYearMonth, { context }).subscribe({
+      next: res => {
+        this.fleetMonthlyGridRows = res.rows || [];
+        this.isPeriodLocked = !!res.is_locked;
+        this.periodStatus = res.period_status || 'OPEN';
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+  }
+
+  saveFleetMonthlyGrid(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل شده است و امکان ذخیره وجود ندارد.');
+      return;
+    }
+    this.isSavingFleetMonthlyGrid = true;
+    const items: any[] = [];
+    this.fleetMonthlyGridRows.forEach(row => {
+      row.days.forEach(d => {
+        items.push({
+          vehicle_id: row.vehicle_id,
+          day: d.day,
+          trip_count: Number(d.trip_count) || 0,
+          unit_rate: d.unit_rate || row.default_rate || 0,
+          dispatch_reference: d.dispatch_reference || '',
+          origin_destination: d.origin_destination || '',
+          notes: d.notes || ''
+        });
+      });
+    });
+
+    this.api.saveVehicleMonthlyGridBulk({
+      warehouse_id: this.selectedWarehouseId,
+      year_month: this.selectedYearMonth,
+      client_tab_id: this.wsService.tabId,
+      items
+    }).subscribe({
+      next: res => {
+        this.isSavingFleetMonthlyGrid = false;
+        this.hasUnsavedFleetMonthlyGrid = false;
+        this.toast.show('success', res.message || 'تقویم ماهانه ناوگان با موفقیت ذخیره شد');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isSavingFleetMonthlyGrid = false;
+        this.toast.show('error', err?.error?.detail || err?.error?.error || 'خطا در ذخیره تقویم ماهانه ناوگان');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // --- مودال سریع جزئیات روز ناوگان (Fleet Day Detail Modal) ---
+  openFleetDayDetailModal(row: VehicleMonthlyGridRow, dayItem: VehicleMonthlyGridDay): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('info', 'این سلول در دوره قفل‌شده قرار دارد و فقط‌خواندنی است');
+      return;
+    }
+    this.selectedFleetDayDetailRow = row;
+    this.selectedFleetDayDetailItem = dayItem;
+    this.fleetDayDetailTripCount = dayItem.trip_count || 0;
+    this.fleetDayDetailUnitRate = dayItem.unit_rate || row.default_rate || 0;
+    this.fleetDayDetailDispatchRef = dayItem.dispatch_reference || '';
+    this.fleetDayDetailOrigDest = dayItem.origin_destination || '';
+    this.fleetDayDetailNotes = dayItem.notes || '';
+    this.isFleetDayDetailModalOpen = true;
+  }
+
+  saveFleetDayDetail(): void {
+    if (!this.selectedFleetDayDetailRow || !this.selectedFleetDayDetailItem) return;
+
+    const vId = this.selectedFleetDayDetailRow.vehicle_id;
+    const day = this.selectedFleetDayDetailItem.day;
+    const activeRow = this.fleetMonthlyGridRows.find(r => r.vehicle_id === vId) || this.selectedFleetDayDetailRow;
+    const activeItem = activeRow.days.find(d => d.day === day) || this.selectedFleetDayDetailItem;
+
+    activeItem.trip_count = Number(this.fleetDayDetailTripCount) || 0;
+    activeItem.unit_rate = Number(this.fleetDayDetailUnitRate) || 0;
+    activeItem.total_amount = activeItem.trip_count * activeItem.unit_rate;
+    activeItem.dispatch_reference = this.fleetDayDetailDispatchRef;
+    activeItem.origin_destination = this.fleetDayDetailOrigDest;
+    activeItem.notes = this.fleetDayDetailNotes;
+    activeItem.is_existing = activeItem.trip_count > 0;
+
+    // محاسبه سرجمع‌های ردیف
+    let totalTrips = 0;
+    let totalAmount = 0;
+    let activeDays = 0;
+    activeRow.days.forEach(d => {
+      totalTrips += d.trip_count;
+      if (activeRow.ownership_type in ['contract', 'personal']) {
+        totalAmount += d.total_amount;
+      }
+      if (d.trip_count > 0) activeDays++;
+    });
+    activeRow.total_trips = totalTrips;
+    activeRow.total_amount = totalAmount;
+    activeRow.active_days = activeDays;
+
+    this.isFleetDayDetailModalOpen = false;
+
+    // ذخیره آنی در سرور
+    this.api.updateVehicleDayTrip({
+      vehicle_id: vId,
+      warehouse_id: this.selectedWarehouseId,
+      date_shamsi: activeItem.date_shamsi,
+      trip_count: activeItem.trip_count,
+      unit_rate: activeItem.unit_rate,
+      dispatch_reference: activeItem.dispatch_reference,
+      origin_destination: activeItem.origin_destination,
+      notes: activeItem.notes,
+      client_tab_id: this.wsService.tabId
+    }).subscribe({
+      next: res => {
+        this.toast.show('success', 'تردد روزانه خودرو با موفقیت ثبت شد');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.detail || err?.error?.error || 'خطا در ثبت تردد خودرو');
+      }
+    });
+  }
+
+  // --- چسباندن سریع از اکسل برای ناوگان (Smart Excel Paste) ---
+  openFleetExcelPasteModal(): void {
+    this.fleetExcelPasteText = '';
+    this.fleetExcelParsedRows = [];
+    this.isFleetExcelPasteModalOpen = true;
+  }
+
+  parseFleetExcelPaste(): void {
+    if (!this.fleetExcelPasteText.trim()) {
+      this.fleetExcelParsedRows = [];
+      return;
+    }
+    const lines = this.fleetExcelPasteText.trim().split('\n');
+    const parsed: any[] = [];
+    for (const line of lines) {
+      const parts = line.split('\t').map(p => p.trim());
+      if (parts.length === 0 || !parts[0]) continue;
+      const identifier = parts[0];
+      const tripCount = parseInt(parts[1] || '1', 10) || 0;
+      const unitRate = parseFloat(parts[2] || '0') || 0;
+      const dispatchRef = parts[3] || '';
+      const origDest = parts[4] || '';
+      const notes = parts[5] || '';
+
+      const matched = this.vehicleRows.find(v => 
+        (v.plate_number && v.plate_number.includes(identifier)) ||
+        (v.driver_name && v.driver_name.includes(identifier))
+      );
+
+      parsed.push({
+        identifier,
+        trip_count: tripCount,
+        unit_rate: unitRate,
+        dispatch_reference: dispatchRef,
+        origin_destination: origDest,
+        notes,
+        matchedRow: matched
+      });
+    }
+    this.fleetExcelParsedRows = parsed;
+  }
+
+  applyFleetExcelPaste(): void {
+    let appliedCount = 0;
+    this.fleetExcelParsedRows.forEach(p => {
+      if (p.matchedRow) {
+        p.matchedRow.trip_count = p.trip_count;
+        if (p.unit_rate > 0) p.matchedRow.unit_rate = p.unit_rate;
+        if (p.dispatch_reference) p.matchedRow.dispatch_reference = p.dispatch_reference;
+        if (p.origin_destination) p.matchedRow.origin_destination = p.origin_destination;
+        if (p.notes) p.matchedRow.notes = p.notes;
+        appliedCount++;
+      }
+    });
+    this.isFleetExcelPasteModalOpen = false;
+    this.toast.show('success', `${appliedCount} ردیف ناوگان با موفقیت از اکسل چسبانده شد`);
+    this.cdr.detectChanges();
+  }
+
+  // --- خروجی و ورودی فایل اکسل ۳۱ روزه ناوگان (Fleet Excel Import/Export) ---
+  downloadFleetMonthlyExcel(): void {
+    if (!this.selectedYearMonth) return;
+    const url = this.api.getFleetMonthlyExcelDownloadUrl(this.selectedWarehouseId, this.selectedYearMonth);
+    window.open(url, '_blank');
+  }
+
+  onFleetExcelFileSelected(event: any): void {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره قفل شده است و امکان بارگذاری اکسل وجود ندارد.');
+      event.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    if (this.selectedWarehouseId) formData.append('warehouse_id', this.selectedWarehouseId.toString());
+    if (this.selectedYearMonth) formData.append('year_month', this.selectedYearMonth);
+
+    this.toast.show('info', 'در حال پردازش و بارگذاری فایل اکسل ناوگان...');
+    this.api.importFleetMonthlyExcel(formData).subscribe({
+      next: res => {
+        this.toast.show('success', res.message || 'فایل اکسل با موفقیت بارگذاری شد');
+        this.loadFleetMonthlyGrid();
+        event.target.value = '';
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در بارگذاری فایل اکسل');
+        event.target.value = '';
+      }
+    });
+  }
+
+  // --- برگه چاپی رسمی ناوگان در قطع A4 افقی (Printable Sheet) ---
+  openFleetPrintModal(): void {
+    const now = new Date();
+    this.fleetPrintTimestamp = now.toLocaleDateString('fa-IR') + ' ' + now.toLocaleTimeString('fa-IR');
+    this.isFleetPrintModalOpen = true;
+  }
+
+  closeFleetPrintModal(): void {
+    this.isFleetPrintModalOpen = false;
+  }
+
+  printFleetSheet(): void {
+    window.print();
+  }
+
+  get totalFleetMonthlyTrips(): number {
+    return this.fleetMonthlyGridRows.reduce((acc, row) => acc + (row.total_trips || 0), 0);
+  }
+
+  get totalFleetMonthlyAmount(): number {
+    return this.fleetMonthlyGridRows.reduce((acc, row) => acc + (row.ownership_type !== 'company' ? (row.total_amount || 0) : 0), 0);
+  }
+
+  // --- پرونده رانندگان و ناوگان (Driver & Vehicle Profile Modal) ---
+  iranianBanks: IranianBankInfo[] = IRANIAN_BANKS;
+  shebaValidationResult: ShebaValidationResult | null = null;
+  shebaDigitsDisplay: string = '';
+  isBankDropdownOpen: boolean = false;
+  bankSearchQuery: string = '';
+
+  get filteredBanks(): IranianBankInfo[] {
+    if (!this.bankSearchQuery || !this.bankSearchQuery.trim()) {
+      return this.iranianBanks;
+    }
+    const q = this.bankSearchQuery.trim().toLowerCase();
+    return this.iranianBanks.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      b.shortName.toLowerCase().includes(q) || 
+      b.code.includes(q)
+    );
+  }
+
+  selectBankFromDropdown(bank: IranianBankInfo, event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.onBankSelect(bank.name);
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
+  }
+
+  private _isSyncingBank = false;
+
+  onShebaInput(event: any): void {
+    if (this._isSyncingBank) return;
+    this._isSyncingBank = true;
+    try {
+      const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
+      const digits = extractShebaDigits(rawVal);
+      const res = validateSheba(digits);
+      this.shebaValidationResult = res;
+      this.shebaDigitsDisplay = res.formattedDigits || digits;
+      this.selectedVehicleProfile.sheba_number = res.rawSheba;
+      if (res.bank) {
+        this.selectedVehicleProfile.bank_name = res.bank.name;
+      }
+      if (res.accountNumber && !this.selectedVehicleProfile.account_number) {
+        this.selectedVehicleProfile.account_number = res.accountNumber;
+      }
+      if (event?.target) {
+        event.target.value = this.shebaDigitsDisplay;
+      }
+    } finally {
+      this._isSyncingBank = false;
+    }
+    this.cdr.detectChanges();
+  }
+
+  onAccountNumberInput(event: any): void {
+    if (this._isSyncingBank) return;
+    const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
+    const cleanAcc = rawVal.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                           .replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                           .replace(/\D/g, '')
+                           .substring(0, 18);
+    this.selectedVehicleProfile.account_number = cleanAcc;
+    if (event?.target) {
+      event.target.value = cleanAcc;
+    }
+    
+    // تبدیل خودکار شماره حساب و بانک به شماره شبا با گارد سخت‌گیر اعتبارسنجی
+    const accValidation = validateAccountNumber(cleanAcc);
+    if (accValidation.isValid && this.selectedVehicleProfile.bank_name) {
+      const generated = generateShebaFromAccount(this.selectedVehicleProfile.bank_name, cleanAcc);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.selectedVehicleProfile.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  onAccountNumberPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pasted = event.clipboardData?.getData('text') || '';
+    this.onAccountNumberInput(pasted);
+    const target = event.target as HTMLInputElement;
+    if (target) {
+      target.value = this.selectedVehicleProfile.account_number || '';
+    }
+  }
+
+  onAccountNumberCopy(event: ClipboardEvent): void {
+    const acc = this.selectedVehicleProfile.account_number || '';
+    if (acc && event.clipboardData) {
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', acc);
+      this.isAccountCopied = true;
+      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+      this.cdr.detectChanges();
+    }
+  }
+
+  onBankSelect(bankName: string): void {
+    this.selectedVehicleProfile.bank_name = bankName;
+    // اگر شماره حساب معتبر موجود باشد، شبا را خودکار متناسب با بانک جدید بازسازی کند
+    const accValidation = validateAccountNumber(this.selectedVehicleProfile.account_number);
+    if (accValidation.isValid && bankName) {
+      const generated = generateShebaFromAccount(bankName, this.selectedVehicleProfile.account_number);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.selectedVehicleProfile.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  convertAccountToShebaNow(): void {
+    if (!this.selectedVehicleProfile.bank_name) {
+      this.toast.show('warning', 'لطفاً ابتدا بانک عامل را انتخاب نمایید.');
+      return;
+    }
+    const accValidation = validateAccountNumber(this.selectedVehicleProfile.account_number);
+    if (!accValidation.isValid) {
+      this.toast.show('warning', accValidation.errorMessage || 'لطفاً یک شماره حساب معتبر وارد نمایید.');
+      return;
+    }
+    const generated = generateShebaFromAccount(this.selectedVehicleProfile.bank_name, this.selectedVehicleProfile.account_number);
+    if (generated) {
+      this.onShebaInput(generated);
+      this.toast.show('success', `شماره شبا با موفقیت بر اساس شماره حساب و ${this.selectedVehicleProfile.bank_name} تولید شد.`);
+    } else {
+      this.toast.show('error', 'امکان تولید شماره شبا برای این شماره حساب وجود ندارد.');
+    }
+  }
+
+  onShebaPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pasted = event.clipboardData?.getData('text') || '';
+    this.onShebaInput(pasted);
+  }
+
+  onShebaCopy(event: ClipboardEvent): void {
+    const rawSheba = this.selectedVehicleProfile.sheba_number || '';
+    if (rawSheba && event.clipboardData) {
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', rawSheba);
+      this.isShebaCopied = true;
+      setTimeout(() => { this.isShebaCopied = false; this.cdr.detectChanges(); }, 2000);
+      this.cdr.detectChanges();
+    }
+  }
+
+  isShebaCopied = false;
+  isAccountCopied = false;
+
+  copyShebaToClipboard(): void {
+    const sheba = this.selectedVehicleProfile.sheba_number;
+    if (sheba) {
+      navigator.clipboard.writeText(sheba).then(() => {
+        this.isShebaCopied = true;
+        this.toast.show('success', 'شماره شبا به صورت یکپارچه و بدون فاصله کپی شد: ' + sheba);
+        setTimeout(() => { this.isShebaCopied = false; this.cdr.detectChanges(); }, 2500);
+        this.cdr.detectChanges();
+      }).catch(() => {
+        this.toast.show('error', 'امکان دسترسی به کلیپ‌بورد وجود ندارد.');
+      });
+    }
+  }
+
+  copyAccountNumberToClipboard(): void {
+    const acc = this.selectedVehicleProfile.account_number || this.shebaValidationResult?.accountNumber;
+    if (acc) {
+      navigator.clipboard.writeText(acc).then(() => {
+        this.isAccountCopied = true;
+        this.toast.show('success', `شماره حساب (${acc}) با موفقیت کپی شد.`);
+        setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2500);
+        this.cdr.detectChanges();
+      }).catch(() => {
+        this.toast.show('error', 'امکان دسترسی به کلیپ‌بورد وجود ندارد.');
+      });
+    } else {
+      this.toast.show('warning', 'شماره حسابی برای کپی یافت نشد.');
+    }
+  }
+
+  openNewVehicleProfileModal(): void {
+    this.isEditingVehicleProfile = false;
+    this.shebaValidationResult = null;
+    this.shebaDigitsDisplay = '';
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
+    this.selectedVehicleProfile = {
+      driver_name: '',
+      driver_national_code: '',
+      driver_phone: '',
+      plate_number: '',
+      vehicle_type: 'pickup',
+      ownership_type: 'contract',
+      default_service_rate: 1500000,
+      sheba_number: '',
+      account_number: '',
+      bank_name: 'بانک ملی ایران',
+      assigned_warehouse: this.selectedWarehouseId || undefined,
+      is_active: true
+    };
+    this.isVehicleProfileModalOpen = true;
+  }
+
+  openEditVehicleProfileModal(vehicleId: number): void {
+    const existing = this.vehicleRows.find(v => v.vehicle_id === vehicleId);
+    this.isEditingVehicleProfile = true;
+    this.shebaValidationResult = null;
+    this.shebaDigitsDisplay = '';
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
+    this.api.getVehicleDriverProfile(vehicleId).subscribe({
+      next: (profile: VehicleDriverProfile) => {
+        this.selectedVehicleProfile = { ...profile };
+        if (profile.sheba_number) {
+          const res = validateSheba(profile.sheba_number);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          if (res.accountNumber && !this.selectedVehicleProfile.account_number) {
+            this.selectedVehicleProfile.account_number = res.accountNumber;
+          }
+        }
+        this.isVehicleProfileModalOpen = true;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.selectedVehicleProfile = {
+          id: vehicleId,
+          driver_name: existing?.driver_name || '',
+          plate_number: existing?.plate_number || '',
+          vehicle_type: 'pickup',
+          ownership_type: 'contract',
+          default_service_rate: existing?.default_rate || 1500000,
+          sheba_number: '',
+          bank_name: 'بانک ملی ایران',
+          is_active: true
+        };
+        this.shebaDigitsDisplay = '';
+        this.isVehicleProfileModalOpen = true;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  saveVehicleProfileForm(): void {
+    if (!this.selectedVehicleProfile.driver_name?.trim()) {
+      this.toast.show('error', 'نام راننده یا پیمانکار الزامی است.');
+      return;
+    }
+    if (!this.selectedVehicleProfile.plate_number?.trim()) {
+      this.toast.show('error', 'شماره پلاک انتظامی الزامی است.');
+      return;
+    }
+
+    if (this.selectedVehicleProfile.sheba_number?.trim()) {
+      const res = validateSheba(this.selectedVehicleProfile.sheba_number);
+      if (!res.isValid) {
+        this.toast.show('error', res.errorMessage || 'شماره شبا نامعتبر است. لطفاً اصلاح فرمایید.');
+        return;
+      }
+      this.selectedVehicleProfile.sheba_number = res.rawSheba;
+      if (res.bank && !this.selectedVehicleProfile.bank_name) {
+        this.selectedVehicleProfile.bank_name = res.bank.name;
+      }
+    }
+
+    this.isSavingVehicleProfile = true;
+    if (this.isEditingVehicleProfile && this.selectedVehicleProfile.id) {
+      this.api.updateVehicleDriverProfile(this.selectedVehicleProfile.id, this.selectedVehicleProfile).subscribe({
+        next: () => {
+          this.isSavingVehicleProfile = false;
+          this.isVehicleProfileModalOpen = false;
+          this.toast.show('success', 'اطلاعات خودرو و راننده با موفقیت ویرایش شد.');
+          this.loadVehicleMatrix();
+          if (this.activeMode === 'monthly_grid') {
+            this.loadFleetMonthlyGrid();
+          }
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          this.isSavingVehicleProfile = false;
+          this.toast.show('error', err?.error?.detail || 'خطا در ویرایش پرونده خودرو');
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      this.api.createVehicleDriverProfile(this.selectedVehicleProfile).subscribe({
+        next: () => {
+          this.isSavingVehicleProfile = false;
+          this.isVehicleProfileModalOpen = false;
+          this.toast.show('success', 'خودرو و راننده جدید با موفقیت ثبت شد.');
+          this.loadVehicleMatrix();
+          if (this.activeMode === 'monthly_grid') {
+            this.loadFleetMonthlyGrid();
+          }
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          this.isSavingVehicleProfile = false;
+          this.toast.show('error', err?.error?.detail || 'خطا در ایجاد پرونده خودرو');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  // --- ممیزی و تاریخچه تغییرات تردد ناوگان (Fleet Audit Logs Modal) ---
+  openFleetAuditLogs(vehicleId?: number): void {
+    this.isLoadingFleetAuditLogs = true;
+    this.isFleetAuditLogsModalOpen = true;
+    this.api.getVehicleTripAuditLogs({
+      vehicle_id: vehicleId,
+      year_month: this.selectedYearMonth
+    }).subscribe({
+      next: (logs: VehicleTripAuditLog[]) => {
+        this.fleetAuditLogs = logs || [];
+        this.isLoadingFleetAuditLogs = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingFleetAuditLogs = false;
+        this.toast.show('error', 'خطا در بارگذاری لاگ‌های ممیزی ناوگان');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closeFleetAuditLogs(): void {
+    this.isFleetAuditLogsModalOpen = false;
   }
 }

@@ -737,11 +737,30 @@
     <div *ngIf="activeMode === 'daily'" class="space-y-3">
       <!-- Fleet Header Toolbar -->
       <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
           <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-            <span>سرویس‌های ثبت‌شده ناوگان در تاریخ {{ selectedDateShamsi }}:</span>
+            <span>سرویس‌های ناوگان:</span>
           </span>
+
+          <!-- Status Filter Tabs: Active / Inactive / All -->
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <button (click)="setFleetStatusFilter('active')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'active' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>🟢 فعال‌ها</span>
+            </button>
+            <button (click)="setFleetStatusFilter('inactive')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'inactive' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>⚪ غیرفعال‌ها</span>
+            </button>
+            <button (click)="setFleetStatusFilter('all')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'all' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>🌐 همه</span>
+            </button>
+          </div>
+
+          <!-- Live Search Input -->
+          <div class="relative">
+            <input type="text" [(ngModel)]="fleetSearchQuery" placeholder="🔍 جستجوی راننده یا پلاک..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold w-44 sm:w-56 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 placeholder:font-sans" />
+            <button *ngIf="fleetSearchQuery" (click)="fleetSearchQuery = ''" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
+          </div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
@@ -790,32 +809,38 @@
                   </div>
                 </td>
               </tr>
-              <tr *ngIf="!isVehicleLoading && vehicleRows.length === 0">
+              <tr *ngIf="!isVehicleLoading && displayedVehicleRows.length === 0">
                 <td colspan="8" class="p-8 text-center text-slate-400 font-medium">
-                  هیچ خودرو یا راننده‌ای در سیستم تعریف نشده است.
+                  {{ fleetSearchQuery ? 'هیچ خودرویی با این مشخصات جستجو یافت نشد.' : 'هیچ خودرویی در این وضعیت تعریف نشده است.' }}
                 </td>
               </tr>
-              <tr *ngFor="let v of vehicleRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+              <tr *ngFor="let v of displayedVehicleRows; let idx = index" class="hover:bg-slate-50/70 transition-colors" [ngClass]="{'opacity-60 bg-slate-50/50': v.is_active === false}">
                 <td class="p-3 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
                 <td class="p-3 font-bold text-slate-800">
-                  <div>{{ v.driver_name || 'راننده ثبت‌نشده' }}</div>
+                  <div class="flex items-center gap-1.5">
+                    <div (click)="openEditVehicleProfileModal(v.vehicle_id)" class="cursor-pointer hover:text-blue-600 flex items-center gap-1.5 group w-fit" title="کلیک جهت ویرایش پرونده راننده، شماره شبا و حساب">
+                      <span>{{ v.driver_name || 'راننده ثبت‌نشده' }}</span>
+                      <span class="text-[11px] text-slate-300 group-hover:text-blue-500 transition-colors">✏️</span>
+                    </div>
+                    <span *ngIf="v.is_active === false" class="bg-slate-200 text-slate-600 border border-slate-300 px-1.5 py-0.5 rounded text-[9px] font-bold">غیرفعال</span>
+                  </div>
                   <div class="text-[10px] text-slate-400 font-normal">{{ v.vehicle_type_display || 'خودرو' }}</div>
                 </td>
                 <td class="p-3 text-slate-700 font-mono font-bold">{{ v.plate_number || '—' }}</td>
                 <td class="p-3 text-center">
-                  <input [id]="'input-trip-' + idx" type="number" [(ngModel)]="v.trip_count" min="0" (keydown)="onFleetGridKeydown($event, 'trip', idx)" class="w-20 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <input [id]="'input-trip-' + idx" type="number" [(ngModel)]="v.trip_count" min="0" [disabled]="v.is_active === false" [title]="v.is_active === false ? 'برای خودروهای غیرفعال امکان ثبت کارکرد وجود ندارد' : ''" (keydown)="onFleetGridKeydown($event, 'trip', idx)" class="w-20 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" />
                 </td>
                 <td class="p-3 text-center">
-                  <input [id]="'input-rate-' + idx" type="number" [(ngModel)]="v.unit_rate" (keydown)="onFleetGridKeydown($event, 'rate', idx)" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <input [id]="'input-rate-' + idx" type="number" [(ngModel)]="v.unit_rate" [disabled]="v.is_active === false" [title]="v.is_active === false ? 'برای خودروهای غیرفعال امکان ثبت کارکرد وجود ندارد' : ''" (keydown)="onFleetGridKeydown($event, 'rate', idx)" class="w-28 text-center bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2 text-xs font-mono font-bold focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" />
                 </td>
                 <td class="p-3">
-                  <input [id]="'input-dispatch-' + idx" type="text" [(ngModel)]="v.dispatch_reference" (keydown)="onFleetGridKeydown($event, 'dispatch', idx)" placeholder="شماره بارنامه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <input [id]="'input-dispatch-' + idx" type="text" [(ngModel)]="v.dispatch_reference" [disabled]="v.is_active === false" [title]="v.is_active === false ? 'برای خودروهای غیرفعال امکان ثبت کارکرد وجود ندارد' : ''" (keydown)="onFleetGridKeydown($event, 'dispatch', idx)" placeholder="شماره بارنامه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" />
                 </td>
                 <td class="p-3">
-                  <input [id]="'input-dest-' + idx" type="text" [(ngModel)]="v.origin_destination" (keydown)="onFleetGridKeydown($event, 'dest', idx)" placeholder="مثلاً: انبار مرکزی به شعبه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <input [id]="'input-dest-' + idx" type="text" [(ngModel)]="v.origin_destination" [disabled]="v.is_active === false" [title]="v.is_active === false ? 'برای خودروهای غیرفعال امکان ثبت کارکرد وجود ندارد' : ''" (keydown)="onFleetGridKeydown($event, 'dest', idx)" placeholder="مثلاً: انبار مرکزی به شعبه..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" />
                 </td>
                 <td class="p-3">
-                  <input [id]="'input-vnote-' + idx" type="text" [(ngModel)]="v.notes" (keydown)="onFleetGridKeydown($event, 'vnote', idx)" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <input [id]="'input-vnote-' + idx" type="text" [(ngModel)]="v.notes" [disabled]="v.is_active === false" [title]="v.is_active === false ? 'برای خودروهای غیرفعال امکان ثبت کارکرد وجود ندارد' : ''" (keydown)="onFleetGridKeydown($event, 'vnote', idx)" placeholder="یادداشت..." class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" />
                 </td>
               </tr>
             </tbody>
@@ -828,11 +853,30 @@
     <div *ngIf="activeMode === 'monthly_grid'" class="space-y-3">
       <!-- Toolbar -->
       <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
           <span class="text-xs font-black text-slate-800 flex items-center gap-1.5">
-            <span>🚛 تقویم و شیت ماهانه ۳۱ روزه تردد ناوگان (ماه {{ monthName || selectedYearMonth }}):</span>
+            <span>🚛 شیت ماهانه ناوگان ({{ monthName || selectedYearMonth }}):</span>
           </span>
           <span *ngIf="isPeriodLocked" class="bg-amber-50 text-amber-800 border border-amber-300 px-2.5 py-0.5 rounded-lg text-[10px] font-bold">دوره قفل شده</span>
+
+          <!-- Status Filter Tabs: Active / Inactive / All -->
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+            <button (click)="setFleetStatusFilter('active')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'active' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>🟢 فعال‌ها</span>
+            </button>
+            <button (click)="setFleetStatusFilter('inactive')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'inactive' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>⚪ غیرفعال‌ها</span>
+            </button>
+            <button (click)="setFleetStatusFilter('all')" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold" [ngClass]="fleetStatusFilter === 'all' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900'">
+              <span>🌐 همه</span>
+            </button>
+          </div>
+
+          <!-- Live Search Input -->
+          <div class="relative">
+            <input type="text" [(ngModel)]="fleetSearchQuery" placeholder="🔍 جستجوی راننده یا پلاک..." class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold w-44 sm:w-56 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder:text-slate-400 placeholder:font-sans" />
+            <button *ngIf="fleetSearchQuery" (click)="fleetSearchQuery = ''" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
+          </div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
@@ -907,15 +951,21 @@
                   </div>
                 </td>
               </tr>
-              <tr *ngIf="!isFleetMonthlyGridLoading && fleetMonthlyGridRows.length === 0">
+              <tr *ngIf="!isFleetMonthlyGridLoading && displayedFleetMonthlyGridRows.length === 0">
                 <td [attr.colspan]="35 + monthlyGridDays.length" class="p-8 text-center text-slate-400 font-medium">
-                  هیچ رکوردی برای ناوگان در این ماه یافت نشد.
+                  {{ fleetSearchQuery ? 'هیچ رکوردی با این مشخصات جستجو یافت نشد.' : 'هیچ رکوردی برای ناوگان در این وضعیت یافت نشد.' }}
                 </td>
               </tr>
-              <tr *ngFor="let row of fleetMonthlyGridRows; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+              <tr *ngFor="let row of displayedFleetMonthlyGridRows; let idx = index" class="hover:bg-slate-50/70 transition-colors" [ngClass]="{'opacity-60 bg-slate-50/50': row.is_active === false}">
                 <td class="p-2 text-center text-slate-400 font-bold sticky right-0 bg-white z-10 border-l border-slate-100">{{ idx + 1 }}</td>
                 <td class="p-2 font-bold text-slate-800 sticky right-10 bg-white z-10 border-l border-slate-100">
-                  <div class="truncate">{{ row.driver_name }}</div>
+                  <div class="flex items-center gap-1.5">
+                    <div (click)="openEditVehicleProfileModal(row.vehicle_id)" class="cursor-pointer hover:text-blue-600 flex items-center gap-1 group w-fit truncate" title="کلیک جهت ویرایش پرونده راننده، شماره شبا و حساب">
+                      <span>{{ row.driver_name }}</span>
+                      <span class="text-[10px] text-slate-300 group-hover:text-blue-500 transition-colors">✏️</span>
+                    </div>
+                    <span *ngIf="row.is_active === false" class="bg-slate-200 text-slate-600 border border-slate-300 px-1 py-0.5 rounded text-[8px] font-bold">غیرفعال</span>
+                  </div>
                   <div class="text-[9px] text-slate-400 font-normal">{{ row.vehicle_type_display }}</div>
                 </td>
                 <td class="p-2 text-slate-700 font-mono font-bold text-center border-l border-slate-100 text-[10px]">{{ row.plate_number || '—' }}</td>

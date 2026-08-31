@@ -4,6 +4,8 @@ import { ApiService } from './api.service';
 import {
   PersonnelProfile,
   VehicleDriverProfile,
+  PersonnelChangeRequest,
+  VehicleChangeRequest,
   AttendanceMatrixResponse,
   VehicleMatrixResponse,
   AttendanceSummaryRow,
@@ -21,7 +23,7 @@ export class PersonnelApiService {
   constructor(private api: ApiService) {}
 
   // --- پرسنل و کارگزینی ---
-  getPersonnelProfiles(params?: { warehouse_id?: number; is_active?: boolean; search?: string }): Observable<PersonnelProfile[]> {
+  getPersonnelProfiles(params?: { warehouse_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<PersonnelProfile[]> {
     return this.api.get<PersonnelProfile[]>(`${this.baseUrl}/profiles`, params as Record<string, unknown>);
   }
 
@@ -33,8 +35,8 @@ export class PersonnelApiService {
     return this.api.post<PersonnelProfile>(`${this.baseUrl}/profiles`, data);
   }
 
-  updatePersonnelProfile(id: number, data: Partial<PersonnelProfile>): Observable<PersonnelProfile> {
-    return this.api.patch<PersonnelProfile>(`${this.baseUrl}/profiles/${id}`, data);
+  updatePersonnelProfile(id: number, data: Partial<PersonnelProfile>): Observable<any> {
+    return this.api.patch<any>(`${this.baseUrl}/profiles/${id}`, data);
   }
 
   deletePersonnelProfile(id: number): Observable<void> {
@@ -45,8 +47,25 @@ export class PersonnelApiService {
     return this.api.upload<any>(`${this.baseUrl}/profiles/import-excel/`, formData);
   }
 
+  // --- گردش کار تایید پرسنل ---
+  approvePersonnelManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-manager/`, {});
+  }
+
+  approvePersonnelFinance(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-finance/`, {});
+  }
+
+  rejectPersonnel(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/reject/`, { reason });
+  }
+
+  requestPersonnelRevision(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/request-revision/`, { reason });
+  }
+
   // --- ناوگان و رانندگان ---
-  getVehicleProfiles(params?: { warehouse_id?: number; is_active?: boolean; search?: string }): Observable<VehicleDriverProfile[]> {
+  getVehicleProfiles(params?: { warehouse_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<VehicleDriverProfile[]> {
     return this.api.get<VehicleDriverProfile[]>(`${this.baseUrl}/vehicles`, params as Record<string, unknown>);
   }
 
@@ -66,16 +85,67 @@ export class PersonnelApiService {
     return this.createVehicleProfile(data);
   }
 
-  updateVehicleProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
-    return this.api.patch<VehicleDriverProfile>(`${this.baseUrl}/vehicles/${id}`, data);
+  updateVehicleProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<any> {
+    return this.api.patch<any>(`${this.baseUrl}/vehicles/${id}`, data);
   }
 
-  updateVehicleDriverProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<VehicleDriverProfile> {
+  updateVehicleDriverProfile(id: number, data: Partial<VehicleDriverProfile>): Observable<any> {
     return this.updateVehicleProfile(id, data);
   }
 
   deleteVehicleProfile(id: number): Observable<void> {
     return this.api.delete<void>(`${this.baseUrl}/vehicles/${id}`);
+  }
+
+  // --- گردش کار تایید ناوگان ---
+  approveVehicleManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-manager/`, {});
+  }
+
+  approveVehicleFinance(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-finance/`, {});
+  }
+
+  rejectVehicle(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/reject/`, { reason });
+  }
+
+  requestVehicleRevision(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/request-revision/`, { reason });
+  }
+
+  // --- کارتابل تغییرات پرسنل (Personnel Change Requests) ---
+  getPersonnelChangeRequests(params?: { status?: string; search?: string }): Observable<PersonnelChangeRequest[]> {
+    return this.api.get<PersonnelChangeRequest[]>(`${this.baseUrl}/personnel-change-requests`, params as Record<string, unknown>);
+  }
+
+  approvePersonnelChangeRequestManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-manager/`, {});
+  }
+
+  approvePersonnelChangeRequestFinance(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-finance/`, {});
+  }
+
+  rejectPersonnelChangeRequest(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/reject/`, { reason });
+  }
+
+  // --- کارتابل تغییرات ناوگان (Vehicle Change Requests) ---
+  getVehicleChangeRequests(params?: { status?: string; search?: string }): Observable<VehicleChangeRequest[]> {
+    return this.api.get<VehicleChangeRequest[]>(`${this.baseUrl}/vehicle-change-requests`, params as Record<string, unknown>);
+  }
+
+  approveVehicleChangeRequestManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-manager/`, {});
+  }
+
+  approveVehicleChangeRequestFinance(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-finance/`, {});
+  }
+
+  rejectVehicleChangeRequest(id: number, reason: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/reject/`, { reason });
   }
 
   // --- ماتریس ثبت کارکرد پرسنل ---
@@ -205,11 +275,14 @@ export class PersonnelApiService {
   getVehicleMatrix(
     warehouseId: number | null | undefined,
     dateShamsi: string,
-    options?: { context?: import('@angular/common/http').HttpContext }
+    options?: { context?: import('@angular/common/http').HttpContext; status?: string }
   ): Observable<VehicleMatrixResponse> {
     const params: any = { date_shamsi: dateShamsi };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
+    }
+    if (options?.status) {
+      params.status = options.status;
     }
     return this.api.get<VehicleMatrixResponse>(`${this.baseUrl}/trips/matrix`, params, options);
   }
@@ -252,11 +325,14 @@ export class PersonnelApiService {
   getVehicleMonthlyGrid(
     warehouseId: number | null | undefined,
     yearMonth: string,
-    options?: { context?: import('@angular/common/http').HttpContext }
+    options?: { context?: import('@angular/common/http').HttpContext; status?: string }
   ): Observable<VehicleMonthlyGridResponse> {
     const params: any = { year_month: yearMonth };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
+    }
+    if (options?.status) {
+      params.status = options.status;
     }
     return this.api.get<VehicleMonthlyGridResponse>(`${this.baseUrl}/trips/monthly-grid`, params, options);
   }

@@ -176,6 +176,45 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   vehicleRows: VehicleMatrixRow[] = [];
   isVehicleLoading = false;
   isSavingVehicles = false;
+  fleetStatusFilter: 'active' | 'inactive' | 'all' = 'active';
+  fleetSearchQuery: string = '';
+
+  get displayedVehicleRows(): VehicleMatrixRow[] {
+    if (!this.vehicleRows) return [];
+    if (!this.fleetSearchQuery || !this.fleetSearchQuery.trim()) {
+      return this.vehicleRows;
+    }
+    const q = this.fleetSearchQuery.trim().toLowerCase();
+    return this.vehicleRows.filter(v => 
+      (v.driver_name && v.driver_name.toLowerCase().includes(q)) ||
+      (v.plate_number && v.plate_number.toLowerCase().includes(q)) ||
+      (v.vehicle_type_display && v.vehicle_type_display.toLowerCase().includes(q)) ||
+      (v.origin_destination && v.origin_destination.toLowerCase().includes(q)) ||
+      (v.dispatch_reference && v.dispatch_reference.toLowerCase().includes(q))
+    );
+  }
+
+  get displayedFleetMonthlyGridRows(): VehicleMonthlyGridRow[] {
+    if (!this.fleetMonthlyGridRows) return [];
+    if (!this.fleetSearchQuery || !this.fleetSearchQuery.trim()) {
+      return this.fleetMonthlyGridRows;
+    }
+    const q = this.fleetSearchQuery.trim().toLowerCase();
+    return this.fleetMonthlyGridRows.filter(r => 
+      (r.driver_name && r.driver_name.toLowerCase().includes(q)) ||
+      (r.plate_number && r.plate_number.toLowerCase().includes(q)) ||
+      (r.vehicle_type_display && r.vehicle_type_display.toLowerCase().includes(q))
+    );
+  }
+
+  setFleetStatusFilter(status: 'active' | 'inactive' | 'all'): void {
+    this.fleetStatusFilter = status;
+    if (this.activeMode === 'daily') {
+      this.loadVehicleMatrix();
+    } else {
+      this.loadFleetMonthlyGrid();
+    }
+  }
 
   fleetMonthlyGridRows: VehicleMonthlyGridRow[] = [];
   isFleetMonthlyGridLoading = false;
@@ -1917,7 +1956,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   loadVehicleMatrix(): void {
     if (!this.selectedDateShamsi) return;
     this.isVehicleLoading = true;
-    this.api.getVehicleMatrix(this.selectedWarehouseId, this.selectedDateShamsi).subscribe({
+    this.api.getVehicleMatrix(this.selectedWarehouseId, this.selectedDateShamsi, { status: this.fleetStatusFilter }).subscribe({
       next: res => {
         this.vehicleRows = res.rows || [];
         this.isVehicleLoading = false;
@@ -1935,7 +1974,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   refreshVehicleMatrixSilently(forceFresh = true): void {
     if (!this.selectedDateShamsi) return;
     const context = forceFresh ? new HttpContext().set(SKIP_OFFLINE, true) : undefined;
-    this.api.getVehicleMatrix(this.selectedWarehouseId, this.selectedDateShamsi, { context }).subscribe({
+    this.api.getVehicleMatrix(this.selectedWarehouseId, this.selectedDateShamsi, { context, status: this.fleetStatusFilter }).subscribe({
       next: res => {
         const newRows: VehicleMatrixRow[] = res.rows || [];
         const vMap = new Map<number, VehicleMatrixRow>();
@@ -1956,6 +1995,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
             r.notes = updated.notes;
             r.warehouse_name = updated.warehouse_name;
             r.is_existing = updated.is_existing;
+            r.is_active = updated.is_active;
           }
         });
 
@@ -1974,6 +2014,13 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   }
 
   saveVehicleMatrix(): void {
+    // گارد محافظ: جلوگیری از ثبت کارکرد برای خودروهای غیرفعال
+    const invalidInactive = this.vehicleRows.find(r => r.is_active === false && Number(r.trip_count) > 0);
+    if (invalidInactive) {
+      this.toast.show('error', `ثبت کارکرد برای خودروی غیرفعال (${invalidInactive.driver_name}) مجاز نیست. لطفاً ابتدا خودرو را فعال نمایید.`);
+      return;
+    }
+
     this.isSavingVehicles = true;
     const payload = {
       warehouse_id: this.selectedWarehouseId,
@@ -2010,7 +2057,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   loadFleetMonthlyGrid(): void {
     if (!this.selectedYearMonth) return;
     this.isFleetMonthlyGridLoading = true;
-    this.api.getVehicleMonthlyGrid(this.selectedWarehouseId, this.selectedYearMonth).subscribe({
+    this.api.getVehicleMonthlyGrid(this.selectedWarehouseId, this.selectedYearMonth, { status: this.fleetStatusFilter }).subscribe({
       next: res => {
         this.fleetMonthlyGridRows = res.rows || [];
         this.monthName = res.month_name || '';
@@ -2087,6 +2134,10 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   // --- مودال سریع جزئیات روز ناوگان (Fleet Day Detail Modal) ---
   openFleetDayDetailModal(row: VehicleMonthlyGridRow, dayItem: VehicleMonthlyGridDay): void {
+    if (row.is_active === false) {
+      this.toast.show('warning', `ثبت کارکرد برای خودروی غیرفعال (${row.driver_name}) مجاز نیست. لطفاً ابتدا خودرو را فعال نمایید.`);
+      return;
+    }
     if (this.isPeriodLocked) {
       this.toast.show('info', 'این سلول در دوره قفل‌شده قرار دارد و فقط‌خواندنی است');
       return;
@@ -2103,6 +2154,11 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   saveFleetDayDetail(): void {
     if (!this.selectedFleetDayDetailRow || !this.selectedFleetDayDetailItem) return;
+
+    if (this.selectedFleetDayDetailRow.is_active === false && Number(this.fleetDayDetailTripCount) > 0) {
+      this.toast.show('error', `ثبت کارکرد برای خودروی غیرفعال (${this.selectedFleetDayDetailRow.driver_name}) مجاز نیست.`);
+      return;
+    }
 
     const vId = this.selectedFleetDayDetailRow.vehicle_id;
     const day = this.selectedFleetDayDetailItem.day;
@@ -2200,8 +2256,13 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   applyFleetExcelPaste(): void {
     let appliedCount = 0;
+    let skippedInactive = 0;
     this.fleetExcelParsedRows.forEach(p => {
       if (p.matchedRow) {
+        if (p.matchedRow.is_active === false) {
+          skippedInactive++;
+          return;
+        }
         p.matchedRow.trip_count = p.trip_count;
         if (p.unit_rate > 0) p.matchedRow.unit_rate = p.unit_rate;
         if (p.dispatch_reference) p.matchedRow.dispatch_reference = p.dispatch_reference;
@@ -2211,7 +2272,11 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       }
     });
     this.isFleetExcelPasteModalOpen = false;
-    this.toast.show('success', `${appliedCount} ردیف ناوگان با موفقیت از اکسل چسبانده شد`);
+    let msg = `${appliedCount} ردیف ناوگان با موفقیت از اکسل چسبانده شد`;
+    if (skippedInactive > 0) {
+      msg += ` (${skippedInactive} ردیف غیرفعال نادیده گرفته شد)`;
+    }
+    this.toast.show('success', msg);
     this.cdr.detectChanges();
   }
 
@@ -2557,10 +2622,11 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     this.isSavingVehicleProfile = true;
     if (this.isEditingVehicleProfile && this.selectedVehicleProfile.id) {
       this.api.updateVehicleDriverProfile(this.selectedVehicleProfile.id, this.selectedVehicleProfile).subscribe({
-        next: () => {
+        next: (res: any) => {
           this.isSavingVehicleProfile = false;
           this.isVehicleProfileModalOpen = false;
-          this.toast.show('success', 'اطلاعات خودرو و راننده با موفقیت ویرایش شد.');
+          const msg = res?.message || 'اطلاعات خودرو با موفقیت ثبت شد.';
+          this.toast.show('success', msg);
           this.loadVehicleMatrix();
           if (this.activeMode === 'monthly_grid') {
             this.loadFleetMonthlyGrid();
@@ -2569,16 +2635,17 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         },
         error: (err: any) => {
           this.isSavingVehicleProfile = false;
-          this.toast.show('error', err?.error?.detail || 'خطا در ویرایش پرونده خودرو');
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در ویرایش پرونده خودرو');
           this.cdr.detectChanges();
         }
       });
     } else {
       this.api.createVehicleDriverProfile(this.selectedVehicleProfile).subscribe({
-        next: () => {
+        next: (res: any) => {
           this.isSavingVehicleProfile = false;
           this.isVehicleProfileModalOpen = false;
-          this.toast.show('success', 'خودرو و راننده جدید با موفقیت ثبت شد.');
+          const msg = res?.message || 'خودرو ثبت شد و در انتظار تایید مدیر و حسابدار قرار گرفت.';
+          this.toast.show('success', msg);
           this.loadVehicleMatrix();
           if (this.activeMode === 'monthly_grid') {
             this.loadFleetMonthlyGrid();
@@ -2587,7 +2654,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         },
         error: (err: any) => {
           this.isSavingVehicleProfile = false;
-          this.toast.show('error', err?.error?.detail || 'خطا در ایجاد پرونده خودرو');
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در ایجاد پرونده خودرو');
           this.cdr.detectChanges();
         }
       });

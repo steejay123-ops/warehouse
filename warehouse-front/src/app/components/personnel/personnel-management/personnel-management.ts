@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Observable } from 'rxjs';
 import { StateService } from '../../../services/state.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ToastService } from '../../../services/toast.service';
@@ -11,6 +12,8 @@ import { WarehouseHttpService } from '../../../core/http/warehouse-http.service'
 import {
   PersonnelProfile,
   VehicleDriverProfile,
+  PersonnelChangeRequest,
+  VehicleChangeRequest,
   AttendanceMatrixRow,
   VehicleMatrixRow,
   AttendanceSummaryRow,
@@ -40,7 +43,9 @@ export class PersonnelManagement implements OnInit, OnDestroy {
 
   // Active Main Tab
   activeTab: string = 'payroll';
-  profileSubTab: 'personnel' | 'vehicles' = 'personnel';
+  profileSubTab: 'personnel' | 'vehicles' | 'change_requests' = 'personnel';
+  profileApprovalFilter: string = 'ALL';
+  changeRequestSubTab: 'personnel' | 'vehicles' = 'personnel';
   reportSubTab: 'personnel' | 'fleet' = 'personnel';
   settingsSubTab: 'grades' | 'labor' | 'attendance_window' | 'dsk' | 'tax' | 'bank' = 'grades';
 
@@ -173,6 +178,39 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   vehiclesList: VehicleDriverProfile[] = [];
   isProfilesLoading = false;
   profileSearch = '';
+
+  // Change Requests & Approvals
+  personnelChangeRequests: PersonnelChangeRequest[] = [];
+  vehicleChangeRequests: VehicleChangeRequest[] = [];
+  isChangeRequestsLoading = false;
+
+  // Rejection & Revision Reason Modal
+  isProfileRejectModalOpen = false;
+  profileRejectTarget: { id: number; title: string; type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr'; action: 'reject' | 'revision' } | null = null;
+  profileRejectReason = '';
+  isSubmittingProfileReject = false;
+
+  // Diff Viewer Modal
+  isDiffModalOpen = false;
+  selectedDiffCR: any = null;
+  selectedDiffType: 'personnel' | 'vehicle' = 'personnel';
+  diffRows: Array<{ label: string; key: string; oldValue: any; newValue: any; isDiff: boolean }> = [];
+
+  get canApprovePersonnelManager(): boolean {
+    return this.auth.hasPermission('perm_approve_personnel_manager') || this.auth.hasPermission('admin_all');
+  }
+
+  get canApprovePersonnelFinance(): boolean {
+    return this.auth.hasPermission('perm_approve_personnel_finance') || this.auth.hasPermission('admin_all');
+  }
+
+  get canApproveFleetManager(): boolean {
+    return this.auth.hasPermission('perm_approve_fleet_manager') || this.auth.hasPermission('admin_all');
+  }
+
+  get canApproveFleetFinance(): boolean {
+    return this.auth.hasPermission('perm_approve_fleet_finance') || this.auth.hasPermission('admin_all');
+  }
 
   // Modals
   isPersonnelModalOpen = false;
@@ -1762,13 +1800,22 @@ export class PersonnelManagement implements OnInit, OnDestroy {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
   // ۵. پرونده پرسنل و ناوگان (Emp_info)
   // ─────────────────────────────────────────────────────────────
   loadProfiles(): void {
+    if (this.profileSubTab === 'change_requests') {
+      this.loadChangeRequests();
+      return;
+    }
+
     this.isProfilesLoading = true;
+    const approvalParam = this.profileApprovalFilter === 'ALL' ? undefined : this.profileApprovalFilter;
+
     if (this.profileSubTab === 'personnel') {
       this.api.getPersonnelProfiles({
         warehouse_id: this.selectedWarehouseId || undefined,
+        approval_status: approvalParam,
         search: this.profileSearch || undefined
       }).subscribe({
         next: (res) => {
@@ -1784,6 +1831,7 @@ export class PersonnelManagement implements OnInit, OnDestroy {
     } else {
       this.api.getVehicleProfiles({
         warehouse_id: this.selectedWarehouseId || undefined,
+        approval_status: approvalParam,
         search: this.profileSearch || undefined
       }).subscribe({
         next: (res) => {
@@ -1796,6 +1844,288 @@ export class PersonnelManagement implements OnInit, OnDestroy {
           this.toast.show('error', 'خطا در بارگذاری لیست ناوگان');
         }
       });
+    }
+  }
+
+  loadChangeRequests(): void {
+    this.isChangeRequestsLoading = true;
+    const statusParam = this.profileApprovalFilter === 'ALL' ? undefined : this.profileApprovalFilter;
+
+    if (this.changeRequestSubTab === 'personnel') {
+      this.api.getPersonnelChangeRequests({
+        status: statusParam,
+        search: this.profileSearch || undefined
+      }).subscribe({
+        next: (res) => {
+          this.personnelChangeRequests = res || [];
+          this.isChangeRequestsLoading = false;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          this.isChangeRequestsLoading = false;
+          this.toast.show('error', 'خطا در دریافت کارتابل تغییرات پرسنل');
+        }
+      });
+    } else {
+      this.api.getVehicleChangeRequests({
+        status: statusParam,
+        search: this.profileSearch || undefined
+      }).subscribe({
+        next: (res) => {
+          this.vehicleChangeRequests = res || [];
+          this.isChangeRequestsLoading = false;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          this.isChangeRequestsLoading = false;
+          this.toast.show('error', 'خطا در دریافت کارتابل تغییرات ناوگان');
+        }
+      });
+    }
+  }
+
+  getPendingChangeRequestsCount(): number {
+    return (this.personnelChangeRequests || []).filter(c => c.status === 'pending_manager' || c.status === 'manager_approved').length +
+           (this.vehicleChangeRequests || []).filter(c => c.status === 'pending_manager' || c.status === 'manager_approved').length;
+  }
+
+  // --- عملیات تایید و رد پرونده‌ها ---
+  approvePersonnelManager(p: PersonnelProfile): void {
+    if (!p.id) return;
+    this.api.approvePersonnelManager(p.id).subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید مرحله اول (مدیر) با موفقیت ثبت شد.');
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+      }
+    });
+  }
+
+  approvePersonnelFinance(p: PersonnelProfile): void {
+    if (!p.id) return;
+    this.api.approvePersonnelFinance(p.id).subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید نهایی مالی (حسابدار) با موفقیت انجام شد و پرونده فعال گردید.');
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مالی');
+      }
+    });
+  }
+
+  approveVehicleManager(v: VehicleDriverProfile): void {
+    if (!v.id) return;
+    this.api.approveVehicleManager(v.id).subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید مرحله اول خودرو (مدیر) با موفقیت ثبت شد.');
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+      }
+    });
+  }
+
+  approveVehicleFinance(v: VehicleDriverProfile): void {
+    if (!v.id) return;
+    this.api.approveVehicleFinance(v.id).subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید نهایی مالی خودرو (حسابدار) با موفقیت انجام شد و خودرو فعال گردید.');
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مالی');
+      }
+    });
+  }
+
+  // --- تایید و رد درخواست‌های تغییرات (Change Requests) ---
+  approveChangeRequestManager(cr: any, type: 'personnel' | 'vehicle'): void {
+    const call = type === 'personnel'
+      ? this.api.approvePersonnelChangeRequestManager(cr.id)
+      : this.api.approveVehicleChangeRequestManager(cr.id);
+
+    call.subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید مرحله اول درخواست تغییرات توسط مدیر ثبت شد.');
+        if (this.isDiffModalOpen) this.closeDiffModal();
+        this.loadChangeRequests();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+      }
+    });
+  }
+
+  approveChangeRequestFinance(cr: any, type: 'personnel' | 'vehicle'): void {
+    const call = type === 'personnel'
+      ? this.api.approvePersonnelChangeRequestFinance(cr.id)
+      : this.api.approveVehicleChangeRequestFinance(cr.id);
+
+    call.subscribe({
+      next: (res) => {
+        this.toast.show('success', res.message || 'تایید نهایی تغییرات توسط حسابدار انجام شد و پرونده به‌روزرسانی گردید.');
+        if (this.isDiffModalOpen) this.closeDiffModal();
+        this.loadChangeRequests();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید مالی');
+      }
+    });
+  }
+
+  openProfileRejectModal(id: number, title: string, type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr', action: 'reject' | 'revision'): void {
+    this.profileRejectTarget = { id, title, type, action };
+    this.profileRejectReason = '';
+    this.isProfileRejectModalOpen = true;
+  }
+
+  closeProfileRejectModal(): void {
+    this.isProfileRejectModalOpen = false;
+    this.profileRejectTarget = null;
+    this.profileRejectReason = '';
+  }
+
+  submitProfileRejectModal(): void {
+    if (!this.profileRejectTarget || !this.profileRejectReason.trim()) {
+      this.toast.show('warning', 'لطفاً علت رد یا بازنگری را به صورت کامل و مستند وارد نمایید.');
+      return;
+    }
+
+    this.isSubmittingProfileReject = true;
+    const { id, type, action } = this.profileRejectTarget;
+    const reason = this.profileRejectReason.trim();
+
+    let obs: Observable<any>;
+    if (type === 'personnel') {
+      obs = action === 'reject' ? this.api.rejectPersonnel(id, reason) : this.api.requestPersonnelRevision(id, reason);
+    } else if (type === 'vehicle') {
+      obs = action === 'reject' ? this.api.rejectVehicle(id, reason) : this.api.requestVehicleRevision(id, reason);
+    } else if (type === 'personnel_cr') {
+      obs = this.api.rejectPersonnelChangeRequest(id, reason);
+    } else {
+      obs = this.api.rejectVehicleChangeRequest(id, reason);
+    }
+
+    obs.subscribe({
+      next: (res) => {
+        this.isSubmittingProfileReject = false;
+        this.toast.show('success', res.message || 'عملیات با موفقیت ثبت شد.');
+        this.closeProfileRejectModal();
+        if (type.includes('_cr')) {
+          this.loadChangeRequests();
+        } else {
+          this.loadProfiles();
+        }
+      },
+      error: (err) => {
+        this.isSubmittingProfileReject = false;
+        this.toast.show('error', err?.error?.error || 'خطا در انجام عملیات');
+      }
+    });
+  }
+
+  openDiffModal(cr: any, type: 'personnel' | 'vehicle'): void {
+    this.selectedDiffCR = cr;
+    this.selectedDiffType = type;
+    this.diffRows = [];
+
+    const changes = cr.proposed_changes || {};
+    const baseProfile = type === 'personnel'
+      ? this.personnelList.find(p => p.id === cr.personnel)
+      : this.vehiclesList.find(v => v.id === cr.vehicle);
+
+    for (const [key, newVal] of Object.entries(changes)) {
+      const oldVal = baseProfile ? (baseProfile as any)[key] : null;
+      this.diffRows.push({
+        label: this.getFieldLabel(key),
+        key,
+        oldValue: oldVal,
+        newValue: newVal,
+        isDiff: JSON.stringify(oldVal) !== JSON.stringify(newVal)
+      });
+    }
+
+    this.isDiffModalOpen = true;
+  }
+
+  closeDiffModal(): void {
+    this.isDiffModalOpen = false;
+    this.selectedDiffCR = null;
+    this.diffRows = [];
+  }
+
+  getFieldLabel(key: string): string {
+    const labels: Record<string, string> = {
+      first_name: 'نام',
+      last_name: 'نام خانوادگی',
+      national_code: 'کد ملی',
+      father_name: 'نام پدر',
+      id_number: 'شماره شناسنامه',
+      job_title: 'عنوان شغل',
+      job_grade: 'گروه شغلی',
+      daily_base_wage: 'مزد روزانه پایه',
+      daily_seniority_bonus: 'پایه سنواتی روزانه',
+      base_daily_rate: 'مزد مبنا روزانه',
+      hourly_rate: 'نرخ ساعتی',
+      contract_type: 'نوع قرارداد',
+      contract_base_salary: 'حقوق ماهانه قرارداد',
+      bank_name: 'نام بانک',
+      account_number: 'شماره حساب',
+      sheba_number: 'شماره شبا',
+      card_number: 'شماره کارت',
+      phone_number: 'شماره تماس',
+      postal_code: 'کد پستی',
+      address: 'نشانی',
+      assigned_warehouse: 'انبار انتسابی',
+      driver_name: 'نام راننده',
+      plate_number: 'پلاک خودرو',
+      vehicle_type: 'نوع خودرو',
+      ownership_type: 'نوع مالکیت',
+      default_service_rate: 'نرخ مصوب هر سرویس',
+      driver_phone: 'تلفن راننده',
+      driver_national_code: 'کد ملی راننده'
+    };
+    return labels[key] || key;
+  }
+
+  getApprovalBadgeClass(status?: string): string {
+    switch (status) {
+      case 'approved':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'manager_approved':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'draft':
+      case 'pending_manager':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'revision_required':
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'rejected':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      default:
+        return 'bg-slate-50 text-slate-600 border-slate-200';
+    }
+  }
+
+  getApprovalStatusTitle(status?: string): string {
+    switch (status) {
+      case 'approved':
+        return 'تایید نهایی شده';
+      case 'manager_approved':
+        return 'تایید مدیر (در انتظار حسابدار)';
+      case 'draft':
+        return 'پیش‌نویس (در انتظار تایید مدیر)';
+      case 'pending_manager':
+        return 'در انتظار تایید مدیر';
+      case 'revision_required':
+        return 'نیازمند بازنگری و اصلاح';
+      case 'rejected':
+        return 'رد شده';
+      default:
+        return 'نامشخص';
     }
   }
 
@@ -2019,6 +2349,114 @@ export class PersonnelManagement implements OnInit, OnDestroy {
       },
       error: () => {
         this.toast.show('error', 'خطا در تغییر وضعیت پرسنل');
+      }
+    });
+  }
+
+  // --- مدیریت خودروهای ناوگان ---
+  openAddVehicleModal(): void {
+    this.editingVehicle = {
+      plate_number: '',
+      vehicle_type: 'pickup',
+      ownership_type: 'contract',
+      driver_name: '',
+      driver_national_code: '',
+      driver_phone: '',
+      default_service_rate: 2000000,
+      bank_name: '',
+      account_number: '',
+      sheba_number: '',
+      assigned_warehouse: this.selectedWarehouseId || null,
+      is_active: true
+    };
+    this.isVehicleModalOpen = true;
+  }
+
+  openEditVehicleModal(v: VehicleDriverProfile): void {
+    this.editingVehicle = { ...v };
+    this.isVehicleModalOpen = true;
+  }
+
+  closeVehicleModal(): void {
+    this.isVehicleModalOpen = false;
+    this.editingVehicle = null;
+  }
+
+  saveVehicle(): void {
+    if (!this.editingVehicle) return;
+    if (!this.editingVehicle.plate_number || !this.editingVehicle.driver_name) {
+      this.toast.show('error', 'نام راننده و شماره پلاک خودرو الزامی است.');
+      return;
+    }
+
+    this.isSavingVehicle = true;
+    if (this.editingVehicle.id) {
+      this.api.updateVehicleProfile(this.editingVehicle.id, this.editingVehicle).subscribe({
+        next: (res) => {
+          this.isSavingVehicle = false;
+          const msg = res?.message || 'اطلاعات خودرو با موفقیت به‌روزرسانی شد.';
+          this.toast.show('success', msg);
+          this.closeVehicleModal();
+          this.loadProfiles();
+        },
+        error: (err) => {
+          this.isSavingVehicle = false;
+          this.toast.show('error', err?.error?.error || 'خطا در ویرایش خودرو');
+        }
+      });
+    } else {
+      this.api.createVehicleProfile(this.editingVehicle).subscribe({
+        next: (res) => {
+          this.isSavingVehicle = false;
+          this.toast.show('success', 'خودروی جدید با موفقیت ثبت شد.');
+          this.closeVehicleModal();
+          this.loadProfiles();
+        },
+        error: (err) => {
+          this.isSavingVehicle = false;
+          this.toast.show('error', err?.error?.error || 'خطا در ثبت خودرو');
+        }
+      });
+    }
+  }
+
+  async deleteVehicle(v: VehicleDriverProfile): Promise<void> {
+    if (!v.id) return;
+    const confirmed = await this.confirmDialog.open({
+      title: 'حذف پرونده خودرو / راننده',
+      message: `آیا از حذف خودروی «${v.driver_name} (${v.plate_number})» اطمینان دارید؟`,
+      confirmText: 'بله، حذف کن',
+      cancelText: 'انصراف',
+      type: 'danger'
+    });
+
+    if (!confirmed) return;
+
+    this.api.deleteVehicleProfile(v.id).subscribe({
+      next: () => {
+        this.toast.show('success', `پرونده خودروی «${v.driver_name}» با موفقیت حذف گردید.`);
+        if (this.isVehicleModalOpen) {
+          this.closeVehicleModal();
+        }
+        this.loadProfiles();
+      },
+      error: (err) => {
+        this.toast.show('error', err?.error?.error || 'امکان حذف این خودرو وجود ندارد (دارای سابقه تردد است).');
+      }
+    });
+  }
+
+  toggleVehicleActive(v: VehicleDriverProfile): void {
+    if (!v.id) return;
+    const newStatus = !v.is_active;
+    this.api.updateVehicleProfile(v.id, { is_active: newStatus }).subscribe({
+      next: () => {
+        v.is_active = newStatus;
+        this.toast.show('success', `وضعیت خودرو به «${newStatus ? 'فعال' : 'غیرفعال'}» تغییر یافت.`);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در تغییر وضعیت خودرو');
       }
     });
   }

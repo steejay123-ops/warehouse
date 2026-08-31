@@ -86,6 +86,19 @@ export interface PersonnelProfile {
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
   is_active: boolean;
+
+  // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
+  approval_status?: 'draft' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  approval_status_display?: string;
+  manager_approved_by?: number | null;
+  manager_approved_by_name?: string;
+  manager_approved_at?: string | null;
+  accountant_approved_by?: number | null;
+  accountant_approved_by_name?: string;
+  accountant_approved_at?: string | null;
+  rejection_reason?: string;
+  has_pending_changes?: boolean;
+
   created_at?: string;
   updated_at?: string;
 }
@@ -109,8 +122,65 @@ export interface VehicleDriverProfile {
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
   is_active: boolean;
+
+  // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
+  approval_status?: 'draft' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  approval_status_display?: string;
+  manager_approved_by?: number | null;
+  manager_approved_by_name?: string;
+  manager_approved_at?: string | null;
+  accountant_approved_by?: number | null;
+  accountant_approved_by_name?: string;
+  accountant_approved_at?: string | null;
+  rejection_reason?: string;
+  has_pending_changes?: boolean;
+
   created_at?: string;
   updated_at?: string;
+}
+
+export interface PersonnelChangeRequest {
+  id: number;
+  personnel: number;
+  personnel_name?: string;
+  national_code?: string;
+  proposed_changes: Record<string, any>;
+  change_reason?: string;
+  status: 'pending_manager' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  status_display?: string;
+  created_by?: number;
+  created_by_name?: string;
+  manager_approved_by?: number;
+  manager_approved_by_name?: string;
+  manager_approved_at?: string;
+  accountant_approved_by?: number;
+  accountant_approved_by_name?: string;
+  accountant_approved_at?: string;
+  rejection_reason?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VehicleChangeRequest {
+  id: number;
+  vehicle: number;
+  driver_name?: string;
+  plate_number?: string;
+  proposed_changes: Record<string, any>;
+  change_reason?: string;
+  status: 'pending_manager' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  status_display?: string;
+  created_by?: number;
+  created_by_name?: string;
+  manager_approved_by?: number;
+  manager_approved_by_name?: string;
+  manager_approved_at?: string;
+  accountant_approved_by?: number;
+  accountant_approved_by_name?: string;
+  accountant_approved_at?: string;
+  rejection_reason?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ImportPersonnelExcelResponse {
@@ -163,6 +233,7 @@ export interface VehicleMatrixRow {
   origin_destination: string;
   notes: string;
   is_existing: boolean;
+  is_active?: boolean;
   warehouse_name?: string;
 }
 
@@ -198,6 +269,7 @@ export interface VehicleMonthlyGridRow {
   total_trips: number;
   total_amount: number;
   active_days: number;
+  is_active?: boolean;
   days: VehicleMonthlyGridDay[];
 }
 

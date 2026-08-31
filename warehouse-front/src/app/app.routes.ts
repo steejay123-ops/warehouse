@@ -23,6 +23,11 @@ import { Reports } from './components/reports/reports';
 import { VerifyCard } from './components/verify-card/verify-card';
 import { PersonnelManagement } from './components/personnel/personnel-management/personnel-management';
 import { WarehouseAttendance } from './components/personnel/warehouse-attendance/warehouse-attendance';
+import { ManagerApprovals } from './components/personnel/manager-approvals/manager-approvals';
+import { FinanceCartable } from './components/personnel/finance-cartable/finance-cartable';
+import { BaseSettings } from './components/personnel/base-settings/base-settings';
+import { PersonnelProfilesHub } from './components/personnel/personnel-profiles/personnel-profiles';
+import { TreasuryCartable } from './components/personnel/treasury-cartable/treasury-cartable';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
 import { settingsLeaveGuard } from './core/guards/settings-leave.guard';
@@ -73,6 +78,13 @@ export const routes: Routes = [
       { path: 'attendance', component: WarehouseAttendance, data: { defaultTab: 'personnel' } },
       { path: 'fleet', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
       { path: 'fleet-attendance', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
+      { path: 'manager-approvals', component: ManagerApprovals, data: { reuse: true } },
+      { path: 'finance-cartable', component: FinanceCartable, data: { reuse: true } },
+      { path: 'treasury-cartable', component: TreasuryCartable, data: { reuse: true } },
+      { path: 'treasury', component: TreasuryCartable, data: { reuse: true } },
+      { path: 'profiles', component: PersonnelProfilesHub, data: { reuse: true } },
+      { path: 'personnel-profiles', component: PersonnelProfilesHub, data: { reuse: true } },
+      { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
       { path: 'tasks', component: Placeholders },
       { path: 'labels', component: Placeholders },
       { path: 'approvals', component: Placeholders },

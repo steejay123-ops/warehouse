@@ -508,11 +508,16 @@ export class Layout implements OnInit, OnDestroy {
     {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'},
-    // بخش کارکرد و حسابداری (در پایین تنظیمات)
-    {id:'attendance', label:'ثبت کارکرد پرسنل', icon:'check-square', permission: 'view_sys_personnel_attendance', isAccounting: true},
-    {id:'fleet', label:'ثبت کارکرد ناوگان و ماشین‌آلات', icon:'truck', permission: 'view_sys_fleet_attendance', isAccounting: true},
-    {id:'personnel', label:'حقوق و دستمزد پرسنل (دیسکت‌ها)', icon:'users', permission: 'view_sys_payroll', isAccounting: true},
-    {id:'fleet-settlement', label:'تسویه و محاسبات مالی ناوگان', icon:'dollar-sign', permission: 'view_sys_fleet_settlement', isAccounting: true}
+    // بخش کارکرد و حسابداری (پورتال‌های ۴ گانه بازطراحی‌شده + لینک‌های قبلی)
+    {id:'attendance', label:'📋 ثبت کارکرد پرسنل و ناوگان', icon:'check-square', permission: 'view_sys_personnel_attendance', isAccounting: true},
+    {id:'manager-approvals', label:'👑 کارتابل تاییدات مدیر', icon:'check-circle', permission: 'view_sys_personnel', isAccounting: true},
+    {id:'finance-cartable', label:'💳 کارتابل مالی و حقوق', icon:'dollar-sign', permission: 'view_sys_payroll', isAccounting: true},
+    {id:'treasury-cartable', label:'🏦 کارتابل خزانه‌داری و پرداخت', icon:'dollar-sign', permission: 'view_sys_treasury', isAccounting: true},
+    {id:'profiles', label:'👥 بانک پرونده‌های پرسنل و ناوگان', icon:'users', permission: 'view_sys_personnel', isAccounting: true},
+    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true},
+    {id:'fleet', label:'🚛 ثبت تردد ناوگان (قدیم)', icon:'truck', permission: 'view_sys_fleet_attendance', isAccounting: true},
+    {id:'personnel', label:'حقوق و دستمزد پرسنل (قدیم)', icon:'users', permission: 'view_sys_payroll', isAccounting: true},
+    {id:'fleet-settlement', label:'تسویه مالی ناوگان (قدیم)', icon:'dollar-sign', permission: 'view_sys_fleet_settlement', isAccounting: true}
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
@@ -555,7 +560,7 @@ export class Layout implements OnInit, OnDestroy {
     const initialTab = initialClean.split('/')[1] || 'dashboard';
     this.store.setCurrentTab(initialTab);
     this.updateTitle(initialTab);
-    if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement'].includes(initialTab)) {
+    if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(initialTab)) {
       this.isAccountingMenuOpen = true;
     }
 
@@ -566,7 +571,7 @@ export class Layout implements OnInit, OnDestroy {
       const tab = cleanUrl.split('/')[1] || 'dashboard';
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
-      if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement'].includes(tab)) {
+      if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(tab)) {
         this.isAccountingMenuOpen = true;
       }
     });
@@ -1037,8 +1042,9 @@ export class Layout implements OnInit, OnDestroy {
       if (item.permission === 'view_sys_personnel_attendance' || 
           item.permission === 'view_sys_fleet_attendance' || 
           item.permission === 'view_sys_payroll' || 
-          item.permission === 'view_sys_fleet_settlement') {
-        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel');
+          item.permission === 'view_sys_fleet_settlement' ||
+          item.permission === 'view_sys_personnel') {
+        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel') || userPerms.includes('view_sys_payroll');
       }
       return userPerms.includes(item.permission);
     });
@@ -1181,9 +1187,16 @@ export class Layout implements OnInit, OnDestroy {
       personnel: 'حقوق و دستمزد پرسنل (دیسکت‌ها)',
       payroll: 'حقوق و دستمزد پرسنل (دیسکت‌ها)',
       'fleet-settlement': 'تسویه و محاسبات مالی ناوگان',
-      attendance: 'ثبت و بازبینی کارکرد پرسنل',
+      attendance: 'ثبت و بازبینی کارکرد پرسنل و ناوگان',
       fleet: 'مدیریت و ثبت تردد ناوگان و ماشین‌آلات',
-      'fleet-attendance': 'مدیریت و ثبت تردد ناوگان و ماشین‌آلات'
+      'fleet-attendance': 'مدیریت و ثبت تردد ناوگان و ماشین‌آلات',
+      'manager-approvals': 'کارتابل تاییدات و بررسی مدیر',
+      'finance-cartable': 'کارتابل مالی، حقوق و تسویه حسابداری',
+      'treasury-cartable': 'کارتابل خزانه‌داری، پرداخت و دیسکت‌های بانکی',
+      'treasury': 'کارتابل خزانه‌داری، پرداخت و دیسکت‌های بانکی',
+      'profiles': 'بانک پرونده‌های پرسنل و ناوگان',
+      'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
+      'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی'
     };
     this.currentTitle = titles[tab] || tab;
   }

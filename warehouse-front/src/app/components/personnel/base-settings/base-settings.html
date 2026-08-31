@@ -1,0 +1,343 @@
+<div class="p-4 md:p-6 space-y-6 max-w-7xl mx-auto pb-28" dir="rtl">
+  
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱. هدر اصلی تنظیمات پایه (Base Settings Header) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div class="flex items-center gap-3.5">
+      <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0" style="background: linear-gradient(135deg, #4338ca, #6366f1)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-lg font-black text-slate-800 tracking-tight">تنظیمات پایه و فرمول‌های محاسباتی</h1>
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            سال مالی {{ fiscalYear }}
+          </span>
+        </div>
+        <p class="text-xs text-slate-500 font-medium mt-0.5">جدول ۲۰ گروه شغلی قانون کار، ضرایب ناخالص، پنجره مجاز ثبت کارکرد و تنظیمات فایل‌های قانونی</p>
+      </div>
+    </div>
+
+    <!-- Fiscal Year & Save Button -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+        <label class="text-xs font-bold text-slate-600">سال مالی:</label>
+        <input type="text" [(ngModel)]="fiscalYear" (change)="onYearChange()" class="w-16 text-center font-mono font-bold text-xs bg-white border border-slate-300 rounded-lg py-1 text-indigo-800 focus:ring-2 focus:ring-indigo-500" />
+      </div>
+
+      <button (click)="saveYearlySettings()" [disabled]="isSaving || !canManageSettings" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        <span *ngIf="!isSaving">ذخیره تمام تنظیمات سال {{ fiscalYear }}</span>
+        <span *ngIf="isSaving">در حال ذخیره...</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۲. تب‌های بالای صفحه (۶ تب تفکیک‌شده و استاندارد) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="bg-white rounded-2xl p-2 border border-slate-200/80 shadow-sm flex items-center gap-1 overflow-x-auto">
+    <button (click)="setTab('grades')" [class.active-tab]="activeTab === 'grades'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>🏢</span>
+      <span>۱. جدول ۲۰ گروه شغلی</span>
+    </button>
+
+    <button (click)="setTab('labor')" [class.active-tab]="activeTab === 'labor'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>💰</span>
+      <span>۲. مزایای قانون کار</span>
+    </button>
+
+    <button (click)="setTab('attendance_window')" [class.active-tab]="activeTab === 'attendance_window'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>⏱️</span>
+      <span>۳. بازه مجاز ویرایش تقویم</span>
+    </button>
+
+    <button (click)="setTab('dsk')" [class.active-tab]="activeTab === 'dsk'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>📑</span>
+      <span>۴. اطلاعات کارگاه بیمه</span>
+    </button>
+
+    <button (click)="setTab('tax')" [class.active-tab]="activeTab === 'tax'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>🏛️</span>
+      <span>۵. اطلاعات سازمان مالیاتی</span>
+    </button>
+
+    <button (click)="setTab('bank')" [class.active-tab]="activeTab === 'bank'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer whitespace-nowrap">
+      <span>🏦</span>
+      <span>۶. تنظیمات بانک ملی</span>
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۳. تب اول: جدول ۲۰ گروه شغلی سال مالی -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'grades' && yearlySettings" class="space-y-6">
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">جدول ۲۰ گروه شغلی سال {{ fiscalYear }} (مزد روزانه پایه و پایه سنواتی)</span>
+        <span class="text-[11px] text-slate-500 font-mono">نرخ ساعتی = مزد روزانه ÷ ۱۰ ساعت پایه روزانه</span>
+      </div>
+      <div class="overflow-x-auto max-h-[550px] overflow-y-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200 sticky top-0 z-10">
+            <tr>
+              <th class="p-3 text-center w-28">گروه شغلی</th>
+              <th class="p-3">مزد روزانه پایه (ریال)</th>
+              <th class="p-3">پایه سنواتی روزانه (ریال)</th>
+              <th class="p-3 text-center">نرخ هر ساعت کارکرد (۱۰ ساعته)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let jg of yearlySettings.job_grades" class="hover:bg-slate-50/60">
+              <td class="p-3 text-center font-black text-indigo-700 bg-indigo-50/30">گروه {{ jg.grade_number }}</td>
+              <td class="p-3">
+                <input type="number" [(ngModel)]="jg.daily_base_wage" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+              </td>
+              <td class="p-3">
+                <input type="number" [(ngModel)]="jg.daily_seniority_bonus" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+              </td>
+              <td class="p-3 text-center font-mono font-bold text-slate-700">
+                {{ (jg.daily_base_wage / 10) | number:'1.0-0' }} ریال
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۴. تب دوم: مزایای مستمر و اقلام قانون کار -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'labor' && yearlySettings" class="space-y-6">
+    <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">اقلام ماهانه قانون کار و ضرایب فوق‌العاده‌ها</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">بن خواربار ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_food_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق مسکن ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_housing_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق تاهل ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_spouse_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">حق اولاد هر فرزند ماهانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.monthly_child_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">هزینه سفر و ماموریت روزانه (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.travel_cost_per_day" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">مبلغ ثابت ایاب و ذهاب (ریال):</label>
+          <input type="number" [(ngModel)]="yearlySettings.transport_fixed_amount" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">ضریب کمک هزینه ایاب و ذهاب:</label>
+          <input type="number" [(ngModel)]="yearlySettings.transport_help_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد جذب بازار کارشناسان:</label>
+          <input type="number" [(ngModel)]="yearlySettings.specialist_attraction_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد بدی آب و هوا:</label>
+          <input type="number" [(ngModel)]="yearlySettings.bad_weather_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد دوری از خانواده:</label>
+          <input type="number" [(ngModel)]="yearlySettings.remote_hardship_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد مناطق پارسیان و عسلویه:</label>
+          <input type="number" [(ngModel)]="yearlySettings.south_pars_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-200/70 md:col-span-2">
+          <label class="block text-xs font-black text-indigo-900 mb-1.5">درصد تخصیص مازاد ناخالص به اضافه‌کار (پیش‌فرض ۵۰٪):</label>
+          <div class="flex items-center gap-3">
+            <input type="number" [(ngModel)]="yearlySettings.surplus_overtime_percent" step="1" min="0" max="100" class="w-36 bg-white border border-indigo-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-800" />
+            <span class="text-[11px] text-indigo-700 font-medium">مابقی مازاد ({{ 100 - (yearlySettings.surplus_overtime_percent || 50) }}٪) به صورت وزنی بین هزینه سفر و حق مأموریت تسهیم می‌گردد.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۵. تب سوم: بازه زمانی مجاز ویرایش تقویم کارکرد -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'attendance_window' && yearlySettings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+    <div class="border-b border-slate-100 pb-4">
+      <div class="flex items-center gap-2 text-indigo-700 mb-1">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <h3 class="text-sm font-black text-slate-800">تنظیمات بازه زمانی مجاز برای ثبت و ویرایش کارکرد پرسنل</h3>
+      </div>
+      <p class="text-xs text-slate-500">
+        مدیر سیستم در این قسمت تعیین می‌کند که انبارداران و سرپرستان تا چند روز قبل و یا بعد از تاریخ جاری، مجاز به ثبت و ویرایش کارکرد پرسنل در ماتریس روزانه و شیت ماهانه هستند.
+      </p>
+    </div>
+
+    <!-- Quick Preset Cards -->
+    <div class="space-y-2">
+      <label class="block text-xs font-bold text-slate-700">الگوهای آماده و پیشنهادی:</label>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button type="button" (click)="setAttendanceWindowPreset(0, 0)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+          <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🔒 فوق‌العاده دقیق</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">فقط تاریخ امروز مجاز</div>
+        </button>
+        <button type="button" (click)="setAttendanceWindowPreset(3, 0)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+          <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">⚡ استاندارد شرکتی</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">تا ۳ روز قبل مجاز، آینده ممنوع</div>
+        </button>
+        <button type="button" (click)="setAttendanceWindowPreset(7, 7)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+          <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🗓️ هفتگی انعطاف‌پذیر</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">۷ روز قبل + ۷ روز بعد</div>
+        </button>
+        <button type="button" (click)="setAttendanceWindowPreset(-1, -1)" class="p-3 bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded-2xl text-right transition-all cursor-pointer group">
+          <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-700">🔓 بدون محدودیت</div>
+          <div class="text-[10px] text-slate-500 mt-0.5">تمام تاریخ‌ها مجاز</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Input Controls -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+      <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-black text-slate-800">حداکثر روزهای گذشته مجاز (روزهای قبل):</label>
+          <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-mono font-black text-xs rounded-lg">
+            {{ yearlySettings.attendance_edit_past_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_past_days === 0 ? 'فقط امروز' : yearlySettings.attendance_edit_past_days + ' روز') }}
+          </span>
+        </div>
+        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_past_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۳" />
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          • عدد <b class="text-indigo-600">۰</b>: فقط روز جاری قابل ویرایش است.<br/>
+          • عدد <b class="text-indigo-600">مثبت (مثلاً ۳)</b>: حداکثر تا ۳ روز قبل از امروز امکان ویرایش وجود دارد.<br/>
+          • عدد <b class="text-indigo-600">۱-</b>: هیچ محدودیتی برای روزهای گذشته وجود ندارد.
+        </p>
+      </div>
+
+      <div class="bg-slate-50/80 p-5 rounded-2xl border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-black text-slate-800">حداکثر روزهای آینده مجاز (روزهای بعد):</label>
+          <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-mono font-black text-xs rounded-lg">
+            {{ yearlySettings.attendance_edit_future_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_future_days === 0 ? 'ممنوع' : yearlySettings.attendance_edit_future_days + ' روز') }}
+          </span>
+        </div>
+        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_future_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۰" />
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          • عدد <b class="text-indigo-600">۰</b>: ثبت کارکرد برای روزهای آینده کاملاً مسدود است.<br/>
+          • عدد <b class="text-indigo-600">مثبت (مثلاً ۷)</b>: پیش‌ثبت کارکرد تا سقف ۷ روز آینده مجاز است.<br/>
+          • عدد <b class="text-indigo-600">۱-</b>: هیچ محدودیتی برای روزهای آینده وجود ندارد.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۶. تب چهارم: اطلاعات کارگاه بیمه تأمین اجتماعی -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'dsk' && yearlySettings" class="space-y-6">
+    <div *ngIf="yearlySettings.workshop_insurance" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات کارگاه و فایل‌های DSK تأمین اجتماعی</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد کارگاه ۱۰ رقمی (DSK_ID):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارگاه (DSK_NAME):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارفرما (DSK_FARM):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.employer_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نشانی کارگاه (DSK_ADRS):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_address" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره لیست (DSK_RAD):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.list_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نرخ حق بیمه (DSK_RATE):</label>
+          <input type="number" [(ngModel)]="yearlySettings.workshop_insurance.default_dsk_rate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۷. تب پنجم: اطلاعات سازمان امور مالیاتی کشور -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'tax' && yearlySettings" class="space-y-6">
+    <div *ngIf="yearlySettings.tax_settings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات پیش‌فرض فایل‌های مالیاتی WH و WP</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع پرداختی مالیات:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.payment_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">محل خدمت مالیاتی:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.service_location" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">استثنائات ماده ۸۴:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.exceptions" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد نوع ارز دارایی:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.currency_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نرخ تسعیر ارز:</label>
+          <input type="number" [(ngModel)]="yearlySettings.tax_settings.currency_exchange_rate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع تسهیلات مسکن:</label>
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.housing_benefit_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۸. تب ششم: تنظیمات فایل پرداخت گروهی بانک ملی -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'bank' && yearlySettings" class="space-y-6">
+    <div *ngIf="yearlySettings.bank_export_settings" class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+      <h3 class="text-sm font-black text-slate-800 border-b border-slate-100 pb-3">تنظیمات پرداخت گروهی و فایل پایا بانک ملی ایران</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام بانک پیش‌فرض پرداخت:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.bank_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره حساب مبدأ شرکت:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.source_account_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شناسه واریز پیش‌فرض:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.default_deposit_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold dir-ltr text-right" placeholder="شناسه واریز" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">الگوی شرح واریز پایا:</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.deposit_description_template" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="حقوق و دستمزد ماه..." />
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

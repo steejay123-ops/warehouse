@@ -165,12 +165,25 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   isSubmitModalOpen = false;
   submitNotes = '';
 
-  // Anomaly Alerts
+  // Anomaly Alerts & Highlight
   anomalies: AttendanceAnomaly[] = [];
   showAnomalies = false;
+  isAnomaliesPanelOpen = false;
+  highlightPersonnelId: number | null = null;
+  highlightDay: number | null = null;
+
+  // Printable Monthly Timesheet
+  isPrintModalOpen = false;
 
   // Two-Way Timesheet Excel
   isExportingMonthlyExcel = false;
+  isImportingMonthlyExcel = false;
+  isExcelImportModalOpen = false;
+  selectedExcelImportFile: File | null = null;
+
+  // Rejection Workflow
+  isRejectModalOpen = false;
+  rejectReason = '';
 
   // Matrix Fleet Trips (Daily & 31-day Monthly Grid)
   vehicleRows: VehicleMatrixRow[] = [];
@@ -441,6 +454,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
   updateUrlParams(): void {
     const queryParams: any = {
+      tab: this.mainSectionTab,
       mode: this.activeMode,
       wh: this.selectedWarehouseId !== null ? this.selectedWarehouseId : null,
       date: this.selectedDateShamsi || null,
@@ -557,6 +571,11 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     if (this.activeMode === 'fleet') {
       this.activeMode = 'daily';
     }
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: tab === 'fleet' ? 'fleet' : null },
+      queryParamsHandling: 'merge'
+    });
     this.onFilterChange();
   }
 
@@ -1938,8 +1957,11 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Timesheet_${this.selectedYearMonth.replace('/', '_')}.xlsx`;
+        const whName = this.getSelectedWarehouseName() || 'all_warehouses';
+        a.download = `Timesheet_${this.selectedYearMonth.replace('/', '_')}_${whName}.xlsx`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         this.toast.show('success', 'فایل اکسل تقویم کارکرد با موفقیت دانلود شد');
         this.cdr.detectChanges();
@@ -1950,6 +1972,119 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  // ─── خروجی چاپی شیت ماهانه جهت اخذ امضا و اثر انگشت ────────────
+  openPrintTimesheetModal(): void {
+    this.isPrintModalOpen = true;
+  }
+
+  closePrintTimesheetModal(): void {
+    this.isPrintModalOpen = false;
+  }
+
+  triggerPrint(): void {
+    window.print();
+  }
+
+  // ─── بارگذاری و ورود دو طرفه اکسل شیت ماهانه ───────────────────
+  openExcelImportModal(): void {
+    if (this.isPeriodLocked) {
+      this.toast.show('warning', 'دوره کارکرد قفل شده است و امکان بارگذاری وجود ندارد.');
+      return;
+    }
+    this.selectedExcelImportFile = null;
+    this.isExcelImportModalOpen = true;
+  }
+
+  closeExcelImportModal(): void {
+    this.isExcelImportModalOpen = false;
+    this.selectedExcelImportFile = null;
+  }
+
+  onExcelImportFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (file) {
+      this.selectedExcelImportFile = file;
+    }
+  }
+
+  uploadMonthlyTimesheetExcel(): void {
+    if (!this.selectedExcelImportFile || !this.selectedYearMonth) return;
+    this.isImportingMonthlyExcel = true;
+    const formData = new FormData();
+    formData.append('file', this.selectedExcelImportFile);
+    if (this.selectedWarehouseId) {
+      formData.append('warehouse_id', this.selectedWarehouseId.toString());
+    }
+    formData.append('year_month', this.selectedYearMonth);
+
+    this.api.importMonthlyAttendanceExcel(formData).subscribe({
+      next: (res) => {
+        this.isImportingMonthlyExcel = false;
+        this.closeExcelImportModal();
+        this.toast.show('success', res.message || 'شیت کارکرد با موفقیت از فایل اکسل بارگذاری شد.');
+        this.loadMonthlyAttendanceGrid();
+      },
+      error: (err) => {
+        this.isImportingMonthlyExcel = false;
+        this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در بارگذاری فایل اکسل');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ─── پنل و هشدارهای ناهنجاری‌ها ──────────────────────────────
+  toggleAnomaliesPanel(): void {
+    this.isAnomaliesPanelOpen = !this.isAnomaliesPanelOpen;
+  }
+
+  focusAnomaly(anomaly: AttendanceAnomaly): void {
+    this.highlightPersonnelId = anomaly.personnel_id;
+    this.highlightDay = anomaly.day;
+    setTimeout(() => {
+      const rowElem = document.getElementById(`grid-row-${anomaly.personnel_id}`);
+      if (rowElem) {
+        rowElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+  }
+
+  clearHighlight(): void {
+    this.highlightPersonnelId = null;
+    this.highlightDay = null;
+  }
+
+  // ─── بازگشایی دوره توسط مدیر ─────────────────────────────────
+  async unlockPeriodWorkflow(): Promise<void> {
+    if (!this.selectedWarehouseId || !this.selectedYearMonth) return;
+    const confirmed = await this.confirmDialog.open({
+      title: 'بازگشایی مجدد دوره کارکرد',
+      message: `آیا از بازگشایی قفل دوره کارکرد ${this.selectedYearMonth} اطمینان دارید؟`,
+      confirmText: 'بازگشایی',
+      cancelText: 'انصراف',
+      type: 'info'
+    });
+
+    if (confirmed) {
+      this.isSubmittingWorkflow = true;
+      this.api.periodWorkflowAction({
+        warehouse_id: this.selectedWarehouseId,
+        year_month: this.selectedYearMonth,
+        action: 'unlock'
+      }).subscribe({
+        next: (res) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('success', res.message || 'دوره با موفقیت بازگشایی شد.');
+          this.loadMonthlyAttendanceGrid();
+        },
+        error: (err) => {
+          this.isSubmittingWorkflow = false;
+          this.toast.show('error', err?.error?.error || err?.error?.detail || 'خطا در بازگشایی دوره');
+          this.cdr.detectChanges();
+        }
+      });
+    }
   }
 
   // --- ناوگان و سرویس‌های انبار ---

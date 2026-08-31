@@ -24,6 +24,18 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs space-y-3">
     
+    <!-- Top Hub Navigation Tabs (پرسنل | تردد ناوگان) -->
+    <div class="flex items-center gap-2 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-inner">
+      <button type="button" (click)="setMainTab('personnel')" [class]="mainSectionTab === 'personnel' ? 'bg-white text-emerald-800 shadow-sm font-black border border-emerald-300' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer">
+        <span class="text-base">📋</span>
+        <span>۱. ثبت کارکرد پرسنل انبار</span>
+      </button>
+      <button type="button" (click)="setMainTab('fleet')" [class]="mainSectionTab === 'fleet' ? 'bg-white text-blue-800 shadow-sm font-black border border-blue-300' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer">
+        <span class="text-base">🚛</span>
+        <span>۲. ثبت تردد ناوگان و خودروها</span>
+      </button>
+    </div>
+
     <!-- Top Row: Title + Status + Lock Badge (Completely Isolated per Route) -->
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
       
@@ -622,15 +634,20 @@
           <span>⚡ اعمال کارکرد در بازه زمانی</span>
         </button>
 
-        <button (click)="triggerExcelImport()" [disabled]="isPeriodLocked || isImportingExcel" class="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50" title="بارگذاری اکسل کارکرد پرسنل">
-          <svg *ngIf="!isImportingExcel" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          <span *ngIf="!isImportingExcel">📥 بارگذاری اکسل</span>
-          <span *ngIf="isImportingExcel">در حال بارگذاری...</span>
+        <button (click)="openExcelImportModal()" [disabled]="isPeriodLocked || isImportingMonthlyExcel" class="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50" title="بارگذاری اکسل کارکرد پرسنل">
+          <svg *ngIf="!isImportingMonthlyExcel" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span *ngIf="!isImportingMonthlyExcel">📥 بارگذاری اکسل</span>
+          <span *ngIf="isImportingMonthlyExcel">در حال بارگذاری...</span>
         </button>
 
-        <button (click)="exportMonthlyExcel()" [disabled]="isExportingMonthlyExcel" class="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer">
+        <button (click)="exportMonthlyExcel()" [disabled]="isExportingMonthlyExcel" class="px-3.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer" title="دانلود فایل اکسل تقویم کارکرد">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           <span>📤 دانلود اکسل تقویم</span>
+        </button>
+
+        <button (click)="openPrintTimesheetModal()" class="px-3.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer" title="پیش‌نمایش چاپ رسمی شیت ماهانه همراه با کادر اثر انگشت و امضا">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          <span>🖨️ چاپ شیت رسمی</span>
         </button>
 
         <button *ngIf="periodStatus === 'OPEN'" (click)="openSubmitModal()" [disabled]="isPeriodLocked" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer">
@@ -661,7 +678,7 @@
       </div>
 
       <div *ngIf="showAnomalies" class="mt-3 pt-3 border-t border-amber-200/80 max-h-56 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        <div *ngFor="let anom of anomalies" class="bg-white/95 border border-amber-200 rounded-xl p-2.5 flex items-start gap-2 text-[11px] shadow-2xs">
+        <div *ngFor="let anom of anomalies" (click)="focusAnomaly(anom)" class="bg-white/95 border border-amber-200 hover:border-amber-400 rounded-xl p-2.5 flex items-start gap-2 text-[11px] shadow-2xs cursor-pointer transition-all hover:bg-amber-50/50">
           <span class="text-amber-500 font-bold text-base leading-none mt-0.5">•</span>
           <div class="flex-1">
             <span class="font-bold text-slate-800">{{ anom.full_name }}: </span>
@@ -692,7 +709,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 font-medium">
-            <tr *ngFor="let row of monthlyGridRows; let idx = index" class="hover:bg-slate-50/80 transition-colors">
+            <tr *ngFor="let row of monthlyGridRows; let idx = index" [id]="'grid-row-' + row.personnel_id" [class.bg-amber-50]="highlightPersonnelId === row.personnel_id" [class.ring-2]="highlightPersonnelId === row.personnel_id" [class.ring-amber-400]="highlightPersonnelId === row.personnel_id" class="hover:bg-slate-50/80 transition-colors">
               <td class="p-2 text-center sticky right-0 bg-white z-10 border-l border-slate-100 font-bold text-slate-400">{{ idx + 1 }}</td>
               <td class="p-2 sticky right-10 bg-white z-10 border-l border-slate-100 font-bold text-slate-800">
                 <div class="flex items-center gap-1.5 flex-wrap">
@@ -1732,6 +1749,189 @@
 
       <div class="flex items-center justify-end pt-3 border-t border-slate-100 shrink-0">
         <button (click)="closeFleetAuditLogs()" class="px-4 py-2 text-slate-600 text-xs font-bold hover:bg-slate-100 rounded-xl cursor-pointer">بستن (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: بارگذاری فایل اکسل شیت ماهانه (Two-Way Import Modal)  -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isExcelImportModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 border border-slate-100">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          </div>
+          <div>
+            <h2 class="text-sm font-black text-slate-800">بارگذاری شیت ماهانه از فایل اکسل</h2>
+            <p class="text-[11px] text-slate-500">دوره {{ selectedYearMonth }} - انبار {{ getSelectedWarehouseName() }}</p>
+          </div>
+        </div>
+        <button (click)="closeExcelImportModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div class="bg-teal-50 border border-teal-200 rounded-2xl p-3.5 text-teal-900 leading-relaxed space-y-1.5">
+          <div class="font-bold flex items-center gap-1">
+            <span>💡 گردش کار اکسل دو طرفه (Two-Way):</span>
+          </div>
+          <p class="text-[11px] text-teal-800">
+            ۱. ابتدا فایل اکسل استاندارد ۳۱ روزه را با زدن دکمه «دانلود اکسل تقویم» دریافت نمایید.<br/>
+            ۲. داده‌های حضور، غیبت، مرخصی و ساعت کارکرد پرسنل را در اکسل ثبت یا ویرایش کنید.<br/>
+            ۳. سپس همان فایل را از طریق کادر زیر انتخاب کرده و بارگذاری کنید تا مستقیماً روی دیتابیس اعمال گردد.
+          </p>
+        </div>
+
+        <div class="border-2 border-dashed border-slate-300 rounded-2xl p-6 text-center hover:border-teal-500 transition-colors bg-slate-50/50">
+          <input type="file" accept=".xlsx,.xls" (change)="onExcelImportFileSelected($event)" id="monthly-excel-input-hub" class="hidden" />
+          <label for="monthly-excel-input-hub" class="cursor-pointer flex flex-col items-center gap-2">
+            <div class="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+            </div>
+            <span class="font-bold text-slate-700">کلیک کنید یا فایل اکسل را اینجا بکشید</span>
+            <span class="text-[11px] text-slate-400">فرمت‌های مجاز: XLSX, XLS</span>
+          </label>
+
+          <div *ngIf="selectedExcelImportFile" class="mt-3 p-2 bg-emerald-50 text-emerald-800 rounded-xl border border-emerald-200 text-xs font-bold flex items-center justify-between">
+            <span class="truncate">{{ selectedExcelImportFile.name }} ({{ (selectedExcelImportFile.size / 1024).toFixed(1) }} KB)</span>
+            <span class="text-emerald-600 font-bold">آماده بارگذاری ✓</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+        <button (click)="closeExcelImportModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
+        <button (click)="uploadMonthlyTimesheetExcel()" [disabled]="!selectedExcelImportFile || isImportingMonthlyExcel" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-xl shadow-md shadow-teal-500/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50">
+          <span *ngIf="!isImportingMonthlyExcel">بارگذاری و اعمال روی کارکرد</span>
+          <span *ngIf="isImportingMonthlyExcel">در حال پردازش و ثبت...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: خروجی چاپی شیت ماهانه جهت امضا و اثر انگشت (Printable Timesheet) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isPrintModalOpen" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-7xl w-full p-6 shadow-2xl space-y-4 border border-slate-100 my-auto">
+      <!-- Modal Action Bar (Hidden in Print) -->
+      <div class="no-print flex items-center justify-between border-b border-slate-200 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </div>
+          <div>
+            <h2 class="text-sm font-black text-slate-800">پیش‌نمایش چاپ رسمی شیت ماهانه (جهت اخذ امضا و اثر انگشت پرسنل)</h2>
+            <p class="text-[11px] text-slate-500">قالب‌بندی استاندارد تک‌صفحه/چندصفحه A4 افقی با کادر اثر انگشت و امضا</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button (click)="triggerPrint()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-md shadow-indigo-500/20 cursor-pointer flex items-center gap-1.5">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            <span>ارسال به چاپگر (Print)</span>
+          </button>
+          <button (click)="closePrintTimesheetModal()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">بستن</button>
+        </div>
+      </div>
+
+      <!-- Printable Area (This is what prints) -->
+      <div id="printable-timesheet-area" class="space-y-4 p-2 bg-white text-slate-900 font-sans">
+        <!-- سربرگ رسمی برگه کارکرد -->
+        <div class="border-b-2 border-slate-800 pb-3 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-lg">
+              انبار
+            </div>
+            <div>
+              <h1 class="text-base font-black text-slate-900 leading-tight">برگه رسمی کارکرد ماهانه پرسنل و ثبت اثر انگشت</h1>
+              <p class="text-xs text-slate-600 mt-0.5">سامانه جامع مدیریت هوشمند لجستیک، انبارداری و حقوق و دستمزد</p>
+            </div>
+          </div>
+          <div class="text-left text-xs space-y-1">
+            <div><span class="font-bold">دوره کارکرد:</span> {{ monthName }} {{ selectedYearMonth.split('/')[0] }}</div>
+            <div><span class="font-bold">انبار محل خدمت:</span> {{ getSelectedWarehouseName() }}</div>
+            <div><span class="font-bold">تاریخ تهیه و چاپ:</span> {{ selectedDateShamsi }}</div>
+          </div>
+        </div>
+
+        <!-- جدول داده‌های ۳۱ روزه و ستون‌های امضا و اثر انگشت -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-right border-collapse text-[10px] border border-slate-400">
+            <thead>
+              <tr class="bg-slate-200 text-slate-900 border-b border-slate-400 font-black">
+                <th class="p-1.5 text-center border-l border-slate-400 w-7">#</th>
+                <th class="p-1.5 border-l border-slate-400 min-w-[120px]">نام و نام خانوادگی</th>
+                <th class="p-1.5 border-l border-slate-400 min-w-[80px]">کد ملی</th>
+                <th class="p-1.5 border-l border-slate-400 min-w-[70px]">سمت</th>
+                <!-- روزهای ۱ تا ۳۱ -->
+                <th *ngFor="let dm of monthlyGridDays" class="p-1 text-center border-l border-slate-300 font-mono w-5" [ngClass]="dm.is_friday ? 'bg-slate-300' : ''">
+                  {{ dm.day }}
+                </th>
+                <th class="p-1.5 text-center border-l border-slate-400 w-12">جمع ساعت</th>
+                <th class="p-1.5 text-center border-l border-slate-400 w-10">اضافه‌کار</th>
+                <th class="p-1.5 text-center border-l border-slate-400 w-10">روز حضور</th>
+                <!-- ستون امضا و اثر انگشت پرسنل -->
+                <th class="p-1.5 text-center border-l border-slate-400 min-w-[75px] bg-slate-100 font-black">امضای پرسنل</th>
+                <th class="p-1.5 text-center min-w-[75px] bg-slate-100 font-black">اثر انگشت</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-300">
+              <tr *ngFor="let row of monthlyGridRows; let idx = index" class="border-b border-slate-300">
+                <td class="p-1 text-center border-l border-slate-400 font-mono">{{ idx + 1 }}</td>
+                <td class="p-1 font-bold border-l border-slate-400 truncate max-w-[120px]">{{ row.full_name }}</td>
+                <td class="p-1 font-mono border-l border-slate-400">{{ row.national_code }}</td>
+                <td class="p-1 border-l border-slate-400 truncate max-w-[70px] text-[9px]">{{ row.job_title }}</td>
+
+                <!-- ساعات کارکرد روزانه -->
+                <td *ngFor="let d of row.days; let dayIdx = index" class="p-0.5 text-center border-l border-slate-200 font-mono text-[9px]" [ngClass]="monthlyGridDays[dayIdx]?.is_friday ? 'bg-slate-100 font-bold' : ''">
+                  <span *ngIf="d.status === 'LEAVE'" class="text-[8px] font-bold">مرخصی</span>
+                  <span *ngIf="d.status === 'ABSENT'" class="text-[8px] text-rose-700 font-bold">غایب</span>
+                  <span *ngIf="d.status === 'MISSION'" class="text-[8px] font-bold">مامور</span>
+                  <span *ngIf="d.effective_hours > 0 && d.status !== 'LEAVE' && d.status !== 'ABSENT'">{{ d.effective_hours }}</span>
+                  <span *ngIf="!d.status && d.effective_hours === 0" class="text-slate-300">—</span>
+                </td>
+
+                <td class="p-1 text-center font-bold border-l border-slate-400 font-mono bg-slate-50">{{ row.total_hours }}</td>
+                <td class="p-1 text-center border-l border-slate-400 font-mono">{{ row.total_overtime }}</td>
+                <td class="p-1 text-center border-l border-slate-400 font-mono font-bold">{{ row.present_days }}</td>
+
+                <!-- کادر مخصوص امضا -->
+                <td class="p-1 text-center border-l border-slate-400 bg-white">
+                  <div class="h-8 border border-dashed border-slate-400 rounded flex items-center justify-center text-[8px] text-slate-400">
+                    محل امضا
+                  </div>
+                </td>
+
+                <!-- کادر مخصوص اثر انگشت -->
+                <td class="p-1 text-center bg-white">
+                  <div class="h-8 border border-dashed border-slate-400 rounded-lg flex items-center justify-center text-[8px] text-slate-400">
+                    اثر انگشت
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- پاورقی سازمانی و تاییدات ۳ گانه -->
+        <div class="pt-4 mt-2 border-t border-slate-400 grid grid-cols-3 gap-6 text-center text-xs">
+          <div class="border border-slate-300 rounded-xl p-3 bg-slate-50/50 space-y-6">
+            <div class="font-black text-slate-800">سرپرست انبار</div>
+            <div class="text-[11px] text-slate-500">نام و نام خانوادگی / تاریخ و امضا</div>
+            <div class="h-6"></div>
+          </div>
+          <div class="border border-slate-300 rounded-xl p-3 bg-slate-50/50 space-y-6">
+            <div class="font-black text-slate-800">مسئول اداری و منابع انسانی</div>
+            <div class="text-[11px] text-slate-500">نام و نام خانوادگی / تاریخ و امضا</div>
+            <div class="h-6"></div>
+          </div>
+          <div class="border border-slate-300 rounded-xl p-3 bg-slate-50/50 space-y-6">
+            <div class="font-black text-slate-800">مدیر مالی و حسابداری</div>
+            <div class="text-[11px] text-slate-500">نام و نام خانوادگی / تاریخ و امضا</div>
+            <div class="h-6"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

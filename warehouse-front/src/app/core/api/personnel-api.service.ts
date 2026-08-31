@@ -401,6 +401,13 @@ export class PersonnelApiService {
     return this.api.post<any>(`${this.baseUrl}/settings/${settingsId}/update-all/`, payload);
   }
 
+  updateYearlySettings(year: string, payload: any): Observable<any> {
+    if (payload && payload.id) {
+      return this.updateAllSettingsTabs(payload.id, payload);
+    }
+    return this.api.post<any>(`${this.baseUrl}/settings/active-or-year/`, { year, ...payload });
+  }
+
   // --- محاسبه ماهانه ۵۸ ستون حقوق و دیسکت‌ها ---
   calculateMonthlyPayroll(warehouseId: number | null | undefined, yearMonth: string): Observable<{
     message: string;
@@ -483,5 +490,45 @@ export class PersonnelApiService {
     const whParam = warehouseId ? `&warehouse_id=${warehouseId}` : '';
     return `/api/personnel/fleet-settlement/export-bank-excel/?year_month=${yearMonth}${whParam}`;
   }
+
+  // --- کارتابل‌های ۵ سطحی سازمانی و خزانه‌داری ---
+  getSupervisorCartable(): Observable<any> {
+    return this.api.get<any>(`${this.baseUrl}/cartable/supervisor/`);
+  }
+
+  getAccountantCartable(): Observable<any> {
+    return this.api.get<any>(`${this.baseUrl}/cartable/accountant/`);
+  }
+
+  getManagerCartable(): Observable<any> {
+    return this.api.get<any>(`${this.baseUrl}/cartable/manager/`);
+  }
+
+  getTreasuryCartable(): Observable<any> {
+    return this.api.get<any>(`${this.baseUrl}/cartable/treasury/`);
+  }
+
+  postCartableAction(
+    cartableType: 'supervisor' | 'accountant' | 'manager',
+    data: { action: 'approve' | 'revision' | 'reject'; model: string; id: number; reason?: string }
+  ): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/cartable/${cartableType}/`, data);
+  }
+
+  disburseTreasury(data: {
+    action: 'disburse_period' | 'disburse_single_payroll' | 'disburse_fleet';
+    tracking_code: string;
+    period_id?: number;
+    payroll_id?: number;
+    trip_ids?: number[];
+    batch_id?: string;
+  }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/cartable/treasury/`, data);
+  }
+
+  getTreasuryDisketteDownloadUrl(periodId: number, type: 'paya' | 'satna' = 'paya'): string {
+    return `/api/personnel/cartable/treasury/export-diskette/?period_id=${periodId}&type=${type}`;
+  }
 }
+
 

@@ -66,6 +66,10 @@ class CustomUser(AbstractUser):
             ("perm_feed_approve_action", "تایید و اعمال فیدهای تغذیه/گمرکی"),
             ("perm_inventory_finalize", "تایید نهایی و بستن دوره‌های انبارگردانی"),
             ("perm_lock_work_period", "قفل و تایید نهایی کارکرد ماهانه"),
+            ("perm_approve_personnel_manager", "تایید مرحله اول (عملیاتی) پرسنل"),
+            ("perm_approve_personnel_finance", "تایید مرحله دوم (مالی و بانکی) پرسنل"),
+            ("perm_approve_fleet_manager", "تایید مرحله اول (عملیاتی) ناوگان و خودروها"),
+            ("perm_approve_fleet_finance", "تایید مرحله دوم (مالی و بانکی) ناوگان و خودروها"),
 
             # Sensitive & Critical Permissions (حساس و بحرانی)
             ("perm_rollback_data", "بازگردانی و احیای جامع داده‌ها"),

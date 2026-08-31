@@ -113,6 +113,55 @@ class PersonnelProfile(models.Model):
         verbose_name="انبار تخصیص‌یافته"
     )
     
+    APPROVAL_STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس / در انتظار تایید مدیر'),
+        ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
+        ('approved', 'تایید نهایی شده'),
+        ('revision_required', 'نیازمند بازنگری و اصلاح'),
+        ('rejected', 'رد شده'),
+    )
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default='approved',
+        db_index=True,
+        verbose_name="وضعیت تایید"
+    )
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manager_approved_personnel',
+        verbose_name="مدیر تاییدکننده"
+    )
+    manager_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید مدیر"
+    )
+    accountant_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='accountant_approved_personnel',
+        verbose_name="حسابدار تاییدکننده"
+    )
+    accountant_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید حسابدار"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="دلیل رد یا بازنگری"
+    )
+    has_pending_changes = models.BooleanField(
+        default=False,
+        verbose_name="دارای درخواست تغییرات معلق"
+    )
     is_active = models.BooleanField(default=True, verbose_name="فعال")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ بروزرسانی")
@@ -212,6 +261,55 @@ class VehicleDriverProfile(models.Model):
         verbose_name="انبار تخصیص‌یافته"
     )
     
+    APPROVAL_STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس / در انتظار تایید مدیر'),
+        ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
+        ('approved', 'تایید نهایی شده'),
+        ('revision_required', 'نیازمند بازنگری و اصلاح'),
+        ('rejected', 'رد شده'),
+    )
+    approval_status = models.CharField(
+        max_length=20,
+        choices=APPROVAL_STATUS_CHOICES,
+        default='approved',
+        db_index=True,
+        verbose_name="وضعیت تایید"
+    )
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manager_approved_vehicles',
+        verbose_name="مدیر تاییدکننده"
+    )
+    manager_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید مدیر"
+    )
+    accountant_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='accountant_approved_vehicles',
+        verbose_name="حسابدار تاییدکننده"
+    )
+    accountant_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید حسابدار"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="دلیل رد یا بازنگری"
+    )
+    has_pending_changes = models.BooleanField(
+        default=False,
+        verbose_name="دارای درخواست تغییرات معلق"
+    )
     is_active = models.BooleanField(default=True, verbose_name="فعال")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ بروزرسانی")
@@ -231,6 +329,172 @@ class VehicleDriverProfile(models.Model):
 
     def __str__(self):
         return f"{self.driver_name} - {self.get_vehicle_type_display()} ({self.plate_number})"
+
+
+class PersonnelChangeRequest(models.Model):
+    """
+    پیش‌نویس درخواست تغییرات اطلاعات پرسنل (Pending Edit Staging)
+    """
+    CHANGE_STATUS_CHOICES = (
+        ('pending_manager', 'در انتظار بررسی مدیر'),
+        ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
+        ('approved', 'تایید نهایی و اعمال شده'),
+        ('rejected', 'رد شده'),
+        ('cancelled', 'لغو شده'),
+    )
+
+    personnel = models.ForeignKey(
+        PersonnelProfile,
+        on_delete=models.CASCADE,
+        related_name='change_requests',
+        verbose_name="پرسنل هدف"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='personnel_change_requests',
+        verbose_name="درخواست‌دهنده"
+    )
+    proposed_changes = models.JSONField(
+        default=dict,
+        verbose_name="فیلدهای تغییریافته (داده‌های جدید)"
+    )
+    previous_values = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="مقادیر پیشین (جهت مقایسه)"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=CHANGE_STATUS_CHOICES,
+        default='pending_manager',
+        db_index=True,
+        verbose_name="وضعیت درخواست"
+    )
+    manager_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_mgr_personnel_changes',
+        verbose_name="مدیر بررسی‌کننده"
+    )
+    manager_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی مدیر"
+    )
+    accountant_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_acc_personnel_changes',
+        verbose_name="حسابدار بررسی‌کننده"
+    )
+    accountant_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی حسابدار"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="توضیحات و دلیل رد"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت درخواست")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین بروزرسانی")
+
+    class Meta:
+        verbose_name = "درخواست تغییرات پرسنل"
+        verbose_name_plural = "درخواست‌های تغییرات پرسنل"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"درخواست تغییرات {self.personnel.full_name} ({self.get_status_display()})"
+
+
+class VehicleChangeRequest(models.Model):
+    """
+    پیش‌نویس درخواست تغییرات اطلاعات خودرو و راننده (Pending Edit Staging)
+    """
+    CHANGE_STATUS_CHOICES = (
+        ('pending_manager', 'در انتظار بررسی مدیر'),
+        ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
+        ('approved', 'تایید نهایی و اعمال شده'),
+        ('rejected', 'رد شده'),
+        ('cancelled', 'لغو شده'),
+    )
+
+    vehicle = models.ForeignKey(
+        VehicleDriverProfile,
+        on_delete=models.CASCADE,
+        related_name='change_requests',
+        verbose_name="خودرو/راننده هدف"
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='vehicle_change_requests',
+        verbose_name="درخواست‌دهنده"
+    )
+    proposed_changes = models.JSONField(
+        default=dict,
+        verbose_name="فیلدهای تغییریافته (داده‌های جدید)"
+    )
+    previous_values = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="مقادیر پیشین (جهت مقایسه)"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=CHANGE_STATUS_CHOICES,
+        default='pending_manager',
+        db_index=True,
+        verbose_name="وضعیت درخواست"
+    )
+    manager_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_mgr_vehicle_changes',
+        verbose_name="مدیر بررسی‌کننده"
+    )
+    manager_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی مدیر"
+    )
+    accountant_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_acc_vehicle_changes',
+        verbose_name="حسابدار بررسی‌کننده"
+    )
+    accountant_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی حسابدار"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="توضیحات و دلیل رد"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت درخواست")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین بروزرسانی")
+
+    class Meta:
+        verbose_name = "درخواست تغییرات خودرو"
+        verbose_name_plural = "درخواست‌های تغییرات خودروها"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"درخواست تغییرات {self.vehicle.driver_name} - {self.vehicle.plate_number} ({self.get_status_display()})"
 
 
 class MonthlyWorkPeriod(models.Model):

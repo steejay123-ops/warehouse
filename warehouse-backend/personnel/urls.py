@@ -3,6 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     PersonnelProfileViewSet,
     VehicleDriverProfileViewSet,
+    PersonnelChangeRequestViewSet,
+    VehicleChangeRequestViewSet,
     DailyAttendanceViewSet,
     VehicleTripViewSet,
     MonthlyWorkPeriodViewSet,
@@ -14,6 +16,8 @@ from .views import (
 router = DefaultRouter()
 router.register(r'profiles', PersonnelProfileViewSet, basename='personnel-profile')
 router.register(r'vehicles', VehicleDriverProfileViewSet, basename='vehicle-profile')
+router.register(r'personnel-change-requests', PersonnelChangeRequestViewSet, basename='personnel-change-requests')
+router.register(r'vehicle-change-requests', VehicleChangeRequestViewSet, basename='vehicle-change-requests')
 router.register(r'attendance', DailyAttendanceViewSet, basename='daily-attendance')
 router.register(r'trips', VehicleTripViewSet, basename='vehicle-trips')
 router.register(r'periods', MonthlyWorkPeriodViewSet, basename='work-periods')

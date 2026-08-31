@@ -63,6 +63,10 @@ class Command(BaseCommand):
             {'codename': 'perm_doc_approve_action', 'name': 'تایید، رد و ثبت امضای اسناد'},
             {'codename': 'perm_feed_approve_action', 'name': 'تایید و اعمال فیدهای تغذیه/گمرکی'},
             {'codename': 'perm_inventory_finalize', 'name': 'تایید نهایی و بستن دوره‌های انبارگردانی'},
+            {'codename': 'perm_approve_personnel_manager', 'name': 'تایید مرحله اول (عملیاتی) پرسنل'},
+            {'codename': 'perm_approve_personnel_finance', 'name': 'تایید مرحله دوم (مالی و بانکی) پرسنل'},
+            {'codename': 'perm_approve_fleet_manager', 'name': 'تایید مرحله اول (عملیاتی) ناوگان و خودروها'},
+            {'codename': 'perm_approve_fleet_finance', 'name': 'تایید مرحله دوم (مالی و بانکی) ناوگان و خودروها'},
 
             # Sensitive & Critical (حساس و بحرانی)
             {'codename': 'perm_rollback_data', 'name': 'بازگردانی و احیای جامع داده‌ها'},

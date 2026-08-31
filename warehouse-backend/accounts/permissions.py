@@ -246,3 +246,57 @@ class CanManageItemPhotos(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         return any(request.user.has_perm(p) for p in self.ALLOWED_PERMISSIONS)
+
+
+class CanApprovePersonnelManager(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله اول (عملیاتی) پرسنل
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_personnel_manager') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanApprovePersonnelFinance(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله دوم (مالی) پرسنل
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_personnel_finance')
+        )
+
+
+class CanApproveFleetManager(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله اول (عملیاتی) ناوگان و رانندگان
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_fleet_manager') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanApproveFleetFinance(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله دوم (مالی) ناوگان و رانندگان
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_fleet_finance')
+        )

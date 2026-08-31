@@ -52,6 +52,15 @@ Application bundle generation complete. [36.960s] -> 0 Errors
 | **لیست تسک‌ها (DUAL-SAVE)** | [`Documents/Attendance_And_Fleet_Audit_Fixes/task_attendance_and_fleet_audit_fixes.md`](file:///e:/warehouse%20project/Documents/Attendance_And_Fleet_Audit_Fixes/task_attendance_and_fleet_audit_fixes.md) | ✅ تکمیل شد |
 | **گزارش نهایی (DUAL-SAVE)** | [`Documents/Attendance_And_Fleet_Audit_Fixes/walkthrough_attendance_and_fleet_audit_fixes.md`](file:///e:/warehouse%20project/Documents/Attendance_And_Fleet_Audit_Fixes/walkthrough_attendance_and_fleet_audit_fixes.md) | ✅ ثبت شد |
 | **تست‌های بک‌اند** | [`warehouse-backend/personnel/test_attendance_fleet_audit.py`](file:///e:/warehouse%20project/warehouse-backend/personnel/test_attendance_fleet_audit.py) | ✅ ۵/۵ سبز |
-| **تست‌های فرانت‌اند** | [`warehouse-front/src/app/components/personnel/warehouse-attendance/warehouse-attendance.spec.ts`](file:///e:/warehouse%20project/warehouse-front/src/app/components/personnel/warehouse-attendance/warehouse-attendance.spec.ts) | ✅ ۱۲/۱۲ سبز |
+---
+
+## ۴. بازطراحی نقش‌محور منوها و کارتابل‌ها (Role-Based Menu & Cartable Redesign)
+
+| کامپوننت / ماژول | مسیر URL | تب‌های فوقانی پیاده‌سازی‌شده | ویژگی‌های کلیدی |
+| :--- | :--- | :--- | :--- |
+| **کارتابل تاییدات مدیر** | `/manager-approvals` | ۱. پرسنل جدید<br>۲. ناوگان جدید<br>۳. درخواست‌های تغییر<br>۴. دوره‌های کارکرد | • نمایشگر مغایرت دو ستونه (Diff Viewer)<br>• پاپ‌آپ ثبت علت ارجاع/رد<br>• فیلتر وضعیت و انبار با همگام‌سازی URL |
+| **کارتابل مالی و حقوق** | `/finance-cartable` | ۱. تایید نهایی مالی<br>۲. محاسبه حقوق ۵۸ ستون<br>۳. تسویه ناوگان پایا<br>۴. دیسکت‌های قانونی و مالیات<br>۵. گزارشات تجمیعی | • موتور ۵۸ ستونی مطابق اکسل شرکت<br>• تسویه پایا و صدور فایل بانک ملی<br>• دانلود مستقیم DSK بیمه و WH/WP مالیات |
+| **تنظیمات پایه سیستم** | `/base-settings` | ۱. تنظیمات قانون کار و ۲۰ گروه شغلی<br>۲. تقویم و بازه مجاز ویرایش کارکرد<br>۳. تنظیمات کارگاه و سازمان مالیاتی | • جدول ۲۰ ردیفه مزد پایه و سنوات<br>• پریست‌های سریع بازه مجاز ویرایش<br>• پیکربندی پارامترهای دیسکت DSK و WP |
+| **ایجنت نگهبان تست** | `warehouse-backend/personnel/guardian_menu_redesign.py` | — | • اعتبارسنجی خودکار ۶ لایه با وضعیت ۱۰۰٪ پاس‌شده |
 
 </div>

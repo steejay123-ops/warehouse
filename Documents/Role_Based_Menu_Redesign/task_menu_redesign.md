@@ -1,5 +1,3 @@
-<div dir="rtl" align="right">
-
 # فهرست وظایف فازبندی‌شده بازطراحی منوها و کارتابل‌ها (Role-Based Menu & Cartable Redesign Tasks)
 
 ## فاز ۱: زیرساخت مسیردهی هم‌زمان و سینک URL (Routing Coexistence & URL Sync)
@@ -38,5 +36,3 @@
 - [ ] <!-- id: 6.2 --> بررسی عدم وجود خطای کامپایل فرانت‌اند (`npx tsc --noEmit`) <!-- priority: High -->
 - [ ] <!-- id: 6.3 --> ثبت مستندات نهایی Walkthrough طبق استاندارد DUAL-SAVE <!-- priority: Medium -->
 - [ ] <!-- id: 6.4 --> (پس از تایید نهایی و رضایت کاربر): پاک‌سازی اختیاری منوهای قدیمی <!-- priority: Low -->
-
-</div>

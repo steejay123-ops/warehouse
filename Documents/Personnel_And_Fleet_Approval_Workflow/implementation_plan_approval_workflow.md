@@ -69,7 +69,47 @@ graph TD
 
 ---
 
-## ۳. مجموعه ایجنت‌های مستقل نگهبان (Strict Phase Guardians)
+## ۳. تغییرات در لایه دیتابیس و مدل‌ها (Database & Schema Changes)
+
+### الف) فیلدهای جدید در `PersonnelProfile` و `VehicleDriverProfile`:
+* `approval_status`: شامل انتخاب‌های `draft` (پیش‌نویس)، `manager_approved` (تایید مدیر)، `approved` (تایید نهایی)، `revision_required` (نیازمند اصلاح)، `rejected` (رد شده). پیش‌فرض در مایگریشن برای رکوردهای قبلی: `approved`.
+* `manager_approved_by`: کلید خارجی به کاربر مدیر تاییدکننده (`User`).
+* `manager_approved_at`: زمان ثبت تاییدیه مدیر (`DateTimeField`).
+* `accountant_approved_by`: کلید خارجی به حسابدار تاییدکننده (`User`).
+* `accountant_approved_at`: زمان ثبت تاییدیه حسابدار (`DateTimeField`).
+* `rejection_reason`: متن توضیحات و دلیل رد یا ارجاع به اصلاح (`TextField`).
+* `has_pending_changes`: فلگ بولی (`BooleanField`) نشان‌دهنده وجود درخواست تغییرات در صف تایید.
+
+### ب) مدل‌های جدید برای پیش‌نویس تغییرات (`ChangeRequest`):
+* `PersonnelChangeRequest`: ذخیره فیلدهای تغییریافته پرسنل (شبا، حساب، حقوق، سمت، و...) در قالب ساختاریافته به همراه شناسه پرسنل هدف، ایجادکننده درخواست و وضعیت تایید ۲ مرحله‌ای.
+* `VehicleChangeRequest`: ذخیره فیلدهای تغییریافته راننده/خودرو (نرخ سرویس، پلاک، شبا، مالکیت و...) به همراه وضعیت تایید ۲ مرحله‌ای.
+
+---
+
+## ۴. ماتریس دسترسی‌های دانه‌ای (Granular RBAC)
+
+| ردیف | کد پرمیشن (Permission Code) | عنوان دسترسی | نقش‌های مجاز پیش‌فرض |
+| :--- | :--- | :--- | :--- |
+| ۱ | `personnel.can_create_personnel` | ثبت اولیه پرسنل و ارسال درخواست | اپراتور، مدیر، حسابدار، ادمین |
+| ۲ | `personnel.can_approve_personnel_manager` | تایید مرحله اول (عملیاتی) پرسنل | مدیر پروژه، سرپرست کارگاه، ادمین |
+| ۳ | `personnel.can_approve_personnel_finance` | تایید مرحله دوم (مالی) پرسنل | حسابدار، مدیر مالی، ادمین |
+| ۴ | `personnel.can_create_vehicle` | ثبت اولیه خودرو و ناوگان | اپراتور، مدیر، حسابدار، ادمین |
+| ۵ | `personnel.can_approve_fleet_manager` | تایید مرحله اول (عملیاتی) ناوگان | مدیر پروژه، سرپرست ترابری، ادمین |
+| ۶ | `personnel.can_approve_fleet_finance` | تایید مرحله دوم (مالی) ناوگان | حسابدار، مدیر مالی، ادمین |
+
+---
+
+## ۵. قفل‌های امنیتی لایه سرویس (Backend Enforcement Gates)
+
+> [!IMPORTANT]
+> **قفل نفوذناپذیر در ثبت تردد و کارکرد:**
+> در متدهای `DailyAttendanceViewSet.bulk_save` و `VehicleTripViewSet.bulk_save`، کوئری لود و ذخیره کارکرد مستقیماً فیلتر `approval_status='approved'` و `is_active=True` را اعمال می‌کند. در صورتی که کاربری با دستکاری Payload تلاش کند برای رکورد غیرتاییدشده کارکرد بفرستد، خطای `400 Bad Request` با پیام شفاف بازگردانده می‌شود.
+
+---
+
+## ۶. مجموعه ایجنت‌های مستقل نگهبان (Strict Phase Guardians)
+
+برای اطمینان از سلامت ۱۰۰٪ سیستم و جلوگیری از کوچک‌ترین رگرسیون، آزمون‌های نگهبان خودکار در قالب اسکریپت‌های ایزوله اجرا خواهند شد:
 
 | شماره ایجنت | نام ایجنت نگهبان | مسئولیت و آزمون‌های سختگیرانه |
 | :---: | :--- | :--- |

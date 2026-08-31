@@ -1,0 +1,486 @@
+"""
+Enterprise 5-Tier Workflow & State Machine Engine
+موتور جامع و اتمیک ماشین حالت، عبور هوشمند (Auto-Pass) و حاکمیت گردش کار ۵ سطحی سازمانی
+منطبق بر سند master_workflow_specification.md
+"""
+
+import logging
+from django.db import transaction
+from django.utils import timezone
+from django.core.exceptions import PermissionDenied, ValidationError
+
+logger = logging.getLogger(__name__)
+
+
+class WorkflowTiers:
+    TIER_1_OPERATOR = 1       # کارمند انبار / ثبت‌کننده
+    TIER_2_SUPERVISOR = 2     # سرپرست انبار / تایید میدانی و عملیاتی
+    TIER_3_ACCOUNTANT = 3     # حسابدار / کنترل مالی، بیمه و شبا
+    TIER_4_MANAGER = 4        # مدیر شرکت / تصویب نهایی و صدور مجوز پرداخت
+    TIER_5_TREASURY = 5       # خزانه‌دار / واریز، پایا و تسویه نهایی
+    TIER_6_SUPERUSER = 6      # مدیر ارشد سیستم (دسترسی کامل)
+
+
+class WorkflowStatuses:
+    # وضعیت‌های استاندارد پرونده‌ها و درخواست‌ها
+    DRAFT = 'draft'
+    PENDING_SUPERVISOR = 'pending_supervisor'
+    SUPERVISOR_APPROVED = 'supervisor_approved'
+    PENDING_ACCOUNTANT = 'pending_accountant'
+    ACCOUNTANT_APPROVED = 'accountant_approved'
+    PENDING_MANAGER = 'pending_manager'
+    MANAGER_APPROVED = 'manager_approved'
+    APPROVED = 'approved'                  # تصویب و فعال‌سازی قطعی پرونده‌ها
+    READY_TO_PAY = 'ready_to_pay'          # صدور مجوز پرداخت مدیر برای اسناد مالی
+    PAID = 'paid'                          # پرداخت، تسویه و فریز قطعی خزانه‌داری
+    REVISION_REQUIRED = 'revision_required'# نیازمند بازنگری و اصلاح
+    REJECTED = 'rejected'                  # رد قطعی و ابطال
+    CANCELLED = 'cancelled'                # لغو شده توسط ثبت‌کننده
+
+    # وضعیت‌های معادل دوره‌های ماهانه
+    PERIOD_OPEN = 'OPEN'
+    PERIOD_SUBMITTED_SUPERVISOR = 'SUBMITTED_SUPERVISOR'
+    PERIOD_SUBMITTED_ACCOUNTANT = 'SUBMITTED_ACCOUNTANT'
+    PERIOD_READY_TO_PAY = 'READY_TO_PAY'
+    PERIOD_PAID = 'PAID'
+    PERIOD_LOCKED = 'LOCKED'
+    PERIOD_FINALIZED = 'FINALIZED'
+    PERIOD_REVISION_REQUIRED = 'REVISION_REQUIRED'
+    PERIOD_REJECTED = 'REJECTED'
+
+    # وضعیت‌های پرداخت انفرادی حقوق
+    PAYROLL_PENDING = 'PENDING'
+    PAYROLL_READY_TO_PAY = 'READY_TO_PAY'
+    PAYROLL_PAID = 'PAID'
+    PAYROLL_FAILED_SHEBA = 'FAILED_SHEBA'
+    PAYROLL_REJECTED = 'REJECTED'
+
+
+def determine_user_tier(user) -> int:
+    """
+    تشخیص بالاترین سطح سازمانی کاربر در ماتریس ۵ سطحی
+    """
+    if not user or not user.is_authenticated:
+        return 0
+    if user.is_superuser:
+        return WorkflowTiers.TIER_6_SUPERUSER
+
+    tier = WorkflowTiers.TIER_1_OPERATOR
+
+    def check_p(codenames):
+        if any(user.has_perm(f'accounts.{c}') for c in codenames):
+            return True
+        if hasattr(user, 'user_permissions') and user.user_permissions.filter(codename__in=codenames).exists():
+            return True
+        if hasattr(user, 'groups') and user.groups.filter(permissions__codename__in=codenames).exists():
+            return True
+        return False
+
+    # بررسی دسترسی خزانه‌داری (سطح ۵)
+    if check_p(['perm_treasury_disburse_action', 'view_sys_treasury']):
+        tier = max(tier, WorkflowTiers.TIER_5_TREASURY)
+
+    # بررسی دسترسی مدیر شرکت (سطح ۴)
+    if check_p(['perm_manager_payment_authorize', 'perm_approve_personnel_manager', 'perm_approve_fleet_manager', 'can_act_as_manager']):
+        tier = max(tier, WorkflowTiers.TIER_4_MANAGER)
+
+    # بررسی دسترسی حسابداری (سطح ۳)
+    if check_p(['perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'view_sys_payroll', 'view_sys_fleet_settlement']):
+        tier = max(tier, WorkflowTiers.TIER_3_ACCOUNTANT)
+
+    # بررسی دسترسی سرپرست انبار (سطح ۲)
+    if check_p(['perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor', 'view_sys_supervisor']):
+        tier = max(tier, WorkflowTiers.TIER_2_SUPERVISOR)
+
+    return tier
+
+
+def can_user_approve_stage(user, current_stage: str, is_financial: bool = False) -> bool:
+    """
+    بررسی مجاز بودن کاربر جهت تایید مرحله جاری
+    """
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+
+    tier = determine_user_tier(user)
+
+    stage_lower = current_stage.lower()
+
+    if stage_lower in ['draft', 'pending_supervisor', 'open', 'revision_required']:
+        # نیاز به سرپرست (سطح ۲ یا بالاتر)
+        return tier >= WorkflowTiers.TIER_2_SUPERVISOR
+
+    elif stage_lower in ['supervisor_approved', 'pending_accountant', 'submitted_supervisor']:
+        # نیاز به حسابدار (سطح ۳ یا بالاتر)
+        return tier >= WorkflowTiers.TIER_3_ACCOUNTANT
+
+    elif stage_lower in ['accountant_approved', 'pending_manager', 'manager_approved', 'submitted_accountant']:
+        # نیاز به مدیر شرکت (سطح ۴ یا بالاتر)
+        return tier >= WorkflowTiers.TIER_4_MANAGER
+
+    elif stage_lower in ['ready_to_pay']:
+        # نیاز به خزانه‌دار (سطح ۵ یا بالاتر)
+        return tier >= WorkflowTiers.TIER_5_TREASURY
+
+    return False
+
+
+@transaction.atomic
+def process_creation_with_auto_pass(instance, creator_user, is_financial: bool = False):
+    """
+    اصل عبور هوشمند از بالا به پایین (Dynamic Auto-Pass Principle) در زمان ایجاد رکورد.
+    اگر نقشی با سطح بالاتر رکوردی را ثبت کند، مراحل پیشین به صورت خودکار تایید شده
+    و پرونده بدون کاغذبازی به مرحله متناظر همان کاربر یا مرحله بعد هدایت می‌شود.
+    """
+    now = timezone.now()
+    user_tier = determine_user_tier(creator_user)
+
+    # ثبت کاربر ایجادکننده
+    if hasattr(instance, 'created_by') and not instance.created_by:
+        instance.created_by = creator_user
+
+    # ۱. کاربر عادی / کارمند انبار (سطح ۱)
+    if user_tier <= WorkflowTiers.TIER_1_OPERATOR:
+        if hasattr(instance, 'approval_status'):
+            instance.approval_status = WorkflowStatuses.PENDING_SUPERVISOR
+        elif hasattr(instance, 'status'):
+            instance.status = WorkflowStatuses.PERIOD_OPEN if hasattr(instance, 'year_month') else WorkflowStatuses.PENDING_SUPERVISOR
+        return instance
+
+    # ۲. سرپرست انبار (سطح ۲)
+    if user_tier == WorkflowTiers.TIER_2_SUPERVISOR:
+        if hasattr(instance, 'supervisor_approved_by'):
+            instance.supervisor_approved_by = creator_user
+            instance.supervisor_approved_at = now
+        if hasattr(instance, 'supervisor_reviewed_by'):
+            instance.supervisor_reviewed_by = creator_user
+            instance.supervisor_reviewed_at = now
+        
+        instance.is_auto_passed = True
+        instance.auto_passed_by = creator_user
+        instance.auto_passed_at = now
+
+        if hasattr(instance, 'approval_status'):
+            instance.approval_status = WorkflowStatuses.PENDING_ACCOUNTANT
+        elif hasattr(instance, 'status'):
+            instance.status = WorkflowStatuses.PERIOD_SUBMITTED_SUPERVISOR if hasattr(instance, 'year_month') else WorkflowStatuses.PENDING_ACCOUNTANT
+        return instance
+
+    # ۳. حسابدار (سطح ۳)
+    if user_tier == WorkflowTiers.TIER_3_ACCOUNTANT:
+        if hasattr(instance, 'supervisor_approved_by'):
+            instance.supervisor_approved_by = creator_user
+            instance.supervisor_approved_at = now
+        if hasattr(instance, 'accountant_approved_by'):
+            instance.accountant_approved_by = creator_user
+            instance.accountant_approved_at = now
+        if hasattr(instance, 'supervisor_reviewed_by'):
+            instance.supervisor_reviewed_by = creator_user
+            instance.supervisor_reviewed_at = now
+        if hasattr(instance, 'accountant_reviewed_by'):
+            instance.accountant_reviewed_by = creator_user
+            instance.accountant_reviewed_at = now
+
+        instance.is_auto_passed = True
+        instance.auto_passed_by = creator_user
+        instance.auto_passed_at = now
+
+        if hasattr(instance, 'approval_status'):
+            instance.approval_status = WorkflowStatuses.PENDING_MANAGER
+        elif hasattr(instance, 'status'):
+            instance.status = WorkflowStatuses.PERIOD_SUBMITTED_ACCOUNTANT if hasattr(instance, 'year_month') else WorkflowStatuses.PENDING_MANAGER
+        return instance
+
+    # ۴. مدیر شرکت (سطح ۴) یا سوپریوزر (سطح ۶)
+    if user_tier >= WorkflowTiers.TIER_4_MANAGER:
+        if hasattr(instance, 'supervisor_approved_by'):
+            instance.supervisor_approved_by = creator_user
+            instance.supervisor_approved_at = now
+        if hasattr(instance, 'accountant_approved_by'):
+            instance.accountant_approved_by = creator_user
+            instance.accountant_approved_at = now
+        if hasattr(instance, 'manager_approved_by'):
+            instance.manager_approved_by = creator_user
+            instance.manager_approved_at = now
+        if hasattr(instance, 'supervisor_reviewed_by'):
+            instance.supervisor_reviewed_by = creator_user
+            instance.supervisor_reviewed_at = now
+        if hasattr(instance, 'accountant_reviewed_by'):
+            instance.accountant_reviewed_by = creator_user
+            instance.accountant_reviewed_at = now
+        if hasattr(instance, 'manager_reviewed_by'):
+            instance.manager_reviewed_by = creator_user
+            instance.manager_reviewed_at = now
+
+        instance.is_auto_passed = True
+        instance.auto_passed_by = creator_user
+        instance.auto_passed_at = now
+
+        # تفکیک مسیر هویتی/قراردادی از اسناد مالی
+        if is_financial:
+            if hasattr(instance, 'approval_status'):
+                instance.approval_status = WorkflowStatuses.READY_TO_PAY
+            elif hasattr(instance, 'status'):
+                instance.status = WorkflowStatuses.PERIOD_READY_TO_PAY if hasattr(instance, 'year_month') else WorkflowStatuses.READY_TO_PAY
+        else:
+            if hasattr(instance, 'approval_status'):
+                instance.approval_status = WorkflowStatuses.APPROVED
+            elif hasattr(instance, 'status'):
+                instance.status = WorkflowStatuses.APPROVED
+
+        return instance
+
+    return instance
+
+
+@transaction.atomic
+def advance_workflow_step(instance, user, target_status: str = None, notes: str = None, is_financial: bool = False):
+    """
+    پیش‌روی امن، اتمیک و مرحله‌به‌مرحله ماشین حالت ۵ سطحی با استفاده از select_for_update()
+    """
+    # قفل ردیف دیتابیس جهت جلوگیری از همزمانی (Race Condition)
+    model_cls = instance.__class__
+    locked_instance = model_cls.objects.select_for_update().get(pk=instance.pk)
+
+    now = timezone.now()
+    current_status = getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', None))
+    
+    if not current_status:
+        raise ValidationError("وضعیت جاری موجودیت معتبر نیست.")
+
+    # بررسی دسترسی کاربر
+    if not can_user_approve_stage(user, current_status, is_financial):
+        raise PermissionDenied("شما دسترسی لازم برای تایید این مرحله از گردش کار را ندارید.")
+
+    user_tier = determine_user_tier(user)
+    curr_lower = current_status.lower()
+
+    # انتقال از سطح ۱ (پیش‌نویس) ⬅️ سطح ۲ (سرپرست انبار)
+    if curr_lower in ['draft', 'pending_supervisor', 'open', 'revision_required']:
+        if hasattr(locked_instance, 'supervisor_approved_by'):
+            locked_instance.supervisor_approved_by = user
+            locked_instance.supervisor_approved_at = now
+        if hasattr(locked_instance, 'supervisor_reviewed_by'):
+            locked_instance.supervisor_reviewed_by = user
+            locked_instance.supervisor_reviewed_at = now
+
+        next_status = target_status or WorkflowStatuses.PENDING_ACCOUNTANT
+        if hasattr(locked_instance, 'approval_status'):
+            locked_instance.approval_status = next_status
+        elif hasattr(locked_instance, 'status'):
+            locked_instance.status = WorkflowStatuses.PERIOD_SUBMITTED_SUPERVISOR if hasattr(locked_instance, 'year_month') else next_status
+
+    # انتقال از سطح ۲ ⬅️ سطح ۳ (حسابدار)
+    elif curr_lower in ['supervisor_approved', 'pending_accountant', 'submitted_supervisor']:
+        if hasattr(locked_instance, 'accountant_approved_by'):
+            locked_instance.accountant_approved_by = user
+            locked_instance.accountant_approved_at = now
+        if hasattr(locked_instance, 'accountant_reviewed_by'):
+            locked_instance.accountant_reviewed_by = user
+            locked_instance.accountant_reviewed_at = now
+
+        next_status = target_status or WorkflowStatuses.PENDING_MANAGER
+        if hasattr(locked_instance, 'approval_status'):
+            locked_instance.approval_status = next_status
+        elif hasattr(locked_instance, 'status'):
+            locked_instance.status = WorkflowStatuses.PERIOD_SUBMITTED_ACCOUNTANT if hasattr(locked_instance, 'year_month') else next_status
+
+    # انتقال از سطح ۳ ⬅️ سطح ۴ (مدیر شرکت)
+    elif curr_lower in ['accountant_approved', 'pending_manager', 'manager_approved', 'submitted_accountant']:
+        if hasattr(locked_instance, 'manager_approved_by'):
+            locked_instance.manager_approved_by = user
+            locked_instance.manager_approved_at = now
+        if hasattr(locked_instance, 'manager_reviewed_by'):
+            locked_instance.manager_reviewed_by = user
+            locked_instance.manager_reviewed_at = now
+
+        if is_financial:
+            next_status = target_status or WorkflowStatuses.READY_TO_PAY
+            if hasattr(locked_instance, 'approval_status'):
+                locked_instance.approval_status = next_status
+            elif hasattr(locked_instance, 'status'):
+                locked_instance.status = WorkflowStatuses.PERIOD_READY_TO_PAY if hasattr(locked_instance, 'year_month') else next_status
+        else:
+            next_status = target_status or WorkflowStatuses.APPROVED
+            if hasattr(locked_instance, 'approval_status'):
+                locked_instance.approval_status = next_status
+            elif hasattr(locked_instance, 'status'):
+                locked_instance.status = next_status
+
+            # اگر درخواست تغییرات است، اعمال مقادیر جدید به پرونده اصلی به صورت اتمیک
+            if hasattr(locked_instance, 'proposed_changes') and hasattr(locked_instance, 'personnel'):
+                _apply_personnel_changes(locked_instance)
+            elif hasattr(locked_instance, 'proposed_changes') and hasattr(locked_instance, 'vehicle'):
+                _apply_vehicle_changes(locked_instance)
+
+    # انتقال از سطح ۴ ⬅️ سطح ۵ (خزانه‌دار / تسویه نهایی)
+    elif curr_lower in ['ready_to_pay']:
+        if hasattr(locked_instance, 'treasury_paid_by'):
+            locked_instance.treasury_paid_by = user
+            locked_instance.treasury_paid_at = now
+
+        next_status = target_status or WorkflowStatuses.PAID
+        if hasattr(locked_instance, 'approval_status'):
+            locked_instance.approval_status = next_status
+        elif hasattr(locked_instance, 'status'):
+            locked_instance.status = WorkflowStatuses.PERIOD_PAID if hasattr(locked_instance, 'year_month') else next_status
+
+    # پاکسازی دلیل بازنگری در صورت تایید موفق
+    if hasattr(locked_instance, 'rejection_reason'):
+        locked_instance.rejection_reason = None
+
+    locked_instance.save()
+    logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} advanced to {getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', ''))} by user {user.username}")
+    return locked_instance
+
+
+@transaction.atomic
+def request_workflow_revision(instance, user, reason: str, target_status: str = None):
+    """
+    بازگرداندن هوشمند پرونده جهت بازنگری و اصلاح (Revision Required) بدون ابطال کامل داده‌ها
+    """
+    if not reason or not reason.strip():
+        raise ValidationError("درج توضیحات و علت درخواست بازنگری الزامی است.")
+
+    model_cls = instance.__class__
+    locked_instance = model_cls.objects.select_for_update().get(pk=instance.pk)
+
+    user_tier = determine_user_tier(user)
+    if user_tier < WorkflowTiers.TIER_2_SUPERVISOR and not user.is_superuser:
+        raise PermissionDenied("شما دسترسی لازم برای ارجاع بازنگری پرونده را ندارید.")
+
+    now = timezone.now()
+    next_status = target_status or WorkflowStatuses.REVISION_REQUIRED
+
+    if hasattr(locked_instance, 'approval_status'):
+        locked_instance.approval_status = next_status
+    elif hasattr(locked_instance, 'status'):
+        locked_instance.status = WorkflowStatuses.PERIOD_REVISION_REQUIRED if hasattr(locked_instance, 'year_month') else next_status
+
+    if hasattr(locked_instance, 'rejection_reason'):
+        locked_instance.rejection_reason = reason.strip()
+    if hasattr(locked_instance, 'revision_requested_by'):
+        locked_instance.revision_requested_by = user
+        locked_instance.revision_requested_at = now
+
+    locked_instance.save()
+    logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} marked REVISION_REQUIRED by {user.username}. Reason: {reason}")
+    return locked_instance
+
+
+@transaction.atomic
+def reject_workflow(instance, user, reason: str):
+    """
+    رد قطعی و ابطال پرونده در هر یک از مراحل
+    """
+    if not reason or not reason.strip():
+        raise ValidationError("درج دلیل رد قطعی الزامی است.")
+
+    model_cls = instance.__class__
+    locked_instance = model_cls.objects.select_for_update().get(pk=instance.pk)
+
+    user_tier = determine_user_tier(user)
+    if user_tier < WorkflowTiers.TIER_2_SUPERVISOR and not user.is_superuser:
+        raise PermissionDenied("شما دسترسی لازم برای رد این پرونده را ندارید.")
+
+    if hasattr(locked_instance, 'approval_status'):
+        locked_instance.approval_status = WorkflowStatuses.REJECTED
+    elif hasattr(locked_instance, 'status'):
+        locked_instance.status = WorkflowStatuses.PERIOD_REJECTED if hasattr(locked_instance, 'year_month') else WorkflowStatuses.REJECTED
+
+    if hasattr(locked_instance, 'rejection_reason'):
+        locked_instance.rejection_reason = reason.strip()
+
+    locked_instance.save()
+    logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} REJECTED by {user.username}. Reason: {reason}")
+    return locked_instance
+
+
+@transaction.atomic
+def execute_treasury_disbursement(instance, user, tracking_code: str, batch_id: str = None, payment_method: str = 'PAYA', notes: str = None):
+    """
+    ثبت پرداخت واریز بانکی و تسویه نهایی خزانه‌داری با ثبت کد رهگیری
+    """
+    model_cls = instance.__class__
+    locked_instance = model_cls.objects.select_for_update().get(pk=instance.pk)
+
+    user_tier = determine_user_tier(user)
+    if user_tier < WorkflowTiers.TIER_5_TREASURY and not user.is_superuser:
+        raise PermissionDenied("فقط خزانه‌دار یا مدیر ارشد مجاز به ثبت تیک واریز و تسویه نهایی هستند.")
+
+    now = timezone.now()
+
+    if hasattr(locked_instance, 'approval_status'):
+        locked_instance.approval_status = WorkflowStatuses.PAID
+    elif hasattr(locked_instance, 'status'):
+        locked_instance.status = WorkflowStatuses.PERIOD_PAID if hasattr(locked_instance, 'year_month') else WorkflowStatuses.PAID
+
+    if hasattr(locked_instance, 'payment_status'):
+        locked_instance.payment_status = WorkflowStatuses.PAYROLL_PAID
+
+    if hasattr(locked_instance, 'treasury_paid_by'):
+        locked_instance.treasury_paid_by = user
+        locked_instance.treasury_paid_at = now
+    if hasattr(locked_instance, 'paid_by'):
+        locked_instance.paid_by = user
+        locked_instance.paid_at = now
+
+    if hasattr(locked_instance, 'payment_tracking_code'):
+        locked_instance.payment_tracking_code = tracking_code
+    if hasattr(locked_instance, 'payment_batch_id') and batch_id:
+        locked_instance.payment_batch_id = batch_id
+    if hasattr(locked_instance, 'payment_method'):
+        locked_instance.payment_method = payment_method
+
+    if hasattr(locked_instance, 'is_settled'):
+        locked_instance.is_settled = True
+        locked_instance.settled_at = now
+        locked_instance.settled_by = user
+
+    locked_instance.save()
+    logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} PAID & SETTLED by {user.username}. Tracking: {tracking_code}")
+    return locked_instance
+
+
+@transaction.atomic
+def record_isolated_sheba_failure(payroll_record, user, failure_reason: str):
+    """
+    اعلام خطای شماره شبا / مسدودی حساب برای یک فرد خاص بدون توقف تسویه سایرین
+    """
+    user_tier = determine_user_tier(user)
+    if user_tier < WorkflowTiers.TIER_5_TREASURY and not user.is_superuser:
+        raise PermissionDenied("فقط متصدی خزانه‌داری مجاز به اعلام خطای شبا می‌باشد.")
+
+    payroll_record.payment_status = WorkflowStatuses.PAYROLL_FAILED_SHEBA
+    payroll_record.payment_failure_reason = failure_reason
+    payroll_record.save()
+    logger.warning(f"[WorkflowEngine] Payroll #{payroll_record.pk} marked FAILED_SHEBA: {failure_reason}")
+    return payroll_record
+
+
+def _apply_personnel_changes(change_request):
+    """
+    اعمال اتمیک فیلدهای ویرایش‌شده در درخواست تغییرات به پرونده پرسنل
+    """
+    personnel = change_request.personnel
+    for field_name, new_val in change_request.proposed_changes.items():
+        if hasattr(personnel, field_name) and field_name not in ['id', 'pk', 'national_code']:
+            setattr(personnel, field_name, new_val)
+    personnel.has_pending_changes = False
+    personnel.save()
+    logger.info(f"[WorkflowEngine] Applied ChangeRequest #{change_request.pk} to Personnel #{personnel.pk}")
+
+
+def _apply_vehicle_changes(change_request):
+    """
+    اعمال اتمیک فیلدهای ویرایش‌شده در درخواست تغییرات به پرونده ناوگان
+    """
+    vehicle = change_request.vehicle
+    for field_name, new_val in change_request.proposed_changes.items():
+        if hasattr(vehicle, field_name) and field_name not in ['id', 'pk', 'plate_number']:
+            setattr(vehicle, field_name, new_val)
+    vehicle.has_pending_changes = False
+    vehicle.save()
+    logger.info(f"[WorkflowEngine] Applied ChangeRequest #{change_request.pk} to Vehicle #{vehicle.pk}")

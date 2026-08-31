@@ -72,11 +72,17 @@ class PayrollYearlySettingsSerializer(serializers.ModelSerializer):
 class MonthlyPayrollRecordSerializer(serializers.ModelSerializer):
     personnel_name = serializers.CharField(source='personnel.full_name', read_only=True)
     period_year_month = serializers.CharField(source='period.year_month', read_only=True)
+    paid_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = MonthlyPayrollRecord
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at', 'paid_by', 'paid_at']
+
+    def get_paid_by_name(self, obj):
+        if obj.paid_by:
+            return f"{obj.paid_by.first_name} {obj.paid_by.last_name}".strip() or obj.paid_by.username
+        return None
 
 
 
@@ -86,23 +92,55 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
     hourly_rate = serializers.FloatField(read_only=True)
     assigned_warehouse_name = serializers.CharField(source='assigned_warehouse.name', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
-    manager_approved_by_name = serializers.SerializerMethodField()
+    supervisor_approved_by_name = serializers.SerializerMethodField()
     accountant_approved_by_name = serializers.SerializerMethodField()
+    manager_approved_by_name = serializers.SerializerMethodField()
+    treasury_paid_by_name = serializers.SerializerMethodField()
+    revision_requested_by_name = serializers.SerializerMethodField()
+    auto_passed_by_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = PersonnelProfile
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'created_by', 'manager_approved_by', 'manager_approved_at', 'accountant_approved_by', 'accountant_approved_at']
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by',
+            'supervisor_approved_by', 'supervisor_approved_at',
+            'accountant_approved_by', 'accountant_approved_at',
+            'manager_approved_by', 'manager_approved_at',
+            'treasury_paid_by', 'treasury_paid_at',
+            'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+            'revision_requested_by', 'revision_requested_at'
+        ]
+
+    def get_supervisor_approved_by_name(self, obj):
+        if obj.supervisor_approved_by:
+            return f"{obj.supervisor_approved_by.first_name} {obj.supervisor_approved_by.last_name}".strip() or obj.supervisor_approved_by.username
+        return None
+
+    def get_accountant_approved_by_name(self, obj):
+        if obj.accountant_approved_by:
+            return f"{obj.accountant_approved_by.first_name} {obj.accountant_approved_by.last_name}".strip() or obj.accountant_approved_by.username
+        return None
 
     def get_manager_approved_by_name(self, obj):
         if obj.manager_approved_by:
             return f"{obj.manager_approved_by.first_name} {obj.manager_approved_by.last_name}".strip() or obj.manager_approved_by.username
         return None
 
-    def get_accountant_approved_by_name(self, obj):
-        if obj.accountant_approved_by:
-            return f"{obj.accountant_approved_by.first_name} {obj.accountant_approved_by.last_name}".strip() or obj.accountant_approved_by.username
+    def get_treasury_paid_by_name(self, obj):
+        if obj.treasury_paid_by:
+            return f"{obj.treasury_paid_by.first_name} {obj.treasury_paid_by.last_name}".strip() or obj.treasury_paid_by.username
+        return None
+
+    def get_revision_requested_by_name(self, obj):
+        if obj.revision_requested_by:
+            return f"{obj.revision_requested_by.first_name} {obj.revision_requested_by.last_name}".strip() or obj.revision_requested_by.username
+        return None
+
+    def get_auto_passed_by_name(self, obj):
+        if obj.auto_passed_by:
+            return f"{obj.auto_passed_by.first_name} {obj.auto_passed_by.last_name}".strip() or obj.auto_passed_by.username
         return None
 
     def get_created_by_name(self, obj):
@@ -133,23 +171,55 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     ownership_type_display = serializers.CharField(source='get_ownership_type_display', read_only=True)
     assigned_warehouse_name = serializers.CharField(source='assigned_warehouse.name', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
-    manager_approved_by_name = serializers.SerializerMethodField()
+    supervisor_approved_by_name = serializers.SerializerMethodField()
     accountant_approved_by_name = serializers.SerializerMethodField()
+    manager_approved_by_name = serializers.SerializerMethodField()
+    treasury_paid_by_name = serializers.SerializerMethodField()
+    revision_requested_by_name = serializers.SerializerMethodField()
+    auto_passed_by_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = VehicleDriverProfile
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'created_by', 'manager_approved_by', 'manager_approved_at', 'accountant_approved_by', 'accountant_approved_at']
+        read_only_fields = [
+            'created_at', 'updated_at', 'created_by',
+            'supervisor_approved_by', 'supervisor_approved_at',
+            'accountant_approved_by', 'accountant_approved_at',
+            'manager_approved_by', 'manager_approved_at',
+            'treasury_paid_by', 'treasury_paid_at',
+            'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+            'revision_requested_by', 'revision_requested_at'
+        ]
+
+    def get_supervisor_approved_by_name(self, obj):
+        if obj.supervisor_approved_by:
+            return f"{obj.supervisor_approved_by.first_name} {obj.supervisor_approved_by.last_name}".strip() or obj.supervisor_approved_by.username
+        return None
+
+    def get_accountant_approved_by_name(self, obj):
+        if obj.accountant_approved_by:
+            return f"{obj.accountant_approved_by.first_name} {obj.accountant_approved_by.last_name}".strip() or obj.accountant_approved_by.username
+        return None
 
     def get_manager_approved_by_name(self, obj):
         if obj.manager_approved_by:
             return f"{obj.manager_approved_by.first_name} {obj.manager_approved_by.last_name}".strip() or obj.manager_approved_by.username
         return None
 
-    def get_accountant_approved_by_name(self, obj):
-        if obj.accountant_approved_by:
-            return f"{obj.accountant_approved_by.first_name} {obj.accountant_approved_by.last_name}".strip() or obj.accountant_approved_by.username
+    def get_treasury_paid_by_name(self, obj):
+        if obj.treasury_paid_by:
+            return f"{obj.treasury_paid_by.first_name} {obj.treasury_paid_by.last_name}".strip() or obj.treasury_paid_by.username
+        return None
+
+    def get_revision_requested_by_name(self, obj):
+        if obj.revision_requested_by:
+            return f"{obj.revision_requested_by.first_name} {obj.revision_requested_by.last_name}".strip() or obj.revision_requested_by.username
+        return None
+
+    def get_auto_passed_by_name(self, obj):
+        if obj.auto_passed_by:
+            return f"{obj.auto_passed_by.first_name} {obj.auto_passed_by.last_name}".strip() or obj.auto_passed_by.username
         return None
 
     def get_created_by_name(self, obj):
@@ -180,28 +250,53 @@ class PersonnelChangeRequestSerializer(serializers.ModelSerializer):
     personnel_name = serializers.CharField(source='personnel.full_name', read_only=True)
     personnel_national_code = serializers.CharField(source='personnel.national_code', read_only=True)
     requested_by_name = serializers.SerializerMethodField()
-    manager_reviewed_by_name = serializers.SerializerMethodField()
+    supervisor_reviewed_by_name = serializers.SerializerMethodField()
     accountant_reviewed_by_name = serializers.SerializerMethodField()
+    manager_reviewed_by_name = serializers.SerializerMethodField()
+    revision_requested_by_name = serializers.SerializerMethodField()
+    auto_passed_by_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = PersonnelChangeRequest
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'requested_by', 'manager_reviewed_by', 'manager_reviewed_at', 'accountant_reviewed_by', 'accountant_reviewed_at']
+        read_only_fields = [
+            'created_at', 'updated_at', 'requested_by',
+            'supervisor_reviewed_by', 'supervisor_reviewed_at',
+            'accountant_reviewed_by', 'accountant_reviewed_at',
+            'manager_reviewed_by', 'manager_reviewed_at',
+            'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+            'revision_requested_by', 'revision_requested_at'
+        ]
 
     def get_requested_by_name(self, obj):
         if obj.requested_by:
             return f"{obj.requested_by.first_name} {obj.requested_by.last_name}".strip() or obj.requested_by.username
         return "سیستم"
 
-    def get_manager_reviewed_by_name(self, obj):
-        if obj.manager_reviewed_by:
-            return f"{obj.manager_reviewed_by.first_name} {obj.manager_reviewed_by.last_name}".strip() or obj.manager_reviewed_by.username
+    def get_supervisor_reviewed_by_name(self, obj):
+        if obj.supervisor_reviewed_by:
+            return f"{obj.supervisor_reviewed_by.first_name} {obj.supervisor_reviewed_by.last_name}".strip() or obj.supervisor_reviewed_by.username
         return None
 
     def get_accountant_reviewed_by_name(self, obj):
         if obj.accountant_reviewed_by:
             return f"{obj.accountant_reviewed_by.first_name} {obj.accountant_reviewed_by.last_name}".strip() or obj.accountant_reviewed_by.username
+        return None
+
+    def get_manager_reviewed_by_name(self, obj):
+        if obj.manager_reviewed_by:
+            return f"{obj.manager_reviewed_by.first_name} {obj.manager_reviewed_by.last_name}".strip() or obj.manager_reviewed_by.username
+        return None
+
+    def get_revision_requested_by_name(self, obj):
+        if obj.revision_requested_by:
+            return f"{obj.revision_requested_by.first_name} {obj.revision_requested_by.last_name}".strip() or obj.revision_requested_by.username
+        return None
+
+    def get_auto_passed_by_name(self, obj):
+        if obj.auto_passed_by:
+            return f"{obj.auto_passed_by.first_name} {obj.auto_passed_by.last_name}".strip() or obj.auto_passed_by.username
         return None
 
 
@@ -209,28 +304,53 @@ class VehicleChangeRequestSerializer(serializers.ModelSerializer):
     driver_name = serializers.CharField(source='vehicle.driver_name', read_only=True)
     plate_number = serializers.CharField(source='vehicle.plate_number', read_only=True)
     requested_by_name = serializers.SerializerMethodField()
-    manager_reviewed_by_name = serializers.SerializerMethodField()
+    supervisor_reviewed_by_name = serializers.SerializerMethodField()
     accountant_reviewed_by_name = serializers.SerializerMethodField()
+    manager_reviewed_by_name = serializers.SerializerMethodField()
+    revision_requested_by_name = serializers.SerializerMethodField()
+    auto_passed_by_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     class Meta:
         model = VehicleChangeRequest
         fields = '__all__'
-        read_only_fields = ['created_at', 'updated_at', 'requested_by', 'manager_reviewed_by', 'manager_reviewed_at', 'accountant_reviewed_by', 'accountant_reviewed_at']
+        read_only_fields = [
+            'created_at', 'updated_at', 'requested_by',
+            'supervisor_reviewed_by', 'supervisor_reviewed_at',
+            'accountant_reviewed_by', 'accountant_reviewed_at',
+            'manager_reviewed_by', 'manager_reviewed_at',
+            'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+            'revision_requested_by', 'revision_requested_at'
+        ]
 
     def get_requested_by_name(self, obj):
         if obj.requested_by:
             return f"{obj.requested_by.first_name} {obj.requested_by.last_name}".strip() or obj.requested_by.username
         return "سیستم"
 
-    def get_manager_reviewed_by_name(self, obj):
-        if obj.manager_reviewed_by:
-            return f"{obj.manager_reviewed_by.first_name} {obj.manager_reviewed_by.last_name}".strip() or obj.manager_reviewed_by.username
+    def get_supervisor_reviewed_by_name(self, obj):
+        if obj.supervisor_reviewed_by:
+            return f"{obj.supervisor_reviewed_by.first_name} {obj.supervisor_reviewed_by.last_name}".strip() or obj.supervisor_reviewed_by.username
         return None
 
     def get_accountant_reviewed_by_name(self, obj):
         if obj.accountant_reviewed_by:
             return f"{obj.accountant_reviewed_by.first_name} {obj.accountant_reviewed_by.last_name}".strip() or obj.accountant_reviewed_by.username
+        return None
+
+    def get_manager_reviewed_by_name(self, obj):
+        if obj.manager_reviewed_by:
+            return f"{obj.manager_reviewed_by.first_name} {obj.manager_reviewed_by.last_name}".strip() or obj.manager_reviewed_by.username
+        return None
+
+    def get_revision_requested_by_name(self, obj):
+        if obj.revision_requested_by:
+            return f"{obj.revision_requested_by.first_name} {obj.revision_requested_by.last_name}".strip() or obj.revision_requested_by.username
+        return None
+
+    def get_auto_passed_by_name(self, obj):
+        if obj.auto_passed_by:
+            return f"{obj.auto_passed_by.first_name} {obj.auto_passed_by.last_name}".strip() or obj.auto_passed_by.username
         return None
 
 

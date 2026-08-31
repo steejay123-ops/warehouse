@@ -114,31 +114,38 @@ class PersonnelProfile(models.Model):
     )
     
     APPROVAL_STATUS_CHOICES = (
-        ('draft', 'پیش‌نویس / در انتظار تایید مدیر'),
+        ('draft', 'پیش‌نویس کارمند انبار'),
+        ('pending_supervisor', 'در انتظار تایید سرپرست انبار'),
+        ('supervisor_approved', 'تایید سرپرست / در انتظار حسابدار'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('accountant_approved', 'تایید حسابدار / در انتظار مدیر'),
+        ('pending_manager', 'در انتظار تایید مدیر'),
         ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
-        ('approved', 'تایید نهایی شده'),
+        ('approved', 'تصویب و فعال شده'),
+        ('ready_to_pay', 'تایید مدیر / آماده پرداخت خزانه‌داری'),
+        ('paid', 'پرداخت و تسویه نهایی شده'),
         ('revision_required', 'نیازمند بازنگری و اصلاح'),
-        ('rejected', 'رد شده'),
+        ('rejected', 'رد شده / ابطال'),
     )
     approval_status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=APPROVAL_STATUS_CHOICES,
         default='approved',
         db_index=True,
         verbose_name="وضعیت تایید"
     )
-    manager_approved_by = models.ForeignKey(
+    supervisor_approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='manager_approved_personnel',
-        verbose_name="مدیر تاییدکننده"
+        related_name='supervisor_approved_personnel',
+        verbose_name="سرپرست تاییدکننده"
     )
-    manager_approved_at = models.DateTimeField(
+    supervisor_approved_at = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="تاریخ و ساعت تایید مدیر"
+        verbose_name="تاریخ و ساعت تایید سرپرست"
     )
     accountant_approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -153,10 +160,79 @@ class PersonnelProfile(models.Model):
         blank=True,
         verbose_name="تاریخ و ساعت تایید حسابدار"
     )
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manager_approved_personnel',
+        verbose_name="مدیر تاییدکننده"
+    )
+    manager_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید مدیر"
+    )
+    treasury_paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='treasury_paid_personnel',
+        verbose_name="خزانه‌دار پرداخت‌کننده"
+    )
+    treasury_paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت پرداخت خزانه‌دار"
+    )
+    payment_tracking_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="شماره پیگیری / کد رهگیری بانکی"
+    )
+    payment_method = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        default='PAYA',
+        verbose_name="روش پرداخت (پایا / ساتنا / کارت / چک / نقدی)"
+    )
+    is_auto_passed = models.BooleanField(
+        default=False,
+        verbose_name="تایید شده با اصل عبور هوشمند"
+    )
+    auto_passed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='autopassed_personnel',
+        verbose_name="کاربر ثبت‌کننده عبور هوشمند"
+    )
+    auto_passed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان عبور هوشمند"
+    )
     rejection_reason = models.TextField(
         blank=True,
         null=True,
         verbose_name="دلیل رد یا بازنگری"
+    )
+    revision_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_req_personnel',
+        verbose_name="درخواست‌دهنده بازنگری"
+    )
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان درخواست بازنگری"
     )
     has_pending_changes = models.BooleanField(
         default=False,
@@ -262,31 +338,38 @@ class VehicleDriverProfile(models.Model):
     )
     
     APPROVAL_STATUS_CHOICES = (
-        ('draft', 'پیش‌نویس / در انتظار تایید مدیر'),
+        ('draft', 'پیش‌نویس کارمند انبار'),
+        ('pending_supervisor', 'در انتظار تایید سرپرست انبار'),
+        ('supervisor_approved', 'تایید سرپرست / در انتظار حسابدار'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('accountant_approved', 'تایید حسابدار / در انتظار مدیر'),
+        ('pending_manager', 'در انتظار تایید مدیر'),
         ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
-        ('approved', 'تایید نهایی شده'),
+        ('approved', 'تصویب و فعال شده'),
+        ('ready_to_pay', 'تایید مدیر / آماده پرداخت خزانه‌داری'),
+        ('paid', 'پرداخت و تسویه نهایی شده'),
         ('revision_required', 'نیازمند بازنگری و اصلاح'),
-        ('rejected', 'رد شده'),
+        ('rejected', 'رد شده / ابطال'),
     )
     approval_status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=APPROVAL_STATUS_CHOICES,
         default='approved',
         db_index=True,
         verbose_name="وضعیت تایید"
     )
-    manager_approved_by = models.ForeignKey(
+    supervisor_approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='manager_approved_vehicles',
-        verbose_name="مدیر تاییدکننده"
+        related_name='supervisor_approved_vehicles',
+        verbose_name="سرپرست تاییدکننده"
     )
-    manager_approved_at = models.DateTimeField(
+    supervisor_approved_at = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="تاریخ و ساعت تایید مدیر"
+        verbose_name="تاریخ و ساعت تایید سرپرست"
     )
     accountant_approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -301,10 +384,79 @@ class VehicleDriverProfile(models.Model):
         blank=True,
         verbose_name="تاریخ و ساعت تایید حسابدار"
     )
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='manager_approved_vehicles',
+        verbose_name="مدیر تاییدکننده"
+    )
+    manager_approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت تایید مدیر"
+    )
+    treasury_paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='treasury_paid_vehicles',
+        verbose_name="خزانه‌دار پرداخت‌کننده"
+    )
+    treasury_paid_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاریخ و ساعت پرداخت خزانه‌دار"
+    )
+    payment_tracking_code = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="شماره پیگیری / کد رهگیری بانکی"
+    )
+    payment_method = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        default='PAYA',
+        verbose_name="روش پرداخت (پایا / ساتنا / کارت / چک / نقدی)"
+    )
+    is_auto_passed = models.BooleanField(
+        default=False,
+        verbose_name="تایید شده با اصل عبور هوشمند"
+    )
+    auto_passed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='autopassed_vehicles',
+        verbose_name="کاربر ثبت‌کننده عبور هوشمند"
+    )
+    auto_passed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان عبور هوشمند"
+    )
     rejection_reason = models.TextField(
         blank=True,
         null=True,
         verbose_name="دلیل رد یا بازنگری"
+    )
+    revision_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_req_vehicles',
+        verbose_name="درخواست‌دهنده بازنگری"
+    )
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان درخواست بازنگری"
     )
     has_pending_changes = models.BooleanField(
         default=False,
@@ -336,9 +488,15 @@ class PersonnelChangeRequest(models.Model):
     پیش‌نویس درخواست تغییرات اطلاعات پرسنل (Pending Edit Staging)
     """
     CHANGE_STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس کارمند انبار'),
+        ('pending_supervisor', 'در انتظار بررسی سرپرست انبار'),
+        ('supervisor_approved', 'تایید سرپرست / در انتظار حسابدار'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('accountant_approved', 'تایید حسابدار / در انتظار مدیر'),
         ('pending_manager', 'در انتظار بررسی مدیر'),
         ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
         ('approved', 'تایید نهایی و اعمال شده'),
+        ('revision_required', 'نیازمند بازنگری و اصلاح'),
         ('rejected', 'رد شده'),
         ('cancelled', 'لغو شده'),
     )
@@ -365,24 +523,24 @@ class PersonnelChangeRequest(models.Model):
         verbose_name="مقادیر پیشین (جهت مقایسه)"
     )
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=CHANGE_STATUS_CHOICES,
         default='pending_manager',
         db_index=True,
         verbose_name="وضعیت درخواست"
     )
-    manager_reviewed_by = models.ForeignKey(
+    supervisor_reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='reviewed_mgr_personnel_changes',
-        verbose_name="مدیر بررسی‌کننده"
+        related_name='reviewed_sup_personnel_changes',
+        verbose_name="سرپرست بررسی‌کننده"
     )
-    manager_reviewed_at = models.DateTimeField(
+    supervisor_reviewed_at = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="زمان بررسی مدیر"
+        verbose_name="زمان بررسی سرپرست"
     )
     accountant_reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -397,10 +555,53 @@ class PersonnelChangeRequest(models.Model):
         blank=True,
         verbose_name="زمان بررسی حسابدار"
     )
+    manager_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_mgr_personnel_changes',
+        verbose_name="مدیر بررسی‌کننده"
+    )
+    manager_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی مدیر"
+    )
+    is_auto_passed = models.BooleanField(
+        default=False,
+        verbose_name="اعمال شده با عبور هوشمند"
+    )
+    auto_passed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='autopassed_p_changes',
+        verbose_name="کاربر عبور هوشمند"
+    )
+    auto_passed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان عبور هوشمند"
+    )
     rejection_reason = models.TextField(
         blank=True,
         null=True,
         verbose_name="توضیحات و دلیل رد"
+    )
+    revision_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_req_p_changes',
+        verbose_name="درخواست‌دهنده بازنگری"
+    )
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان درخواست بازنگری"
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت درخواست")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین بروزرسانی")
@@ -419,9 +620,15 @@ class VehicleChangeRequest(models.Model):
     پیش‌نویس درخواست تغییرات اطلاعات خودرو و راننده (Pending Edit Staging)
     """
     CHANGE_STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس کارمند انبار'),
+        ('pending_supervisor', 'در انتظار بررسی سرپرست انبار'),
+        ('supervisor_approved', 'تایید سرپرست / در انتظار حسابدار'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('accountant_approved', 'تایید حسابدار / در انتظار مدیر'),
         ('pending_manager', 'در انتظار بررسی مدیر'),
         ('manager_approved', 'تایید مدیر / در انتظار حسابدار'),
         ('approved', 'تایید نهایی و اعمال شده'),
+        ('revision_required', 'نیازمند بازنگری و اصلاح'),
         ('rejected', 'رد شده'),
         ('cancelled', 'لغو شده'),
     )
@@ -448,24 +655,24 @@ class VehicleChangeRequest(models.Model):
         verbose_name="مقادیر پیشین (جهت مقایسه)"
     )
     status = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=CHANGE_STATUS_CHOICES,
         default='pending_manager',
         db_index=True,
         verbose_name="وضعیت درخواست"
     )
-    manager_reviewed_by = models.ForeignKey(
+    supervisor_reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='reviewed_mgr_vehicle_changes',
-        verbose_name="مدیر بررسی‌کننده"
+        related_name='reviewed_sup_vehicle_changes',
+        verbose_name="سرپرست بررسی‌کننده"
     )
-    manager_reviewed_at = models.DateTimeField(
+    supervisor_reviewed_at = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="زمان بررسی مدیر"
+        verbose_name="زمان بررسی سرپرست"
     )
     accountant_reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -480,10 +687,53 @@ class VehicleChangeRequest(models.Model):
         blank=True,
         verbose_name="زمان بررسی حسابدار"
     )
+    manager_reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_mgr_vehicle_changes',
+        verbose_name="مدیر بررسی‌کننده"
+    )
+    manager_reviewed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان بررسی مدیر"
+    )
+    is_auto_passed = models.BooleanField(
+        default=False,
+        verbose_name="اعمال شده با عبور هوشمند"
+    )
+    auto_passed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='autopassed_v_changes',
+        verbose_name="کاربر عبور هوشمند"
+    )
+    auto_passed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان عبور هوشمند"
+    )
     rejection_reason = models.TextField(
         blank=True,
         null=True,
         verbose_name="توضیحات و دلیل رد"
+    )
+    revision_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_req_v_changes',
+        verbose_name="درخواست‌دهنده بازنگری"
+    )
+    revision_requested_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="زمان درخواست بازنگری"
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت درخواست")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین بروزرسانی")
@@ -503,10 +753,15 @@ class MonthlyWorkPeriod(models.Model):
     """
     PERIOD_STATUS_CHOICES = (
         ('OPEN', 'باز (امکان ثبت و ویرایش)'),
+        ('SUBMITTED_SUPERVISOR', 'تایید و ارسال سرپرست انبار'),
+        ('SUBMITTED_ACCOUNTANT', 'تایید و ارسال حسابدار'),
+        ('READY_TO_PAY', 'تایید مدیر / آماده پرداخت خزانه‌داری'),
+        ('PAID', 'پرداخت و تسویه قطعی خزانه‌داری'),
         ('SUBMITTED', 'ارسال‌شده جهت بررسی مالی'),
         ('LOCKED', 'تایید نهایی و قفل‌شده'),
-        ('REJECTED', 'رد شده و نیازمند بازبینی'),
         ('FINALIZED', 'قطعی و تسویه‌شده'),
+        ('REVISION_REQUIRED', 'نیازمند بازنگری و اصلاح'),
+        ('REJECTED', 'رد شده و نیازمند بازبینی'),
     )
 
     warehouse = models.ForeignKey(
@@ -518,9 +773,9 @@ class MonthlyWorkPeriod(models.Model):
         verbose_name="انبار مربوطه"
     )
     year_month = models.CharField(max_length=7, db_index=True, verbose_name="سال و ماه (مثال ۱۴۰۴/۰۵)")
-    status = models.CharField(max_length=15, choices=PERIOD_STATUS_CHOICES, default='OPEN', verbose_name="وضعیت دوره")
+    status = models.CharField(max_length=25, choices=PERIOD_STATUS_CHOICES, default='OPEN', verbose_name="وضعیت دوره")
     
-    # چرخه بررسی دو مرحله‌ای
+    # چرخه بررسی ۵ سطحی
     submitted_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان ارسال جهت بررسی")
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -532,6 +787,55 @@ class MonthlyWorkPeriod(models.Model):
     )
     submission_notes = models.TextField(blank=True, null=True, verbose_name="یادداشت سرپرست هنگام ارسال")
     rejection_reason = models.TextField(blank=True, null=True, verbose_name="علت رد توسط حسابداری")
+
+    supervisor_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sup_approved_work_periods',
+        verbose_name="سرپرست تاییدکننده"
+    )
+    supervisor_approved_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان تایید سرپرست")
+    accountant_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='acc_approved_work_periods',
+        verbose_name="حسابدار تاییدکننده"
+    )
+    accountant_approved_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان تایید حسابدار")
+    manager_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='mgr_approved_work_periods',
+        verbose_name="مدیر تاییدکننده"
+    )
+    manager_approved_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان تایید مدیر")
+    treasury_paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='treasury_paid_work_periods',
+        verbose_name="خزانه‌دار تسویه‌کننده"
+    )
+    treasury_paid_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان پرداخت خزانه‌دار")
+    payment_tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="کد رهگیری بانکی تسویه")
+    payment_batch_id = models.CharField(max_length=100, blank=True, null=True, verbose_name="شناسه دسته پرداخت پایا")
+
+    revision_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='revision_req_work_periods',
+        verbose_name="درخواست‌دهنده بازنگری"
+    )
+    revision_requested_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان بازنگری")
 
     locked_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان قفل")
     locked_by = models.ForeignKey(
@@ -707,6 +1011,18 @@ class VehicleTripLog(models.Model):
         related_name='vehicle_trips',
         verbose_name="دوره ماهانه"
     )
+    
+    is_settled = models.BooleanField(default=False, verbose_name="تسویه شده")
+    settled_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان تسویه")
+    settled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='settled_trips',
+        verbose_name="کاربر تسویه‌کننده"
+    )
+    payment_tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="کد رهگیری پرداخت بانکی")
     
     is_deleted = models.BooleanField(default=False, verbose_name="حذف منطقی")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1022,7 +1338,35 @@ class MonthlyPayrollRecord(models.Model):
     payable_amount = models.DecimalField(max_digits=14, decimal_places=0, default=0, verbose_name="قابل پرداخت (ستون ۵۷)")
     tax_check_discrepancy = models.DecimalField(max_digits=14, decimal_places=0, default=0, verbose_name="چک مالیات (ستون ۵۸)")
 
-    # ── ۶. متادیتای ممیزی و فایل مالیات دارایی ───────────────────────
+    # ── ۶. متادیتای پرداخت و خزانه‌داری ───────────────────────────
+    PAYMENT_STATUS_CHOICES = (
+        ('PENDING', 'در انتظار تایید'),
+        ('READY_TO_PAY', 'تایید مدیر / آماده پرداخت'),
+        ('PAID', 'پرداخت و تسویه شده'),
+        ('FAILED_SHEBA', 'خطای شماره شبا / حساب بانکی'),
+        ('REJECTED', 'رد شده'),
+    )
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='PENDING',
+        db_index=True,
+        verbose_name="وضعیت پرداخت خزانه‌داری"
+    )
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان پرداخت خزانه‌داری")
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paid_payrolls',
+        verbose_name="خزانه‌دار پرداخت‌کننده"
+    )
+    payment_tracking_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="کد رهگیری بانکی واریز")
+    payment_batch_id = models.CharField(max_length=100, blank=True, null=True, verbose_name="شناسه دسته واریز پایا")
+    payment_failure_reason = models.TextField(blank=True, null=True, verbose_name="علت عدم واریز یا خطای شبا")
+
+    # ── ۷. متادیتای ممیزی و فایل مالیات دارایی ───────────────────────
     tax_source_type = models.CharField(
         max_length=50,
         default='MANUAL',

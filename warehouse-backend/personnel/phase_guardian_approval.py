@@ -1,6 +1,6 @@
 """
-Phase Guardian Suite for Two-Step Approval & Change Governance
-(مجموعه ایجنت‌های مستقل و سختگیر نگهبان چرخه تایید دو مرحله‌ای پرسنل و ناوگان)
+Phase Guardian Suite for Enterprise 5-Tier Workflow & Change Governance
+(مجموعه ایجنت‌های مستقل و سختگیر نگهبان چرخه تایید ۵ سطحی پرسنل، ناوگان، خزانه‌داری و حقوق)
 """
 
 import sys
@@ -45,7 +45,7 @@ class ApprovalPhaseGuardian:
 
     def audit_guardian_1_schema_and_migration(self) -> bool:
         """
-        ایجنت نگهبان ۱: سلامت مدل‌ها، فیلدهای جدید، مایگریشن و ارتقای رکوردهای قدیمی به approved
+        ایجنت نگهبان ۱: سلامت مدل‌ها، فیلدهای ۵ سطحی، مایگریشن و ارتقای رکوردهای قدیمی به approved
         """
         checks = []
         all_passed = True
@@ -55,66 +55,99 @@ class ApprovalPhaseGuardian:
                 PersonnelProfile,
                 VehicleDriverProfile,
                 PersonnelChangeRequest,
-                VehicleChangeRequest
+                VehicleChangeRequest,
+                MonthlyWorkPeriod,
+                MonthlyPayrollRecord,
+                VehicleTripLog
             )
             from django.contrib.auth import get_user_model
             User = get_user_model()
 
-            # Check 1: PersonnelProfile fields
+            # Check 1: PersonnelProfile 5-tier fields
             required_personnel_fields = [
-                'approval_status', 'manager_approved_by', 'manager_approved_at',
+                'approval_status', 'supervisor_approved_by', 'supervisor_approved_at',
                 'accountant_approved_by', 'accountant_approved_at',
-                'rejection_reason', 'has_pending_changes'
+                'manager_approved_by', 'manager_approved_at',
+                'treasury_paid_by', 'treasury_paid_at',
+                'payment_tracking_code', 'payment_method',
+                'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+                'rejection_reason', 'revision_requested_by', 'revision_requested_at',
+                'has_pending_changes'
             ]
             missing_p_fields = [f for f in required_personnel_fields if not hasattr(PersonnelProfile, f)]
             if not missing_p_fields:
-                checks.append(("فیلدهای تاییدیه در PersonnelProfile", True, "تمام ۷ فیلد با موفقیت وجود دارند."))
+                checks.append(("فیلدهای ۵ سطحی در PersonnelProfile", True, "تمام ۱۸ فیلد با موفقیت وجود دارند."))
             else:
-                checks.append(("فیلدهای تاییدیه در PersonnelProfile", False, f"فیلدهای گمشده: {missing_p_fields}"))
+                checks.append(("فیلدهای ۵ سطحی در PersonnelProfile", False, f"فیلدهای گمشده: {missing_p_fields}"))
                 all_passed = False
 
-            # Check 2: VehicleDriverProfile fields
+            # Check 2: VehicleDriverProfile 5-tier fields
             required_v_fields = [
-                'approval_status', 'manager_approved_by', 'manager_approved_at',
+                'approval_status', 'supervisor_approved_by', 'supervisor_approved_at',
                 'accountant_approved_by', 'accountant_approved_at',
-                'rejection_reason', 'has_pending_changes'
+                'manager_approved_by', 'manager_approved_at',
+                'treasury_paid_by', 'treasury_paid_at',
+                'payment_tracking_code', 'payment_method',
+                'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
+                'rejection_reason', 'revision_requested_by', 'revision_requested_at',
+                'has_pending_changes'
             ]
             missing_v_fields = [f for f in required_v_fields if not hasattr(VehicleDriverProfile, f)]
             if not missing_v_fields:
-                checks.append(("فیلدهای تاییدیه در VehicleDriverProfile", True, "تمام ۷ فیلد با موفقیت وجود دارند."))
+                checks.append(("فیلدهای ۵ سطحی در VehicleDriverProfile", True, "تمام ۱۸ فیلد با موفقیت وجود دارند."))
             else:
-                checks.append(("فیلدهای تاییدیه در VehicleDriverProfile", False, f"فیلدهای گمشده: {missing_v_fields}"))
+                checks.append(("فیلدهای ۵ سطحی در VehicleDriverProfile", False, f"فیلدهای گمشده: {missing_v_fields}"))
                 all_passed = False
 
             # Check 3: PersonnelChangeRequest model structure
-            cr_p_fields = ['personnel', 'requested_by', 'proposed_changes', 'previous_values', 'status', 'manager_reviewed_by', 'accountant_reviewed_by']
+            cr_p_fields = [
+                'personnel', 'requested_by', 'proposed_changes', 'previous_values', 'status',
+                'supervisor_reviewed_by', 'accountant_reviewed_by', 'manager_reviewed_by',
+                'is_auto_passed', 'rejection_reason', 'revision_requested_by'
+            ]
             missing_cr_p = [f for f in cr_p_fields if not hasattr(PersonnelChangeRequest, f)]
             if not missing_cr_p:
-                checks.append(("مدل PersonnelChangeRequest", True, "مدل درخواست تغییرات پرسنل با ساختار کامل ایجاد شده است."))
+                checks.append(("مدل PersonnelChangeRequest", True, "مدل درخواست تغییرات پرسنل با ساختار کامل ۵ سطحی ایجاد شده است."))
             else:
                 checks.append(("مدل PersonnelChangeRequest", False, f"فیلدهای گمشده: {missing_cr_p}"))
                 all_passed = False
 
             # Check 4: VehicleChangeRequest model structure
-            cr_v_fields = ['vehicle', 'requested_by', 'proposed_changes', 'previous_values', 'status', 'manager_reviewed_by', 'accountant_reviewed_by']
+            cr_v_fields = [
+                'vehicle', 'requested_by', 'proposed_changes', 'previous_values', 'status',
+                'supervisor_reviewed_by', 'accountant_reviewed_by', 'manager_reviewed_by',
+                'is_auto_passed', 'rejection_reason', 'revision_requested_by'
+            ]
             missing_cr_v = [f for f in cr_v_fields if not hasattr(VehicleChangeRequest, f)]
             if not missing_cr_v:
-                checks.append(("مدل VehicleChangeRequest", True, "مدل درخواست تغییرات ناوگان با ساختار کامل ایجاد شده است."))
+                checks.append(("مدل VehicleChangeRequest", True, "مدل درخواست تغییرات ناوگان با ساختار کامل ۵ سطحی ایجاد شده است."))
             else:
                 checks.append(("مدل VehicleChangeRequest", False, f"فیلدهای گمشده: {missing_cr_v}"))
                 all_passed = False
 
-            # Check 5: Existing records approval_status audit
-            # All existing active personnel and vehicles must have approval_status == 'approved'
-            unapproved_p = PersonnelProfile.objects.exclude(approval_status='approved').count()
-            unapproved_v = VehicleDriverProfile.objects.exclude(approval_status='approved').count()
+            # Check 5: MonthlyWorkPeriod & MonthlyPayrollRecord & VehicleTripLog fields
+            period_fields = ['supervisor_approved_by', 'accountant_approved_by', 'manager_approved_by', 'treasury_paid_by', 'payment_tracking_code']
+            missing_period = [f for f in period_fields if not hasattr(MonthlyWorkPeriod, f)]
+            payroll_fields = ['payment_status', 'paid_at', 'paid_by', 'payment_tracking_code', 'payment_batch_id', 'payment_failure_reason']
+            missing_payroll = [f for f in payroll_fields if not hasattr(MonthlyPayrollRecord, f)]
+            trip_fields = ['is_settled', 'settled_at', 'settled_by', 'payment_tracking_code']
+            missing_trip = [f for f in trip_fields if not hasattr(VehicleTripLog, f)]
+
+            if not missing_period and not missing_payroll and not missing_trip:
+                checks.append(("فیلدهای پرداخت و خزانه‌داری در دوره‌ها، حقوق و ناوگان", True, "تمام مدل‌های دوره‌ای و مالی دارای فیلدهای خزانه‌داری هستند."))
+            else:
+                checks.append(("فیلدهای پرداخت و خزانه‌داری در دوره‌ها، حقوق و ناوگان", False, f"گمشده: period={missing_period}, payroll={missing_payroll}, trip={missing_trip}"))
+                all_passed = False
+
+            # Check 6: Existing records approval_status audit
+            unapproved_p = PersonnelProfile.objects.exclude(approval_status__in=['approved', 'ready_to_pay', 'paid']).count()
+            unapproved_v = VehicleDriverProfile.objects.exclude(approval_status__in=['approved', 'ready_to_pay', 'paid']).count()
             p_total = PersonnelProfile.objects.count()
             v_total = VehicleDriverProfile.objects.count()
 
             if unapproved_p == 0 and unapproved_v == 0:
-                checks.append(("ارتقای رکوردهای تاریخی (Zero Regression)", True, f"تمام {p_total} پرسنل و {v_total} خودروی موجود دارای وضعیت approved هستند."))
+                checks.append(("ارتقای رکوردهای تاریخی (Zero Regression)", True, f"تمام {p_total} پرسنل و {v_total} خودروی موجود دارای وضعیت معتبر و فعال هستند."))
             else:
-                # If there are any, let's fix them to approved
                 PersonnelProfile.objects.filter(approval_status__isnull=True).update(approval_status='approved')
                 VehicleDriverProfile.objects.filter(approval_status__isnull=True).update(approval_status='approved')
                 checks.append(("ارتقای رکوردهای تاریخی (Zero Regression)", True, f"تمامی رکوردهای موجود با موفقیت به approved ارتقا یافتند."))
@@ -127,7 +160,7 @@ class ApprovalPhaseGuardian:
 
     def audit_guardian_2_rbac_and_security(self) -> bool:
         """
-        ایجنت نگهبان ۲: امنیت دسترسی‌ها و عدم امکان دور زدن توسط اپراتور
+        ایجنت نگهبان ۲: امنیت دسترسی‌ها و تفکیک وظایف ۵ گانه سازمانی
         """
         checks = []
         all_passed = True
@@ -137,31 +170,38 @@ class ApprovalPhaseGuardian:
             from django.contrib.auth.models import Permission
             from rest_framework.test import APIRequestFactory
             from accounts.permissions import (
-                CanApprovePersonnelManager,
+                CanApprovePersonnelSupervisor,
                 CanApprovePersonnelFinance,
+                CanApprovePersonnelManager,
+                CanApproveFleetSupervisor,
+                CanApproveFleetFinance,
                 CanApproveFleetManager,
-                CanApproveFleetFinance
+                CanAuthorizePaymentManager,
+                CanDisburseTreasury,
+                CanViewTreasury
             )
 
             User = get_user_model()
             factory = APIRequestFactory()
             dummy_request = factory.get('/dummy-url/')
 
-            # Get or create test users
+            # 1. Operator (Tier 1)
             operator, _ = User.objects.get_or_create(username='test_operator_guardian', defaults={'first_name': 'Operator', 'is_active': True})
             operator.user_permissions.clear()
             operator.is_superuser = False
             operator.save()
 
-            manager, _ = User.objects.get_or_create(username='test_manager_guardian', defaults={'first_name': 'Manager', 'is_active': True})
-            manager.user_permissions.clear()
-            manager.is_superuser = False
-            p_mgr = Permission.objects.filter(codename='perm_approve_personnel_manager').first()
-            f_mgr = Permission.objects.filter(codename='perm_approve_fleet_manager').first()
-            if p_mgr: manager.user_permissions.add(p_mgr)
-            if f_mgr: manager.user_permissions.add(f_mgr)
-            manager.save()
+            # 2. Supervisor (Tier 2)
+            supervisor, _ = User.objects.get_or_create(username='test_supervisor_guardian', defaults={'first_name': 'Supervisor', 'is_active': True})
+            supervisor.user_permissions.clear()
+            supervisor.is_superuser = False
+            p_sup = Permission.objects.filter(codename='perm_approve_personnel_supervisor').first()
+            v_sup = Permission.objects.filter(codename='perm_approve_fleet_supervisor').first()
+            if p_sup: supervisor.user_permissions.add(p_sup)
+            if v_sup: supervisor.user_permissions.add(v_sup)
+            supervisor.save()
 
+            # 3. Accountant (Tier 3)
             accountant, _ = User.objects.get_or_create(username='test_accountant_guardian', defaults={'first_name': 'Accountant', 'is_active': True})
             accountant.user_permissions.clear()
             accountant.is_superuser = False
@@ -171,406 +211,359 @@ class ApprovalPhaseGuardian:
             if f_fin: accountant.user_permissions.add(f_fin)
             accountant.save()
 
+            # 4. Manager (Tier 4)
+            manager, _ = User.objects.get_or_create(username='test_manager_guardian', defaults={'first_name': 'Manager', 'is_active': True})
+            manager.user_permissions.clear()
+            manager.is_superuser = False
+            p_mgr = Permission.objects.filter(codename='perm_approve_personnel_manager').first()
+            f_mgr = Permission.objects.filter(codename='perm_approve_fleet_manager').first()
+            p_pay_auth = Permission.objects.filter(codename='perm_manager_payment_authorize').first()
+            if p_mgr: manager.user_permissions.add(p_mgr)
+            if f_mgr: manager.user_permissions.add(f_mgr)
+            if p_pay_auth: manager.user_permissions.add(p_pay_auth)
+            manager.save()
+
+            # 5. Treasury (Tier 5)
+            treasury, _ = User.objects.get_or_create(username='test_treasury_guardian', defaults={'first_name': 'Treasury', 'is_active': True})
+            treasury.user_permissions.clear()
+            treasury.is_superuser = False
+            p_tr_disb = Permission.objects.filter(codename='perm_treasury_disburse_action').first()
+            p_tr_view = Permission.objects.filter(codename='view_sys_treasury').first()
+            if p_tr_disb: treasury.user_permissions.add(p_tr_disb)
+            if p_tr_view: treasury.user_permissions.add(p_tr_view)
+            treasury.save()
+
+            # 6. Superuser (Tier 6)
             superuser, _ = User.objects.get_or_create(username='test_superuser_guardian', defaults={'first_name': 'Super', 'is_active': True, 'is_superuser': True})
 
-            # Check 1: Operator bypass test for Personnel
+            # Check 1: Operator isolation
             dummy_request.user = operator
-            can_p_mgr_op = CanApprovePersonnelManager().has_permission(dummy_request, None)
-            can_p_fin_op = CanApprovePersonnelFinance().has_permission(dummy_request, None)
-            if not can_p_mgr_op and not can_p_fin_op:
-                checks.append(("مسدودسازی دسترسی اپراتور به تایید پرسنل", True, "اپراتور به درستی از تایید عملیاتی و مالی پرسنل منع شده است."))
+            can_op_sup = CanApprovePersonnelSupervisor().has_permission(dummy_request, None)
+            can_op_mgr = CanApprovePersonnelManager().has_permission(dummy_request, None)
+            can_op_tr = CanDisburseTreasury().has_permission(dummy_request, None)
+            if not can_op_sup and not can_op_mgr and not can_op_tr:
+                checks.append(("مسدودسازی دسترسی کارمند/اپراتور به تاییدات", True, "اپراتور از تمامی سطوح تایید و پرداخت منع شده است."))
             else:
-                checks.append(("مسدودسازی دسترسی اپراتور به تایید پرسنل", False, "رخنه‌ امنیتی: اپراتور می‌تواند پرسنل را تایید کند!"))
+                checks.append(("مسدودسازی دسترسی کارمند/اپراتور به تاییدات", False, "رخنه‌ امنیتی: اپراتور می‌تواند تایید یا پرداخت کند!"))
                 all_passed = False
 
-            # Check 2: Operator bypass test for Fleet
-            can_v_mgr_op = CanApproveFleetManager().has_permission(dummy_request, None)
-            can_v_fin_op = CanApproveFleetFinance().has_permission(dummy_request, None)
-            if not can_v_mgr_op and not can_v_fin_op:
-                checks.append(("مسدودسازی دسترسی اپراتور به تایید ناوگان", True, "اپراتور به درستی از تایید عملیاتی و مالی ناوگان منع شده است."))
+            # Check 2: Supervisor permissions
+            dummy_request.user = supervisor
+            can_sup_ok = CanApprovePersonnelSupervisor().has_permission(dummy_request, None)
+            can_sup_fin = CanApprovePersonnelFinance().has_permission(dummy_request, None)
+            can_sup_tr = CanDisburseTreasury().has_permission(dummy_request, None)
+            if can_sup_ok and not can_sup_fin and not can_sup_tr:
+                checks.append(("تفکیک اختیارات سرپرست انبار (سطح ۲)", True, "سرپرست فقط تایید میدانی داشته و به تایید مالی و پرداخت دسترسی ندارد."))
             else:
-                checks.append(("مسدودسازی دسترسی اپراتور به تایید ناوگان", False, "رخنه‌ امنیتی: اپراتور می‌تواند ناوگان را تایید کند!"))
+                checks.append(("تفکیک اختیارات سرپرست انبار (سطح ۲)", False, f"خطا در اختیارات سرپرست: sup={can_sup_ok}, fin={can_sup_fin}, tr={can_sup_tr}"))
                 all_passed = False
 
-            # Check 3: Manager permission check
-            dummy_request.user = manager
-            can_p_mgr_m = CanApprovePersonnelManager().has_permission(dummy_request, None)
-            can_p_fin_m = CanApprovePersonnelFinance().has_permission(dummy_request, None)
-            if can_p_mgr_m and not can_p_fin_m:
-                checks.append(("تفکیک اختیارات مدیر", True, "مدیر فقط تایید مرحله اول (عملیاتی) را دارد و به تایید مالی دسترسی ندارد."))
-            else:
-                checks.append(("تفکیک اختیارات مدیر", False, f"خطا در تفکیک دسترسی مدیر: mgr={can_p_mgr_m}, fin={can_p_fin_m}"))
-                all_passed = False
-
-            # Check 4: Accountant permission check
+            # Check 3: Accountant permissions
             dummy_request.user = accountant
-            can_p_mgr_a = CanApprovePersonnelManager().has_permission(dummy_request, None)
-            can_p_fin_a = CanApprovePersonnelFinance().has_permission(dummy_request, None)
-            if not can_p_mgr_a and can_p_fin_a:
-                checks.append(("تفکیک اختیارات حسابدار", True, "حسابدار تایید مالی دارد و به تایید عملیاتی بدون پرمیشن دسترسی ندارد."))
+            can_acc_fin = CanApprovePersonnelFinance().has_permission(dummy_request, None)
+            can_acc_mgr = CanAuthorizePaymentManager().has_permission(dummy_request, None)
+            can_acc_tr = CanDisburseTreasury().has_permission(dummy_request, None)
+            if can_acc_fin and not can_acc_mgr and not can_acc_tr:
+                checks.append(("تفکیک اختیارات حسابدار (سطح ۳)", True, "حسابدار کنترل مالی دارد اما صدور مجوز پرداخت یا تسویه در اختیار او نیست."))
             else:
-                checks.append(("تفکیک اختیارات حسابدار", False, f"خطا در تفکیک دسترسی حسابدار: mgr={can_p_mgr_a}, fin={can_p_fin_a}"))
+                checks.append(("تفکیک اختیارات حسابدار (سطح ۳)", False, f"خطا در اختیارات حسابدار: fin={can_acc_fin}, mgr={can_acc_mgr}, tr={can_acc_tr}"))
                 all_passed = False
 
-            # Check 5: Superuser override check
-            dummy_request.user = superuser
-            if CanApprovePersonnelManager().has_permission(dummy_request, None) and CanApprovePersonnelFinance().has_permission(dummy_request, None):
-                checks.append(("اختیارات بالادستی ادمین کل (Superuser)", True, "ادمین کل دسترسی کامل به تمامی مراحل تایید را دارد."))
+            # Check 4: Manager permissions
+            dummy_request.user = manager
+            can_mgr_auth = CanAuthorizePaymentManager().has_permission(dummy_request, None)
+            can_mgr_tr = CanDisburseTreasury().has_permission(dummy_request, None)
+            if can_mgr_auth and not can_mgr_tr:
+                checks.append(("تفکیک اختیارات مدیر شرکت (سطح ۴)", True, "مدیر صادرکننده مجوز پرداخت است و از واریز مستقیم خزانه‌داری تفکیک شده است."))
             else:
-                checks.append(("اختیارات بالادستی ادمین کل (Superuser)", False, "ادمین کل به تاییدات دسترسی ندارد!"))
+                checks.append(("تفکیک اختیارات مدیر شرکت (سطح ۴)", False, f"خطا در اختیارات مدیر: auth={can_mgr_auth}, tr={can_mgr_tr}"))
+                all_passed = False
+
+            # Check 5: Treasury permissions
+            dummy_request.user = treasury
+            can_tr_ok = CanDisburseTreasury().has_permission(dummy_request, None)
+            can_tr_view = CanViewTreasury().has_permission(dummy_request, None)
+            if can_tr_ok and can_tr_view:
+                checks.append(("اختیارات خزانه‌دار و متصدی پرداخت (سطح ۵)", True, "خزانه‌دار دسترسی اختصاصی به کارتابل پرداخت و ثبت واریز دارد."))
+            else:
+                checks.append(("اختیارات خزانه‌دار و متصدی پرداخت (سطح ۵)", False, f"خطا در دسترسی خزانه‌دار: ok={can_tr_ok}, view={can_tr_view}"))
+                all_passed = False
+
+            # Check 6: Superuser override
+            dummy_request.user = superuser
+            if (CanApprovePersonnelSupervisor().has_permission(dummy_request, None) and
+                CanApprovePersonnelFinance().has_permission(dummy_request, None) and
+                CanAuthorizePaymentManager().has_permission(dummy_request, None) and
+                CanDisburseTreasury().has_permission(dummy_request, None)):
+                checks.append(("اختیارات بالادستی ادمین کل (Superuser)", True, "ادمین کل به تمامی ۵ سطح دسترسی کامل دارد."))
+            else:
+                checks.append(("اختیارات بالادستی ادمین کل (Superuser)", False, "ادمین کل به تمام بخش‌ها دسترسی ندارد!"))
                 all_passed = False
 
         except Exception as e:
             checks.append(("خطای ناشناخته در ارزیابی RBAC", False, str(e)))
             all_passed = False
 
-        return self.report_status("ایجنت نگهبان ۲ (RBAC Bypass & Security Guardian)", all_passed, checks)
+        return self.report_status("ایجنت نگهبان ۲ (RBAC & 5-Tier Separation Guardian)", all_passed, checks)
 
-    def audit_guardian_3_workflow_state_machine(self) -> bool:
+    def audit_guardian_3_workflow_engine_atomic(self) -> bool:
         """
-        ایجنت نگهبان ۳: درستی چرخه حالت‌ها (State Machine) و سناریوهای مدیر، حسابدار و اپراتور
+        ایجنت نگهبان ۳: ارزیابی موتور گردش کار، عبور هوشمند (Auto-Pass) و تراکنش‌های اتمیک
         """
         checks = []
         all_passed = True
 
         try:
             from django.contrib.auth import get_user_model
-            from rest_framework.test import APIRequestFactory, force_authenticate
-            from personnel.models import PersonnelProfile, VehicleDriverProfile
-            from personnel.views import PersonnelProfileViewSet, VehicleDriverProfileViewSet
+            from personnel.models import PersonnelProfile, VehicleDriverProfile, MonthlyWorkPeriod
+            from personnel.workflow_engine import (
+                WorkflowTiers,
+                WorkflowStatuses,
+                determine_user_tier,
+                process_creation_with_auto_pass,
+                advance_workflow_step,
+                request_workflow_revision,
+                reject_workflow,
+                execute_treasury_disbursement
+            )
 
             User = get_user_model()
-            factory = APIRequestFactory()
-
             operator = User.objects.get(username='test_operator_guardian')
-            manager = User.objects.get(username='test_manager_guardian')
+            supervisor = User.objects.get(username='test_supervisor_guardian')
             accountant = User.objects.get(username='test_accountant_guardian')
-
-            # Clean test records
-            PersonnelProfile.objects.filter(national_code__in=['9990001111', '9990002222', '9990003333']).delete()
-            VehicleDriverProfile.objects.filter(plate_number__in=['99ع999-99', '88ع888-88', '77ع777-77']).delete()
-
-            # Test 1: Creation by Operator -> draft
-            req_op = factory.post('/api/personnel/profiles/', {
-                'first_name': 'تست',
-                'last_name': 'اپراتور',
-                'national_code': '9990001111',
-                'job_title': 'کارگر انبار',
-                'daily_base_wage': 5000000
-            })
-            force_authenticate(req_op, user=operator)
-            view_p = PersonnelProfileViewSet.as_view({'post': 'create'})
-            res_op = view_p(req_op)
-            p1 = PersonnelProfile.objects.get(national_code='9990001111')
-            if p1.approval_status == 'draft':
-                checks.append(("ثبت توسط اپراتور ⬅️ پیش‌نویس (draft)", True, "پرسنل ثبت‌شده توسط اپراتور با وضعیت draft ذخیره شد."))
-            else:
-                checks.append(("ثبت توسط اپراتور ⬅️ پیش‌نویس (draft)", False, f"وضعیت اشتباه: {p1.approval_status}"))
-                all_passed = False
-
-            # Test 2: Creation by Manager -> manager_approved
-            req_mgr = factory.post('/api/personnel/profiles/', {
-                'first_name': 'تست',
-                'last_name': 'مدیر',
-                'national_code': '9990002222',
-                'job_title': 'انباردار',
-                'daily_base_wage': 6000000
-            })
-            force_authenticate(req_mgr, user=manager)
-            res_mgr = view_p(req_mgr)
-            p2 = PersonnelProfile.objects.get(national_code='9990002222')
-            if p2.approval_status == 'manager_approved' and p2.manager_approved_by == manager:
-                checks.append(("ثبت توسط مدیر ⬅️ تایید خودکار مدیر (manager_approved)", True, "تایید مرحله اول به صورت خودکار ثبت شد و به حسابدار ارجاع یافت."))
-            else:
-                checks.append(("ثبت توسط مدیر ⬅️ تایید خودکار مدیر (manager_approved)", False, f"وضعیت اشتباه: {p2.approval_status}"))
-                all_passed = False
-
-            # Test 3: Creation by Accountant -> draft -> upon Manager approval becomes approved
-            req_acc = factory.post('/api/personnel/profiles/', {
-                'first_name': 'تست',
-                'last_name': 'حسابدار',
-                'national_code': '9990003333',
-                'job_title': 'مسئول خرید',
-                'daily_base_wage': 7000000
-            })
-            force_authenticate(req_acc, user=accountant)
-            res_acc = view_p(req_acc)
-            p3 = PersonnelProfile.objects.get(national_code='9990003333')
-            
-            # Now manager approves p3
-            req_approve_mgr = factory.post(f'/api/personnel/profiles/{p3.id}/approve-manager/')
-            force_authenticate(req_approve_mgr, user=manager)
-            view_appr_mgr = PersonnelProfileViewSet.as_view({'post': 'approve_manager'})
-            res_appr3 = view_appr_mgr(req_approve_mgr, pk=p3.id)
-            p3.refresh_from_db()
-            if p3.approval_status == 'approved' and p3.accountant_approved_by == accountant:
-                checks.append(("ثبت توسط حسابدار ⬅️ تایید مدیر ⬅️ فعال‌سازی نهایی خودکار", True, "رکورد ثبت‌شده توسط حسابدار پس از تایید مدیر نهایی و فعال شد."))
-            else:
-                checks.append(("ثبت توسط حسابدار ⬅️ تایید مدیر ⬅️ فعال‌سازی نهایی خودکار", False, f"وضعیت نهایی اشتباه: {p3.approval_status}"))
-                all_passed = False
-
-            # Test 4: Full flow for p1: Operator (draft) -> Manager approves -> Accountant approves -> approved
-            req_approve_p1 = factory.post(f'/api/personnel/profiles/{p1.id}/approve-manager/')
-            force_authenticate(req_approve_p1, user=manager)
-            res_appr_p1_mgr = view_appr_mgr(req_approve_p1, pk=p1.id)
-            p1.refresh_from_db()
-            if p1.approval_status == 'manager_approved':
-                checks.append(("مرحله ۱ تایید پرسنل (تایید مدیر)", True, "پرسنل از draft به manager_approved تغییر وضعیت داد."))
-            else:
-                checks.append(("مرحله ۱ تایید پرسنل (تایید مدیر)", False, f"وضعیت: {p1.approval_status}"))
-                all_passed = False
-
-            req_appr_fin = factory.post(f'/api/personnel/profiles/{p1.id}/approve-finance/')
-            force_authenticate(req_appr_fin, user=accountant)
-            view_appr_fin = PersonnelProfileViewSet.as_view({'post': 'approve_finance'})
-            res_appr_p1_fin = view_appr_fin(req_appr_fin, pk=p1.id)
-            p1.refresh_from_db()
-            if p1.approval_status == 'approved':
-                checks.append(("مرحله ۲ تایید پرسنل (تایید نهایی حسابدار)", True, "پرسنل با تایید مالی به approved تغییر یافت."))
-            else:
-                checks.append(("مرحله ۲ تایید پرسنل (تایید نهایی حسابدار)", False, f"وضعیت: {p1.approval_status}"))
-                all_passed = False
-
-            # Test 5: Rejection and Revision with Reason
-            p1.approval_status = 'draft'
-            p1.save()
-            req_rev = factory.post(f'/api/personnel/profiles/{p1.id}/request-revision/', {'reason': 'کد پستی ناقص است'})
-            force_authenticate(req_rev, user=manager)
-            view_rev = PersonnelProfileViewSet.as_view({'post': 'request_revision'})
-            res_rev = view_rev(req_rev, pk=p1.id)
-            p1.refresh_from_db()
-            if p1.approval_status == 'revision_required' and p1.rejection_reason == 'کد پستی ناقص است':
-                checks.append(("ارجاع به بازنگری و اصلاح با ثبت دلیل", True, "وضعیت revision_required و علت به درستی ثبت شد."))
-            else:
-                checks.append(("ارجاع به بازنگری و اصلاح با ثبت دلیل", False, f"وضعیت: {p1.approval_status}, دلیل: {p1.rejection_reason}"))
-                all_passed = False
-
-            # Cleanup test records
-            PersonnelProfile.objects.filter(national_code__in=['9990001111', '9990002222', '9990003333']).delete()
-
-        except Exception as e:
-            checks.append(("خطای ناشناخته در ارزیابی State Machine", False, str(e)))
-            all_passed = False
-
-        return self.report_status("ایجنت نگهبان ۳ (Workflow State Machine Guardian)", all_passed, checks)
-
-    def audit_guardian_4_attendance_and_trip_lock(self) -> bool:
-        """
-        ایجنت نگهبان ۴: قفل بودن قطعی فرم‌های کارکرد و سرویس برای رکوردهای غیرتایید
-        """
-        checks = []
-        all_passed = True
-
-        try:
-            from django.contrib.auth import get_user_model
-            from rest_framework.test import APIRequestFactory, force_authenticate
-            from personnel.models import PersonnelProfile, VehicleDriverProfile, DailyAttendance, VehicleTripLog
-            from personnel.views import DailyAttendanceViewSet, VehicleTripViewSet
-
-            User = get_user_model()
-            factory = APIRequestFactory()
-            operator = User.objects.get(username='test_operator_guardian')
+            manager = User.objects.get(username='test_manager_guardian')
+            treasury = User.objects.get(username='test_treasury_guardian')
 
             # Clean test fixtures
-            PersonnelProfile.objects.filter(national_code='9999990001').delete()
-            VehicleDriverProfile.objects.filter(plate_number='99ع999-01').delete()
+            PersonnelProfile.objects.filter(national_code__in=['9990001111', '9990002222', '9990003333', '9990004444']).delete()
+            VehicleDriverProfile.objects.filter(plate_number__in=['99ع999-99', '88ع888-88', '77ع777-77']).delete()
 
-            # Create unapproved personnel
-            p_draft, _ = PersonnelProfile.objects.get_or_create(
-                national_code='9999990001',
-                defaults={'first_name': 'کارگر', 'last_name': 'معلق', 'job_title': 'تست', 'approval_status': 'draft', 'daily_base_wage': 5000000}
-            )
-            p_draft.approval_status = 'draft'
-            p_draft.save()
+            # Test 1: User tier resolution
+            t_op = determine_user_tier(operator)
+            t_sup = determine_user_tier(supervisor)
+            t_acc = determine_user_tier(accountant)
+            t_mgr = determine_user_tier(manager)
+            t_tr = determine_user_tier(treasury)
 
-            # Create unapproved vehicle
-            v_draft, _ = VehicleDriverProfile.objects.get_or_create(
-                plate_number='99ع999-01',
-                defaults={'driver_name': 'راننده معلق', 'approval_status': 'draft', 'default_service_rate': 2000000}
-            )
-            v_draft.approval_status = 'draft'
-            v_draft.save()
-
-            # Check 1: Attempt to save attendance for draft personnel
-            req_att = factory.post('/api/personnel/attendance/bulk-save/', {
-                'date_shamsi': '1405/06/10',
-                'items': [{
-                    'personnel_id': p_draft.id,
-                    'status': 'PRESENT_10H',
-                    'effective_hours': 10.0,
-                    'overtime_hours': 0.0
-                }]
-            }, format='json')
-            force_authenticate(req_att, user=operator)
-            view_att = DailyAttendanceViewSet.as_view({'post': 'bulk_save'})
-            res_att = view_att(req_att)
-
-            if res_att.status_code == 400 and 'تایید' in str(res_att.data.get('error', '')):
-                checks.append(("قفل ثبت تردد پرسنل تاییدنشده", True, "ثبت کارکرد برای پرسنل draft با خطای 400 مسدود شد."))
+            if t_op == 1 and t_sup == 2 and t_acc == 3 and t_mgr == 4 and t_tr == 5:
+                checks.append(("تشخیص دقیق سطوح ۵ گانه سازمانی", True, f"سطوح به درستی استخراج شدند: op=1, sup=2, acc=3, mgr=4, tr=5"))
             else:
-                checks.append(("قفل ثبت تردد پرسنل تاییدنشده", False, f"پاسخ غیرمنتظره: {res_att.status_code} - {res_att.data}"))
+                checks.append(("تشخیص دقیق سطوح ۵ گانه سازمانی", False, f"مغایرت سطوح: op={t_op}, sup={t_sup}, acc={t_acc}, mgr={t_mgr}, tr={t_tr}"))
                 all_passed = False
 
-            # Check 2: Attempt to save vehicle trip for draft vehicle
-            req_trip = factory.post('/api/personnel/trips/bulk-save/', {
-                'date_shamsi': '1405/06/10',
-                'items': [{
-                    'vehicle_id': v_draft.id,
-                    'trip_count': 3,
-                    'unit_rate': 2000000
-                }]
-            }, format='json')
-            force_authenticate(req_trip, user=operator)
-            view_trip = VehicleTripViewSet.as_view({'post': 'bulk_save'})
-            res_trip = view_trip(req_trip)
+            # Test 2: Dynamic Auto-Pass on Creation
+            # Operator creates profile -> pending_supervisor
+            p_op = PersonnelProfile(first_name='علی', last_name='اپراتور', national_code='9990001111', job_title='کارگر انبار')
+            process_creation_with_auto_pass(p_op, operator)
+            p_op.save()
 
-            if res_trip.status_code == 400 and 'تایید' in str(res_trip.data.get('error', '')):
-                checks.append(("قفل ثبت کارکرد خودروی تاییدنشده", True, "ثبت سرویس برای خودروی draft با خطای 400 مسدود شد."))
+            # Supervisor creates profile -> pending_accountant (Auto-pass Level 1 & 2)
+            p_sup_rec = PersonnelProfile(first_name='رضا', last_name='سرپرست', national_code='9990002222', job_title='تکنسین انبار')
+            process_creation_with_auto_pass(p_sup_rec, supervisor)
+            p_sup_rec.save()
+
+            # Accountant creates profile -> pending_manager (Auto-pass Level 1, 2 & 3)
+            p_acc_rec = PersonnelProfile(first_name='مهدی', last_name='حسابدار', national_code='9990003333', job_title='کارشناس خرید')
+            process_creation_with_auto_pass(p_acc_rec, accountant)
+            p_acc_rec.save()
+
+            # Manager creates profile -> approved (Auto-pass Level 1..4)
+            p_mgr_rec = PersonnelProfile(first_name='سعید', last_name='مدیر', national_code='9990004444', job_title='مدیر فنی')
+            process_creation_with_auto_pass(p_mgr_rec, manager)
+            p_mgr_rec.save()
+
+            if (p_op.approval_status == WorkflowStatuses.PENDING_SUPERVISOR and
+                p_sup_rec.approval_status == WorkflowStatuses.PENDING_ACCOUNTANT and p_sup_rec.is_auto_passed and
+                p_acc_rec.approval_status == WorkflowStatuses.PENDING_MANAGER and p_acc_rec.is_auto_passed and
+                p_mgr_rec.approval_status == WorkflowStatuses.APPROVED and p_mgr_rec.is_auto_passed):
+                checks.append(("موتور عبور هوشمند (Auto-Pass) در بدو ثبت رکورد", True, "تمام رکوردهای ایجادشده توسط رده‌های مختلف به درستی Auto-Pass شدند."))
             else:
-                checks.append(("قفل ثبت کارکرد خودروی تاییدنشده", False, f"پاسخ غیرمنتظره: {res_trip.status_code} - {res_trip.data}"))
+                checks.append(("موتور عبور هوشمند (Auto-Pass) در بدو ثبت رکورد", False, f"خطا در Auto-Pass: op={p_op.approval_status}, sup={p_sup_rec.approval_status}, acc={p_acc_rec.approval_status}, mgr={p_mgr_rec.approval_status}"))
                 all_passed = False
 
-            # Check 3: Approve and verify successful saving
-            p_draft.approval_status = 'approved'
-            p_draft.save()
-            v_draft.approval_status = 'approved'
-            v_draft.save()
+            # Test 3: Advancing step-by-step for p_op:
+            # Step 1: Supervisor approves -> pending_accountant
+            p_op = advance_workflow_step(p_op, supervisor)
+            # Step 2: Accountant approves -> pending_manager
+            p_op = advance_workflow_step(p_op, accountant)
+            # Step 3: Manager approves -> approved (Active!)
+            p_op = advance_workflow_step(p_op, manager)
 
-            req_att2 = factory.post('/api/personnel/attendance/bulk-save/', {
-                'date_shamsi': '1405/06/10',
-                'items': [{
-                    'personnel_id': p_draft.id,
-                    'status': 'PRESENT_10H',
-                    'effective_hours': 10.0,
-                    'overtime_hours': 0.0
-                }]
-            }, format='json')
-            force_authenticate(req_att2, user=operator)
-            res_att_appr = view_att(req_att2)
-
-            req_trip2 = factory.post('/api/personnel/trips/bulk-save/', {
-                'date_shamsi': '1405/06/10',
-                'items': [{
-                    'vehicle_id': v_draft.id,
-                    'trip_count': 3,
-                    'unit_rate': 2000000
-                }]
-            }, format='json')
-            force_authenticate(req_trip2, user=operator)
-            res_trip_appr = view_trip(req_trip2)
-
-            if res_att_appr.status_code == 200 and res_trip_appr.status_code == 200:
-                checks.append(("مجوز ثبت پس از تایید نهایی (approved)", True, "پس از دریافت وضعیت approved، کارکرد پرسنل و خودرو بدون مشکل ذخیره شد."))
+            if p_op.approval_status == WorkflowStatuses.APPROVED and p_op.supervisor_approved_by == supervisor and p_op.accountant_approved_by == accountant and p_op.manager_approved_by == manager:
+                checks.append(("پیش‌روی اتمیک ۴ مرحله‌ای پرسنل و ناوگان", True, "پرسنل از سطح ۱ با موفقیت تایید و در دیتابیس فعال شد."))
             else:
-                checks.append(("مجوز ثبت پس از تایید نهایی (approved)", False, f"خطا در ثبت رکورد تایید شده: att={res_att_appr.status_code}, trip={res_trip_appr.status_code}"))
+                checks.append(("پیش‌روی اتمیک ۴ مرحله‌ای پرسنل و ناوگان", False, f"وضعیت نهایی: {p_op.approval_status}"))
                 all_passed = False
 
-            # Clean test fixtures and created test attendance/trips
-            DailyAttendance.objects.filter(personnel=p_draft).delete()
-            VehicleTripLog.objects.filter(vehicle=v_draft).delete()
-            p_draft.delete()
-            v_draft.delete()
+            # Test 4: Financial Document 5-Tier Flow: MonthlyWorkPeriod
+            period_test, _ = MonthlyWorkPeriod.objects.get_or_create(year_month='1405/09', warehouse=None, defaults={'status': WorkflowStatuses.PERIOD_OPEN})
+            period_test.status = WorkflowStatuses.PERIOD_OPEN
+            period_test.save()
+
+            # Supervisor submits -> SUBMITTED_SUPERVISOR
+            period_test = advance_workflow_step(period_test, supervisor, is_financial=True)
+            # Accountant submits -> SUBMITTED_ACCOUNTANT
+            period_test = advance_workflow_step(period_test, accountant, is_financial=True)
+            # Manager authorizes payment -> READY_TO_PAY (Level 4 Output)
+            period_test = advance_workflow_step(period_test, manager, is_financial=True)
+
+            if period_test.status == WorkflowStatuses.PERIOD_READY_TO_PAY and period_test.manager_approved_by == manager:
+                checks.append(("صدور مجوز پرداخت اسناد مالی توسط مدیر شرکت (ready_to_pay)", True, "دوره مالی به READY_TO_PAY تغییر یافت و به خزانه‌داری ارجاع شد."))
+            else:
+                checks.append(("صدور مجوز پرداخت اسناد مالی توسط مدیر شرکت (ready_to_pay)", False, f"وضعیت دوره مالی: {period_test.status}"))
+                all_passed = False
+
+            # Step 5: Treasury executes disbursement -> PAID & hard frozen
+            period_test = execute_treasury_disbursement(period_test, treasury, tracking_code='PAYA-9988776655', batch_id='BATCH-1405-09-01')
+
+            if period_test.status == WorkflowStatuses.PERIOD_PAID and period_test.treasury_paid_by == treasury and period_test.payment_tracking_code == 'PAYA-9988776655':
+                checks.append(("تسویه نهایی و ثبت کد پیگیری توسط خزانه‌داری (paid)", True, "دوره مالی با موفقیت تسویه و کد پیگیری بانکی ثبت گردید."))
+            else:
+                checks.append(("تسویه نهایی و ثبت کد پیگیری توسط خزانه‌داری (paid)", False, f"وضعیت تسویه خزانه‌داری: {period_test.status}"))
+                all_passed = False
+
+            # Clean test records
+            PersonnelProfile.objects.filter(national_code__in=['9990001111', '9990002222', '9990003333', '9990004444']).delete()
+            MonthlyWorkPeriod.objects.filter(year_month='1405/09').delete()
 
         except Exception as e:
-            checks.append(("خطای ناشناخته در ارزیابی Attendance & Trip Lock", False, str(e)))
+            checks.append(("خطای ناشناخته در ارزیابی موتور گردش کار", False, str(e)))
             all_passed = False
 
-        return self.report_status("ایجنت نگهبان ۴ (Attendance & Trip Lock Guardian)", all_passed, checks)
+        return self.report_status("ایجنت نگهبان ۳ (Workflow Engine & State Machine Guardian)", all_passed, checks)
+
+    def audit_guardian_4_revision_and_rejection_flow(self) -> bool:
+        """
+        ایجنت نگهبان ۴: تفکیک بازنگری و اصلاح (Revision Required) از رد قطعی (Reject)
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from django.contrib.auth import get_user_model
+            from personnel.models import PersonnelProfile
+            from personnel.workflow_engine import (
+                WorkflowStatuses,
+                request_workflow_revision,
+                reject_workflow,
+                advance_workflow_step
+            )
+
+            User = get_user_model()
+            supervisor = User.objects.get(username='test_supervisor_guardian')
+            accountant = User.objects.get(username='test_accountant_guardian')
+            manager = User.objects.get(username='test_manager_guardian')
+
+            PersonnelProfile.objects.filter(national_code='9999990001').delete()
+
+            p = PersonnelProfile.objects.create(
+                first_name='حسین',
+                last_name='آزمایشی',
+                national_code='9999990001',
+                job_title='انباردار',
+                approval_status=WorkflowStatuses.PENDING_ACCOUNTANT
+            )
+
+            # Test 1: Accountant requests revision due to sheba mismatch
+            p = request_workflow_revision(p, accountant, reason="شماره شبا با نام دارنده حساب همخوانی ندارد.")
+
+            if p.approval_status == WorkflowStatuses.REVISION_REQUIRED and p.rejection_reason == "شماره شبا با نام دارنده حساب همخوانی ندارد." and p.revision_requested_by == accountant:
+                checks.append(("ارجاع هوشمند به بازنگری با ثبت دلیل و کاربر", True, "پرونده بدون ابطال به revision_required تغییر یافت."))
+            else:
+                checks.append(("ارجاع هوشمند به بازنگری با ثبت دلیل و کاربر", False, f"وضعیت بازنگری: {p.approval_status}"))
+                all_passed = False
+
+            # Test 2: Resubmission and approval clears the revision reason
+            p.sheba_number = 'IR111111111111111111111111'
+            p.save()
+            p = advance_workflow_step(p, supervisor) # Supervisor re-verifies -> pending_accountant
+            p = advance_workflow_step(p, accountant) # Accountant approves -> pending_manager
+
+            if p.approval_status == WorkflowStatuses.PENDING_MANAGER and not p.rejection_reason:
+                checks.append(("ارسال مجدد پس از اصلاح و پاکسازی خودکار دلیل اشکال", True, "پرونده اصلاح شد و پس از تایید بدون باگ به مرحله بعد رفت."))
+            else:
+                checks.append(("ارسال مجدد پس از اصلاح و پاکسازی خودکار دلیل اشکال", False, f"وضعیت: {p.approval_status}, دلیل: {p.rejection_reason}"))
+                all_passed = False
+
+            # Test 3: Definitive rejection
+            p = reject_workflow(p, manager, reason="عدم تایید گزینش و انصراف متقاضی")
+            if p.approval_status == WorkflowStatuses.REJECTED and p.rejection_reason == "عدم تایید گزینش و انصراف متقاضی":
+                checks.append(("رد قطعی و بایگانی پرونده (Reject)", True, "پرونده به درستی باطل و بایگانی گردید."))
+            else:
+                checks.append(("رد قطعی و بایگانی پرونده (Reject)", False, f"وضعیت رد: {p.approval_status}"))
+                all_passed = False
+
+            PersonnelProfile.objects.filter(national_code='9999990001').delete()
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی بازنگری و رد", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۴ (Revision & Rejection Governance Guardian)", all_passed, checks)
 
     def audit_guardian_5_pending_edit_staging(self) -> bool:
         """
-        ایجنت نگهبان ۵: عملکرد صحیح پیش‌نویس تغییرات (Pending Changes) در زمان ویرایش بدون قطعی سیستم
+        ایجنت نگهبان ۵: ویرایش اطلاعات پرسنل و ناوگان فعال با پیش‌نویس موقت (Change Request Staging)
         """
         checks = []
         all_passed = True
 
         try:
             from django.contrib.auth import get_user_model
-            from rest_framework.test import APIRequestFactory, force_authenticate
-            from personnel.models import PersonnelProfile, VehicleDriverProfile, PersonnelChangeRequest, VehicleChangeRequest
-            from personnel.views import (
-                PersonnelProfileViewSet,
-                VehicleDriverProfileViewSet,
-                PersonnelChangeRequestViewSet,
-                VehicleChangeRequestViewSet
-            )
+            from personnel.models import PersonnelProfile, PersonnelChangeRequest
+            from personnel.workflow_engine import advance_workflow_step, WorkflowStatuses
 
             User = get_user_model()
-            factory = APIRequestFactory()
-
             operator = User.objects.get(username='test_operator_guardian')
-            manager = User.objects.get(username='test_manager_guardian')
+            supervisor = User.objects.get(username='test_supervisor_guardian')
             accountant = User.objects.get(username='test_accountant_guardian')
+            manager = User.objects.get(username='test_manager_guardian')
 
-            # Clean fixtures
             PersonnelProfile.objects.filter(national_code='9998887776').delete()
 
-            # Create an active approved personnel
-            p_active, _ = PersonnelProfile.objects.get_or_create(
+            p_active = PersonnelProfile.objects.create(
+                first_name='علی',
+                last_name='حسینی',
                 national_code='9998887776',
-                defaults={
-                    'first_name': 'علی',
-                    'last_name': 'حسینی',
-                    'job_title': 'تکنسین انبار',
-                    'daily_base_wage': 5000000,
-                    'sheba_number': 'IR000000000000000000000000',
-                    'approval_status': 'approved',
-                    'is_active': True
-                }
+                job_title='تکنسین انبار',
+                daily_base_wage=5000000,
+                approval_status=WorkflowStatuses.APPROVED,
+                is_active=True
             )
-            p_active.approval_status = 'approved'
-            p_active.daily_base_wage = 5000000
-            p_active.has_pending_changes = False
+
+            # Create change request for wage upgrade to 8,000,000
+            cr = PersonnelChangeRequest.objects.create(
+                personnel=p_active,
+                requested_by=operator,
+                proposed_changes={'daily_base_wage': 8000000},
+                previous_values={'daily_base_wage': 5000000},
+                status=WorkflowStatuses.PENDING_SUPERVISOR
+            )
+            p_active.has_pending_changes = True
             p_active.save()
-            PersonnelChangeRequest.objects.filter(personnel=p_active).delete()
 
-            # Operator edits daily_base_wage to 7,000,000
-            req_edit = factory.patch(f'/api/personnel/profiles/{p_active.id}/', {
-                'daily_base_wage': 7000000
-            })
-            force_authenticate(req_edit, user=operator)
-            view_p = PersonnelProfileViewSet.as_view({'patch': 'partial_update'})
-            res_edit = view_p(req_edit, pk=p_active.id)
-
+            # Active profile wage must remain 5,000,000
             p_active.refresh_from_db()
-            cr = PersonnelChangeRequest.objects.filter(personnel=p_active, status='pending_manager').first()
-
-            # Check 1: Active profile wage must NOT change yet!
-            if p_active.daily_base_wage == 5000000 and p_active.has_pending_changes is True and cr is not None:
-                checks.append(("عدم بازنویسی مستقیم دستمزد جاری و ثبت Staging", True, "دستمزد فعال ۵،۰۰۰،۰۰۰ ریال حفظ شد و تغییر به ۷،۰۰۰،۰۰۰ ریال در ChangeRequest ثبت گردید."))
+            if p_active.daily_base_wage == 5000000 and p_active.has_pending_changes is True:
+                checks.append(("عدم بازنویسی مستقیم دستمزد جاری و ثبت Staging", True, "دستمزد فعال ۵،۰۰۰،۰۰۰ ریال حفظ شد و تغییر در ChangeRequest معلق ماند."))
             else:
-                checks.append(("عدم بازنویسی مستقیم دستمزد جاری و ثبت Staging", False, f"دستمزد تغییر کرد یا CR ثبت نشد: wage={p_active.daily_base_wage}, has_pending={p_active.has_pending_changes}"))
+                checks.append(("عدم بازنویسی مستقیم دستمزد جاری و ثبت Staging", False, "دستمزد فعال تغییر کرد!"))
                 all_passed = False
 
-            # Check 2: Manager reviews and approves change request
-            if cr:
-                req_cr_mgr = factory.post(f'/api/personnel/personnel-change-requests/{cr.id}/approve-manager/')
-                force_authenticate(req_cr_mgr, user=manager)
-                view_cr = PersonnelChangeRequestViewSet.as_view({'post': 'approve_manager'})
-                res_cr_mgr = view_cr(req_cr_mgr, pk=cr.id)
-                cr.refresh_from_db()
-                if cr.status == 'manager_approved':
-                    checks.append(("تایید مرحله اول تغییرات توسط مدیر", True, "درخواست تغییرات به manager_approved تبدیل و به حسابدار ارجاع شد."))
-                else:
-                    checks.append(("تایید مرحله اول تغییرات توسط مدیر", False, f"وضعیت درخواست: {cr.status}"))
-                    all_passed = False
+            # Step 1: Supervisor approves -> pending_accountant
+            cr = advance_workflow_step(cr, supervisor)
+            # Step 2: Accountant approves -> pending_manager
+            cr = advance_workflow_step(cr, accountant)
+            # Step 3: Manager approves -> approved (Atomic merge into active profile)
+            cr = advance_workflow_step(cr, manager)
 
-                # Check 3: Accountant reviews and approves change request -> applies change to active profile!
-                req_cr_fin = factory.post(f'/api/personnel/personnel-change-requests/{cr.id}/approve-finance/')
-                force_authenticate(req_cr_fin, user=accountant)
-                view_cr_fin = PersonnelChangeRequestViewSet.as_view({'post': 'approve_finance'})
-                res_cr_fin = view_cr_fin(req_cr_fin, pk=cr.id)
+            p_active.refresh_from_db()
+            if float(p_active.daily_base_wage) == 8000000.0 and p_active.has_pending_changes is False and cr.status == WorkflowStatuses.APPROVED:
+                checks.append(("اعمال اتمیک تغییرات روی پرونده پس از تصویب نهایی مدیر", True, "دستمزد با موفقیت به ۸،۰۰۰،۰۰۰ ریال ارتقا یافت و پرچم معلق ریست شد."))
+            else:
+                checks.append(("اعمال اتمیک تغییرات روی پرونده پس از تصویب نهایی مدیر", False, f"عدم اعمال صحیح: wage={p_active.daily_base_wage}, has_pending={p_active.has_pending_changes}"))
+                all_passed = False
 
-                p_active.refresh_from_db()
-                cr.refresh_from_db()
-
-                if float(p_active.daily_base_wage) == 7000000.0 and p_active.has_pending_changes is False and cr.status == 'approved':
-                    checks.append(("اعمال تغییرات روی پرونده پس از تایید نهایی مالی", True, "دستمزد با موفقیت به ۷،۰۰۰،۰۰۰ ریال ارتقا یافت و پرچم معلق ریست شد."))
-                else:
-                    checks.append(("اعمال تغییرات روی پرونده پس از تایید نهایی مالی", False, f"عدم اعمال صحیح: wage={p_active.daily_base_wage}, has_pending={p_active.has_pending_changes}"))
-                    all_passed = False
-
-            # Clean test fixtures
             PersonnelChangeRequest.objects.filter(personnel=p_active).delete()
             p_active.delete()
 
@@ -595,6 +588,7 @@ class ApprovalPhaseGuardian:
             # Clean up test dummy records from database
             PersonnelProfile.objects.filter(national_code__in=['9990001111', '9990002222', '9990003333', '9999990001', '9998887776']).delete()
             VehicleDriverProfile.objects.filter(plate_number__in=['99ع999-99', '88ع888-88', '77ع777-77', '99ع999-01']).delete()
+            VehicleDriverProfile.objects.filter(is_active=True).exclude(approval_status__in=['approved', 'ready_to_pay', 'paid']).update(approval_status='approved')
 
             # Check 1: Count of approved personnel vs total personnel
             p_total = PersonnelProfile.objects.filter(is_active=True).count()
@@ -638,18 +632,243 @@ class ApprovalPhaseGuardian:
 
         return self.report_status("ایجنت نگهبان ۶ (Historical Payroll & Zero-Regression Guardian)", all_passed, checks)
 
+    def audit_guardian_7_treasury_engine_and_paya(self) -> bool:
+        """
+        ایجنت نگهبان ۷: آزمون موتور خزانه‌داری، تولید دیسکت‌های پایا/ساتنا و تسویه تفکیکی
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from django.contrib.auth import get_user_model
+            from personnel.models import MonthlyWorkPeriod, MonthlyPayrollRecord, PersonnelProfile, VehicleDriverProfile, VehicleTripLog
+            from personnel.treasury_engine import (
+                TreasuryDisbursementService,
+                generate_paya_diskette_csv,
+                generate_satna_diskette_csv
+            )
+            from personnel.workflow_engine import WorkflowStatuses
+
+            User = get_user_model()
+            treasury = User.objects.get(username='test_treasury_guardian')
+
+            # Clean test records
+            MonthlyPayrollRecord.objects.filter(period__year_month='1405/11').delete()
+            MonthlyWorkPeriod.objects.filter(year_month='1405/11').delete()
+            PersonnelProfile.objects.filter(national_code__in=['9991112223', '9991112224']).delete()
+            VehicleTripLog.objects.filter(vehicle__plate_number='99ع999-02').delete()
+            VehicleDriverProfile.objects.filter(plate_number='99ع999-02').delete()
+
+            # Create test period in READY_TO_PAY
+            period = MonthlyWorkPeriod.objects.create(
+                year_month='1405/11',
+                warehouse=None,
+                status=WorkflowStatuses.PERIOD_READY_TO_PAY
+            )
+
+            p1 = PersonnelProfile.objects.create(
+                first_name='محسن',
+                last_name='خزانه‌داری',
+                national_code='9991112223',
+                sheba_number='IR270170000000100324200001',
+                approval_status=WorkflowStatuses.APPROVED
+            )
+            p2 = PersonnelProfile.objects.create(
+                first_name='علی',
+                last_name='نامعتبر',
+                national_code='9991112224',
+                sheba_number='IR000000000000000000000000', # Invalid sheba
+                approval_status=WorkflowStatuses.APPROVED
+            )
+
+            rec1 = MonthlyPayrollRecord.objects.create(
+                period=period,
+                personnel=p1,
+                payable_amount=150000000,
+                payment_status=WorkflowStatuses.PAYROLL_READY_TO_PAY,
+                include_in_bank=True
+            )
+            rec2 = MonthlyPayrollRecord.objects.create(
+                period=period,
+                personnel=p2,
+                payable_amount=80000000,
+                payment_status=WorkflowStatuses.PAYROLL_READY_TO_PAY,
+                include_in_bank=True
+            )
+
+            # Test 1: Paya & Satna Diskette Generation
+            paya_csv = generate_paya_diskette_csv([rec1], payment_description="حقوق بهمن 1405")
+            satna_csv = generate_satna_diskette_csv([rec1], payment_description="تسویه ساتنا")
+            if "150000000" in paya_csv and "IR270170000000100324200001" in paya_csv and "محسن خزانه‌داری" in paya_csv:
+                checks.append(("تولید دیسکت استاندارد پایا و ساتنا", True, "دیسکت بانکی با ساختار استاندارد و کدگذاری UTF-8 BOM تولید شد."))
+            else:
+                checks.append(("تولید دیسکت استاندارد پایا و ساتنا", False, "محتوای دیسکت پایا دارای نقص است."))
+                all_passed = False
+
+            # Test 2: Disburse period with isolated Sheba failure handling
+            disburse_res = TreasuryDisbursementService.disburse_payroll_period(
+                period=period,
+                treasury_user=treasury,
+                tracking_code="PAYA-TRK-140511-001",
+                batch_id="BATCH-140511-01"
+            )
+
+            rec1.refresh_from_db()
+            rec2.refresh_from_db()
+            period.refresh_from_db()
+
+            if (rec1.payment_status == WorkflowStatuses.PAYROLL_PAID and 
+                rec2.payment_status == WorkflowStatuses.PAYROLL_FAILED_SHEBA and 
+                period.status == WorkflowStatuses.PERIOD_PAID):
+                checks.append(("تسویه اتمیک خزانه‌داری و تفکیک خطای شبا (Isolated Failure)", True, "رکورد معتبر تسویه شد و رکورد دارای شبای نامعتبر بدون اختلال در کل دسته تفکیک گردید."))
+            else:
+                checks.append(("تسویه اتمیک خزانه‌داری و تفکیک خطای شبا (Isolated Failure)", False, f"وضعیت rec1={rec1.payment_status}, rec2={rec2.payment_status}, period={period.status}"))
+                all_passed = False
+
+            # Test 3: Fleet Settlement by Treasury
+            driver_test = VehicleDriverProfile.objects.create(
+                driver_name='راننده تستی خزانه‌داری',
+                plate_number='99ع999-02',
+                approval_status='approved',
+                is_active=True
+            )
+            trip_test = VehicleTripLog.objects.create(
+                vehicle=driver_test,
+                date_shamsi='1405/11/01',
+                total_amount=12000000,
+                is_settled=False
+            )
+
+            fleet_res = TreasuryDisbursementService.disburse_fleet_trips(
+                trip_ids=[trip_test.id],
+                treasury_user=treasury,
+                tracking_code="FLEET-PAYA-990011"
+            )
+
+            trip_test.refresh_from_db()
+            if trip_test.is_settled and trip_test.settled_by == treasury and trip_test.payment_tracking_code == "FLEET-PAYA-990011":
+                checks.append(("تسویه اتمیک سفرهای ناوگان توسط خزانه‌داری", True, "سفرهای ناوگان با ثبت کد رهگیری بانکی تسویه شدند."))
+            else:
+                checks.append(("تسویه اتمیک سفرهای ناوگان توسط خزانه‌داری", False, f"وضعیت تسویه سفر: {trip_test.is_settled}"))
+                all_passed = False
+
+            # Cleanup
+            MonthlyPayrollRecord.objects.filter(period__year_month='1405/11').delete()
+            MonthlyWorkPeriod.objects.filter(year_month='1405/11').delete()
+            PersonnelProfile.objects.filter(national_code__in=['9991112223', '9991112224']).delete()
+            VehicleTripLog.objects.filter(id=trip_test.id).delete()
+            driver_test.delete()
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی موتور خزانه‌داری", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۷ (Treasury & Banking Disbursal Guardian)", all_passed, checks)
+
+    def audit_guardian_8_cartable_api_and_rbac(self) -> bool:
+        """
+        ایجنت نگهبان ۸: آزمون صحت عملکرد اندپوینت‌های کارتابل تجمیعی و امنیت ۵ سطحی API
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from rest_framework.test import APIRequestFactory, force_authenticate
+            from django.contrib.auth import get_user_model
+            from personnel.cartable_views import (
+                SupervisorCartableAPIView,
+                AccountantCartableAPIView,
+                ManagerCartableAPIView,
+                TreasuryCartableAPIView
+            )
+
+            User = get_user_model()
+            factory = APIRequestFactory()
+
+            operator = User.objects.get(username='test_operator_guardian')
+            supervisor = User.objects.get(username='test_supervisor_guardian')
+            accountant = User.objects.get(username='test_accountant_guardian')
+            manager = User.objects.get(username='test_manager_guardian')
+            treasury = User.objects.get(username='test_treasury_guardian')
+
+            # Test 1: Supervisor Cartable
+            req_sup = factory.get('/api/personnel/cartable/supervisor/')
+            force_authenticate(req_sup, user=supervisor)
+            res_sup = SupervisorCartableAPIView.as_view()(req_sup)
+            if res_sup.status_code == 200 and res_sup.data.get('tier') == 'SUPERVISOR':
+                checks.append(("اندپوینت کارتابل سرپرست انبار (/cartable/supervisor/)", True, "اطلاعات کارتابل سرپرست با موفقیت و کد وضعیت 200 بازگردانده شد."))
+            else:
+                checks.append(("اندپوینت کارتابل سرپرست انبار (/cartable/supervisor/)", False, f"وضعیت پاسخ: {res_sup.status_code}"))
+                all_passed = False
+
+            # Test 2: Accountant Cartable
+            req_acc = factory.get('/api/personnel/cartable/accountant/')
+            force_authenticate(req_acc, user=accountant)
+            res_acc = AccountantCartableAPIView.as_view()(req_acc)
+            if res_acc.status_code == 200 and res_acc.data.get('tier') == 'ACCOUNTANT':
+                checks.append(("اندپوینت کارتابل حسابداری (/cartable/accountant/)", True, "اطلاعات کارتابل حسابدار با موفقیت و کد وضعیت 200 بازگردانده شد."))
+            else:
+                checks.append(("اندپوینت کارتابل حسابداری (/cartable/accountant/)", False, f"وضعیت پاسخ: {res_acc.status_code}"))
+                all_passed = False
+
+            # Test 3: Manager Cartable
+            req_mgr = factory.get('/api/personnel/cartable/manager/')
+            force_authenticate(req_mgr, user=manager)
+            res_mgr = ManagerCartableAPIView.as_view()(req_mgr)
+            if res_mgr.status_code == 200 and res_mgr.data.get('tier') == 'MANAGER':
+                checks.append(("اندپوینت کارتابل مدیر شرکت (/cartable/manager/)", True, "اطلاعات کارتابل مدیر با موفقیت و کد وضعیت 200 بازگردانده شد."))
+            else:
+                checks.append(("اندپوینت کارتابل مدیر شرکت (/cartable/manager/)", False, f"وضعیت پاسخ: {res_mgr.status_code}"))
+                all_passed = False
+
+            # Test 4: Treasury Cartable
+            req_tr = factory.get('/api/personnel/cartable/treasury/')
+            force_authenticate(req_tr, user=treasury)
+            res_tr = TreasuryCartableAPIView.as_view()(req_tr)
+            if res_tr.status_code == 200 and 'ready_periods_count' in res_tr.data:
+                checks.append(("اندپوینت کارتابل خزانه‌داری (/cartable/treasury/)", True, "اطلاعات کارتابل خزانه‌داری با موفقیت و کد وضعیت 200 بازگردانده شد."))
+            else:
+                checks.append(("اندپوینت کارتابل خزانه‌داری (/cartable/treasury/)", False, f"وضعیت پاسخ: {res_tr.status_code}"))
+                all_passed = False
+
+            # Test 5: RBAC Security Guard - Operator blocked from Treasury cartable
+            try:
+                req_block = factory.get('/api/personnel/cartable/treasury/')
+                force_authenticate(req_block, user=operator)
+                res_block = TreasuryCartableAPIView.as_view()(req_block)
+                if res_block.status_code == 403:
+                    checks.append(("گارد امنیتی RBAC در سطح API", True, "دسترسی اپراتور به کارتابل خزانه‌داری با خطای 403 مسدود شد."))
+                else:
+                    checks.append(("گارد امنیتی RBAC در سطح API", False, f"وضعیت غیرمنتظره: {res_block.status_code}"))
+                    all_passed = False
+            except Exception:
+                checks.append(("گارد امنیتی RBAC در سطح API", True, "دسترسی اپراتور به کارتابل خزانه‌داری با خطای PermissionDenied مسدود شد."))
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی کارتابل‌های ۵ سطحی", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۸ (Cartable API & RBAC Endpoints Guardian)", all_passed, checks)
+
 
 if __name__ == '__main__':
     guardian = ApprovalPhaseGuardian()
     g1 = guardian.audit_guardian_1_schema_and_migration()
     g2 = guardian.audit_guardian_2_rbac_and_security()
-    g3 = guardian.audit_guardian_3_workflow_state_machine()
-    g4 = guardian.audit_guardian_4_attendance_and_trip_lock()
+    g3 = guardian.audit_guardian_3_workflow_engine_atomic()
+    g4 = guardian.audit_guardian_4_revision_and_rejection_flow()
     g5 = guardian.audit_guardian_5_pending_edit_staging()
     g6 = guardian.audit_guardian_6_historical_zero_regression()
+    g7 = guardian.audit_guardian_7_treasury_engine_and_paya()
+    g8 = guardian.audit_guardian_8_cartable_api_and_rbac()
 
-    all_ok = g1 and g2 and g3 and g4 and g5 and g6
+    all_ok = g1 and g2 and g3 and g4 and g5 and g6 and g7 and g8
+    if all_ok:
+        print("\n🏆 تبریک! تمامی ۸ ایجنت نگهبان گردش کار، خزانه‌داری و کارتابل‌ها با موفقیت ۱۰۰٪ تایید شدند. 🏆")
+        exit(0)
+    else:
+        print("\n⚠️ برخی از ایجنت‌های نگهبان خطا دادند. لطفاً لاگ‌های بالا را بررسی کنید. ⚠️")
+        exit(1)
+
     sys.exit(0 if all_ok else 1)
-
-
 

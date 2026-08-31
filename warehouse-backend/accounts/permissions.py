@@ -300,3 +300,75 @@ class CanApproveFleetFinance(permissions.BasePermission):
             request.user.is_superuser or
             request.user.has_perm('accounts.perm_approve_fleet_finance')
         )
+
+
+class CanApprovePersonnelSupervisor(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله سرپرست انبار برای پرسنل
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_personnel_supervisor') or
+            request.user.has_perm('accounts.perm_approve_personnel_manager') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanApproveFleetSupervisor(permissions.BasePermission):
+    """
+    دسترسی تایید مرحله سرپرست انبار برای ناوگان و رانندگان
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_approve_fleet_supervisor') or
+            request.user.has_perm('accounts.perm_approve_fleet_manager') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanAuthorizePaymentManager(permissions.BasePermission):
+    """
+    دسترسی صدور مجوز پرداخت نهایی مدیر شرکت
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_manager_payment_authorize') or
+            request.user.has_perm('accounts.can_act_as_manager')
+        )
+
+
+class CanDisburseTreasury(permissions.BasePermission):
+    """
+    دسترسی ثبت واریز و تسویه نهایی خزانه‌داری
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.perm_treasury_disburse_action')
+        )
+
+
+class CanViewTreasury(permissions.BasePermission):
+    """
+    دسترسی مشاهده کارتابل خزانه‌داری
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return bool(
+            request.user.is_superuser or
+            request.user.has_perm('accounts.view_sys_treasury') or
+            request.user.has_perm('accounts.perm_treasury_disburse_action')
+        )
+

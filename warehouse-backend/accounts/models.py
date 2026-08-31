@@ -62,14 +62,19 @@ class CustomUser(AbstractUser):
             ("view_wh_settings", "تنظیمات انبار"),
 
             # Operational Approval & Action Permissions (فرآیندی و کارتابل‌ها)
+            ("view_sys_treasury", "کارتابل خزانه‌داری و پرداخت"),
             ("perm_doc_approve_action", "تایید، رد و ثبت امضای اسناد"),
             ("perm_feed_approve_action", "تایید و اعمال فیدهای تغذیه/گمرکی"),
             ("perm_inventory_finalize", "تایید نهایی و بستن دوره‌های انبارگردانی"),
             ("perm_lock_work_period", "قفل و تایید نهایی کارکرد ماهانه"),
+            ("perm_approve_personnel_supervisor", "تایید مرحله سرپرست انبار برای پرسنل"),
             ("perm_approve_personnel_manager", "تایید مرحله اول (عملیاتی) پرسنل"),
             ("perm_approve_personnel_finance", "تایید مرحله دوم (مالی و بانکی) پرسنل"),
+            ("perm_approve_fleet_supervisor", "تایید مرحله سرپرست انبار برای ناوگان"),
             ("perm_approve_fleet_manager", "تایید مرحله اول (عملیاتی) ناوگان و خودروها"),
             ("perm_approve_fleet_finance", "تایید مرحله دوم (مالی و بانکی) ناوگان و خودروها"),
+            ("perm_manager_payment_authorize", "صدور مجوز پرداخت نهایی مدیر شرکت"),
+            ("perm_treasury_disburse_action", "ثبت واریز و تسویه نهایی خزانه‌داری"),
 
             # Sensitive & Critical Permissions (حساس و بحرانی)
             ("perm_rollback_data", "بازگردانی و احیای جامع داده‌ها"),

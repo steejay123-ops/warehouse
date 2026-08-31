@@ -13,6 +13,14 @@ from .views import (
     FleetSettlementViewSet
 )
 
+from .cartable_views import (
+    SupervisorCartableAPIView,
+    AccountantCartableAPIView,
+    ManagerCartableAPIView,
+    TreasuryCartableAPIView,
+    TreasuryDisketteExportAPIView
+)
+
 router = DefaultRouter()
 router.register(r'profiles', PersonnelProfileViewSet, basename='personnel-profile')
 router.register(r'vehicles', VehicleDriverProfileViewSet, basename='vehicle-profile')
@@ -26,6 +34,11 @@ router.register(r'monthly-payroll', MonthlyPayrollViewSet, basename='monthly-pay
 router.register(r'fleet-settlement', FleetSettlementViewSet, basename='fleet-settlement')
 
 urlpatterns = [
+    path('cartable/supervisor/', SupervisorCartableAPIView.as_view(), name='supervisor-cartable'),
+    path('cartable/accountant/', AccountantCartableAPIView.as_view(), name='accountant-cartable'),
+    path('cartable/manager/', ManagerCartableAPIView.as_view(), name='manager-cartable'),
+    path('cartable/treasury/', TreasuryCartableAPIView.as_view(), name='treasury-cartable'),
+    path('cartable/treasury/export-diskette/', TreasuryDisketteExportAPIView.as_view(), name='treasury-export-diskette'),
     path('profiles/import-excel/', PersonnelProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'}), name='personnel-import-excel'),
     path('profiles/import-excel', PersonnelProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'})),
     path('', include(router.urls)),

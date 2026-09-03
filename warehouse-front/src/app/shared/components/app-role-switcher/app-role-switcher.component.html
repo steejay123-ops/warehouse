@@ -1,0 +1,111 @@
+<div class="flex items-center gap-2" dir="rtl">
+  <!-- ۱. لایه دوم: انتخابگر نقش فعال (سمت راست / داخلی) -->
+  <div *ngIf="persona.activeApp() === 'personnel'" class="relative">
+    <button
+      type="button"
+      (click)="toggleDropdown($event)"
+      [disabled]="!persona.isMultiRole()"
+      [class.cursor-pointer]="persona.isMultiRole()"
+      [class.cursor-default]="!persona.isMultiRole()"
+      class="role-trigger-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-black shadow-2xs active:scale-95 disabled:active:scale-100 shrink-0"
+      [style.background]="persona.currentPersona().badgeColor + '15'"
+      [style.borderColor]="persona.currentPersona().badgeColor + '40'"
+      [style.color]="persona.currentPersona().badgeColor"
+      [title]="persona.isMultiRole() ? 'کلیک برای تغییر نقش فعال در سامانه مالی' : 'نقش فعال شما در سامانه مالی'"
+    >
+      <span class="text-sm">{{ persona.currentPersona().icon }}</span>
+      <span class="max-w-[85px] sm:max-w-[130px] truncate font-extrabold text-[11px]">{{ persona.currentPersona().title }}</span>
+
+      <!-- نشانگر چندنقشه‌ای و دراپ‌داون -->
+      <svg
+        *ngIf="persona.isMultiRole()"
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        class="transition-transform duration-200 shrink-0"
+        [class.rotate-180]="isDropdownOpen()"
+      >
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+
+    <!-- منوی بازشونده نقش‌ها (Role Dropdown List) -->
+    <div
+      *ngIf="isDropdownOpen()"
+      class="absolute left-0 top-full mt-2 w-52 sm:w-60 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden py-1.5 animate-in fade-in zoom-in-95 duration-150"
+    >
+      <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+        <span class="text-[11px] font-bold text-slate-600 dark:text-slate-300">انتخاب نقش فعال</span>
+        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 border border-indigo-200/50 font-bold">
+          {{ persona.availableRoles().length }} نقش
+        </span>
+      </div>
+
+      <div class="max-h-64 overflow-y-auto p-1.5 space-y-1">
+        @for (role of persona.availableRoles(); track role.code) {
+          <button
+            type="button"
+            (click)="selectRole(role, $event)"
+            [class.selected-role]="persona.activeRole() === role.code"
+            class="w-full text-right flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer group"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="text-sm shrink-0">{{ role.icon }}</span>
+              <span class="truncate text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-300 font-extrabold">{{ role.title }}</span>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span
+                *ngIf="persona.activeRole() === role.code"
+                class="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px]"
+              >
+                ✓
+              </span>
+            </div>
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- ۲. دکمه تک سوئیچر ماژول کلان (نمایش نام و آیکون اپلیکیشن جاری: مالی و کارکرد / انبارگردانی) -->
+  <button
+    type="button"
+    (click)="toggleApp()"
+    [disabled]="!persona.canSwitchApps()"
+    [class.cursor-pointer]="persona.canSwitchApps()"
+    [class.cursor-default]="!persona.canSwitchApps()"
+    class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:active:scale-100 shrink-0 select-none"
+    [ngClass]="persona.activeApp() === 'warehouse' 
+      ? 'border-indigo-200/90 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' + (persona.canSwitchApps() ? ' hover:bg-indigo-100/80' : '') 
+      : 'border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' + (persona.canSwitchApps() ? ' hover:bg-emerald-100/80' : '')"
+    [title]="!persona.canSwitchApps() 
+      ? (persona.activeApp() === 'warehouse' ? 'شما صرفاً به ماژول انبارگردانی دسترسی دارید' : 'شما صرفاً به سامانه مالی و کارکرد دسترسی دارید') 
+      : (persona.activeApp() === 'warehouse' ? 'ماژول فعال: انبارگردانی (کلیک برای سوئیچ به مالی و کارکرد)' : 'سامانه فعال: مالی و کارکرد (کلیک برای سوئیچ به انبارگردانی)')"
+  >
+    <span class="text-sm">{{ persona.activeApp() === 'warehouse' ? '📦' : '💳' }}</span>
+    <span class="hidden sm:inline font-black text-[11px]">{{ persona.activeApp() === 'warehouse' ? 'انبارگردانی' : 'مالی و کارکرد' }}</span>
+    <svg *ngIf="persona.canSwitchApps()" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="opacity-60 hidden sm:inline shrink-0">
+      <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
+    </svg>
+  </button>
+
+  <!-- ۳. دکمه بازگشت به پورتال لانچر (مخصوص کاربران با دسترسی به دو ماژول) -->
+  <button
+    *ngIf="persona.canSwitchApps()"
+    type="button"
+    (click)="goToLauncher()"
+    class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
+    title="پورتال انتخاب برنامه (App Launcher)"
+  >
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+      <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+      <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+      <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+    </svg>
+  </button>
+</div>

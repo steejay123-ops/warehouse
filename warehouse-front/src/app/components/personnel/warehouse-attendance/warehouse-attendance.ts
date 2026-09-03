@@ -29,6 +29,7 @@ import {
 import { jalaliToGregorian, gregorianToJalali } from '../../../core/utils/date-utils';
 import { IRANIAN_BANKS, IranianBankInfo, validateSheba, ShebaValidationResult, formatShebaDisplay, cleanShebaInput, extractShebaDigits, generateShebaFromAccount, getBankByName, validateAccountNumber } from '../../../core/utils/sheba-utils';
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
+import { AppPersonaService } from '../../../core/services/app-persona.service';
 
 @Component({
   selector: 'app-warehouse-attendance',
@@ -98,6 +99,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   bulkHoursScope: 'selected' | 'present' | 'all' = 'selected';
   bulkEffectiveHours = 10;
   bulkOvertimeHours = 0;
+  bulkAdvancePayment: number | null = null;
   bulkStatusOption: '' | 'PRESENT_10H' | 'HALF_5H' = '';
   bulkNotes = '';
 
@@ -123,6 +125,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     status?: string;
     effective_hours?: number;
     overtime_hours?: number;
+    advance_payment?: number;
     notes?: string;
     matchedRow?: AttendanceMatrixRow;
   }> = [];
@@ -279,6 +282,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   constructor(
     public state: StateService,
     public auth: AuthService,
+    public persona: AppPersonaService,
     private api: PersonnelApiService,
     private whService: WarehouseHttpService,
     private wsService: WebSocketService,
@@ -290,11 +294,19 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   ) {}
 
   get canUnlockPeriod(): boolean {
+    if (!this.persona.canPerform('/attendance', 'approve_attendance_period')) {
+      return false;
+    }
     const u = this.auth.user();
     if (!u) return false;
     return !!u.is_superuser ||
       (u.roles && (u.roles.includes('admin') || u.roles.includes('manager'))) ||
       (u.permissions && (u.permissions.includes('can_override_attendance_lock') || u.permissions.includes('perm_sys_settings')));
+  }
+
+  get canDirectEditAttendance(): boolean {
+    return this.persona.canPerform('/attendance', 'create_daily_attendance_entry') &&
+           this.persona.canPerform('/attendance', 'input_bulk_attendance_records');
   }
 
   // Summary counts for daily status using smart aggregation
@@ -659,7 +671,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   }
 
   // ناوبری هوشمند کلیدهای جهت‌نما (Arrow Keys)، اینتر و اسکیپ در جدول کارکرد روزانه
-  onAttendanceGridKeydown(event: KeyboardEvent, colType: 'status' | 'eff' | 'ot' | 'note' | 'wh', rowIndex: number, statusType?: string, row?: AttendanceMatrixRow): void {
+  onAttendanceGridKeydown(event: KeyboardEvent, colType: 'status' | 'eff' | 'ot' | 'adv' | 'note' | 'wh', rowIndex: number, statusType?: string, row?: AttendanceMatrixRow): void {
     const key = event.key;
 
     // ۱. ناوبری روی دکمه‌های وضعیت حضور (حاضر، نیمه‌وقت، مرخصی، غایب)
@@ -707,7 +719,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       return;
     }
 
-    // ۲. ناوبری روی ورودی‌های عددی و متنی (ساعت موثر، اضافه‌کار، یادداشت، تگ انبار)
+    // ۲. ناوبری روی ورودی‌های عددی و متنی (ساعت موثر، اضافه‌کار، مساعده، یادداشت، تگ انبار)
     if (key === 'ArrowUp') {
       event.preventDefault();
       const prevEl = document.getElementById(colType === 'wh' ? `select-wh-${rowIndex - 1}` : `input-${colType}-${rowIndex - 1}`);
@@ -731,7 +743,8 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         event.preventDefault();
         let nextColId = '';
         if (colType === 'eff') nextColId = `input-ot-${rowIndex}`;
-        else if (colType === 'ot') nextColId = `input-note-${rowIndex}`;
+        else if (colType === 'ot') nextColId = `input-adv-${rowIndex}`;
+        else if (colType === 'adv') nextColId = `input-note-${rowIndex}`;
         else if (colType === 'note') nextColId = `select-wh-${rowIndex}`;
         if (nextColId) {
           const el = document.getElementById(nextColId);
@@ -748,7 +761,8 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         event.preventDefault();
         let prevColId = '';
         if (colType === 'wh') prevColId = `input-note-${rowIndex}`;
-        else if (colType === 'note') prevColId = `input-ot-${rowIndex}`;
+        else if (colType === 'note') prevColId = `input-adv-${rowIndex}`;
+        else if (colType === 'adv') prevColId = `input-ot-${rowIndex}`;
         else if (colType === 'ot') prevColId = `input-eff-${rowIndex}`;
         else if (colType === 'eff') {
           // بازگشت به دکمه وضعیت فعال یا غایب
@@ -1346,6 +1360,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       r.overtime_hours = 0;
       r.is_friday_work = false;
       r.is_mission = false;
+      r.advance_payment = 0;
       r.notes = '';
       r._isDirty = true;
     });
@@ -1362,6 +1377,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     this.bulkHoursScope = this.selectedPersonnelIds.size > 0 ? 'selected' : 'all';
     this.bulkEffectiveHours = 10;
     this.bulkOvertimeHours = 0;
+    this.bulkAdvancePayment = null;
     this.bulkStatusOption = '';
     this.bulkNotes = '';
     this.isBulkHoursModalOpen = true;
@@ -1389,6 +1405,9 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
           r.effective_hours = this.bulkEffectiveHours;
           r.overtime_hours = this.bulkOvertimeHours;
         }
+      }
+      if (this.bulkAdvancePayment !== null && this.bulkAdvancePayment !== undefined && this.bulkAdvancePayment >= 0) {
+        r.advance_payment = Number(this.bulkAdvancePayment);
       }
       if (this.bulkNotes.trim()) {
         r.notes = this.bulkNotes.trim();
@@ -1438,7 +1457,9 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       const defaultHours = isZeroHourStatus ? 0 : 10;
       const effectiveHours = cols[2] ? parseFloat(cols[2]) : defaultHours;
       const overtimeHours = (cols[3] && !isZeroHourStatus) ? parseFloat(cols[3]) : 0;
-      const notes = cols[4] || '';
+      const rawAdv = cols[4] ? parseFloat(cols[4].replace(/,/g, '')) : 0;
+      const advancePayment = !isNaN(rawAdv) && rawAdv > 0 ? rawAdv : 0;
+      const notes = cols[5] || (isNaN(rawAdv) ? cols[4] : '') || '';
 
       this.excelParsedRows.push({
         national_code: matchedRow?.national_code || (codeOrName.length === 10 ? codeOrName : ''),
@@ -1446,6 +1467,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         status,
         effective_hours: isNaN(effectiveHours) ? defaultHours : (isZeroHourStatus ? 0 : effectiveHours),
         overtime_hours: isNaN(overtimeHours) ? 0 : (isZeroHourStatus ? 0 : overtimeHours),
+        advance_payment: advancePayment,
         notes,
         matchedRow
       });
@@ -1459,6 +1481,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         if (pr.status) pr.matchedRow.status = pr.status;
         if (pr.effective_hours !== undefined) pr.matchedRow.effective_hours = pr.effective_hours;
         if (pr.overtime_hours !== undefined) pr.matchedRow.overtime_hours = pr.overtime_hours;
+        if (pr.advance_payment !== undefined && pr.advance_payment > 0) pr.matchedRow.advance_payment = pr.advance_payment;
         if (pr.notes) pr.matchedRow.notes = pr.notes;
         pr.matchedRow._isDirty = true;
         appliedCount++;
@@ -2515,7 +2538,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       if (res.bank) {
         this.selectedVehicleProfile.bank_name = res.bank.name;
       }
-      if (res.accountNumber && !this.selectedVehicleProfile.account_number) {
+      if (res.accountNumber) {
         this.selectedVehicleProfile.account_number = res.accountNumber;
       }
       if (event?.target) {
@@ -2706,7 +2729,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
           const res = validateSheba(profile.sheba_number);
           this.shebaValidationResult = res;
           this.shebaDigitsDisplay = res.formattedDigits;
-          if (res.accountNumber && !this.selectedVehicleProfile.account_number) {
+          if (res.accountNumber) {
             this.selectedVehicleProfile.account_number = res.accountNumber;
           }
         }

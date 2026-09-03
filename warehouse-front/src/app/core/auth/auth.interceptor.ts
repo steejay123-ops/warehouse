@@ -83,9 +83,15 @@ export const authInterceptor: HttpInterceptorFn = (
 };
 
 function addToken(req: HttpRequest<unknown>, token: string): HttpRequest<unknown> {
+  const activeRole = localStorage.getItem('active_role_persona') || 'operator';
+  const activeApp = localStorage.getItem('active_app_module') || 'personnel';
+
   return req.clone({
     setHeaders: {
       Authorization: `Bearer ${token}`,
+      'X-Active-Role': activeRole,
+      'X-Active-App': activeApp,
     },
   });
 }
+

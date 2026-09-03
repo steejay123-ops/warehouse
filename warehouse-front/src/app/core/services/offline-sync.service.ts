@@ -365,7 +365,20 @@ export class OfflineSyncService {
   }
 
   /**
-   * دریافت تمام رکوردهای صف (برای ادغام با کش)
+   * لغو و حذف یک درخواست معلق از صف انتظار محلی قبل از ارسال به سرور
+   */
+  async cancelQueueEntry(id: number): Promise<void> {
+    const entry = await offlineDb.syncQueue.get(id);
+    await offlineDb.syncQueue.delete(id);
+    if (entry?.url) {
+      await this.invalidateCache(entry.url);
+    }
+    await this.refreshCounts();
+    console.log(`[OfflineSync] 🗑️ درخواست با شناسه ${id} از صف انتظار محلی لغو و حذف شد.`);
+  }
+
+  /**
+   * دریافت تمام رکوردهای صف (برای ادغام با کش و نمایش به کاربر)
    */
   async getQueueEntries(): Promise<SyncQueueEntry[]> {
     return offlineDb.syncQueue
@@ -915,9 +928,10 @@ export class OfflineSyncService {
       .count();
   }
 
-  /** تخلیه کامل صف (برای حالت‌های اضطراری) */
+  /** تخلیه کامل صف (برای حالت‌های اضطراری یا لغو کاربر) */
   async clearQueue(): Promise<void> {
     await offlineDb.syncQueue.clear();
+    await this.refreshCounts();
   }
 
   /** 

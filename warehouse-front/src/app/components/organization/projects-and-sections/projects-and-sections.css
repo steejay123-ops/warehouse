@@ -1,0 +1,16 @@
+.subtab-btn {
+  background-color: transparent;
+  color: #64748b;
+  border: 1px solid transparent;
+}
+
+.subtab-btn:hover {
+  background-color: #f1f5f9;
+  color: #1e293b;
+}
+
+.subtab-btn.active-subtab {
+  background-color: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -2px rgba(79, 70, 229, 0.2);
+}

@@ -22,19 +22,56 @@
       </div>
     </div>
 
-    <!-- Fiscal Year & Save Button -->
-    <div class="flex items-center gap-3">
+    <!-- Fiscal Year, Project Scope & Save Button -->
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <!-- انتخاب دامنه پروژه -->
+      <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+        <label class="text-xs font-bold text-slate-600">دامنه تنظیمات:</label>
+        <select [ngModel]="selectedProjectId" (ngModelChange)="onProjectChange($event)" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <option [ngValue]="null">🌐 سراسری سازمان (پیش‌فرض شرکت)</option>
+          <option *ngFor="let p of projects" [value]="p.id">🏢 {{ p.name }} ({{ p.code }})</option>
+        </select>
+      </div>
+
+      <!-- سال مالی -->
       <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
         <label class="text-xs font-bold text-slate-600">سال مالی:</label>
         <input type="text" [(ngModel)]="fiscalYear" (change)="onYearChange()" class="w-16 text-center font-mono font-bold text-xs bg-white border border-slate-300 rounded-lg py-1 text-indigo-800 focus:ring-2 focus:ring-indigo-500" />
       </div>
 
+      <!-- دکمه کپی برای پروژه در صورت ارث‌بری -->
+      <button *ngIf="selectedProjectId && !isCurrentSettingSpecificToProject" (click)="cloneForSelectedProject()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs" title="کپی اطلاعات تنظیمات عمومی برای این پروژه">
+        <span>📋</span>
+        <span>ایجاد نسخه اختصاصی پروژه</span>
+      </button>
+
       <button (click)="saveYearlySettings()" [disabled]="isSaving || !canManageSettings" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-        <span *ngIf="!isSaving">ذخیره تمام تنظیمات سال {{ fiscalYear }}</span>
+        <span *ngIf="!isSaving">ذخیره تنظیمات</span>
         <span *ngIf="isSaving">در حال ذخیره...</span>
       </button>
     </div>
+  </div>
+
+  <!-- بنر وضعیت ارث‌بری مقادیر برای پروژه انتخابی -->
+  <div *ngIf="selectedProjectId && !isCurrentSettingSpecificToProject" class="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs">
+    <div class="flex items-center gap-2.5 text-amber-900 font-bold">
+      <span class="text-base">ℹ️</span>
+      <span>برای این پروژه هنوز تنظیمات اختصاصی ثبت نشده است و مقادیر فعلی از <strong>«تنظیمات عمومی سازمان»</strong> خوانده می‌شوند.</span>
+    </div>
+    <button (click)="cloneForSelectedProject()" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-xl transition-all cursor-pointer whitespace-nowrap shadow-xs">
+      کپی و ایجاد تنظیمات اختصاصی پروژه
+    </button>
+  </div>
+
+  <!-- بنر تایید تنظیمات اختصاصی فعال -->
+  <div *ngIf="yearlySettings?.project" class="bg-indigo-50/80 border border-indigo-200/80 rounded-2xl p-3.5 flex items-center justify-between text-xs text-indigo-950 font-bold shadow-xs">
+    <div class="flex items-center gap-2">
+      <span class="text-base">🏢</span>
+      <span>تنظیمات اختصاصی پروژه فعال است: <strong>{{ yearlySettings?.project_name }}</strong></span>
+      <span class="text-slate-500 font-normal text-[11px]">(تغییرات در کارگاه بیمه و بانک صرفاً برای این پروژه اعمال می‌شود)</span>
+    </div>
+    <span class="px-2.5 py-1 bg-white rounded-lg border border-indigo-200 text-indigo-700 font-mono text-[11px]">پروژه‌محور</span>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -341,3 +378,4 @@
   </div>
 
 </div>
+

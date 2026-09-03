@@ -529,6 +529,25 @@
   <!-- ۶. تب چهارم: دیسکت‌های قانونی و خروجی‌ها (Legal Diskettes) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="activeTab === 'legal_diskettes'" class="space-y-6">
+    <!-- انتخاب اجباری تک‌پروژه‌ای برای خروجی‌های قانونی -->
+    <div class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold shrink-0">
+          🏢
+        </div>
+        <div>
+          <span class="text-xs font-black text-slate-800">پروژه هدف صدور دیسکت‌های بیمه و پرداخت بانک ملی:</span>
+          <p class="text-[11px] text-slate-500 font-medium mt-0.5">بر اساس قوانین تأمین اجتماعی و استانداردهای پایا، دیسکت‌های بیمه و فایل پرداخت بانک ملی باید به تفکیک کارگاه هر پروژه صادر شوند.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs font-bold text-slate-600">پروژه:</label>
+        <select [(ngModel)]="selectedProjectId" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[200px]">
+          <option *ngFor="let p of projects" [value]="p.id">🏢 {{ p.name }} ({{ p.code }})</option>
+        </select>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       <!-- 1. Bimeh DSK ZIP -->
       <div class="bg-gradient-to-br from-blue-900 to-indigo-900 text-white rounded-3xl p-6 shadow-lg flex flex-col justify-between">
@@ -621,16 +640,41 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="activeTab === 'reports'" class="space-y-4">
     <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden p-6">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+      <div class="flex flex-wrap items-center justify-between border-b border-slate-100 pb-4 mb-4 gap-3">
         <h2 class="text-sm font-black text-slate-800">گزارشات تجمیعی مالی و آماری کارکرد</h2>
         <div class="flex items-center gap-2">
-          <button (click)="reportSubTab = 'personnel'; loadReports()" [class]="reportSubTab === 'personnel' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-700 font-medium'" class="px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
+          <button (click)="reportSubTab = 'personnel'; loadReports()" [class]="reportSubTab === 'personnel' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-slate-100 text-slate-700 font-medium'" class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
             گزارش کارکرد پرسنل
           </button>
-          <button (click)="reportSubTab = 'fleet'; loadReports()" [class]="reportSubTab === 'fleet' ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-700 font-medium'" class="px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
+          <button (click)="reportSubTab = 'fleet'; loadReports()" [class]="reportSubTab === 'fleet' ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-slate-100 text-slate-700 font-medium'" class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer">
             گزارش کارکرد ناوگان
           </button>
         </div>
+      </div>
+
+      <!-- نوار فیلتر انبار و دوره در تب گزارشات -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4 p-3 bg-slate-50/70 rounded-2xl border border-slate-200/60">
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- انتخاب انبار -->
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-bold text-slate-600">انبار:</label>
+            <select [(ngModel)]="selectedWarehouseId" (change)="loadReports()" class="bg-white border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer">
+              <option [ngValue]="null">🌐 کل پرسنل شرکت (سراسری)</option>
+              <option *ngFor="let wh of warehouses" [ngValue]="wh.id">{{wh.name}}</option>
+            </select>
+          </div>
+
+          <!-- انتخاب دوره -->
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-bold text-slate-600">دوره کارکرد:</label>
+            <input type="text" [(ngModel)]="selectedYearMonth" (change)="loadReports()" placeholder="۱۴۰۵/۰۶" class="w-24 text-center bg-white border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono" />
+          </div>
+        </div>
+
+        <button (click)="loadReports()" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95" [disabled]="isReportLoading">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [class.animate-spin]="isReportLoading"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span>بروزرسانی گزارش</span>
+        </button>
       </div>
 
       <!-- Personnel Report Grid -->
@@ -759,24 +803,141 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- MODAL: درون‌ریزی اکسل مالیات دارایی -->
+  <!-- MODAL: درون‌ریزی مالیات دارایی (فایل اکسل یا Smart Paste متن) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="isTaxModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-        <h3 class="text-sm font-black text-slate-800">درون‌ریزی فایل اکسل مالیات دارایی</h3>
-        <button (click)="isTaxModalOpen = false" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+  <div *ngIf="isTaxModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" (keydown.escape)="closeTaxModal()">
+    <div class="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col border border-slate-100">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center font-black">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="18" x2="12" y2="12"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-black text-slate-800">درون‌ریزی فایل مالیات دارایی (سامانه مالیات حقوق)</h3>
+            <p class="text-[11px] text-slate-500 font-medium">دوره: <span class="font-mono font-bold text-teal-700">{{ selectedYearMonth }}</span></p>
+          </div>
+        </div>
+        <button (click)="closeTaxModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer transition-colors">&times;</button>
       </div>
 
-      <p class="text-xs text-slate-500">متن کپی‌شده از اکسل مالیات (کد ملی و مبلغ مالیات) را در کادر زیر بچسبانید:</p>
+      <!-- Mode Switcher Tabs (فایل اکسل / چسباندن متن) -->
+      <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl shrink-0">
+        <button type="button" (click)="setTaxModalMode('file')" [ngClass]="taxModalMode === 'file' ? 'bg-white text-teal-800 font-black shadow-xs' : 'text-slate-600 font-bold hover:text-slate-900'" class="flex-1 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>📁 بارگذاری فایل اکسل (.xlsx)</span>
+        </button>
+        <button type="button" (click)="setTaxModalMode('paste')" [ngClass]="taxModalMode === 'paste' ? 'bg-white text-teal-800 font-black shadow-xs' : 'text-slate-600 font-bold hover:text-slate-900'" class="flex-1 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+          <span>📋 چسباندن متن (Smart Paste)</span>
+        </button>
+      </div>
 
-      <textarea [(ngModel)]="taxExcelText" rows="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="کد ملی [Tab] مبلغ مالیات..."></textarea>
+      <!-- Modal Body (Scrollable) -->
+      <div class="space-y-4 overflow-y-auto flex-1 text-xs pr-0.5">
 
-      <div class="flex items-center justify-end gap-2 pt-2">
-        <button (click)="isTaxModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
-        <button (click)="importTaxData()" [disabled]="isImportingTax || !taxExcelText.trim()" class="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer disabled:opacity-50">
-          <span *ngIf="!isImportingTax">اعمال مالیات به شیت ماه</span>
-          <span *ngIf="isImportingTax">در حال پردازش...</span>
+        <!-- ── TAB 1: FILE UPLOAD (EXCEL) ── -->
+        <div *ngIf="taxModalMode === 'file'" class="space-y-3">
+          <div class="border-2 border-dashed border-teal-200 hover:border-teal-500 rounded-2xl p-6 text-center transition-colors bg-teal-50/20">
+            <input type="file" #taxFileInput (change)="onTaxFileSelected($event)" accept=".xlsx,.xls" class="hidden" id="tax-file-input" />
+            <label for="tax-file-input" class="cursor-pointer flex flex-col items-center gap-2.5">
+              <div class="w-12 h-12 rounded-2xl bg-teal-100/80 text-teal-700 flex items-center justify-center shadow-xs">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+              </div>
+              <span class="font-black text-slate-700">کلیک کنید یا فایل اکسل خروجی دارایی را اینجا رها کنید</span>
+              <span class="text-[11px] text-slate-400">فرمت‌های مجاز: XLSX, XLS (فایل سامانه امور مالیاتی)</span>
+            </label>
+
+            <!-- Selected File Badge -->
+            <div *ngIf="selectedTaxFile" class="mt-4 p-3 bg-emerald-50 text-emerald-900 rounded-2xl border border-emerald-200 flex items-center justify-between">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="text-emerald-600 font-bold">📄</span>
+                <span class="font-bold truncate text-xs">{{ selectedTaxFile.name }}</span>
+                <span class="text-[10px] font-mono text-emerald-700">({{ (selectedTaxFile.size / 1024).toFixed(1) }} KB)</span>
+              </div>
+              <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-lg shrink-0">آماده اعمال ✓</span>
+            </div>
+          </div>
+
+          <!-- Guide Banner -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-600 space-y-1">
+            <div class="font-bold text-slate-700 flex items-center gap-1">
+              <span>💡 ستون‌های مورد نیاز در اکسل دارایی:</span>
+            </div>
+            <p class="leading-relaxed">
+              فایل اکسل دارایی باید شامل ستون <span class="font-bold text-teal-800">کد ملی</span> و ستون <span class="font-bold text-teal-800">مالیات محاسبه شده</span> باشد. سیستم به طور خودکار ستون‌ها را شناسایی کرده و مبلغ مالیات را روی رکوردهای حقوق دوره اعمال می‌نماید.
+            </p>
+          </div>
+        </div>
+
+        <!-- ── TAB 2: SMART PASTE (TEXT) ── -->
+        <div *ngIf="taxModalMode === 'paste'" class="space-y-3">
+          <p class="text-slate-500 leading-relaxed text-[11px]">
+            سطرهای کپی‌شده از اکسل (شامل <span class="font-bold text-slate-700">کد ملی</span> و <span class="font-bold text-slate-700">مبلغ مالیات</span>) را در کادر زیر بچسبانید:
+          </p>
+
+          <textarea [(ngModel)]="taxExcelText" (input)="onTaxTextChange()" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-mono focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="مثال:&#10;1234567890	4500000&#10;0987654321	12000000"></textarea>
+
+          <!-- Live Preview Table of Parsed Rows -->
+          <div *ngIf="taxParsedRows.length > 0" class="border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+            <div class="p-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-[11px]">
+              <span class="font-bold text-slate-700">پیش‌نمایش داده‌های استخراج‌شده:</span>
+              <span class="font-bold text-teal-800">{{ taxParsedRows.length }} سطر شناسایی شد</span>
+            </div>
+            <div class="max-h-40 overflow-y-auto">
+              <table class="w-full text-right text-[11px]">
+                <thead class="bg-slate-50 text-slate-500 font-bold sticky top-0 border-b border-slate-200">
+                  <tr>
+                    <th class="p-2">#</th>
+                    <th class="p-2">کد ملی</th>
+                    <th class="p-2">نام پرسنل در سیستم</th>
+                    <th class="p-2 text-center">مبلغ مالیات (ریال)</th>
+                    <th class="p-2 text-center">وضعیت تطبیق</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <tr *ngFor="let pr of taxParsedRows; let idx = index" class="hover:bg-slate-50">
+                    <td class="p-2 text-slate-400 font-mono">{{ idx + 1 }}</td>
+                    <td class="p-2 font-mono font-bold text-slate-800">{{ pr.national_code }}</td>
+                    <td class="p-2 font-bold" [ngClass]="pr.matched ? 'text-slate-800' : 'text-slate-400'">{{ pr.full_name }}</td>
+                    <td class="p-2 text-center font-mono font-bold text-teal-900">{{ pr.tax_amount | number }}</td>
+                    <td class="p-2 text-center">
+                      <span *ngIf="pr.matched" class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">تطبیق‌یافته ✓</span>
+                      <span *ngIf="!pr.matched" class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">پرسنل ناشناس</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Result Banner (If any) ── -->
+        <div *ngIf="taxImportResult" class="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 space-y-1">
+          <div class="font-black text-xs flex items-center gap-1.5">
+            <span>✓ {{ taxImportResult.message }}</span>
+          </div>
+          <div class="text-[11px] text-emerald-800 flex items-center gap-4 pt-1">
+            <span>تعداد تطبیق‌یافته: <strong class="font-mono">{{ taxImportResult.matched_count }}</strong> نفر</span>
+            <span>جمع کل مالیات: <strong class="font-mono">{{ taxImportResult.total_imported_tax | number }}</strong> ریال</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
+        <button (click)="closeTaxModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors">انصراف (Esc)</button>
+        <button (click)="submitTaxImport()" [disabled]="isImportingTax || (taxModalMode === 'file' && !selectedTaxFile) || (taxModalMode === 'paste' && taxParsedRows.length === 0)" class="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-black rounded-xl shadow-md shadow-teal-500/20 cursor-pointer flex items-center gap-2 disabled:opacity-50 transition-all">
+          <svg *ngIf="!isImportingTax" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"></path></svg>
+          <span *ngIf="!isImportingTax">اعمال مالیات به دوره حقوق</span>
+          <span *ngIf="isImportingTax">در حال پردازش و اعمال...</span>
         </button>
       </div>
     </div>

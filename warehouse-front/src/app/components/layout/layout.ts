@@ -23,17 +23,20 @@ import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pe
 import { ChatDrawerComponent } from '../communications/chat-drawer/chat-drawer.component';
 import { CommunicationService } from '../../core/services/communication.service';
 import { WebSocketService } from '../../core/http/websocket.service';
+import { AppPersonaService } from '../../core/services/app-persona.service';
+import { AppRoleSwitcherComponent } from '../../shared/components/app-role-switcher/app-role-switcher.component';
 import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent, ChatDrawerComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent, ChatDrawerComponent, AppRoleSwitcherComponent],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
 export class Layout implements OnInit, OnDestroy {
   public commService = inject(CommunicationService);
   public wsService = inject(WebSocketService);
+  public personaService = inject(AppPersonaService);
 
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
@@ -508,16 +511,14 @@ export class Layout implements OnInit, OnDestroy {
     {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'},
-    // بخش کارکرد و حسابداری (پورتال‌های ۴ گانه بازطراحی‌شده + لینک‌های قبلی)
+    // بخش کارکرد و حسابداری (پورتال‌های ماژولار سامانه مالی و حسابداری)
+    {id:'projects-and-sections', label:'🏢 پروژه‌ها و بخش‌ها', icon:'briefcase', permission: 'view_sys_projects', isAccounting: true},
     {id:'attendance', label:'📋 ثبت کارکرد پرسنل و ناوگان', icon:'check-square', permission: 'view_sys_personnel_attendance', isAccounting: true},
     {id:'manager-approvals', label:'👑 کارتابل تاییدات مدیر', icon:'check-circle', permission: 'view_sys_personnel', isAccounting: true},
     {id:'finance-cartable', label:'💳 کارتابل مالی و حقوق', icon:'dollar-sign', permission: 'view_sys_payroll', isAccounting: true},
     {id:'treasury-cartable', label:'🏦 کارتابل خزانه‌داری و پرداخت', icon:'dollar-sign', permission: 'view_sys_treasury', isAccounting: true},
     {id:'profiles', label:'👥 بانک پرونده‌های پرسنل و ناوگان', icon:'users', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'fleet', label:'🚛 ثبت تردد ناوگان (قدیم)', icon:'truck', permission: 'view_sys_fleet_attendance', isAccounting: true},
-    {id:'personnel', label:'حقوق و دستمزد پرسنل (قدیم)', icon:'users', permission: 'view_sys_payroll', isAccounting: true},
-    {id:'fleet-settlement', label:'تسویه مالی ناوگان (قدیم)', icon:'dollar-sign', permission: 'view_sys_fleet_settlement', isAccounting: true}
+    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true}
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
@@ -555,23 +556,33 @@ export class Layout implements OnInit, OnDestroy {
       this.icons[k] = this.sanitizer.bypassSecurityTrustHtml(this.rawIcons[k]);
     }
 
-    // Track current tab from URL
-    const initialClean = (this.router.url || '').split('?')[0];
-    const initialTab = initialClean.split('/')[1] || 'dashboard';
+    // Track current tab from modular URL
+    const parseTabFromUrl = (url: string): string => {
+      const clean = (url || '').split('?')[0];
+      const segments = clean.split('/').filter(Boolean);
+      if (segments[0] === 'app' && segments[2]) {
+        return segments[2];
+      }
+      if (segments[0] && segments[0] !== 'app') {
+        return segments[0];
+      }
+      return 'dashboard';
+    };
+
+    const initialTab = parseTabFromUrl(this.router.url);
     this.store.setCurrentTab(initialTab);
     this.updateTitle(initialTab);
-    if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(initialTab)) {
+    if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(initialTab)) {
       this.isAccountingMenuOpen = true;
     }
 
     this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd)
     ).subscribe((e) => {
-      const cleanUrl = (e.urlAfterRedirects || e.url || '').split('?')[0];
-      const tab = cleanUrl.split('/')[1] || 'dashboard';
+      const tab = parseTabFromUrl(e.urlAfterRedirects || e.url);
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
-      if (['attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(tab)) {
+      if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(tab)) {
         this.isAccountingMenuOpen = true;
       }
     });
@@ -1007,6 +1018,11 @@ export class Layout implements OnInit, OnDestroy {
 
   /** ──── Sidebar Navigation Signals ──── */
   readonly primaryNavItems = computed(() => {
+    // اگر کاربر در سامانه کارکرد و مالی است، منوهای انبارداری مخفی می‌شوند
+    if (this.personaService.activeApp() === 'personnel') {
+      return [];
+    }
+
     const userPerms = this.auth.userPermissions();
     const isAdmin = userPerms.includes('admin_all');
     
@@ -1032,19 +1048,38 @@ export class Layout implements OnInit, OnDestroy {
   });
 
   readonly accountingNavItems = computed(() => {
-    if (this.store.isWarehouseContext()) return [];
+    // اگر کاربر در سامانه انبارداری است، منوهای مالی مخفی می‌شوند
+    if (this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+
     const userPerms = this.auth.userPermissions();
     const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
     
     return this.SYSTEM_NAV_ITEMS.filter(item => {
       if (!item.isAccounting) return false;
       if (isAdmin) return true;
+
+      // فیلتر هوشمند بر اساس نقش فعال SoD
+      if (item.id === 'finance-cartable' && activeRole === 'operator') {
+        return false;
+      }
+      if (item.id === 'treasury-cartable' && !['treasury', 'manager', 'superuser'].includes(activeRole)) {
+        return false;
+      }
+      if (item.id === 'manager-approvals' && !['manager', 'superuser'].includes(activeRole)) {
+        return false;
+      }
+
       if (item.permission === 'view_sys_personnel_attendance' || 
           item.permission === 'view_sys_fleet_attendance' || 
           item.permission === 'view_sys_payroll' || 
           item.permission === 'view_sys_fleet_settlement' ||
-          item.permission === 'view_sys_personnel') {
-        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel') || userPerms.includes('view_sys_payroll');
+          item.permission === 'view_sys_personnel' ||
+          item.permission === 'view_sys_projects' ||
+          item.permission === 'view_sys_treasury') {
+        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel') || userPerms.includes('view_sys_payroll') || userPerms.includes('view_sys_projects');
       }
       return userPerms.includes(item.permission);
     });
@@ -1063,7 +1098,16 @@ export class Layout implements OnInit, OnDestroy {
 
   switchTab(tabId: string) {
     this.closeSidebar();
-    this.router.navigate(['/' + tabId]);
+    const accountingTabs = [
+      'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
+      'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
+      'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement'
+    ];
+    if (accountingTabs.includes(tabId)) {
+      this.router.navigate(['/app/finance/' + tabId]);
+    } else {
+      this.router.navigate(['/app/warehouse/' + tabId]);
+    }
   }
 
   /** ──── Warehouse Selector ──── */
@@ -1087,7 +1131,7 @@ export class Layout implements OnInit, OnDestroy {
       this.store.setIsSwitchingWarehouse(false);
     }
     this.store.setWarehouseContext(false);
-    this.router.navigate(['/projects']);
+    this.router.navigate(['/app/warehouse/projects']);
   }
 
   get progressStats() {

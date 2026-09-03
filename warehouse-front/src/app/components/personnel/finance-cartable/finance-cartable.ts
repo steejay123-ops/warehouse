@@ -16,7 +16,8 @@ import {
   VehicleChangeRequest,
   MonthlyPayrollRecord,
   AttendanceSummaryRow,
-  VehicleSummaryRow
+  VehicleSummaryRow,
+  FinancialProject
 } from '../../../core/models/personnel.model';
 
 @Component({
@@ -35,6 +36,9 @@ export class FinanceCartable implements OnInit, OnDestroy {
   warehouses: any[] = [];
   fiscalYear = '1405';
   selectedYearMonth = '1405/04';
+
+  projects: FinancialProject[] = [];
+  selectedProjectId: number | null = null;
 
   // Final Approvals Sub-Tab
   approvalSubTab: 'personnel' | 'fleet' | 'change_requests' = 'personnel';
@@ -76,8 +80,24 @@ export class FinanceCartable implements OnInit, OnDestroy {
 
   // Tax Modal State
   isTaxModalOpen = false;
+  taxModalMode: 'file' | 'paste' = 'file';
+  selectedTaxFile: File | null = null;
   taxExcelText = '';
+  taxParsedRows: Array<{
+    national_code: string;
+    tax_amount: number;
+    full_name?: string;
+    matched: boolean;
+  }> = [];
   isImportingTax = false;
+  taxImportResult: {
+    message: string;
+    matched_count: number;
+    unmatched_count: number;
+    unmatched_rows: any[];
+    total_imported_tax: number;
+    period_year_month: string;
+  } | null = null;
 
   // Diff Modal State
   isDiffModalOpen = false;
@@ -135,6 +155,17 @@ export class FinanceCartable implements OnInit, OnDestroy {
     this.whService.getAll().subscribe({
       next: (data: any) => {
         this.warehouses = Array.isArray(data) ? data : [];
+      },
+      error: () => {}
+    });
+
+    this.api.getFinancialProjects().subscribe({
+      next: (projs) => {
+        this.projects = projs;
+        if (this.projects.length > 0 && !this.selectedProjectId) {
+          this.selectedProjectId = this.projects[0].id ?? null;
+        }
+        this.cdr.detectChanges();
       },
       error: () => {}
     });
@@ -419,8 +450,12 @@ export class FinanceCartable implements OnInit, OnDestroy {
   }
 
   downloadDskZip(): void {
+    if (!this.selectedProjectId) {
+      this.toast.show('warning', 'لطفاً ابتدا پروژه مورد نظر را انتخاب نمایید.');
+      return;
+    }
     if (this.currentPeriodId) {
-      window.open(this.api.getDskZipDownloadUrl(this.currentPeriodId), '_blank');
+      window.open(this.api.getBimehDiskettesDownloadUrl(this.currentPeriodId, this.selectedProjectId), '_blank');
     }
   }
 
@@ -437,8 +472,12 @@ export class FinanceCartable implements OnInit, OnDestroy {
   }
 
   downloadBankExcel(): void {
+    if (!this.selectedProjectId) {
+      this.toast.show('warning', 'لطفاً ابتدا پروژه مورد نظر را انتخاب نمایید.');
+      return;
+    }
     if (this.currentPeriodId) {
-      window.open(this.api.getBankExcelDownloadUrl(this.currentPeriodId), '_blank');
+      window.open(this.api.getBankExcelDownloadUrl(this.currentPeriodId, this.selectedProjectId), '_blank');
     }
   }
 
@@ -548,38 +587,169 @@ export class FinanceCartable implements OnInit, OnDestroy {
   // ─── Tax Modal ────────────────────────────────────────────
   openTaxModal(): void {
     this.isTaxModalOpen = true;
+    this.taxModalMode = 'file';
+    this.selectedTaxFile = null;
     this.taxExcelText = '';
+    this.taxParsedRows = [];
+    this.taxImportResult = null;
   }
 
-  importTaxData(): void {
-    if (!this.taxExcelText.trim()) return;
-    this.toast.show('info', 'در حال پردازش داده‌های مالیاتی...');
+  closeTaxModal(): void {
     this.isTaxModalOpen = false;
+    this.selectedTaxFile = null;
+    this.taxExcelText = '';
+    this.taxParsedRows = [];
+    this.taxImportResult = null;
   }
 
-  importTaxFile(event: any): void {
-    const file = event.target.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('year_month', this.selectedYearMonth);
-    if (this.currentPeriodId) {
-      formData.append('period_id', String(this.currentPeriodId));
+  setTaxModalMode(mode: 'file' | 'paste'): void {
+    this.taxModalMode = mode;
+    this.taxImportResult = null;
+  }
+
+  onTaxFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (file) {
+      this.selectedTaxFile = file;
+      this.taxImportResult = null;
+    }
+  }
+
+  onTaxTextChange(): void {
+    if (!this.taxExcelText.trim()) {
+      this.taxParsedRows = [];
+      return;
     }
 
-    this.isImportingTax = true;
-    this.api.importTaxExcel(formData).subscribe({
-      next: (res: any) => {
-        this.isImportingTax = false;
-        this.isTaxModalOpen = false;
-        this.toast.show('success', `اطلاعات مالیات دارایی با موفقیت اعمال شد (${res.matched_count || 0} رکورد).`);
-        this.loadMonthlyPayroll();
-      },
-      error: (err: any) => {
-        this.isImportingTax = false;
-        this.toast.show('error', err?.error?.error || 'خطا در درون‌ریزی مالیات');
+    const normalizeDigits = (str: string): string => {
+      if (!str) return '';
+      return str
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    };
+
+    const lines = this.taxExcelText.trim().split(/\r?\n/);
+    const parsed: typeof this.taxParsedRows = [];
+
+    // Map existing payroll records by national code
+    const recordMap = new Map<string, MonthlyPayrollRecord>();
+    (this.payrollRecords || []).forEach(r => {
+      if (r.national_code) {
+        recordMap.set(normalizeDigits(r.national_code).trim().padStart(10, '0'), r);
       }
     });
+
+    lines.forEach((line, idx) => {
+      const cleanLine = line.trim();
+      if (!cleanLine) return;
+
+      // Skip header line if detected
+      if (idx === 0 && (cleanLine.includes('کد ملی') || cleanLine.includes('مالیات') || cleanLine.includes('نام') || cleanLine.includes('ردیف'))) {
+        return;
+      }
+
+      const rawCols = cleanLine.split(/[\t,;|]/).map(c => c.trim()).filter(c => c.length > 0);
+      const normalizedCols = rawCols.map(c => normalizeDigits(c));
+
+      let nationalCode = '';
+      let taxAmount = 0;
+
+      for (const col of normalizedCols) {
+        const digitsOnly = col.replace(/\D/g, '');
+        if (digitsOnly.length === 10 && !nationalCode) {
+          nationalCode = digitsOnly;
+        } else if (/^-?\d+([.,]\d+)?$/.test(col.replace(/,/g, '')) && !taxAmount) {
+          taxAmount = Math.abs(parseFloat(col.replace(/,/g, '')) || 0);
+        }
+      }
+
+      // If columns weren't isolated by regex loop, check index positions
+      if (!nationalCode && normalizedCols.length >= 1) {
+        const d = normalizedCols[0].replace(/\D/g, '');
+        if (d.length >= 8 && d.length <= 10) {
+          nationalCode = d.padStart(10, '0');
+        }
+      }
+      if (!taxAmount && normalizedCols.length >= 2) {
+        const cleanNum = normalizedCols[1].replace(/,/g, '').replace(/[^\d.-]/g, '');
+        taxAmount = Math.abs(parseFloat(cleanNum) || 0);
+      }
+
+      if (nationalCode) {
+        const matchedRecord = recordMap.get(nationalCode);
+        parsed.push({
+          national_code: nationalCode,
+          tax_amount: taxAmount,
+          full_name: matchedRecord?.full_name || '—',
+          matched: !!matchedRecord
+        });
+      }
+    });
+
+    this.taxParsedRows = parsed;
+  }
+
+  submitTaxImport(): void {
+    if (this.taxModalMode === 'file') {
+      if (!this.selectedTaxFile) {
+        this.toast.show('warning', 'لطفاً ابتدا فایل اکسل مالیات دارایی را انتخاب نمایید.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', this.selectedTaxFile);
+      formData.append('year_month', this.selectedYearMonth);
+      if (this.currentPeriodId) {
+        formData.append('period_id', String(this.currentPeriodId));
+      }
+
+      this.isImportingTax = true;
+      this.api.importTaxExcel(formData).subscribe({
+        next: (res: any) => {
+          this.isImportingTax = false;
+          this.taxImportResult = res;
+          this.toast.show('success', res.message || `اطلاعات مالیات دارایی با موفقیت اعمال شد (${res.matched_count || 0} رکورد).`);
+          this.loadMonthlyPayroll();
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          this.isImportingTax = false;
+          this.toast.show('error', err?.error?.error || 'خطا در درون‌ریزی فایل اکسل مالیات');
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      // Paste mode
+      if (this.taxParsedRows.length === 0) {
+        this.toast.show('warning', 'هیچ سطر معتبری از متن پیست‌شده شناسایی نشد.');
+        return;
+      }
+
+      const payload = {
+        year_month: this.selectedYearMonth,
+        period_id: this.currentPeriodId,
+        items: this.taxParsedRows.map(r => ({
+          national_code: r.national_code,
+          tax_amount: r.tax_amount
+        }))
+      };
+
+      this.isImportingTax = true;
+      this.api.importTaxExcel(payload).subscribe({
+        next: (res: any) => {
+          this.isImportingTax = false;
+          this.taxImportResult = res;
+          this.toast.show('success', res.message || `اطلاعات مالیات دارایی با موفقیت اعمال شد (${res.matched_count || 0} رکورد).`);
+          this.loadMonthlyPayroll();
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => {
+          this.isImportingTax = false;
+          this.toast.show('error', err?.error?.error || 'خطا در اعمال اطلاعات متنی مالیات');
+          this.cdr.detectChanges();
+        }
+      });
+    }
   }
 
   getApprovalBadgeClass(status?: string): string {

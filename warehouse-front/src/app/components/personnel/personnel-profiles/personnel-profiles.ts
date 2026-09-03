@@ -28,6 +28,7 @@ import {
   getBankByName,
   validateAccountNumber
 } from '../../../core/utils/sheba-utils';
+import { AppPersonaService } from '../../../core/services/app-persona.service';
 
 @Component({
   selector: 'app-personnel-profiles',
@@ -91,6 +92,7 @@ export class PersonnelProfilesHub implements OnInit {
   constructor(
     public state: StateService,
     public auth: AuthService,
+    public persona: AppPersonaService,
     private api: PersonnelApiService,
     private whService: WarehouseHttpService,
     private toast: ToastService,
@@ -101,23 +103,39 @@ export class PersonnelProfilesHub implements OnInit {
   ) {}
 
   get canApprovePersonnelManager(): boolean {
+    if (!this.persona.canPerform('/profiles', 'approve_personnel_profile')) {
+      return false;
+    }
     return this.auth.userPermissions().includes('perm_approve_personnel_manager') ||
            this.auth.userPermissions().includes('admin_all');
   }
 
   get canApprovePersonnelFinance(): boolean {
+    if (!this.persona.canPerform('/profiles', 'approve_personnel_profile')) {
+      return false;
+    }
     return this.auth.userPermissions().includes('perm_approve_personnel_finance') ||
            this.auth.userPermissions().includes('admin_all');
   }
 
   get canApproveFleetManager(): boolean {
+    if (!this.persona.canPerform('/profiles', 'approve_vehicle_profile')) {
+      return false;
+    }
     return this.auth.userPermissions().includes('perm_approve_fleet_manager') ||
            this.auth.userPermissions().includes('admin_all');
   }
 
   get canApproveFleetFinance(): boolean {
+    if (!this.persona.canPerform('/profiles', 'approve_vehicle_profile')) {
+      return false;
+    }
     return this.auth.userPermissions().includes('perm_approve_fleet_finance') ||
            this.auth.userPermissions().includes('admin_all');
+  }
+
+  get canEditWageAndAllowances(): boolean {
+    return this.persona.canPerform('/profiles', 'edit_base_wage_and_bonuses');
   }
 
   ngOnInit(): void {
@@ -778,7 +796,7 @@ export class PersonnelProfilesHub implements OnInit {
       if (res.bank) {
         this.editingVehicle.bank_name = res.bank.name;
       }
-      if (res.accountNumber && !this.editingVehicle.account_number) {
+      if (res.accountNumber) {
         this.editingVehicle.account_number = res.accountNumber;
       }
       if (event?.target) {

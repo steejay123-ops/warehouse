@@ -224,6 +224,16 @@ export class AuthService {
     return this.userDepartment() === dept;
   }
 
+  /** به‌روزرسانی مشخصات کاربر جاری در سیگنال و ذخیره‌سازی محلی */
+  updateUser(partial: Partial<AuthUserProfile>): void {
+    const u = this._user();
+    if (u) {
+      const updated = { ...u, ...partial };
+      this._user.set(updated);
+      this.setItem(USER_KEY, JSON.stringify(updated));
+    }
+  }
+
   // ────────── Preferences ──────────
   
   updatePreferences(prefs: any): Observable<any> {

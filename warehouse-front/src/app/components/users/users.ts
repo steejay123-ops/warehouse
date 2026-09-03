@@ -59,6 +59,97 @@ export class Users implements OnInit, OnDestroy {
     date_joined: '', last_login: '', is_active: true, is_superuser: false, expiryDays: 90
   };
 
+  // Quick Role Presets / Templates for One-Click Permission Granting
+  readonly ROLE_PRESETS = [
+    {
+      id: 'manager',
+      title: 'مدیر شرکت / مدیرعامل',
+      color: '#7c3aed',
+      icon: '👑',
+      description: 'دسترسی کامل مدیریتی، تاییدات کارکرد، صدور مجوز پرداخت، مانیتورینگ و گزارش‌ها',
+      permissionCodenames: [
+        'view_sys_dashboard', 'view_sys_users', 'view_sys_projects', 'view_sys_reports',
+        'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+        'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
+        'view_wh_dashboard', 'view_sys_manager_review', 'view_sys_supervisor', 'view_sys_recounts', 'view_wh_customs',
+        'perm_approve_personnel_manager', 'perm_approve_fleet_manager', 'perm_manager_payment_authorize',
+        'perm_lock_work_period', 'perm_inventory_finalize', 'can_act_as_manager'
+      ]
+    },
+    {
+      id: 'accountant',
+      title: 'حسابدار / مالی و حقوق',
+      color: '#059669',
+      icon: '💳',
+      description: 'محاسبات حقوق و دستمزد، کارتابل مالی، تسویه ناوگان، پرونده‌ها و تایید مرحله مالی',
+      permissionCodenames: [
+        'view_sys_personnel', 'view_sys_payroll', 'view_sys_fleet_settlement',
+        'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+        'perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'can_act_as_accountant'
+      ]
+    },
+    {
+      id: 'treasury',
+      title: 'خزانه‌دار و پرداخت',
+      color: '#d97706',
+      icon: '🏦',
+      description: 'کارتابل خزانه‌داری، اجرای واریز پایا/چک، مشاهده مبالغ مصوب حقوق و تسویه',
+      permissionCodenames: [
+        'view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'view_sys_personnel'
+      ]
+    },
+    {
+      id: 'supervisor',
+      title: 'سرپرست انبار / اجرا',
+      color: '#2563eb',
+      icon: '📋',
+      description: 'ثبت و تایید کارکرد میدانی پرسنل و ناوگان، کارتابل سرپرست شمارش، تخصیص کالا',
+      permissionCodenames: [
+        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance',
+        'view_wh_dashboard', 'view_wh_docs', 'view_wh_dispatch', 'view_sys_supervisor', 'view_sys_counter',
+        'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor', 'can_act_as_supervisor'
+      ]
+    },
+    {
+      id: 'counter',
+      title: 'انبارگردان / شمارشگر',
+      color: '#0284c7',
+      icon: '🔢',
+      description: 'میزکار شمارش کور فیزیکی، اسکن بارکد و ثبت تگ‌ها بدون دسترسی به مبالغ مالی',
+      permissionCodenames: [
+        'view_sys_counter', 'can_act_as_counter'
+      ]
+    },
+    {
+      id: 'docs_auditor',
+      title: 'مسئول اسناد و انبار',
+      color: '#0d9488',
+      icon: '📑',
+      description: 'مدیریت کالا، تایید اسناد وارده و صادره، ممیزی و رهگیری تگ‌ها',
+      permissionCodenames: [
+        'view_wh_docs', 'view_wh_dispatch', 'view_wh_doc_approvals', 'view_wh_audit', 'perm_doc_approve_action'
+      ]
+    },
+    {
+      id: 'operator',
+      title: 'کارمند / اپراتور ثبت',
+      color: '#64748b',
+      icon: '👤',
+      description: 'ثبت اولیه روزهای کارکرد و حضور غیاب پرسنل و ماشین‌آلات',
+      permissionCodenames: [
+        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'can_act_as_operator'
+      ]
+    },
+    {
+      id: 'admin_all',
+      title: 'مدیر کل سیستم (همه دسترسی‌ها)',
+      color: '#4f46e5',
+      icon: '⚡',
+      description: 'اعطای ۱۰۰٪ تمام دسترسی‌های سیستمی، عملیاتی، مالی و فرآیندی',
+      permissionCodenames: 'ALL'
+    }
+  ];
+
   systemPermissions: Permission[] = [];
   systemPermissionGroups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [];
   permSearchQuery = '';
@@ -91,7 +182,7 @@ export class Users implements OnInit, OnDestroy {
     this.route.queryParams.subscribe((params: any) => {
       this.activeTab = params['tab'] || 'users';
       this.activeRoleTab = params['roleTab'] || 'custom';
-      this.activePermTab = params['permTab'] || 'MAIN_MENU';
+      this.activePermTab = params['permTab'] || 'PERSONNEL_FINANCE';
       const q = params['q'] || '';
       if (q !== this.searchQuery) {
         this.searchQuery = q;
@@ -119,31 +210,70 @@ export class Users implements OnInit, OnDestroy {
       this.systemPermissions = res;
       
       const sensitivePerms = res.filter((p: any) => p.is_sensitive);
-      const mainMenuPerms = res.filter((p: any) => p.codename.startsWith('view_sys_') && !p.is_sensitive);
-      const warehouseMenuPerms = res.filter((p: any) => p.codename.startsWith('view_wh_') && !p.is_sensitive);
-      const workflowPerms = res.filter((p: any) => p.codename.startsWith('can_act_as_') && !p.is_sensitive);
-      const backendPerms = res.filter((p: any) => !p.codename.startsWith('view_sys_') && !p.codename.startsWith('view_wh_') && !p.codename.startsWith('can_act_as_') && !p.is_sensitive);
+
+      const sysPersonnelPerms = [
+        'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+        'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury'
+      ];
+      const sysGeneralPerms = [
+        'view_sys_dashboard', 'view_sys_users', 'view_sys_projects', 'view_sys_id_cards',
+        'view_sys_settings', 'view_sys_reports'
+      ];
+      const sysWarehousePerms = [
+        'view_wh_dashboard', 'view_wh_docs', 'view_wh_dispatch', 'view_sys_counter',
+        'view_wh_customs', 'view_sys_supervisor', 'view_sys_manager_review', 'view_sys_recounts',
+        'view_wh_attendance', 'view_wh_doc_approvals', 'view_wh_feeding', 'view_wh_feed_approvals',
+        'view_wh_labels', 'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings'
+      ];
+
+      const generalMenuPerms = res.filter((p: any) => sysGeneralPerms.includes(p.codename) && !p.is_sensitive);
+      const personnelMenuPerms = res.filter((p: any) => sysPersonnelPerms.includes(p.codename) && !p.is_sensitive);
+      const warehouseMenuPerms = res.filter((p: any) => sysWarehousePerms.includes(p.codename) && !p.is_sensitive);
+      
+      const workflowPerms = res.filter((p: any) => 
+        (p.codename.startsWith('perm_approve_') || 
+         p.codename.startsWith('perm_manager_') || 
+         p.codename.startsWith('perm_treasury_') || 
+         p.codename.startsWith('perm_doc_') || 
+         p.codename.startsWith('perm_feed_') || 
+         p.codename.startsWith('perm_lock_') || 
+         p.codename.startsWith('perm_inventory_') || 
+         p.codename.startsWith('can_act_as_')) && !p.is_sensitive
+      );
+
+      const otherPerms = res.filter((p: any) => 
+        !p.is_sensitive && 
+        !generalMenuPerms.includes(p) && 
+        !personnelMenuPerms.includes(p) && 
+        !warehouseMenuPerms.includes(p) && 
+        !workflowPerms.includes(p)
+      );
 
       const groups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [
         {
-          key: 'MAIN_MENU',
-          title: 'منوی اصلی',
-          items: mainMenuPerms
+          key: 'PERSONNEL_FINANCE',
+          title: 'کارکرد، حقوق و خزانه‌داری 💳',
+          items: personnelMenuPerms
         },
         {
           key: 'WH_MENU',
-          title: 'منوی انبار',
+          title: 'عملیات انبار و شمارش 📦',
           items: warehouseMenuPerms
         },
         {
           key: 'WORKFLOW',
-          title: 'فرآیندی و کارتابل‌ها',
+          title: 'تاییدات و کارتابل‌ها 📋',
           items: workflowPerms
         },
         {
+          key: 'MAIN_MENU',
+          title: 'مدیریت و کلان سیستم ⚙️',
+          items: generalMenuPerms
+        },
+        {
           key: 'BACKEND',
-          title: 'سایر',
-          items: backendPerms
+          title: 'سایر دسترسی‌ها 📑',
+          items: otherPerms
         },
         {
           key: 'SENSITIVE',
@@ -153,46 +283,63 @@ export class Users implements OnInit, OnDestroy {
         }
       ];
 
-      this.systemPermissionGroups = groups;
+      this.systemPermissionGroups = groups.filter(g => g.items.length > 0);
+    }, error => {
+      console.warn('[Users] خطا در دریافت مجوزهای سیستم:', error);
     });
 
-    this.accountsService.getRoles().subscribe(res => {
-      this.state.appState.roles = res;
-      const map: any = {};
-      const flattenRoles = (roles: any[]) => {
-        for (const r of roles) {
-          map[r.name] = { title: r.title, color: r.color };
-          if (r.children?.length) flattenRoles(r.children);
-        }
-      };
-      flattenRoles(res);
-      this.state.appState.rolesMap = map;
+    this.accountsService.getRoles().subscribe({
+      next: (res) => {
+        const rolesList = Array.isArray(res) ? res : [];
+        this.state.appState.roles = rolesList;
+        const map: any = {};
+        const flattenRoles = (roles: any[]) => {
+          for (const r of roles) {
+            map[r.name] = { title: r.title, color: r.color };
+            if (Array.isArray(r.children) && r.children.length) flattenRoles(r.children);
+          }
+        };
+        flattenRoles(rolesList);
+        this.state.appState.rolesMap = map;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.warn('[Users] خطا در دریافت نقش‌ها:', err);
+      }
     });
 
     this.isLoading = true;
-    this.accountsService.getUsers().subscribe(res => {
-      this.state.appState.users = res;
-      setTimeout(() => {
-        this.isLoading = false;
-        this.cdr.detectChanges();
-      }, 400);
-    }, error => {
-      setTimeout(() => {
-        this.isLoading = false;
-        this.cdr.detectChanges();
-      }, 400);
+    this.accountsService.getUsers().subscribe({
+      next: (res) => {
+        this.state.appState.users = Array.isArray(res) ? res : [];
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 400);
+      },
+      error: (err) => {
+        setTimeout(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }, 400);
+      }
     });
     
-    this.whService.getAll().subscribe((res: any) => {
-        this.state.appState.projects = res;
+    this.whService.getAll().subscribe({
+      next: (res: any) => {
+        this.state.appState.projects = Array.isArray(res) ? res : [];
+        this.cdr.detectChanges();
+      },
+      error: () => {}
     });
   }
 
   get filteredUsers() {
     const q = this.searchQuery.trim().toLowerCase();
-    if (!q) return this.state.appState.users;
+    const users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+    if (!q) return users;
 
-    return this.state.appState.users.filter((u: any) => {
+    return users.filter((u: any) => {
       const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
       const username = (u.username || '').toLowerCase();
       const nid = (u.national_code || '');
@@ -212,16 +359,19 @@ export class Users implements OnInit, OnDestroy {
   }
 
   get rootRoles() {
-    const allIds = new Set(this.state.appState.roles.map((r: any) => r.id));
-    return this.state.appState.roles.filter((r: any) => !r.parent || !allIds.has(r.parent));
+    const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
+    const allIds = new Set(roles.map((r: any) => r.id));
+    return roles.filter((r: any) => !r.parent || !allIds.has(r.parent));
   }
 
   getRoleChildren(parentId: number) {
-    return this.state.appState.roles.filter((r: any) => r.parent === parentId);
+    const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
+    return roles.filter((r: any) => r.parent === parentId);
   }
 
   getSelectableParents() {
-    if (!this.roleForm || !this.roleForm.id) return this.state.appState.roles;
+    const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
+    if (!this.roleForm || !this.roleForm.id) return roles;
     
     const invalidIds = new Set<number>();
     invalidIds.add(this.roleForm.id);
@@ -235,7 +385,7 @@ export class Users implements OnInit, OnDestroy {
     };
     addDescendants(this.roleForm.id);
     
-    return this.state.appState.roles.filter((r: any) => !invalidIds.has(r.id));
+    return roles.filter((r: any) => !invalidIds.has(r.id));
   }
 
   getAvailableSupervisors() {
@@ -258,8 +408,9 @@ export class Users implements OnInit, OnDestroy {
     return '👤';
   }
 
-  getUsersInRoleCount(roleId: number) {
-    return this.state.appState.users.filter((u: any) => u.groups && u.groups.includes(roleId)).length;
+  getUsersInRoleCount(roleId: number): number {
+    const users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+    return users.filter((u: any) => Array.isArray(u.groups) && u.groups.includes(roleId)).length;
   }
 
   getPrimaryRole(u: any) {
@@ -293,7 +444,9 @@ export class Users implements OnInit, OnDestroy {
   }
 
   switchPermTab(tab: string) {
+    this.activePermTab = tab;
     this.router.navigate([], { queryParams: { permTab: tab }, queryParamsHandling: 'merge' });
+    this.cdr.detectChanges();
   }
 
   onSearchChange(val: string) {
@@ -492,14 +645,38 @@ export class Users implements OnInit, OnDestroy {
       return this.toast.show('error', 'وارد کردن نام، نام خانوادگی و شناسه ورود الزامی است.');
     }
 
+    const normalizeDigits = (str: string) => {
+      return (str || '')
+        .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+        .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+        .replace(/[\s\-_]/g, '')
+        .trim();
+    };
+
+    let phone = normalizeDigits(this.userForm.phone_number);
+    if (phone) {
+      if (phone.startsWith('+98')) phone = '0' + phone.substring(3);
+      else if (phone.startsWith('0098')) phone = '0' + phone.substring(4);
+      else if (phone.startsWith('98') && phone.length === 12) phone = '0' + phone.substring(2);
+      else if (phone.startsWith('9') && phone.length === 10) phone = '0' + phone;
+    }
+
+    if (!this.editingUser && !phone) {
+      return this.toast.show('error', 'وارد کردن شماره تلفن همراه برای تعریف کاربر جدید الزامی است.');
+    }
+
+    if (phone && !/^09\d{9}$/.test(phone)) {
+      return this.toast.show('error', 'فرمت شماره همراه نامعتبر است. شماره همراه باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789).');
+    }
+
     const pendingBlob = this.userForm._pendingAvatarBlob;
     const payload: any = { ...this.userForm };
     delete payload._pendingAvatarBlob;
     delete payload.avatar; // Avatar is uploaded via dedicated endpoint
     if (!payload.national_code) payload.national_code = null;
     if (!payload.supervisor) payload.supervisor = null;
-    if (!payload.phone_number) payload.phone_number = null;
-    if (!payload.email) payload.email = null;
+    payload.phone_number = phone || null;
+    payload.email = payload.email ? payload.email.trim() : '';
     if (!payload.company) payload.company = null;
     if (!payload.address) payload.address = null;
     if (!payload.operational_zone) payload.operational_zone = null;
@@ -559,8 +736,35 @@ export class Users implements OnInit, OnDestroy {
       this.editingRole = null;
       this.roleForm = { id: null, name: '', title: '', parent: null, color: '#94a3b8', permissions: [] };
     }
-    this.activePermTab = 'MAIN_MENU';
+    this.activePermTab = 'PERSONNEL_FINANCE';
     this.isRoleModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  applyRolePreset(preset: any) {
+    if (preset.permissionCodenames === 'ALL') {
+      this.roleForm.permissions = this.systemPermissions
+        .filter(p => !p.is_sensitive || this.isSuperuser())
+        .map(p => p.id);
+    } else {
+      const targetCodenames = new Set(preset.permissionCodenames);
+      const matchedIds = this.systemPermissions
+        .filter(p => targetCodenames.has(p.codename))
+        .map(p => p.id);
+      this.roleForm.permissions = Array.from(new Set([...matchedIds]));
+    }
+
+    // اگر در حال ایجاد نقش جدید هستیم و فیلدها خالی هستند، مشخصات قالب را پر کند
+    if (!this.editingRole && (!this.roleForm.title || !this.roleForm.name)) {
+      this.roleForm.title = preset.title.split('/')[0].trim();
+      this.roleForm.name = preset.id;
+      this.roleForm.color = preset.color;
+    }
+
+    this.toast.show(
+      'success',
+      `قالب «${preset.title}» اعمال شد (${this.roleForm.permissions.length} مجوز انتخاب گردید).`
+    );
     this.cdr.detectChanges();
   }
 

@@ -13,7 +13,12 @@ import {
   MonthlyWorkPeriod,
   MonthlyGridResponse,
   VehicleMonthlyGridResponse,
-  VehicleTripAuditLog
+  VehicleTripAuditLog,
+  FinancialProject,
+  ProjectSection,
+  UserSectionAssignment,
+  Counterparty,
+  ExpenseInvoice
 } from '../models/personnel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -384,8 +389,16 @@ export class PersonnelApiService {
   }
 
   // --- تنظیمات پایه سالانه و ۲۰ گروه شغلی ---
-  getYearlySettings(year = '1405'): Observable<any> {
-    return this.api.get<any>(`${this.baseUrl}/settings/active-or-year/`, { year });
+  getYearlySettings(year = '1405', projectId?: number | null): Observable<any> {
+    const params: any = { year };
+    if (projectId) {
+      params.project_id = projectId;
+    }
+    return this.api.get<any>(`${this.baseUrl}/settings/active-or-year/`, params);
+  }
+
+  cloneSettingsForProject(projectId: number, year = '1405'): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/settings/clone-for-project/`, { project_id: projectId, year });
   }
 
   getJobGradeRate(grade: string, year = '1405'): Observable<{
@@ -432,7 +445,7 @@ export class PersonnelApiService {
     return this.api.get<any[]>(`${this.baseUrl}/monthly-payroll/`, params as Record<string, unknown>);
   }
 
-  importTaxExcel(formData: FormData): Observable<{
+  importTaxExcel(payload: FormData | { items: any[]; period_id?: number | null; year_month?: string }): Observable<{
     message: string;
     matched_count: number;
     unmatched_count: number;
@@ -440,12 +453,21 @@ export class PersonnelApiService {
     total_imported_tax: number;
     period_year_month: string;
   }> {
-    return this.api.upload<any>(`${this.baseUrl}/monthly-payroll/import-tax-excel/`, formData);
+    if (payload instanceof FormData) {
+      return this.api.upload<any>(`${this.baseUrl}/monthly-payroll/import-tax-excel/`, payload);
+    }
+    return this.api.post<any>(`${this.baseUrl}/monthly-payroll/import-tax-excel/`, payload);
   }
 
   // لینک‌های مستقیم دانلود فایل‌ها و دیسکت‌ها
-  getDskZipDownloadUrl(periodId: number): string {
-    return `/api/personnel/monthly-payroll/export-dsk-zip/?period_id=${periodId}`;
+  getDskZipDownloadUrl(periodId: number, projectId?: number): string {
+    const projParam = projectId ? `&project_id=${projectId}` : '';
+    return `/api/personnel/monthly-payroll/export-bimeh-diskettes/?period_id=${periodId}${projParam}`;
+  }
+
+  getBimehDiskettesDownloadUrl(periodId: number, projectId?: number): string {
+    const projParam = projectId ? `&project_id=${projectId}` : '';
+    return `/api/personnel/monthly-payroll/export-bimeh-diskettes/?period_id=${periodId}${projParam}`;
   }
 
   getTaxWhDownloadUrl(periodId: number): string {
@@ -456,8 +478,9 @@ export class PersonnelApiService {
     return `/api/personnel/monthly-payroll/export-tax-wp/?period_id=${periodId}`;
   }
 
-  getBankExcelDownloadUrl(periodId: number): string {
-    return `/api/personnel/monthly-payroll/export-bank-excel/?period_id=${periodId}`;
+  getBankExcelDownloadUrl(periodId: number, projectId?: number): string {
+    const projParam = projectId ? `&project_id=${projectId}` : '';
+    return `/api/personnel/monthly-payroll/export-bank-excel/?period_id=${periodId}${projParam}`;
   }
 
   getMonthlyExcelDownloadUrl(periodId: number): string {
@@ -529,6 +552,129 @@ export class PersonnelApiService {
   getTreasuryDisketteDownloadUrl(periodId: number, type: 'paya' | 'satna' = 'paya'): string {
     return `/api/personnel/cartable/treasury/export-diskette/?period_id=${periodId}&type=${type}`;
   }
+
+  // --- ساختار سازمانی: پروژه‌های مالی و عملیاتی ---
+  getFinancialProjects(params?: { is_active?: boolean; search?: string }): Observable<FinancialProject[]> {
+    return this.api.get<FinancialProject[]>(`${this.baseUrl}/financial-projects`, params as Record<string, unknown>);
+  }
+
+  createFinancialProject(data: Partial<FinancialProject>): Observable<FinancialProject> {
+    return this.api.post<FinancialProject>(`${this.baseUrl}/financial-projects`, data);
+  }
+
+  updateFinancialProject(id: number, data: Partial<FinancialProject>): Observable<FinancialProject> {
+    return this.api.patch<FinancialProject>(`${this.baseUrl}/financial-projects/${id}`, data);
+  }
+
+  deleteFinancialProject(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/financial-projects/${id}`);
+  }
+
+  // --- ساختار سازمانی: بخش‌ها و دپارتمان‌های پروژه ---
+  getProjectSections(params?: { project_id?: number; is_active?: boolean; search?: string }): Observable<ProjectSection[]> {
+    return this.api.get<ProjectSection[]>(`${this.baseUrl}/project-sections`, params as Record<string, unknown>);
+  }
+
+  createProjectSection(data: Partial<ProjectSection>): Observable<ProjectSection> {
+    return this.api.post<ProjectSection>(`${this.baseUrl}/project-sections`, data);
+  }
+
+  updateProjectSection(id: number, data: Partial<ProjectSection>): Observable<ProjectSection> {
+    return this.api.patch<ProjectSection>(`${this.baseUrl}/project-sections/${id}`, data);
+  }
+
+  deleteProjectSection(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/project-sections/${id}`);
+  }
+
+  // --- ساختار سازمانی: انتساب کاربران به بخش‌ها ---
+  getUserSectionAssignments(params?: { section_id?: number; project_id?: number; user_id?: number; role?: string }): Observable<UserSectionAssignment[]> {
+    return this.api.get<UserSectionAssignment[]>(`${this.baseUrl}/user-section-assignments`, params as Record<string, unknown>);
+  }
+
+  createUserSectionAssignment(data: Partial<UserSectionAssignment>): Observable<UserSectionAssignment> {
+    return this.api.post<UserSectionAssignment>(`${this.baseUrl}/user-section-assignments`, data);
+  }
+
+  updateUserSectionAssignment(id: number, data: Partial<UserSectionAssignment>): Observable<UserSectionAssignment> {
+    return this.api.patch<UserSectionAssignment>(`${this.baseUrl}/user-section-assignments/${id}`, data);
+  }
+
+  deleteUserSectionAssignment(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/user-section-assignments/${id}`);
+  }
+
+  getMySections(): Observable<ProjectSection[]> {
+    return this.api.get<ProjectSection[]>(`${this.baseUrl}/user-section-assignments/my-sections/`);
+  }
+
+  // --- طرف‌حساب‌های مالی ---
+  getCounterparties(params?: { section_id?: number; counterparty_type?: string; search?: string }): Observable<Counterparty[]> {
+    return this.api.get<Counterparty[]>(`${this.baseUrl}/counterparties`, params as Record<string, unknown>);
+  }
+
+  createCounterparty(data: Partial<Counterparty>): Observable<Counterparty> {
+    return this.api.post<Counterparty>(`${this.baseUrl}/counterparties`, data);
+  }
+
+  updateCounterparty(id: number, data: Partial<Counterparty>): Observable<Counterparty> {
+    return this.api.patch<Counterparty>(`${this.baseUrl}/counterparties/${id}`, data);
+  }
+
+  deleteCounterparty(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/counterparties/${id}`);
+  }
+
+  // --- فاکتورهای هزینه ---
+  getExpenseInvoices(params?: { section_id?: number; status?: string; search?: string }): Observable<ExpenseInvoice[]> {
+    return this.api.get<ExpenseInvoice[]>(`${this.baseUrl}/expense-invoices`, params as Record<string, unknown>);
+  }
+
+  createExpenseInvoice(data: Partial<ExpenseInvoice>): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices`, data);
+  }
+
+  updateExpenseInvoice(id: number, data: Partial<ExpenseInvoice>): Observable<ExpenseInvoice> {
+    return this.api.patch<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}`, data);
+  }
+
+  deleteExpenseInvoice(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/expense-invoices/${id}`);
+  }
+
+  // --- ورودی و خروجی اکسل ساختار سازمانی و طرف‌های حساب ---
+  exportFinancialProjectsExcel(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/financial-projects/export-excel/`);
+  }
+
+  downloadFinancialProjectsTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/financial-projects/download-template/`);
+  }
+
+  exportProjectSectionsExcel(projectId?: number): Observable<Blob> {
+    const params = projectId ? { project_id: projectId } : undefined;
+    return this.api.download(`${this.baseUrl}/project-sections/export-excel/`, params);
+  }
+
+  downloadProjectSectionsTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/project-sections/download-template/`);
+  }
+
+  exportCounterpartiesExcel(sectionId?: number): Observable<Blob> {
+    const params = sectionId ? { section_id: sectionId } : undefined;
+    return this.api.download(`${this.baseUrl}/counterparties/export-excel/`, params);
+  }
+
+  downloadCounterpartiesTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/counterparties/download-template/`);
+  }
+
+  importCounterpartiesExcel(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.post<any>(`${this.baseUrl}/counterparties/import-excel/`, formData);
+  }
 }
+
 
 

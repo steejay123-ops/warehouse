@@ -1,0 +1,621 @@
+<div class="p-4 md:p-6 space-y-4 bg-slate-50 min-h-screen dir-rtl text-right font-sans">
+
+  <!-- هدر ماژول مدیریت ساختار سازمانی (طراحی فشرده و ارگونومیک) -->
+  <div class="bg-white rounded-2xl px-4 py-2.5 md:px-5 md:py-3 border border-slate-200/80 shadow-xs flex flex-row items-center justify-between gap-3">
+    <div class="flex items-center gap-2.5">
+      <span class="w-8 h-8 md:w-9 md:h-9 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-lg shadow-2xs">🏢</span>
+      <div>
+        <h1 class="text-xs md:text-sm font-black text-slate-800 tracking-tight">مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها</h1>
+        <p class="text-[10px] text-slate-400 hidden sm:block">تعریف مراکز هزینه، دپارتمان‌های تابعه، ماتریس انتساب کاربران و طرف‌حساب‌های مالی</p>
+      </div>
+    </div>
+
+    <!-- دکمه‌های ۳‌گانه اکشن (فقط آیکون مطابق دیزاین کاربران و انبارگردانی) -->
+    <div class="flex items-center gap-1.5 md:gap-2">
+      <!-- ۱. خروجی و دانلود اکسل (سبز) -->
+      <button 
+        type="button" 
+        (click)="exportExcel()" 
+        class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95" 
+        title="خروجی و دانلود فایل اکسل" 
+        aria-label="خروجی اکسل"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+      </button>
+
+      <!-- ۲. ورودی و آپلود اکسل (آبی) -->
+      <button 
+        type="button" 
+        (click)="openImportModal()" 
+        class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95" 
+        title="ورودی و آپلود فایل اکسل" 
+        aria-label="ورودی اکسل"
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+      </button>
+
+      <!-- ۳. بروزرسانی اطلاعات (بنفش/ایندیگو) -->
+      <button 
+        type="button" 
+        [disabled]="isLoading" 
+        (click)="loadAllData()" 
+        class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95" 
+        title="بروزرسانی اطلاعات" 
+        aria-label="بروزرسانی"
+      >
+        <svg *ngIf="!isLoading" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span *ngIf="isLoading" class="animate-spin block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- نوار ناوبری زیرتب‌ها -->
+  <div class="flex items-center justify-between flex-wrap gap-3 bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs">
+    <div class="flex items-center gap-1.5 md:gap-2 overflow-x-auto p-0.5">
+      <button (click)="switchSubTab('projects')" [class.active-subtab]="activeSubTab === 'projects'" class="subtab-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+        <span>🏛️</span>
+        <span>پروژه‌های مالی ({{ financialProjects.length }})</span>
+      </button>
+      <button (click)="switchSubTab('sections')" [class.active-subtab]="activeSubTab === 'sections'" class="subtab-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+        <span>🏢</span>
+        <span>بخش‌ها و دپارتمان‌ها ({{ projectSections.length }})</span>
+      </button>
+      <button (click)="switchSubTab('assignments')" [class.active-subtab]="activeSubTab === 'assignments'" class="subtab-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+        <span>👥</span>
+        <span>انتساب کاربران و نقش‌ها ({{ userAssignments.length }})</span>
+      </button>
+      <button (click)="switchSubTab('counterparties')" [class.active-subtab]="activeSubTab === 'counterparties'" class="subtab-btn px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+        <span>🤝</span>
+        <span>طرف‌حساب‌های مالی ({{ counterparties.length }})</span>
+      </button>
+    </div>
+
+    <div class="text-[11px] text-slate-500 font-medium px-2 hidden lg:block">
+      <span>مراکز هزینه و تفکیک دپارتمانی جهت صدور فاکتور و کنترل دسترسی</span>
+    </div>
+  </div>
+
+  <!-- ── زیرتب ۱: پروژه‌های مالی ── -->
+  <div *ngIf="activeSubTab === 'projects'" class="space-y-5">
+    <!-- فرم تعریف/ویرایش پروژه -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h4 class="text-xs font-black text-slate-800 flex items-center gap-2">
+          <span>{{ editingProject ? '✏️ ویرایش پروژه مالی' : '➕ تعریف پروژه مالی جدید' }}</span>
+        </h4>
+        <button *ngIf="editingProject" (click)="cancelEditProject()" class="text-xs text-slate-400 hover:text-rose-500 transition-colors cursor-pointer">انصراف از ویرایش</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد پروژه (یکتا):</label>
+          <input type="text" [(ngModel)]="newProject.code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثلاً PRJ-SHIRAZ" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام پروژه:</label>
+          <input type="text" [(ngModel)]="newProject.name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" placeholder="مثلاً پروژه انبار شیراز" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">توضیحات و شرح عملیات:</label>
+          <input type="text" [(ngModel)]="newProject.description" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="توضیحات اختیاری..." />
+        </div>
+        <div class="flex items-end gap-3">
+          <label class="flex items-center gap-2 cursor-pointer pb-2 text-xs font-bold text-slate-700">
+            <input type="checkbox" [(ngModel)]="newProject.is_active" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
+            <span>پروژه فعال است</span>
+          </label>
+          <button (click)="saveProject()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer">
+            {{ editingProject ? 'بروزرسانی پروژه' : 'ثبت پروژه' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول پروژه‌ها -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">فهرست پروژه‌های فعال سازمان</span>
+        <span class="text-[11px] text-slate-500 font-mono">تعداد کل: {{ financialProjects.length }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3 w-32">کد پروژه</th>
+              <th class="p-3">نام پروژه</th>
+              <th class="p-3">توضیحات</th>
+              <th class="p-3 text-center w-28">تعداد بخش‌ها</th>
+              <th class="p-3 text-center w-24">وضعیت</th>
+              <th class="p-3 text-center w-36">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let proj of financialProjects" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3 font-mono font-bold text-indigo-700">{{ proj.code }}</td>
+              <td class="p-3 font-bold text-slate-800">{{ proj.name }}</td>
+              <td class="p-3 text-slate-500 text-[11px]">{{ proj.description || '-' }}</td>
+              <td class="p-3 text-center">
+                <span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-mono text-[11px] font-bold">
+                  {{ proj.sections_count || 0 }} بخش
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <span *ngIf="proj.is_active" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">فعال</span>
+                <span *ngIf="!proj.is_active" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">غیرفعال</span>
+              </td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button (click)="editProject(proj)" class="px-2.5 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold">
+                    ویرایش
+                  </button>
+                  <button (click)="deleteProject(proj.id!, proj.name)" class="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold">
+                    حذف
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="financialProjects.length === 0">
+              <td colspan="6" class="p-8 text-center text-slate-400 text-xs">
+                هیچ پروژه‌ای تعریف نشده است. از فرم بالا پروژه اول را تعریف کنید.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── زیرتب ۲: بخش‌ها و دپارتمان‌ها ── -->
+  <div *ngIf="activeSubTab === 'sections'" class="space-y-5">
+    <!-- فیلتر و فرم ایجاد بخش -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+        <h4 class="text-xs font-black text-slate-800 flex items-center gap-2">
+          <span>{{ editingSection ? '✏️ ویرایش بخش' : '➕ تعریف بخش ذیل پروژه' }}</span>
+        </h4>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-slate-600">انتخاب پروژه والد:</span>
+          <select [ngModel]="selectedProjectId" (ngModelChange)="onProjectSelectChange($event)" class="bg-indigo-50 border border-indigo-200 rounded-xl px-3 py-1.5 text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500">
+            <option *ngFor="let p of financialProjects" [value]="p.id">{{ p.name }} ({{ p.code }})</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد بخش (یکتا در پروژه):</label>
+          <input type="text" [(ngModel)]="newSection.code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثلاً SEC-TRANS" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام بخش / دپارتمان:</label>
+          <input type="text" [(ngModel)]="newSection.name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" placeholder="مثلاً بخش ترابری و لجستیک" />
+        </div>
+        <div class="flex items-center gap-2 pt-6">
+          <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+            <input type="checkbox" [(ngModel)]="newSection.is_active" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
+            <span>بخش فعال است</span>
+          </label>
+        </div>
+        <div class="flex items-end gap-2">
+          <button (click)="saveSection()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer">
+            {{ editingSection ? 'بروزرسانی بخش' : 'ثبت بخش' }}
+          </button>
+          <button *ngIf="editingSection" (click)="cancelEditSection()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold cursor-pointer">
+            انصراف
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول بخش‌ها -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">بخش‌های تابعه پروژه انتخابی</span>
+        <span class="text-[11px] text-slate-500 font-mono">تعداد: {{ projectSections.length }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3 w-36">پروژه والد</th>
+              <th class="p-3 w-32">کد بخش</th>
+              <th class="p-3">نام بخش</th>
+              <th class="p-3 text-center w-24">وضعیت</th>
+              <th class="p-3 text-center w-36">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let sec of projectSections" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3 text-slate-500 text-[11px] font-bold">{{ sec.project_name || '-' }}</td>
+              <td class="p-3 font-mono font-bold text-indigo-700">{{ sec.code }}</td>
+              <td class="p-3 font-bold text-slate-800">{{ sec.name }}</td>
+              <td class="p-3 text-center">
+                <span *ngIf="sec.is_active" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">فعال</span>
+                <span *ngIf="!sec.is_active" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">غیرفعال</span>
+              </td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button (click)="editSection(sec)" class="px-2.5 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold">
+                    ویرایش
+                  </button>
+                  <button (click)="deleteSection(sec.id!, sec.name)" class="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold">
+                    حذف
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="projectSections.length === 0">
+              <td colspan="5" class="p-8 text-center text-slate-400 text-xs">
+                هیچ بخشی برای این پروژه ثبت نشده است.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── زیرتب ۳: انتساب کاربران و تعیین نقش‌ها ── -->
+  <div *ngIf="activeSubTab === 'assignments'" class="space-y-5">
+    <!-- فرم انتساب کاربر به بخش -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+      <h4 class="text-xs font-black text-slate-800 border-b border-slate-100 pb-3 flex items-center gap-2">
+        <span>➕ انتساب کاربر به بخش و تعیین نقش سازمانی</span>
+      </h4>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">انتخاب کاربر:</label>
+          <select [(ngModel)]="newAssignment.user" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option [ngValue]="null">-- انتخاب کاربر --</option>
+            <option *ngFor="let u of systemUsers" [value]="u.id">
+              {{ u.first_name }} {{ u.last_name }} ({{ u.username }})
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">انتخاب بخش سازمانی:</label>
+          <select [(ngModel)]="newAssignment.section" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option [ngValue]="null">-- انتخاب بخش --</option>
+            <option *ngFor="let s of projectSections" [value]="s.id">
+              {{ s.project_name }} - {{ s.name }} ({{ s.code }})
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نقش سازمانی در این بخش:</label>
+          <select [(ngModel)]="newAssignment.role" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="employee">کارمند / اپراتور ثبت (فقط پیش‌نویس)</option>
+            <option value="supervisor">سرپرست بخش (تایید اولیه)</option>
+            <option value="accountant">حسابدار پروژه (تایید مالی)</option>
+            <option value="manager">مدیر پروژه (تایید نهایی)</option>
+            <option value="treasury">خزانه‌دار کل (پرداخت)</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button (click)="saveAssignment()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer">
+            ثبت انتساب کاربر
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول انتساب‌ها -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">ماتریس انتساب کاربران و سطوح دسترسی بخش‌ها</span>
+        <span class="text-[11px] text-slate-500 font-mono">تعداد کل: {{ userAssignments.length }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3">نام و نام‌خانوادگی کاربر</th>
+              <th class="p-3 w-32">نام کاربری</th>
+              <th class="p-3">پروژه و بخش</th>
+              <th class="p-3 text-center w-36">نقش سازمانی</th>
+              <th class="p-3 text-center w-24">وضعیت</th>
+              <th class="p-3 text-center w-28">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let a of userAssignments" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3 font-bold text-slate-800">{{ a.user_full_name || '-' }}</td>
+              <td class="p-3 font-mono text-slate-500 text-[11px]">{{ a.username }}</td>
+              <td class="p-3 text-indigo-900 font-bold">
+                {{ a.project_name }} <span class="text-slate-400 font-normal">/</span> {{ a.section_name }}
+              </td>
+              <td class="p-3 text-center">
+                <span [ngClass]="{
+                  'bg-slate-100 text-slate-700 border-slate-200': a.role === 'employee',
+                  'bg-blue-50 text-blue-700 border-blue-200': a.role === 'supervisor',
+                  'bg-amber-50 text-amber-700 border-amber-200': a.role === 'accountant',
+                  'bg-purple-50 text-purple-700 border-purple-200': a.role === 'manager',
+                  'bg-emerald-50 text-emerald-700 border-emerald-200': a.role === 'treasury'
+                }" class="px-2.5 py-1 rounded-full border text-[10px] font-bold">
+                  {{ a.role_display || a.role }}
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <span *ngIf="a.is_active" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">فعال</span>
+                <span *ngIf="!a.is_active" class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">غیرفعال</span>
+              </td>
+              <td class="p-3 text-center">
+                <button (click)="deleteAssignment(a.id!)" class="px-2.5 py-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold">
+                  لغو انتساب
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="userAssignments.length === 0">
+              <td colspan="6" class="p-8 text-center text-slate-400 text-xs">
+                هیچ کاربری به بخش‌ها منتسب نشده است.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── زیرتب ۴: طرف‌حساب‌های مالی ── -->
+  <div *ngIf="activeSubTab === 'counterparties'" class="space-y-5">
+    <!-- فرم طرف‌حساب -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h4 class="text-xs font-black text-slate-800 flex items-center gap-2">
+          <span>{{ editingCounterparty ? '✏️ ویرایش طرف‌حساب مالی' : '➕ تعریف طرف‌حساب مالی جدید' }}</span>
+        </h4>
+        <button *ngIf="editingCounterparty" (click)="cancelEditCounterparty()" class="text-xs text-slate-400 hover:text-rose-500 cursor-pointer">انصراف</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نام شخص یا شرکت:</label>
+          <input type="text" [(ngModel)]="newCounterparty.name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" placeholder="مثلاً تعمیرگاه دیزل پارس" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع طرف‌حساب:</label>
+          <select [(ngModel)]="newCounterparty.counterparty_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="driver">راننده استیجاری / شرکتی</option>
+            <option value="repair_shop">تعمیرگاه و قطعه‌فروشی</option>
+            <option value="fuel_station">جایگاه سوخت</option>
+            <option value="contractor">پیمانکار / مشاور</option>
+            <option value="other">سایر طرف‌حساب‌ها</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره تماس / همراه:</label>
+          <input type="text" [(ngModel)]="newCounterparty.phone" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="0912..." />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد ملی / شناسه ملی:</label>
+          <input type="text" [(ngModel)]="newCounterparty.national_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="کد یا شناسه ۱۰ رقمی" />
+        </div>
+        <!-- فیلد هوشمند شماره شبا مشابه با تعریف خودرو -->
+        <div class="col-span-1 md:col-span-2 space-y-1">
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-slate-700 text-xs flex items-center gap-1.5">
+              <span>شماره شبا (تسویه بانکی پایا / ساتنا)</span>
+              <span class="text-amber-500 text-sm" title="اولویت اصلی تسویه بانکی">⭐</span>
+            </label>
+          </div>
+
+          <!-- اینپوت هوشمند شبا با پیشوند ثابت IR در سمت چپ و دکمه کپی -->
+          <div dir="ltr" class="flex items-center rounded-xl overflow-hidden border transition-all"
+            [ngClass]="{
+              'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20': shebaValidationResult?.isValid,
+              'border-rose-400 ring-2 ring-rose-400/20 bg-rose-50/20': shebaDigitsDisplay && !shebaValidationResult?.isValid,
+              'border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500': !shebaDigitsDisplay
+            }">
+            
+            <!-- پیشوند ثابت IR -->
+            <div class="px-3 py-2 bg-slate-200/80 border-r border-slate-300 text-slate-700 font-mono font-black text-xs select-none flex items-center shrink-0">
+              <span>IR</span>
+            </div>
+
+            <!-- ورودی ۲۴ رقمی -->
+            <div class="relative flex-1">
+              <input 
+                type="text" 
+                [value]="shebaDigitsDisplay" 
+                (input)="onShebaInput($event)"
+                (paste)="onShebaPaste($event)"
+                (copy)="onShebaCopy($event)"
+                maxlength="35"
+                dir="ltr"
+                placeholder="-- ---- ---- ---- ---- ----" 
+                class="w-full bg-transparent border-0 text-left font-mono tracking-widest text-xs px-3 py-2 pr-16 focus:outline-none text-slate-800 font-bold"
+              />
+
+              <!-- دکمه کپی و آیکون وضعیت درون فیلد شبا -->
+              <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                <button *ngIf="newCounterparty.sheba_number" type="button" (click)="copyShebaToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isShebaCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white/90 hover:bg-white text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره شبا به صورت یکپارچه و بدون فاصله">
+                  <span>{{ isShebaCopied ? '✓' : '📋' }}</span>
+                </button>
+                <span *ngIf="shebaValidationResult?.isValid" class="text-emerald-600 font-black text-sm" title="شماره شبا معتبر است">✓</span>
+                <span *ngIf="shebaDigitsDisplay && !shebaValidationResult?.isValid" class="text-rose-500 font-black text-sm" title="شماره شبا نامعتبر است">✕</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- پیام اعتبارسنجی زنده -->
+          <div *ngIf="shebaDigitsDisplay" class="pt-0.5">
+            <div *ngIf="shebaValidationResult?.isValid" class="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+              <span>✓ شماره شبا معتبر و تایید شد (الگوریتم استاندارد ISO 7064 Mod 97)</span>
+            </div>
+            <div *ngIf="!shebaValidationResult?.isValid && shebaValidationResult?.errorMessage" class="text-[10px] text-rose-600 font-bold flex items-center gap-1">
+              <span>⚠ {{ shebaValidationResult?.errorMessage }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- انتخاب هوشمند بانک عامل با قابلیت جستجو -->
+        <div class="relative">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block font-bold text-slate-600 text-xs">انتخاب بانک عامل:</label>
+          </div>
+          <div class="relative">
+            <input 
+              type="text" 
+              [value]="isBankDropdownOpen ? bankSearchQuery : (newCounterparty.bank_name || '')" 
+              (focus)="isBankDropdownOpen = true; bankSearchQuery = ''" 
+              (input)="bankSearchQuery = $any($event.target).value; isBankDropdownOpen = true"
+              (click)="isBankDropdownOpen = true"
+              placeholder="جستجو یا انتخاب بانک..." 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button 
+              type="button" 
+              (click)="isBankDropdownOpen = !isBankDropdownOpen"
+              class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer text-xs"
+            >
+              ▼
+            </button>
+
+            <!-- لایه شفاف جهت بستن دراپ‌داون با کلیک به بیرون -->
+            <div *ngIf="isBankDropdownOpen" (click)="isBankDropdownOpen = false" class="fixed inset-0 z-40 bg-transparent"></div>
+
+            <!-- منوی دراپ‌داون بانک‌ها -->
+            <div 
+              *ngIf="isBankDropdownOpen" 
+              class="absolute z-50 bottom-full mb-1 left-0 right-0 bg-white rounded-xl shadow-xl border border-slate-200 max-h-48 overflow-y-auto divide-y divide-slate-100"
+            >
+              <div 
+                *ngFor="let b of filteredBanks" 
+                (click)="selectBankFromDropdown(b, $event)"
+                class="px-3 py-2 text-xs hover:bg-indigo-50 cursor-pointer flex items-center justify-between transition-colors"
+                [class.bg-indigo-50]="newCounterparty.bank_name === b.name"
+              >
+                <span class="font-bold text-slate-800">{{ b.name }}</span>
+                <span class="text-[10px] text-slate-400 font-mono">{{ b.shortName }}</span>
+              </div>
+              <div *ngIf="filteredBanks.length === 0" class="px-3 py-3 text-xs text-slate-400 text-center">
+                بانکی یافت نشد
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- فیلد شماره حساب (تکمیل خودکار از شبا و دکمه تبدیل به شبا) -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="block font-bold text-slate-600 text-xs">شماره حساب (اختیاری):</label>
+          </div>
+          <div dir="ltr" class="relative flex items-center rounded-xl overflow-hidden border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-indigo-500 transition-all">
+            <input 
+              type="text" 
+              [value]="newCounterparty.account_number || ''" 
+              (input)="onAccountNumberInput($event)"
+              (paste)="onAccountNumberPaste($event)"
+              (copy)="onAccountNumberCopy($event)"
+              placeholder="مثال: 0101111111001" 
+              dir="ltr"
+              class="w-full bg-transparent border-0 text-left font-mono text-xs px-3 py-2 pr-16 focus:outline-none text-slate-800 font-bold"
+            />
+            
+            <!-- دکمه‌های کپی و تبدیل به شبا -->
+            <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              <button *ngIf="newCounterparty.account_number" type="button" (click)="copyAccountNumberToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isAccountCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره حساب">
+                <span>{{ isAccountCopied ? '✓' : '📋' }}</span>
+              </button>
+              <button *ngIf="newCounterparty.account_number && newCounterparty.bank_name" type="button" (click)="convertAccountToShebaNow()" class="w-6 h-6 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-all flex items-center justify-center cursor-pointer shadow-2xs text-xs font-bold" title="تولید خودکار شماره شبا از حساب">
+                <span>⚡</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">اختصاص به بخش خاص (اختیاری):</label>
+          <select [(ngModel)]="newCounterparty.section" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option [ngValue]="null">عمومی (همه بخش‌ها)</option>
+            <option *ngFor="let s of projectSections" [value]="s.id">{{ s.name }} ({{ s.code }})</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button (click)="saveCounterparty()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer">
+            {{ editingCounterparty ? 'بروزرسانی طرف‌حساب' : 'ثبت طرف‌حساب' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- جدول طرف‌حساب‌ها -->
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-black text-slate-700">فهرست طرف‌حساب‌های مالی</span>
+        <span class="text-[11px] text-slate-500 font-mono">تعداد: {{ counterparties.length }}</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3">نام طرف‌حساب</th>
+              <th class="p-3 w-36">نوع</th>
+              <th class="p-3 w-32">تلفن</th>
+              <th class="p-3 w-32">کد/شناسه ملی</th>
+              <th class="p-3">اطلاعات بانکی</th>
+              <th class="p-3 text-center w-28">بخش منتسب</th>
+              <th class="p-3 text-center w-28">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-medium">
+            <tr *ngFor="let cp of counterparties" class="hover:bg-slate-50/60 transition-colors">
+              <td class="p-3 font-bold text-slate-800">{{ cp.name }}</td>
+              <td class="p-3 text-[11px]">
+                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold">{{ cp.counterparty_type_display || cp.counterparty_type }}</span>
+              </td>
+              <td class="p-3 font-mono text-slate-600 text-[11px]">{{ cp.phone || '-' }}</td>
+              <td class="p-3 font-mono text-slate-600 text-[11px]">{{ cp.national_id || '-' }}</td>
+              <td class="p-3 text-[11px]">
+                <div *ngIf="cp.sheba_number" class="font-mono text-slate-700 font-bold">IR{{ cp.sheba_number }}</div>
+                <div *ngIf="cp.account_number" class="font-mono text-indigo-700 text-[10px]">حساب: {{ cp.account_number }}</div>
+                <div *ngIf="cp.bank_name" class="text-slate-400 text-[10px]">{{ cp.bank_name }}</div>
+                <div *ngIf="!cp.sheba_number && !cp.account_number && !cp.bank_name" class="text-slate-400">-</div>
+              </td>
+              <td class="p-3 text-center text-slate-500 text-[11px]">{{ cp.section_name || 'عمومی' }}</td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button (click)="editCounterparty(cp)" class="px-2 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-[11px] font-bold cursor-pointer">
+                    ویرایش
+                  </button>
+                  <button (click)="deleteCounterparty(cp.id!, cp.name)" class="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-bold cursor-pointer">
+                    حذف
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="counterparties.length === 0">
+              <td colspan="7" class="p-8 text-center text-slate-400 text-xs">
+                هیچ طرف‌حسابی ثبت نشده است.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- مدال اختصاصی آپلود و ورود اکسل -->
+  <app-excel-import-modal
+    *ngIf="isExcelModalOpen"
+    [title]="excelModalTitle"
+    [importFn]="excelImportFn"
+    [templateDownloadFn]="excelTemplateFn"
+    (closed)="closeExcelModal()"
+    (imported)="onExcelImported($event)"
+  ></app-excel-import-modal>
+
+</div>

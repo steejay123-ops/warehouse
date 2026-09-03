@@ -397,6 +397,9 @@ export interface BankExportSettings {
 export interface PayrollYearlySettings {
   id?: number;
   fiscal_year: string;
+  project?: number | null;
+  project_name?: string | null;
+  title?: string;
   is_active: boolean;
   notes?: string;
 
@@ -577,6 +580,86 @@ export interface MonthlyGridResponse {
   rows: MonthlyGridRow[];
   anomalies?: AttendanceAnomaly[];
 }
+
+export interface FinancialProject {
+  id?: number;
+  code: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  sections_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProjectSection {
+  id?: number;
+  project: number;
+  project_name?: string;
+  project_code?: string;
+  code: string;
+  name: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserSectionAssignment {
+  id?: number;
+  user: number;
+  username?: string;
+  user_full_name?: string;
+  section: number;
+  section_name?: string;
+  section_code?: string;
+  project_id?: number;
+  project_name?: string;
+  role: 'employee' | 'supervisor' | 'accountant' | 'manager' | 'treasury';
+  role_display?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Counterparty {
+  id?: number;
+  name: string;
+  counterparty_type: 'driver' | 'repair_shop' | 'fuel_station' | 'contractor' | 'other';
+  counterparty_type_display?: string;
+  national_id?: string;
+  phone?: string;
+  bank_name?: string;
+  account_number?: string;
+  sheba_number?: string;
+  section?: number | null;
+  section_name?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ExpenseInvoice {
+  id?: number;
+  section: number;
+  section_name?: string;
+  project_id?: number;
+  project_name?: string;
+  counterparty: number;
+  counterparty_name?: string;
+  invoice_number: string;
+  invoice_date_shamsi: string;
+  amount: number;
+  category: string;
+  description: string;
+  attachment?: string | null;
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'ready_to_pay' | 'paid' | 'rejected';
+  status_display?: string;
+  created_by?: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 
 
 

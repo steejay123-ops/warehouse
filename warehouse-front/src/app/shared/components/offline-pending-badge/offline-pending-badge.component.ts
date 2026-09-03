@@ -2,14 +2,17 @@ import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, HostListener
 import { CommonModule } from '@angular/common';
 import { NetworkStatusService, ConnectionState } from '../../../core/services/network-status.service';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
+import { SyncQueueEntry, SyncErrorEntry, offlineDb } from '../../../core/services/offline-db';
+import { StateService } from '../../../services/state.service';
 import { Subscription } from 'rxjs';
 
 /**
- * نشانگر پویای وضعیت شبکه و صف همگام‌سازی (Offline Pending & Network Sync Badge)
+ * مرکز یکپارچه وضعیت اتصال، صف انتظار و صندوق خطاهای همگام‌سازی
+ * (Unified Network, Offline Queue & Sync Error Hub)
  *
  * حالت‌ها:
  * • mode="inline" → برای سطرهای جدول (فشرده، غیرتعاملی، نشان‌دهنده رکورد آفلاین)
- * • mode="header" → برای هدر سراسری و هدر صفحات (پویا، نمایش وضعیت آنلاین/آفلاین/صف + پاپ‌آپ تعاملی با کلیک)
+ * • mode="header" → برای هدر سراسری با پاپ‌اور تعاملی کامل، مدیریت صف و خطاها
  */
 @Component({
   selector: 'app-offline-pending-badge',
@@ -31,116 +34,348 @@ import { Subscription } from 'rxjs';
       </span>
     </ng-container>
 
-    <!-- Header Mode (مخصوص نوار ابزار هدر صفحات و هدر سراسری) -->
+    <!-- Header Mode: کپسول یکپارچه وضعیت، صف و هشدار خطا -->
     <div *ngIf="mode === 'header'" class="relative inline-block text-right select-none" dir="rtl">
-      <!-- Status Pill Button -->
+      <!-- Status Pill Button (دکمه کپسولی ادغام‌شده) -->
       <button
         type="button"
         (click)="togglePopover($event)"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:scale-95 whitespace-nowrap"
+        class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/20 active:scale-95 whitespace-nowrap"
         [ngClass]="pillClasses"
         [title]="tooltipText"
       >
-        <!-- Connected / Synced -->
+        <!-- 1. Connected / Synced -->
         <ng-container *ngIf="networkState === 'online' && !isSyncing && pendingCount === 0">
-          <span class="text-emerald-700 font-bold">متصل</span>
-          <span class="relative flex h-2 w-2 mr-0.5">
+          <span class="relative flex h-2 w-2">
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
+          <span class="text-emerald-700 font-extrabold hidden sm:inline">متصل</span>
         </ng-container>
 
-        <!-- Syncing in progress -->
+        <!-- 2. Syncing in progress -->
         <ng-container *ngIf="isSyncing">
           <svg class="animate-spin text-sky-600" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
           </svg>
-          <span class="text-sky-800">در حال ارسال ({{ pendingCount }})</span>
+          <span class="text-sky-800 font-extrabold hidden sm:inline">در حال ارسال ({{ pendingCount }})</span>
+          <span class="text-sky-800 text-[10px] sm:hidden font-mono font-black">({{ pendingCount }})</span>
         </ng-container>
 
-        <!-- Offline or Pending in queue -->
+        <!-- 3. Offline or Pending in queue -->
         <ng-container *ngIf="!isSyncing && (networkState !== 'online' || pendingCount > 0)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-amber-600">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [ngClass]="networkState === 'online' ? 'text-amber-600' : 'text-rose-600'">
             <line x1="1" y1="1" x2="23" y2="23"></line>
             <path d="M18.5 19H9a7 7 0 0 1-1.87-13.75"></path>
             <path d="M10.71 5.05A6 6 0 0 1 20 10h.5a4.5 4.5 0 0 1 2.62 8.16"></path>
           </svg>
-          <span *ngIf="networkState !== 'online' && pendingCount === 0" class="text-amber-800">آفلاین</span>
-          <span *ngIf="pendingCount > 0" class="text-amber-800">در انتظار ارسال ({{ pendingCount }})</span>
+          <span *ngIf="networkState !== 'online' && pendingCount === 0" class="text-rose-800 font-extrabold hidden sm:inline">آفلاین</span>
+          <span *ngIf="pendingCount > 0" class="text-amber-800 font-extrabold hidden sm:inline">صف ارسال ({{ pendingCount }})</span>
+          <span *ngIf="pendingCount > 0" class="text-amber-800 text-[10px] sm:hidden font-mono font-black">({{ pendingCount }})</span>
         </ng-container>
+
+        <!-- 4. ادغام زنگوله/هشدار خطای همگام‌سازی (Integrated Sync Error Chip) -->
+        <span
+          *ngIf="errorCount > 0"
+          class="inline-flex items-center gap-1 mr-0.5 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black shadow-xs animate-pulse"
+          title="{{ errorCount }} خطای ارسال نیازمند بررسی"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span>{{ errorCount }}</span>
+        </span>
       </button>
 
-      <!-- Interactive Popover Card -->
+      <!-- Backdrop to close on click outside -->
+      <div *ngIf="isPopoverOpen" class="fixed inset-0 z-40 bg-black/5 sm:bg-transparent" (click)="closePopover()"></div>
+
+      <!-- Unified Popover Modal (پاپ‌اور یکپارچه مرکز همگام‌سازی — بازشونده به سمت چپ بدون تداخل با سایدبار) -->
       <div
         *ngIf="isPopoverOpen"
-        class="absolute left-0 top-full mt-2 w-72 bg-white rounded-2xl border border-slate-200/90 shadow-xl z-50 overflow-hidden text-right fade-in"
+        class="fixed inset-x-3 top-[74px] sm:absolute sm:inset-x-auto sm:right-0 sm:left-auto sm:top-full sm:mt-2 w-auto sm:w-[350px] bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl z-50 overflow-hidden text-right fade-in flex flex-col max-h-[calc(100dvh-90px)] sm:max-h-[520px]"
         (click)="$event.stopPropagation()"
       >
-        <!-- Popover Header -->
-        <div class="p-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between">
+        <!-- Modal Top Header -->
+        <div class="p-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-800/70 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-2">
             <div class="w-2.5 h-2.5 rounded-full" [ngClass]="statusDotClass"></div>
-            <span class="text-xs font-black text-slate-800">وضعیت اتصال و همگام‌سازی</span>
+            <span class="text-xs font-black text-slate-800 dark:text-slate-100">مرکز اتصال و همگام‌سازی</span>
           </div>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border" [ngClass]="badgeStatusClass">
-            {{ statusLabel }}
-          </span>
-        </div>
-
-        <!-- Popover Body -->
-        <div class="p-3.5 space-y-3 text-xs">
-          <!-- Connection Detail -->
-          <div class="flex items-center justify-between py-1 border-b border-slate-100/80">
-            <span class="text-slate-500 font-medium">وضعیت سرور:</span>
-            <span class="font-bold" [ngClass]="serverStatusClass">{{ serverStatusText }}</span>
-          </div>
-
-          <!-- Pending Queue Detail -->
-          <div class="flex items-center justify-between py-1 border-b border-slate-100/80">
-            <span class="text-slate-500 font-medium">صف ارسال محلی:</span>
-            <span class="font-bold" [class.text-amber-600]="pendingCount > 0" [class.text-emerald-600]="pendingCount === 0">
-              {{ pendingCount > 0 ? (pendingCount + ' رکورد در انتظار ارسال') : 'همگام و بدون صف' }}
-            </span>
-          </div>
-
-          <!-- Last Sync Detail -->
-          <div class="flex items-center justify-between py-1 border-b border-slate-100/80">
-            <span class="text-slate-500 font-medium">آخرین همگام‌سازی:</span>
-            <span class="font-bold text-slate-700">{{ formattedLastSync }}</span>
-          </div>
-
-          <!-- Errors if any (Clickable & Responsive Navigation to Sync Inbox) -->
-          <div
-            *ngIf="errorCount > 0"
-            (click)="onOpenSyncInbox($event)"
-            class="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs active:scale-98 select-none"
-            title="کلیک برای مشاهده و مدیریت خطاها در صندوق همگام‌سازی"
-          >
-            <div class="flex items-center gap-1.5 min-w-0">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              <span class="truncate">{{ errorCount }} خطا در صف ارسال</span>
-            </div>
-            <div class="flex items-center gap-1 text-[10px] text-rose-600 font-extrabold shrink-0 bg-white/70 px-2 py-0.5 rounded-md border border-rose-200/60">
-              <span>مشاهده صندوق</span>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </div>
-          </div>
-
-          <!-- Action Button: Manual Sync Now -->
           <button
             type="button"
-            (click)="onManualSync()"
-            [disabled]="isSyncing || networkState !== 'online'"
-            class="w-full mt-1 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-98 cursor-pointer"
-            [ngClass]="networkState === 'online' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400'"
+            (click)="closePopover()"
+            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-200/50 transition-all cursor-pointer"
+            title="بستن"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isSyncing">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-            <span>{{ isSyncing ? 'در حال ارسال داده‌ها...' : 'همگام‌سازی دستی اکنون' }}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
+        </div>
+
+        <!-- ─── 3 Navigation Tabs (Segmented Pill Style) ─── -->
+        <div class="flex border-b border-slate-100 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-800/50 p-1.5 gap-1 shrink-0 text-xs font-bold">
+          <button
+            type="button"
+            (click)="activeTab = 'status'"
+            class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer text-[11px]"
+            [ngClass]="activeTab === 'status' 
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-black' 
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+          >
+            وضعیت شبکه
+          </button>
+          <button
+            type="button"
+            (click)="activeTab = 'queue'"
+            class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer flex items-center justify-center gap-1 text-[11px]"
+            [ngClass]="activeTab === 'queue' 
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-black' 
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+          >
+            <span>صف ارسال</span>
+            <span
+              *ngIf="pendingCount > 0"
+              class="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold"
+              [ngClass]="activeTab === 'queue' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'"
+            >
+              {{ pendingCount }}
+            </span>
+          </button>
+          <button
+            type="button"
+            (click)="activeTab = 'errors'"
+            class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer flex items-center justify-center gap-1 text-[11px]"
+            [ngClass]="activeTab === 'errors' 
+              ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-xs font-black' 
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+          >
+            <span>خطاها</span>
+            <span
+              *ngIf="errorCount > 0"
+              class="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-rose-500 text-white"
+            >
+              {{ errorCount }}
+            </span>
+          </button>
+        </div>
+
+        <!-- ─── Tab Content Scrollable Area ─── -->
+        <div class="overflow-y-auto flex-1 p-3.5 space-y-3 text-xs">
+
+          <!-- ─── TAB 1: وضعیت و همگام‌سازی ─── -->
+          <div *ngIf="activeTab === 'status'" class="space-y-2.5 fade-in">
+            <!-- Server Status -->
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">وضعیت سرور:</span>
+              <span class="font-bold text-[11px]" [ngClass]="serverStatusClass">{{ serverStatusText }}</span>
+            </div>
+
+            <!-- Pending Queue Summary -->
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">صف ارسال محلی:</span>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-[11px]" [class.text-amber-600]="pendingCount > 0" [class.text-emerald-600]="pendingCount === 0">
+                  {{ pendingCount > 0 ? (pendingCount + ' رکورد در انتظار') : 'همگام و بدون صف' }}
+                </span>
+                <button
+                  *ngIf="pendingCount > 0"
+                  type="button"
+                  (click)="activeTab = 'queue'"
+                  class="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                >
+                  مشاهده
+                </button>
+              </div>
+            </div>
+
+            <!-- Last Sync Detail -->
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">آخرین ارسال موفق:</span>
+              <span class="font-bold text-slate-700 dark:text-slate-300 text-[11px] font-mono">{{ formattedLastSync }}</span>
+            </div>
+
+            <!-- Error Summary Warning if any -->
+            <div
+              *ngIf="errorCount > 0"
+              (click)="activeTab = 'errors'"
+              class="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-[11px] font-bold flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs select-none"
+              title="کلیک برای مشاهده خطاها"
+            >
+              <div class="flex items-center gap-1.5 min-w-0">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span class="truncate">{{ errorCount }} خطا در پردازش درخواست‌ها رخ داده است</span>
+              </div>
+              <span class="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold shrink-0 bg-white/80 dark:bg-slate-900 px-2 py-0.5 rounded-md border border-rose-200/70">
+                بررسی
+              </span>
+            </div>
+
+            <!-- Manual Sync Button -->
+            <button
+              type="button"
+              (click)="onManualSync()"
+              [disabled]="isSyncing || networkState !== 'online'"
+              class="w-full mt-2 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-98 cursor-pointer"
+              [ngClass]="networkState === 'online' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400'"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isSyncing">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+              <span>{{ isSyncing ? 'در حال ارسال داده‌ها...' : 'همگام‌سازی دستی اکنون' }}</span>
+            </button>
+          </div>
+
+          <!-- ─── TAB 2: جزئیات صف انتظار و امکان لغو ─── -->
+          <div *ngIf="activeTab === 'queue'" class="space-y-2.5 fade-in">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+              <span class="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                درخواست‌های ذخیره‌شده روی دستگاه ({{ queueEntries.length }})
+              </span>
+              <button
+                *ngIf="queueEntries.length > 1"
+                type="button"
+                (click)="onClearAllQueue()"
+                class="text-[10px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold hover:underline cursor-pointer"
+              >
+                لغو همه موارد
+              </button>
+            </div>
+
+            <!-- Empty Queue State -->
+            <div *ngIf="queueEntries.length === 0" class="py-8 text-center">
+              <div class="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+              <p class="text-xs font-bold text-slate-700 dark:text-slate-300">صف انتظار خالی است</p>
+              <p class="text-[10px] text-slate-400 mt-1">کلیه تغییرات شما با سرور همگام شده‌اند.</p>
+            </div>
+
+            <!-- Queue Items List -->
+            <div *ngFor="let item of queueEntries" class="p-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-800/80 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 space-y-2 transition-all">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                  <!-- Human Action Icon Badge -->
+                  <div
+                    class="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold shadow-2xs"
+                    [ngClass]="getHumanActionBadgeClass(item)"
+                  >
+                    {{ getHumanActionIcon(item) }}
+                  </div>
+
+                  <!-- Human Readable Title & Subtitle -->
+                  <div class="min-w-0 flex-1">
+                    <div class="text-xs font-black text-slate-800 dark:text-slate-100 leading-snug">
+                      {{ getHumanTitle(item) }}
+                    </div>
+                    <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium leading-tight">
+                      {{ getHumanSubtitle(item) }}
+                    </div>
+                    <div class="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-mono">
+                      <span>ثبت در ساعت {{ formatTime(item.createdAt) }}</span>
+                      <span *ngIf="item.retryCount > 0" class="text-amber-500 font-bold">({{ item.retryCount }} بار تلاش)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Action: Cancel / Discard this item from queue -->
+                <button
+                  type="button"
+                  (click)="onCancelQueueItem(item.id!)"
+                  class="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-[11px] font-bold transition-all active:scale-95 shrink-0 cursor-pointer shadow-2xs flex items-center gap-1"
+                  title="لغو این عملیات و جلوگیری از ارسال آن به سرور"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  <span>لغو</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ─── TAB 3: صندوق خطاهای همگام‌سازی ─── -->
+          <div *ngIf="activeTab === 'errors'" class="space-y-2.5 fade-in">
+            <div class="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+              <span class="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">
+                خطاهای ثبت‌شده توسط سرور ({{ syncErrors.length }})
+              </span>
+              <button
+                *ngIf="syncErrors.length > 0"
+                type="button"
+                (click)="onDismissAllErrors()"
+                class="text-[10px] text-rose-600 hover:text-rose-700 dark:text-rose-400 font-bold hover:underline cursor-pointer"
+              >
+                پاک کردن همه
+              </button>
+            </div>
+
+            <!-- Empty Errors State -->
+            <div *ngIf="syncErrors.length === 0" class="py-8 text-center">
+              <div class="w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+              <p class="text-xs font-bold text-slate-700 dark:text-slate-300">هیچ خطایی وجود ندارد</p>
+              <p class="text-[10px] text-slate-400 mt-1">تمام درخواست‌های ارسالی با موفقیت پردازش شده‌اند.</p>
+            </div>
+
+            <!-- Errors List -->
+            <div *ngFor="let err of syncErrors" class="p-2.5 rounded-xl border border-rose-200/70 dark:border-rose-900 bg-rose-50/40 dark:bg-rose-950/20 space-y-1.5 transition-all">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-1.5 mb-1">
+                    <span class="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300">
+                      {{ err.statusCode || 'ERR' }}
+                    </span>
+                    <span class="text-[10px] font-mono font-bold text-slate-500">{{ err.method }}</span>
+                    <span class="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                      {{ err.serverMessage || 'خطای اعتبارسنجی سرور' }}
+                    </span>
+                  </div>
+                  <p class="text-[9px] text-slate-400 font-mono">{{ formatTime(err.failedAt) }}</p>
+                </div>
+
+                <!-- Dismiss Button -->
+                <button
+                  type="button"
+                  (click)="onDismissError(err.id!)"
+                  class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors shrink-0 cursor-pointer"
+                  title="حذف خطا"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+              </div>
+
+              <!-- Actions: Retry + View Data -->
+              <div class="flex items-center gap-2 pt-1 border-t border-rose-100 dark:border-rose-900/50">
+                <button
+                  type="button"
+                  (click)="onRetryError(err.id!)"
+                  class="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                  تلاش مجدد
+                </button>
+                <button
+                  *ngIf="hasPayload(err.body)"
+                  type="button"
+                  (click)="togglePayload(err.id!)"
+                  class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold transition-all cursor-pointer"
+                >
+                  {{ expandedPayloadId === err.id ? 'بستن داده' : 'نمایش داده' }}
+                </button>
+              </div>
+
+              <!-- Error Payload Details -->
+              <div *ngIf="expandedPayloadId === err.id" class="mt-1 p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 text-[9px] font-mono max-h-32 overflow-y-auto space-y-0.5">
+                <div *ngFor="let field of formatPayload(err.body)" class="flex items-start gap-1 py-0.5">
+                  <span class="text-slate-400 shrink-0" dir="ltr">{{ field.key }}:</span>
+                  <span class="text-slate-700 dark:text-slate-300 break-all" dir="auto">{{ field.value }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -156,11 +391,6 @@ import { Subscription } from 'rxjs';
   `]
 })
 export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
-  /**
-   * حالت نمایش:
-   * 'inline' → تگ فشرده برای جداول
-   * 'header' → نشانگر پویا و تعاملی برای هدر
-   */
   @Input() mode: 'header' | 'inline' = 'inline';
   @Output() openSyncInbox = new EventEmitter<void>();
 
@@ -171,21 +401,21 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
   errorCount = 0;
 
   isPopoverOpen = false;
+  activeTab: 'status' | 'queue' | 'errors' = 'status';
+
+  queueEntries: SyncQueueEntry[] = [];
+  syncErrors: SyncErrorEntry[] = [];
+  expandedPayloadId: number | null = null;
 
   private network = NetworkStatusService.getInstance();
   private sync = OfflineSyncService.getInstance();
   private subs: Subscription[] = [];
 
-  constructor(private elementRef: ElementRef, private cdr: ChangeDetectorRef) {}
-
-  onOpenSyncInbox(event?: MouseEvent): void {
-    if (event) {
-      event.stopPropagation();
-    }
-    this.isPopoverOpen = false;
-    this.cdr.markForCheck();
-    this.openSyncInbox.emit();
-  }
+  constructor(
+    private elementRef: ElementRef,
+    private cdr: ChangeDetectorRef,
+    private state: StateService
+  ) {}
 
   ngOnInit(): void {
     if (this.mode === 'header') {
@@ -200,6 +430,9 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       this.subs.push(
         this.sync.isSyncing$.subscribe((syncing) => {
           this.isSyncing = syncing;
+          if (!syncing && this.isPopoverOpen) {
+            this.refreshData();
+          }
           this.cdr.markForCheck();
         })
       );
@@ -207,6 +440,9 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       this.subs.push(
         this.sync.pendingCount$.subscribe((count) => {
           this.pendingCount = count;
+          if (this.isPopoverOpen) {
+            this.loadQueueEntries();
+          }
           this.cdr.markForCheck();
         })
       );
@@ -221,6 +457,9 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       this.subs.push(
         this.sync.errorCount$.subscribe((errors) => {
           this.errorCount = errors;
+          if (this.isPopoverOpen) {
+            this.loadSyncErrors();
+          }
           this.cdr.markForCheck();
         })
       );
@@ -235,24 +474,467 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     if (this.isPopoverOpen && !this.elementRef.nativeElement.contains(event.target)) {
-      this.isPopoverOpen = false;
-      this.cdr.markForCheck();
+      this.closePopover();
     }
   }
 
   togglePopover(event: MouseEvent): void {
     event.stopPropagation();
     this.isPopoverOpen = !this.isPopoverOpen;
+    if (this.isPopoverOpen) {
+      // انتخاب هوشمند تب فعال بر اساس اولویت
+      if (this.errorCount > 0) {
+        this.activeTab = 'errors';
+      } else if (this.pendingCount > 0) {
+        this.activeTab = 'queue';
+      } else {
+        this.activeTab = 'status';
+      }
+      this.refreshData();
+    }
+  }
+
+  closePopover(): void {
+    this.isPopoverOpen = false;
+    this.expandedPayloadId = null;
+    this.cdr.markForCheck();
+  }
+
+  async refreshData(): Promise<void> {
+    await Promise.all([this.loadQueueEntries(), this.loadSyncErrors()]);
+    this.cdr.markForCheck();
+  }
+
+  humanTitlesCache: Map<number, { title: string; subtitle: string; icon: string; badgeClass: string }> = new Map();
+
+  async loadQueueEntries(): Promise<void> {
+    try {
+      this.queueEntries = await this.sync.getQueueEntries();
+
+      // بازیابی مشخصات کاربرپسند برای تک‌تک اقلام صف
+      for (const item of this.queueEntries) {
+        if (!item.id) continue;
+        const details = this.resolveHumanSyncDetails(item);
+
+        // اگر نام کاربر در StateService پیدا نشد، در کش IndexedDB آفلاین جستجو کن
+        if (details.title.includes('کاربر شماره #') && item.url) {
+          const targetId = this.getTargetId(item.url);
+          if (targetId) {
+            try {
+              const cached = await offlineDb.apiCache.filter(e => e.url.includes('/users')).first();
+              if (cached?.response) {
+                const list = Array.isArray(cached.response) ? cached.response : (cached.response.results || []);
+                const u = list.find((x: any) => String(x.id) === String(targetId));
+                if (u) {
+                  const userName = (u.first_name ? (u.first_name + ' ' + (u.last_name || '')).trim() : '') || u.username;
+                  if (userName) {
+                    details.title = item.method === 'DELETE' ? `حذف حساب کاربری «${userName}»` : `ویرایش حساب کاربری «${userName}»`;
+                    if (u.username) details.subtitle = `نام کاربری: ${u.username} • درخواست حذف دائمی از سیستم`;
+                  }
+                }
+              }
+            } catch {}
+          }
+        }
+
+        // اگر نام نقش پیدا نشد، در کش IndexedDB جستجو کن
+        if (details.title.includes('نقش شماره #') && item.url) {
+          const targetId = this.getTargetId(item.url);
+          if (targetId) {
+            try {
+              const cached = await offlineDb.apiCache.filter(e => e.url.includes('/roles')).first();
+              if (cached?.response) {
+                const list = Array.isArray(cached.response) ? cached.response : (cached.response.results || []);
+                const r = list.find((x: any) => String(x.id) === String(targetId));
+                if (r) {
+                  const roleName = r.title || r.name;
+                  if (roleName) {
+                    details.title = item.method === 'DELETE' ? `حذف نقش کاربری «${roleName}»` : `ویرایش نقش کاربری «${roleName}»`;
+                    details.subtitle = 'درخواست حذف این نقش از سیستم';
+                  }
+                }
+              }
+            } catch {}
+          }
+        }
+
+        this.humanTitlesCache.set(item.id, details);
+      }
+    } catch (e) {
+      console.warn('[SyncBadge] Failed to load queue:', e);
+      this.queueEntries = [];
+    }
+    this.cdr.markForCheck();
+  }
+
+  async loadSyncErrors(): Promise<void> {
+    try {
+      this.syncErrors = await this.sync.getErrors();
+    } catch (e) {
+      console.warn('[SyncBadge] Failed to load errors:', e);
+      this.syncErrors = [];
+    }
+    this.cdr.markForCheck();
+  }
+
+  async onCancelQueueItem(id: number): Promise<void> {
+    try {
+      await this.sync.cancelQueueEntry(id);
+      this.queueEntries = this.queueEntries.filter(item => item.id !== id);
+    } catch (e) {
+      console.error('[SyncBadge] Failed to cancel queue item:', e);
+    }
+    this.cdr.markForCheck();
+  }
+
+  async onClearAllQueue(): Promise<void> {
+    if (!confirm('آیا از لغو و حذف کلیه رکوردهای صف انتظار اطمینان دارید؟ این تغییرات دیگر به سرور ارسال نخواهند شد.')) {
+      return;
+    }
+    try {
+      await this.sync.clearQueue();
+      this.queueEntries = [];
+    } catch (e) {
+      console.error('[SyncBadge] Failed to clear queue:', e);
+    }
+    this.cdr.markForCheck();
+  }
+
+  async onDismissError(id: number): Promise<void> {
+    try {
+      await this.sync.dismissError(id);
+      this.syncErrors = this.syncErrors.filter(err => err.id !== id);
+    } catch (e) {
+      console.error('[SyncBadge] Failed to dismiss error:', e);
+    }
+    this.cdr.markForCheck();
+  }
+
+  async onDismissAllErrors(): Promise<void> {
+    try {
+      await this.sync.dismissAllErrors();
+      this.syncErrors = [];
+    } catch (e) {
+      console.error('[SyncBadge] Failed to dismiss all errors:', e);
+    }
+    this.cdr.markForCheck();
+  }
+
+  async onRetryError(id: number): Promise<void> {
+    try {
+      await this.sync.retryError(id);
+      this.syncErrors = this.syncErrors.filter(err => err.id !== id);
+      await this.loadQueueEntries();
+    } catch (e) {
+      console.error('[SyncBadge] Failed to retry error:', e);
+    }
+    this.cdr.markForCheck();
   }
 
   async onManualSync(): Promise<void> {
     if (this.isSyncing || this.networkState !== 'online') return;
     try {
       await this.sync.forceSync();
+      await this.refreshData();
     } catch (e) {
       console.error('[SyncBadge] Manual sync error:', e);
     }
     this.cdr.markForCheck();
+  }
+
+  togglePayload(id: number): void {
+    this.expandedPayloadId = this.expandedPayloadId === id ? null : id;
+    this.cdr.markForCheck();
+  }
+
+  hasPayload(body: any): boolean {
+    return !!body && typeof body === 'object' && Object.keys(body).length > 0;
+  }
+
+  formatPayload(body: any): { key: string; value: string }[] {
+    if (!body || typeof body !== 'object') return [];
+    return Object.entries(body)
+      .filter(([k]) => !k.startsWith('_'))
+      .slice(0, 10)
+      .map(([k, v]) => ({
+        key: k,
+        value: v === null || v === undefined ? '—' : typeof v === 'object' ? JSON.stringify(v).slice(0, 80) : String(v).slice(0, 80),
+      }));
+  }
+
+  getTargetId(url?: string): string | null {
+    if (!url) return null;
+    const match = url.match(/\/(\d+)\/?(?:\?.*)?$/);
+    return match ? match[1] : null;
+  }
+
+  getShortUrl(url?: string): string {
+    if (!url) return '—';
+    try {
+      const u = url.split('?')[0];
+      return u.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/api/, '');
+    } catch {
+      return url;
+    }
+  }
+
+  getHumanTitle(item: SyncQueueEntry): string {
+    const cached = item.id ? this.humanTitlesCache.get(item.id) : null;
+    if (cached) return cached.title;
+    return this.resolveHumanSyncDetails(item).title;
+  }
+
+  getHumanSubtitle(item: SyncQueueEntry): string {
+    const cached = item.id ? this.humanTitlesCache.get(item.id) : null;
+    if (cached) return cached.subtitle;
+    return this.resolveHumanSyncDetails(item).subtitle;
+  }
+
+  getHumanActionIcon(item: SyncQueueEntry): string {
+    const cached = item.id ? this.humanTitlesCache.get(item.id) : null;
+    if (cached) return cached.icon;
+    return this.resolveHumanSyncDetails(item).icon;
+  }
+
+  getHumanActionBadgeClass(item: SyncQueueEntry): string {
+    const cached = item.id ? this.humanTitlesCache.get(item.id) : null;
+    if (cached) return cached.badgeClass;
+    return this.resolveHumanSyncDetails(item).badgeClass;
+  }
+
+  resolveHumanSyncDetails(item: SyncQueueEntry): { title: string; subtitle: string; icon: string; badgeClass: string } {
+    const url = item.url || '';
+    const method = item.method?.toUpperCase() || 'GET';
+    const targetId = this.getTargetId(url);
+    const body = item.body || {};
+
+    // 1. حساب‌های کاربری (Users)
+    if (url.includes('/users')) {
+      let userName = '';
+      let username = '';
+
+      // ۱. جستجو در حافظه برنامه (StateService)
+      const uFromState = this.state?.appState?.users?.find((u: any) => String(u.id) === String(targetId));
+      if (uFromState) {
+        userName = (uFromState.first_name ? (uFromState.first_name + ' ' + (uFromState.last_name || '')).trim() : '') || uFromState.username;
+        username = uFromState.username || '';
+      }
+
+      // ۲. اگر از طریق بدنه ارسال شده (POST / PATCH)
+      if (!userName && (body.first_name || body.username)) {
+        userName = (body.first_name ? (body.first_name + ' ' + (body.last_name || '')).trim() : '') || body.username;
+        username = body.username || '';
+      }
+
+      const displayUser = userName ? `«${userName}»` : (targetId ? `کاربر شماره #${targetId}` : 'کاربر');
+      const subInfo = username ? `نام کاربری: ${username}` : (targetId ? `شناسه سیستمی: #${targetId}` : '');
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف حساب کاربر ${displayUser}`,
+          subtitle: subInfo ? `${subInfo} • درخواست حذف دائمی از سیستم` : 'درخواست حذف دائمی حساب کاربری از سیستم',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      if (method === 'POST') {
+        return {
+          title: `ایجاد کاربر جدید: ${displayUser}`,
+          subtitle: subInfo || 'ثبت اطلاعات و دسترسی‌های کاربر جدید',
+          icon: '👤',
+          badgeClass: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+        };
+      }
+      return {
+        title: `ویرایش مشخصات ${displayUser}`,
+        subtitle: subInfo || 'بروزرسانی اطلاعات و دسترسی‌های کاربر',
+        icon: '✏️',
+        badgeClass: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+      };
+    }
+
+    // 2. نقش‌های کاربری (Custom Roles)
+    if (url.includes('/roles') || url.includes('/custom-roles')) {
+      let roleTitle = body.name || body.title || '';
+      if (!roleTitle) {
+        const rFromState = this.state?.appState?.roles?.find((r: any) => String(r.id) === String(targetId));
+        if (rFromState) roleTitle = rFromState.title || rFromState.name;
+      }
+      const displayRole = roleTitle ? `«${roleTitle}»` : (targetId ? `نقش شماره #${targetId}` : 'نقش سازمانی');
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف نقش کاربری ${displayRole}`,
+          subtitle: 'درخواست حذف این نقش از لیست نقش‌های سیستم',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      if (method === 'POST') {
+        return {
+          title: `تعریف نقش جدید: ${displayRole}`,
+          subtitle: 'ایجاد نقش سازمانی و اعطای مجوزها',
+          icon: '🛡️',
+          badgeClass: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+        };
+      }
+      return {
+        title: `ویرایش نقش کاربری ${displayRole}`,
+        subtitle: 'تغییر مجوزها یا عنوان این نقش',
+        icon: '✏️',
+        badgeClass: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+      };
+    }
+
+    // 3. دسترسی‌ها (Permissions)
+    if (url.includes('/permissions')) {
+      const permName = body.name || body.codename;
+      if (method === 'DELETE') {
+        return {
+          title: 'حذف مجوز دسترسی',
+          subtitle: permName ? `کد دسترسی: ${permName}` : 'حذف دسترسی از سیستم',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `مدیریت مجوزها ${permName ? ': ' + permName : ''}`,
+        subtitle: 'بروزرسانی جدول دسترسی‌های سامانه',
+        icon: '🔑',
+        badgeClass: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+      };
+    }
+
+    // 4. کارکرد روزانه پرسنل (Attendance)
+    if (url.includes('/attendance')) {
+      const person = body.personnel_name || body.personnel || '';
+      const date = body.date || body.work_date || '';
+      const statusFa = body.status === 'PRESENT' ? 'حاضر' : (body.status === 'ABSENT' ? 'غایب' : (body.status === 'LEAVE' ? 'مرخصی' : (body.status || '')));
+      const hours = body.hours || body.effective_hours ? `${body.hours || body.effective_hours} ساعت` : '';
+      const displayPerson = person ? `«${person}»` : 'پرسنل';
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف کارکرد ${displayPerson}`,
+          subtitle: date ? `مربوط به تاریخ ${date}` : 'لغو ثبت کارکرد روزانه',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `ثبت کارکرد ${displayPerson}${statusFa ? ' (' + statusFa + ')' : ''}`,
+        subtitle: `${date ? 'تاریخ: ' + date : ''}${hours ? ' • کارکرد: ' + hours : ''}` || 'ثبت حضور و غیاب پرسنل',
+        icon: '⏱️',
+        badgeClass: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+      };
+    }
+
+    // 5. تردد ناوگان (Fleet Trips)
+    if (url.includes('/trips')) {
+      const plate = body.plate_number || body.vehicle_name || '';
+      const driver = body.driver_name || '';
+      const displayVehicle = plate ? `خودرو «${plate}»` : 'ناوگان حمل و نقل';
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف تردد ${displayVehicle}`,
+          subtitle: driver ? `راننده: ${driver}` : 'لغو تردد ثبت‌شده',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `ثبت تردد ${displayVehicle}`,
+        subtitle: driver ? `راننده: ${driver}` : 'ثبت تردد خودرو در انبار',
+        icon: '🚛',
+        badgeClass: 'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300'
+      };
+    }
+
+    // 6. انبارگردانی و شمارش (Inventory Counts)
+    if (url.includes('/count-tasks') || url.includes('/count')) {
+      const tag = body.tag_number || body.tag || '';
+      const qty = body.count_quantity ?? body.counted_quantity;
+      const itemName = body.item_name || body.name || '';
+      const displayItem = itemName ? `«${itemName}»` : (tag ? `تگ شمارش #${tag}` : 'کالای انبار');
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف شمارش ${displayItem}`,
+          subtitle: 'لغو رکورد شمارش فیزیکی',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `شمارش انبار: ${displayItem}`,
+        subtitle: `${qty !== undefined ? 'تعداد: ' + qty + ' عدد' : ''}${tag ? ' • تگ: ' + tag : ''}` || 'ثبت شمارش فیزیکی کالا در انبارگردانی',
+        icon: '📦',
+        badgeClass: 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+      };
+    }
+
+    // 7. پرونده پرسنلی (Personnel Profiles)
+    if (url.includes('/personnel') || url.includes('/profiles')) {
+      const name = body.full_name || (body.first_name ? (body.first_name + ' ' + (body.last_name || '')).trim() : '');
+      const code = body.personnel_code || '';
+      const displayName = name ? `«${name}»` : (targetId ? `پرسنل شماره #${targetId}` : 'پرونده پرسنلی');
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف پرونده ${displayName}`,
+          subtitle: code ? `کد پرسنلی: ${code}` : 'حذف اطلاعات پرسنل از سیستم',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `ویرایش پرونده ${displayName}`,
+        subtitle: code ? `کد پرسنلی: ${code}` : 'بروزرسانی مشخصات پرسنلی و احکام شغلی',
+        icon: '👤',
+        badgeClass: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300'
+      };
+    }
+
+    // 8. اقلام انبار (Items)
+    if (url.includes('/items')) {
+      const name = body.name || body.description || '';
+      const code = body.code || body.sku || '';
+      const displayItem = name ? `«${name}»` : (code ? `کد کالا ${code}` : (targetId ? `کالا #${targetId}` : 'کالای انبار'));
+
+      if (method === 'DELETE') {
+        return {
+          title: `حذف کالای ${displayItem}`,
+          subtitle: code ? `کد کالا: ${code}` : 'حذف قلم کالا از فهرست انبار',
+          icon: '🗑️',
+          badgeClass: 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+        };
+      }
+      return {
+        title: `ویرایش کالای ${displayItem}`,
+        subtitle: code ? `کد کالا: ${code}` : 'بروزرسانی مشخصات کالا در سیستم',
+        icon: '📦',
+        badgeClass: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+      };
+    }
+
+    // سایر موارد عمومی
+    return {
+      title: method === 'DELETE' ? `درخواست حذف رکورد #${targetId || ''}` : (method === 'POST' ? 'ثبت اطلاعات جدید در سیستم' : 'ویرایش اطلاعات در سیستم'),
+      subtitle: 'تغییر ذخیره‌شده روی دستگاه، در انتظار همگام‌سازی با سرور',
+      icon: '📝',
+      badgeClass: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+    };
+  }
+
+  formatTime(timestamp?: number): string {
+    if (!timestamp) return 'نامشخص';
+    try {
+      const d = new Date(timestamp);
+      return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return 'لحظاتی قبل';
+    }
   }
 
   get pillClasses(): Record<string, boolean> {
@@ -266,22 +948,30 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
         'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100': true,
       };
     }
+    if (this.networkState !== 'online') {
+      return {
+        'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100': true,
+      };
+    }
     return {
       'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100': true,
     };
   }
 
   get tooltipText(): string {
+    if (this.errorCount > 0) {
+      return `${this.errorCount} خطای ارسال در صف وجود دارد (کلیک برای بررسی و مدیریت)`;
+    }
     if (this.networkState === 'online' && !this.isSyncing && this.pendingCount === 0) {
-      return 'اتصال برقرار است و تمام داده‌ها همگام هستند (برای جزئیات کلیک کنید)';
+      return 'اتصال برقرار است و تمام داده‌ها همگام هستند (کلیک برای جزئیات)';
     }
     if (this.isSyncing) {
       return `در حال ارسال ${this.pendingCount} مورد به سرور...`;
     }
     if (this.networkState !== 'online') {
-      return `آفلاین - ${this.pendingCount} مورد در صف ارسال محلی (برای جزئیات کلیک کنید)`;
+      return `آفلاین - ${this.pendingCount} مورد در صف ارسال محلی (کلیک برای مشاهده و لغو)`;
     }
-    return `${this.pendingCount} مورد در صف ارسال (برای جزئیات کلیک کنید)`;
+    return `${this.pendingCount} مورد در صف ارسال (کلیک برای مشاهده و لغو)`;
   }
 
   get statusDotClass(): Record<string, boolean> {
@@ -290,22 +980,6 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       'bg-amber-500': this.networkState === 'server-unreachable',
       'bg-rose-500': this.networkState === 'offline',
     };
-  }
-
-  get statusLabel(): string {
-    if (this.networkState === 'online') return 'آنلاین و فعال';
-    if (this.networkState === 'server-unreachable') return 'عدم پاسخ سرور';
-    return 'آفلاین';
-  }
-
-  get badgeStatusClass(): Record<string, boolean> {
-    if (this.networkState === 'online') {
-      return { 'bg-emerald-50 text-emerald-700 border-emerald-200': true };
-    }
-    if (this.networkState === 'server-unreachable') {
-      return { 'bg-amber-50 text-amber-700 border-amber-200': true };
-    }
-    return { 'bg-rose-50 text-rose-700 border-rose-200': true };
   }
 
   get serverStatusText(): string {
@@ -324,11 +998,6 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
 
   get formattedLastSync(): string {
     if (!this.lastSyncTime) return 'هنوز ثبت نشده';
-    try {
-      const d = new Date(this.lastSyncTime);
-      return d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } catch {
-      return 'لحظاتی قبل';
-    }
+    return this.formatTime(this.lastSyncTime);
   }
 }

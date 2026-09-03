@@ -7,7 +7,7 @@ import { StateService } from '../../../services/state.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ToastService } from '../../../services/toast.service';
 import { PersonnelApiService } from '../../../core/api/personnel-api.service';
-import { PayrollYearlySettings } from '../../../core/models/personnel.model';
+import { PayrollYearlySettings, FinancialProject } from '../../../core/models/personnel.model';
 
 @Component({
   selector: 'app-base-settings',
@@ -23,6 +23,9 @@ export class BaseSettings implements OnInit, OnDestroy {
 
   fiscalYear = '1405';
   yearlySettings: PayrollYearlySettings | null = null;
+  projects: FinancialProject[] = [];
+  selectedProjectId: number | null = null;
+
   isLoading = false;
   isSaving = false;
 
@@ -40,10 +43,22 @@ export class BaseSettings implements OnInit, OnDestroy {
 
   get canManageSettings(): boolean {
     const p = this.auth.userPermissions();
-    return p.includes('perm_settings_personnel') || p.includes('admin_all');
+    return p.includes('perm_settings_personnel') || p.includes('admin_all') || !!this.auth.user()?.is_superuser;
+  }
+
+  get isCurrentSettingSpecificToProject(): boolean {
+    return !!(this.selectedProjectId && this.yearlySettings?.project === this.selectedProjectId);
   }
 
   ngOnInit(): void {
+    // بارگذاری لیست پروژه‌ها جهت سلکتور دامنه تنظیمات
+    this.api.getFinancialProjects().subscribe({
+      next: (projs) => {
+        this.projects = projs;
+        this.cdr.detectChanges();
+      }
+    });
+
     this.querySub = this.route.queryParams.subscribe(params => {
       if (params['tab']) {
         const t = params['tab'];
@@ -60,6 +75,9 @@ export class BaseSettings implements OnInit, OnDestroy {
       if (params['year']) {
         this.fiscalYear = params['year'];
       }
+      if (params['project_id']) {
+        this.selectedProjectId = Number(params['project_id']);
+      }
       this.loadYearlySettings();
     });
   }
@@ -73,6 +91,7 @@ export class BaseSettings implements OnInit, OnDestroy {
   setTab(tab: 'grades' | 'labor' | 'attendance_window' | 'dsk' | 'tax' | 'bank'): void {
     this.activeTab = tab;
     this.updateQueryParams();
+    this.loadYearlySettings();
   }
 
   onYearChange(): void {
@@ -80,20 +99,32 @@ export class BaseSettings implements OnInit, OnDestroy {
     this.loadYearlySettings();
   }
 
+  onProjectChange(projId: any): void {
+    this.selectedProjectId = projId ? Number(projId) : null;
+    this.updateQueryParams();
+    this.loadYearlySettings();
+  }
+
   private updateQueryParams(): void {
+    const qp: any = {
+      tab: this.activeTab,
+      year: this.fiscalYear
+    };
+    if (this.selectedProjectId) {
+      qp.project_id = this.selectedProjectId;
+    } else {
+      qp.project_id = null;
+    }
     this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: {
-        tab: this.activeTab,
-        year: this.fiscalYear
-      },
+      queryParams: qp,
       queryParamsHandling: 'merge'
     });
   }
 
   loadYearlySettings(): void {
     this.isLoading = true;
-    this.api.getYearlySettings(this.fiscalYear).subscribe({
+    this.api.getYearlySettings(this.fiscalYear, this.selectedProjectId).subscribe({
       next: (res: any) => {
         this.yearlySettings = res;
         this.isLoading = false;
@@ -102,6 +133,24 @@ export class BaseSettings implements OnInit, OnDestroy {
       error: () => {
         this.isLoading = false;
         this.toast.show('error', 'خطا در بارگذاری تنظیمات پایه سالانه');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  cloneForSelectedProject(): void {
+    if (!this.selectedProjectId) return;
+    this.isLoading = true;
+    this.api.cloneSettingsForProject(this.selectedProjectId, this.fiscalYear).subscribe({
+      next: (cloned) => {
+        this.yearlySettings = cloned;
+        this.isLoading = false;
+        this.toast.show('success', `تنظیمات اختصاصی برای پروژه «${cloned.project_name || ''}» با موفقیت ایجاد شد.`);
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isLoading = false;
+        this.toast.show('error', err?.error?.error || 'خطا در کپی تنظیمات برای پروژه');
         this.cdr.detectChanges();
       }
     });

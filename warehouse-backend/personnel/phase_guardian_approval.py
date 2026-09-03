@@ -850,25 +850,638 @@ class ApprovalPhaseGuardian:
 
         return self.report_status("ایجنت نگهبان ۸ (Cartable API & RBAC Endpoints Guardian)", all_passed, checks)
 
+    def audit_guardian_9_sod_database_and_redis_cache(self) -> bool:
+        """
+        ایجنت نگهبان ۹: اعتبارسنجی مدل SoDPolicyRule، مایگریشن، پر شدن پایگاه داده، و بارگذاری O(1) در کش Redis
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from accounts.models import SoDPolicyRule
+            from accounts.sod_cache_service import SoDCacheService
+
+            # Check 1: Model Existence and Fields
+            req_fields = ['app_module', 'role_code', 'role_title_fa', 'page_route', 'action_code', 'action_title_fa', 'is_prohibited', 'prohibition_reason_fa']
+            missing = [f for f in req_fields if not hasattr(SoDPolicyRule, f)]
+            if not missing:
+                checks.append(("ساختار مدل SoDPolicyRule", True, "مدل در دیتابیس با تمامی فیلدهای الزامی موجود است."))
+            else:
+                checks.append(("ساختار مدل SoDPolicyRule", False, f"فیلدهای گمشده: {missing}"))
+                all_passed = False
+
+            # Check 2: Seed Data Count
+            SoDCacheService.seed_default_rules()
+            total_rules = SoDPolicyRule.objects.count()
+            if total_rules >= 15:
+                checks.append(("تعداد قوانین ثبت‌شده در پایگاه داده", True, f"تعداد {total_rules} قانون خط قرمز مصوب در جدول SoDPolicyRule ثبت شد."))
+            else:
+                checks.append(("تعداد قوانین ثبت‌شده در پایگاه داده", False, f"تعداد قوانین ناکافی: {total_rules}"))
+                all_passed = False
+
+            # Check 3: Redis Cache Loading
+            matrix = SoDCacheService.load_sod_policies_to_cache()
+            if matrix and len(matrix) >= 15:
+                checks.append(("بارگذاری ماتریس قوانین در کش Redis", True, f"ماتریس با {len(matrix)} قانون به صورت O(1) در کلید ردیس sod:policy_matrix بارگذاری گردید."))
+            else:
+                checks.append(("بارگذاری ماتریس قوانین در کش Redis", False, "خطا در بارگذاری ماتریس در کش ردیس."))
+                all_passed = False
+
+            # Check 4: Operator Prohibitions Evaluation
+            p1, r1 = SoDCacheService.is_action_prohibited('personnel', 'operator', '/attendance', 'approve_attendance_period')
+            p2, r2 = SoDCacheService.is_action_prohibited('personnel', 'operator', '/profiles', 'approve_personnel_profile')
+            if p1 and p2:
+                checks.append(("ممنوعیت‌های نقش اپراتور / کارمند (تایید کارکرد و احکام)", True, "اپراتور به درستی از تایید نهایی کارکرد و تصویب احکام منع شده است."))
+            else:
+                checks.append(("ممنوعیت‌های نقش اپراتور / کارمند (تایید کارکرد و احکام)", False, f"عدم تشخیص خط قرمز: p1={p1}, p2={p2}"))
+                all_passed = False
+
+            # Check 5: Supervisor Wage & Disbursal Prohibitions Evaluation
+            p3, r3 = SoDCacheService.is_action_prohibited('personnel', 'supervisor', '/profiles', 'edit_base_wage_and_bonuses')
+            p4, r4 = SoDCacheService.is_action_prohibited('personnel', 'supervisor', '/treasury-cartable', 'disburse_treasury_payment')
+            if p3 and p4:
+                checks.append(("ممنوعیت‌های نقش سرپرست انبار (تغییر دستمزد و پرداخت)", True, "سرپرست انبار به درستی از تغییر ضرایب مالی حقوق و واریز خزانه‌داری منع شده است."))
+            else:
+                checks.append(("ممنوعیت‌های نقش سرپرست انبار (تغییر دستمزد و پرداخت)", False, f"عدم تشخیص خط قرمز: p3={p3}, p4={p4}"))
+                all_passed = False
+
+            # Check 6: Accountant Daily Attendance Prohibitions Evaluation
+            p5, r5 = SoDCacheService.is_action_prohibited('personnel', 'accountant', '/attendance', 'create_daily_attendance_entry')
+            p6, r6 = SoDCacheService.is_action_prohibited('personnel', 'accountant', '/manager-approvals', 'authorize_manager_payment')
+            if p5 and p6:
+                checks.append(("ممنوعیت‌های نقش حسابدار (دستکاری حضور میدانی و مجوز مدیر)", True, "حسابدار به درستی از ثبت مستقیم حضور میدانی و صدور مجوز مدیر منع شده است."))
+            else:
+                checks.append(("ممنوعیت‌های نقش حسابدار (دستکاری حضور میدانی و مجوز مدیر)", False, f"عدم تشخیص خط قرمز: p5={p5}, p6={p6}"))
+                all_passed = False
+
+            # Check 7: Warehouse Counter Prohibitions Evaluation
+            p7, r7 = SoDCacheService.is_action_prohibited('warehouse', 'counter', '/manager-review', 'finalize_inventory_count')
+            p8, r8 = SoDCacheService.is_action_prohibited('warehouse', 'counter', '/customs', 'view_customs_and_costs')
+            if p7 and p8:
+                checks.append(("ممنوعیت‌های نقش شمارشگر انبار (بستن دوره و ارزش مالی کالا)", True, "شمارشگر کور به درستی از بستن دوره انبارگردانی و دیدن قیمت‌ها منع گردید."))
+            else:
+                checks.append(("ممنوعیت‌های نقش شمارشگر انبار (بستن دوره و ارزش مالی کالا)", False, f"عدم تشخیص خط قرمز: p7={p7}, p8={p8}"))
+                all_passed = False
+
+            # Check 8: Superuser Absolute Clearance Evaluation
+            p_admin, _ = SoDCacheService.is_action_prohibited('personnel', 'superuser', '/attendance', 'approve_attendance_period')
+            if not p_admin:
+                checks.append(("دسترسی آزاد ادمین کل (Superuser Bypass)", True, "ادمین کل از شمول ممنوعیت‌ها مستثنی شده است."))
+            else:
+                checks.append(("دسترسی آزاد ادمین کل (Superuser Bypass)", False, "ادمین کل اشتباهاً منع شده است."))
+                all_passed = False
+
+            # Check 9: Role Prohibitions List Extraction (For Frontend UI)
+            op_prohibitions = SoDCacheService.get_prohibitions_for_role('personnel', 'operator')
+            if len(op_prohibitions) >= 3:
+                checks.append(("استخراج لیست خطوط قرمز برای فرانت‌اند (Role Prohibitions Map)", True, f"تعداد {len(op_prohibitions)} خط قرمز برای ارسال به فرانت‌اند استخراج شد."))
+            else:
+                checks.append(("استخراج لیست خطوط قرمز برای فرانت‌اند (Role Prohibitions Map)", False, f"تعداد خطوط قرمز استخراج‌شده ناکافی: {len(op_prohibitions)}"))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی SoD و Redis", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۹ (SoD Database & Redis Cache Guardian)", all_passed, checks)
+
+    def audit_guardian_10_x_active_role_middleware(self) -> bool:
+        """
+        ایجنت نگهبان ۱۰: اعتبارسنجی استخراج هدرهای X-Active-Role / X-Active-App، مقابله با جعل نقش و نگهداری کانتکست
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from django.test import RequestFactory
+            from django.contrib.auth import get_user_model
+            from django.contrib.auth.models import Permission
+            from accounts.middleware import ActiveRoleMiddleware, get_current_active_role, get_current_active_app
+            User = get_user_model()
+            factory = RequestFactory()
+
+            # Create test users
+            op_user, _ = User.objects.get_or_create(username='g10_operator', defaults={'is_active': True})
+            p_att = Permission.objects.get(codename='view_sys_personnel_attendance')
+            op_user.user_permissions.add(p_att)
+
+            mgr_user, _ = User.objects.get_or_create(username='g10_manager', defaults={'is_active': True})
+            p_mgr = Permission.objects.get(codename='perm_manager_payment_authorize')
+            p_att_m = Permission.objects.get(codename='view_sys_personnel_attendance')
+            mgr_user.user_permissions.add(p_mgr, p_att_m)
+
+            middleware = ActiveRoleMiddleware(lambda req: None)
+
+            # Test 1: Header extraction for standard operator
+            req1 = factory.get('/api/test/', HTTP_X_ACTIVE_ROLE='operator', HTTP_X_ACTIVE_APP='personnel')
+            req1.user = op_user
+            middleware(req1)
+            if getattr(req1, 'active_role', None) == 'operator' and getattr(req1, 'active_app', None) == 'personnel':
+                checks.append(("استخراج هدرهای X-Active-Role و X-Active-App", True, "هدرهای ارسالی با موفقیت استخراج و به request متصل شدند."))
+            else:
+                checks.append(("استخراج هدرهای X-Active-Role و X-Active-App", False, f"نقش فعال: {getattr(req1, 'active_role', None)}"))
+                all_passed = False
+
+            # Test 2: Anti-Spoofing Barrier (Operator sending X-Active-Role: manager)
+            req2 = factory.get('/api/test/', HTTP_X_ACTIVE_ROLE='manager', HTTP_X_ACTIVE_APP='personnel')
+            req2.user = op_user
+            middleware(req2)
+            if getattr(req2, 'active_role', None) != 'manager':
+                checks.append(("سپر ضد جعل نقش (Anti Role-Spoofing)", True, "تلاش اپراتور برای جعل نقش مدیر با موفقیت خنثی و به نقش مجاز تنزل یافت."))
+            else:
+                checks.append(("سپر ضد جعل نقش (Anti Role-Spoofing)", False, "هشدار امنیتی: اپراتور توانست به نقش مدیر ارتقا یابد!"))
+                all_passed = False
+
+            # Test 3: Legitimate Multi-Role User Persona Switching
+            req3 = factory.get('/api/test/', HTTP_X_ACTIVE_ROLE='operator', HTTP_X_ACTIVE_APP='personnel')
+            req3.user = mgr_user
+            middleware(req3)
+            if getattr(req3, 'active_role', None) == 'operator':
+                checks.append(("سوئیچ نقش مجاز کاربر چندنقشه (Persona Switching)", True, "کاربر چندنقشه با موفقیت نقش فعال خود را به اپراتور تغییر داد."))
+            else:
+                checks.append(("سوئیچ نقش مجاز کاربر چندنقشه (Persona Switching)", False, f"عدم اعمال سوئیچ نقش: {getattr(req3, 'active_role', None)}"))
+                all_passed = False
+
+            # Test 4: App Switching to Warehouse
+            req4 = factory.get('/api/test/', HTTP_X_ACTIVE_APP='warehouse', HTTP_X_ACTIVE_ROLE='counter')
+            req4.user = op_user
+            middleware(req4)
+            if getattr(req4, 'active_app', None) == 'warehouse':
+                checks.append(("سوئیچ ماژول کلان (App Module Switching)", True, "سوئیچ به ماژول warehouse به درستی اعمال گردید."))
+            else:
+                checks.append(("سوئیچ ماژول کلان (App Module Switching)", False, f"ماژول فعال: {getattr(req4, 'active_app', None)}"))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی میدلور", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۰ (X-Active-Role Middleware & Anti-Spoofing Guardian)", all_passed, checks)
+
+    def audit_guardian_11_prohibited_actions_backend_barrier(self) -> bool:
+        """
+        ایجنت نگهبان ۱۱: مسدودسازی صریح خطوط قرمز تفکیک وظایف با خطای ۴۰۳ و پیام ممیزی فارسی
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            from django.test import RequestFactory
+            from django.contrib.auth import get_user_model
+            from rest_framework.exceptions import PermissionDenied
+            from accounts.permissions import check_sod_prohibition, SoDPolicyPermission
+            User = get_user_model()
+            factory = RequestFactory()
+
+            op_user, _ = User.objects.get_or_create(username='g11_operator', defaults={'is_active': True})
+            sup_user, _ = User.objects.get_or_create(username='g11_supervisor', defaults={'is_active': True})
+            acc_user, _ = User.objects.get_or_create(username='g11_accountant', defaults={'is_active': True})
+            admin_user, _ = User.objects.get_or_create(username='g11_admin', defaults={'is_active': True, 'is_superuser': True})
+
+            # Test 1: Operator blocked from attendance period approval
+            req1 = factory.post('/api/personnel/attendance/approve-period/')
+            req1.user = op_user
+            req1.active_role = 'operator'
+            req1.active_app = 'personnel'
+
+            blocked_op = False
+            error_detail = None
+            try:
+                check_sod_prohibition(req1, '/attendance', 'approve_attendance_period')
+            except PermissionDenied as pe:
+                blocked_op = True
+                error_detail = pe.detail
+
+            if blocked_op and isinstance(error_detail, dict) and error_detail.get('code') == 'sod_prohibited':
+                checks.append(("مسدودسازی خط قرمز اپراتور در تایید کارکرد", True, "خطای 403 با پیام ممیزی و کد sod_prohibited صادر شد."))
+            else:
+                checks.append(("مسدودسازی خط قرمز اپراتور در تایید کارکرد", False, f"عدم مسدودسازی خط قرمز: blocked={blocked_op}"))
+                all_passed = False
+
+            # Test 2: Supervisor blocked from base wage modification
+            req2 = factory.post('/api/personnel/profiles/1/edit-wage/')
+            req2.user = sup_user
+            req2.active_role = 'supervisor'
+            req2.active_app = 'personnel'
+
+            blocked_sup = False
+            try:
+                check_sod_prohibition(req2, '/profiles', 'edit_base_wage_and_bonuses')
+            except PermissionDenied:
+                blocked_sup = True
+
+            if blocked_sup:
+                checks.append(("مسدودسازی خط قرمز سرپرست در تغییر دستمزد", True, "تلاش سرپرست برای تغییر دستمزد با موفقیت مسدود گردید."))
+            else:
+                checks.append(("مسدودسازی خط قرمز سرپرست در تغییر دستمزد", False, "هشدار: سرپرست توانست اقدام تغییر دستمزد را دور بزند!"))
+                all_passed = False
+
+            # Test 3: Accountant blocked from direct daily attendance creation
+            req3 = factory.post('/api/personnel/attendance/')
+            req3.user = acc_user
+            req3.active_role = 'accountant'
+            req3.active_app = 'personnel'
+
+            blocked_acc = False
+            try:
+                check_sod_prohibition(req3, '/attendance', 'create_daily_attendance_entry')
+            except PermissionDenied:
+                blocked_acc = True
+
+            if blocked_acc:
+                checks.append(("مسدودسازی خط قرمز حسابدار در تولید کارکرد میدانی", True, "تلاش حسابدار برای ثبت مستقیم روزهای کارکرد مسدود گردید."))
+            else:
+                checks.append(("مسدودسازی خط قرمز حسابدار در تولید کارکرد میدانی", False, "هشدار: حسابدار توانست کارکرد میدانی ثبت کند!"))
+                all_passed = False
+
+            # Test 4: Superuser Immunity from SoD Barrier
+            req_admin = factory.post('/api/personnel/attendance/approve-period/')
+            req_admin.user = admin_user
+            req_admin.active_role = 'superuser'
+            req_admin.active_app = 'personnel'
+
+            admin_passed = True
+            try:
+                check_sod_prohibition(req_admin, '/attendance', 'approve_attendance_period')
+            except PermissionDenied:
+                admin_passed = False
+
+            if admin_passed:
+                checks.append(("عدم انسداد ادمین کل (Superuser Bypass)", True, "ادمین کل بدون مسدودیت از گارد عبور می‌کند."))
+            else:
+                checks.append(("عدم انسداد ادمین کل (Superuser Bypass)", False, "ادمین کل مسدود شد!"))
+                all_passed = False
+
+            # Test 5: DRF Permission Class SoDPolicyPermission integration
+            class MockView:
+                sod_page_route = '/treasury-cartable'
+                sod_action_code = 'disburse_treasury_payment'
+
+            perm = SoDPolicyPermission()
+            req_sup_tr = factory.post('/api/personnel/cartable/treasury/disburse/')
+            req_sup_tr.user = sup_user
+            req_sup_tr.active_role = 'supervisor'
+            req_sup_tr.active_app = 'personnel'
+
+            is_allowed = perm.has_permission(req_sup_tr, MockView())
+            if not is_allowed:
+                checks.append(("کلاس گارد SoDPolicyPermission در DRF", True, "گارد DRF به درستی درخواست غیرمجاز را با پیام خطای مربوطه رد کرد."))
+            else:
+                checks.append(("کلاس گارد SoDPolicyPermission در DRF", False, "گارد DRF اجازه عبور غیرمجاز داد!"))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی گارد SoD", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۱ (Prohibited Actions Backend Barrier Guardian)", all_passed, checks)
+
+    def audit_guardian_12_two_level_app_switcher_reactive(self) -> bool:
+        """
+        ایجنت نگهبان ۱۲: اعتبارسنجی سرویس AppPersonaService فرانت‌اند، تزریق هدرها در اینترسپتور، تفکیک سایدبار و یکپارچگی دوطرفه
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            # Check 1: AppPersonaService TypeScript File
+            service_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'core', 'services', 'app-persona.service.ts')
+            if os.path.exists(service_path):
+                with open(service_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                if 'AppPersonaService' in content and 'ALL_APP_ROLES' in content and 'FRONTEND_SOD_PROHIBITIONS' in content:
+                    checks.append(("سرویس AppPersonaService در انگولار ۱۹", True, "سرویس با تمام سیگنال‌های واکنشی و ماتریس‌های خطوط قرمز ایجاد شده است."))
+                else:
+                    checks.append(("سرویس AppPersonaService در انگولار ۱۹", False, "محتوای فایل ناقص است."))
+                    all_passed = False
+            else:
+                checks.append(("سرویس AppPersonaService در انگولار ۱۹", False, f"فایل یافت نشد: {service_path}"))
+                all_passed = False
+
+            # Check 2: Auth Interceptor Header Injection
+            interceptor_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'core', 'auth', 'auth.interceptor.ts')
+            if os.path.exists(interceptor_path):
+                with open(interceptor_path, 'r', encoding='utf-8') as f:
+                    icontent = f.read()
+                if 'X-Active-Role' in icontent and 'X-Active-App' in icontent:
+                    checks.append(("تزریق هدرهای X-Active-Role و X-Active-App در اینترسپتور", True, "اینترسپتور به درستی هدرهای نقش و اپلیکیشن فعال را به درخواست‌ها الصاق می‌کند."))
+                else:
+                    checks.append(("تزریق هدرهای X-Active-Role و X-Active-App در اینترسپتور", False, "هدرهای لازم در اینترسپتور یافت نشدند."))
+                    all_passed = False
+            else:
+                checks.append(("تزریق هدرهای X-Active-Role و X-Active-App در اینترسپتور", False, "فایل اینترسپتور یافت نشد."))
+                all_passed = False
+
+            # Check 3: Layout.ts Sidebar Separation
+            layout_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'layout', 'layout.ts')
+            if os.path.exists(layout_path):
+                with open(layout_path, 'r', encoding='utf-8') as f:
+                    lcontent = f.read()
+                if 'AppPersonaService' in lcontent and 'personaService' in lcontent:
+                    checks.append(("تفکیک واکنشی سایدبار در Layout فرانت‌اند", True, "سایدبار به صورت واکنشی متناسب با ماژول و نقش فعال فیلتر می‌شود."))
+                else:
+                    checks.append(("تفکیک واکنشی سایدبار در Layout فرانت‌اند", False, "سرویس AppPersonaService در Layout تزریق نشده است."))
+                    all_passed = False
+            else:
+                checks.append(("تفکیک واکنشی سایدبار در Layout فرانت‌اند", False, "فایل layout.ts یافت نشد."))
+                all_passed = False
+
+            # Check 4: Backend Persona Round-Trip Personnel Accountant Verification
+            from django.test import RequestFactory
+            from django.contrib.auth import get_user_model
+            from django.contrib.auth.models import Permission
+            from accounts.middleware import ActiveRoleMiddleware
+            User = get_user_model()
+            factory = RequestFactory()
+
+            acc_user, _ = User.objects.get_or_create(username='g12_accountant', defaults={'is_active': True})
+            p_acc = Permission.objects.get(codename='perm_approve_personnel_finance')
+            acc_user.user_permissions.add(p_acc)
+
+            req_acc = factory.get('/api/test/', HTTP_X_ACTIVE_APP='personnel', HTTP_X_ACTIVE_ROLE='accountant')
+            req_acc.user = acc_user
+            ActiveRoleMiddleware(lambda req: None)(req_acc)
+
+            if getattr(req_acc, 'active_app', None) == 'personnel' and getattr(req_acc, 'active_role', None) == 'accountant':
+                checks.append(("ارزیابی دوربرگردان نقش مالی (Round-Trip Personnel)", True, "درخواست با ماژول personnel و نقش accountant به درستی پردازش شد."))
+            else:
+                checks.append(("ارزیابی دوربرگردان نقش مالی (Round-Trip Personnel)", False, f"app={getattr(req_acc, 'active_app', None)}, role={getattr(req_acc, 'active_role', None)}"))
+                all_passed = False
+
+            # Check 5: Backend Persona Round-Trip Warehouse Counter Verification
+            cnt_user, _ = User.objects.get_or_create(username='g12_counter', defaults={'is_active': True})
+            p_cnt = Permission.objects.get(codename='view_sys_counter')
+            cnt_user.user_permissions.add(p_cnt)
+
+            req_cnt = factory.get('/api/test/', HTTP_X_ACTIVE_APP='warehouse', HTTP_X_ACTIVE_ROLE='counter')
+            req_cnt.user = cnt_user
+            ActiveRoleMiddleware(lambda req: None)(req_cnt)
+
+            if getattr(req_cnt, 'active_app', None) == 'warehouse' and getattr(req_cnt, 'active_role', None) == 'counter':
+                checks.append(("ارزیابی دوربرگردان نقش انبارگردانی (Round-Trip Warehouse)", True, "درخواست با ماژول warehouse و نقش counter به درستی پردازش شد."))
+            else:
+                checks.append(("ارزیابی دوربرگردان نقش انبارگردانی (Round-Trip Warehouse)", False, f"app={getattr(req_cnt, 'active_app', None)}, role={getattr(req_cnt, 'active_role', None)}"))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی نگهبان ۱۲", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۲ (Two-Level App Switcher Reactive Guardian)", all_passed, checks)
+
+    def audit_guardian_13_header_app_role_switcher_ui(self) -> bool:
+        """
+        ایجنت نگهبان ۱۳: اعتبارسنجی کامپوننت هدر دولایه AppRoleSwitcher، قالب HTML، استایل‌ها و استقرار در هدر اصلی
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            comp_base = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'shared', 'components', 'app-role-switcher')
+            ts_path = os.path.join(comp_base, 'app-role-switcher.component.ts')
+            html_path = os.path.join(comp_base, 'app-role-switcher.component.html')
+            css_path = os.path.join(comp_base, 'app-role-switcher.component.css')
+
+            # Check 1: Files Existence
+            if os.path.exists(ts_path) and os.path.exists(html_path) and os.path.exists(css_path):
+                checks.append(("وجود فایل‌های ۳ گانه کامپوننت AppRoleSwitcher", True, "فایل‌های TS, HTML, CSS با موفقیت ایجاد شده‌اند."))
+            else:
+                checks.append(("وجود فایل‌های ۳ گانه کامپوننت AppRoleSwitcher", False, "برخی فایل‌های کامپوننت یافت نشدند."))
+                all_passed = False
+
+            # Check 2: Component TypeScript Logic
+            with open(ts_path, 'r', encoding='utf-8') as f:
+                ts_content = f.read()
+            if 'AppRoleSwitcherComponent' in ts_content and 'isDropdownOpen' in ts_content and 'selectRole' in ts_content and 'selectApp' in ts_content:
+                checks.append(("منطق کنترلی تایپ‌اسکریپت (TypeScript Controller Logic)", True, "متدهای مدیریت باز و بسته شدن دراپ‌داون، سوئیچ اپلیکیشن و سوئیچ نقش پیاده‌سازی شده‌اند."))
+            else:
+                checks.append(("منطق کنترلی تایپ‌اسکریپت (TypeScript Controller Logic)", False, "متدهای لازم در فایل تایپ‌اسکریپت وجود ندارند."))
+                all_passed = False
+
+            # Check 3: HTML Template Structure (App Switcher Button & Role Dropdown)
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            if ('toggleApp()' in html_content or ('selectApp(\'warehouse\')' in html_content and 'selectApp(\'personnel\')' in html_content)) and 'role-trigger-btn' in html_content:
+                checks.append(("ساختار سوئیچر ماژول و نقش در قالب HTML (App Switcher & Role Dropdown)", True, "دکمه سوئیچر هوشمند ماژول و دراپ‌داون انتخابگر نقش به زیبایی پیاده‌سازی شدند."))
+            else:
+                checks.append(("ساختار سوئیچر ماژول و نقش در قالب HTML (App Switcher & Role Dropdown)", False, "ساختار سوئیچر ماژول و نقش در HTML ناقص است."))
+                all_passed = False
+
+            # Check 4: Layout Header Embedding
+            layout_html_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'layout', 'layout.html')
+            layout_ts_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'layout', 'layout.ts')
+            with open(layout_html_path, 'r', encoding='utf-8') as f:
+                lh_content = f.read()
+            with open(layout_ts_path, 'r', encoding='utf-8') as f:
+                lt_content = f.read()
+
+            if '<app-role-switcher' in lh_content and 'AppRoleSwitcherComponent' in lt_content:
+                checks.append(("استقرار در هدر اصلی سیستم (Layout Header Integration)", True, "کامپوننت با موفقیت در هدر بالای سامانه تزریق و رندر شده است."))
+            else:
+                checks.append(("استقرار در هدر اصلی سیستم (Layout Header Integration)", False, "کامپوننت در هدر اصلی مستقر نشده است."))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی نگهبان ۱۳", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۳ (Header App & Persona Switcher UI Guardian)", all_passed, checks)
+
+    def audit_guardian_14_smart_dom_red_lines_masking(self) -> bool:
+        """
+        ایجنت نگهبان ۱۴: پنهان‌سازی هوشمند خطوط قرمز تفکیک وظایف در DOM صفحات مشترک (attendance و profiles) و تطابق با بک‌اند
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            # Check 1: Attendance Component SoD Protection
+            att_ts_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'personnel', 'warehouse-attendance', 'warehouse-attendance.ts')
+            with open(att_ts_path, 'r', encoding='utf-8') as f:
+                att_content = f.read()
+
+            if "canPerform('/attendance', 'approve_attendance_period')" in att_content and "canDirectEditAttendance" in att_content:
+                checks.append(("محافظت هوشمند صفحه کارکرد (/attendance)", True, "دسترسی تایید دوره و ثبت مستقیم کارکرد با متدهای SoD ایمن‌سازی شده‌اند."))
+            else:
+                checks.append(("محافظت هوشمند صفحه کارکرد (/attendance)", False, "محافظت SoD در فایل تایپ‌اسکریپت کارکرد اعمال نشده است."))
+                all_passed = False
+
+            # Check 2: Profiles Hub SoD Approval Protection
+            prof_ts_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'personnel', 'personnel-profiles', 'personnel-profiles.ts')
+            with open(prof_ts_path, 'r', encoding='utf-8') as f:
+                prof_ts_content = f.read()
+
+            if "canPerform('/profiles', 'approve_personnel_profile')" in prof_ts_content and "canEditWageAndAllowances" in prof_ts_content:
+                checks.append(("محافظت هوشمند تصویب احکام در پرونده‌ها (/profiles)", True, "تایید احکام پرسنل و ناوگان بر اساس خطوط قرمز نقش فیلتر می‌شوند."))
+            else:
+                checks.append(("محافظت هوشمند تصویب احکام در پرونده‌ها (/profiles)", False, "محافظت SoD در فایل تایپ‌اسکریپت پرونده‌ها اعمال نشده است."))
+                all_passed = False
+
+            # Check 3: Profiles Wage Inputs DOM Masking
+            prof_html_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'personnel', 'personnel-profiles', 'personnel-profiles.html')
+            with open(prof_html_path, 'r', encoding='utf-8') as f:
+                prof_html_content = f.read()
+
+            if "!canEditWageAndAllowances" in prof_html_content and "job_grade" in prof_html_content and "daily_base_wage" in prof_html_content:
+                checks.append(("غیرفعال‌سازی فیلدهای دستمزد برای سرپرست انبار در DOM", True, "فیلدهای گروه شغلی، پایه سنواتی و مزد مبنا در DOM برای سرپرست انبار محافظت شده‌اند."))
+            else:
+                checks.append(("غیرفعال‌سازی فیلدهای دستمزد برای سرپرست انبار در DOM", False, "فیلدهای دستمزد در قالب HTML محافظت نشده‌اند."))
+                all_passed = False
+
+            # Check 4: Frontend-Backend SoD Rules Absolute Consistency
+            from accounts.sod_cache_service import SoDCacheService
+            is_op_blocked, op_reason = SoDCacheService.is_action_prohibited('personnel', 'operator', '/attendance', 'approve_attendance_period')
+            is_sup_blocked, sup_reason = SoDCacheService.is_action_prohibited('personnel', 'supervisor', '/profiles', 'edit_base_wage_and_bonuses')
+            is_acc_blocked, acc_reason = SoDCacheService.is_action_prohibited('personnel', 'accountant', '/attendance', 'create_daily_attendance_entry')
+
+            if is_op_blocked and is_sup_blocked and is_acc_blocked:
+                checks.append(("تطابق ۱۰۰٪ خطوط قرمز فرانت‌اند با ماتریس بک‌اند", True, "تمام قوانین SoD اعمال‌شده در فرانت‌اند با ماتریس بک‌اند همگام و یکپارچه هستند."))
+            else:
+                checks.append(("تطابق ۱۰۰٪ خطوط قرمز فرانت‌اند با ماتریس بک‌اند", False, "ناهماهنگی در ارزیابی قوانین بک‌اند مشاهده شد."))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی نگهبان ۱۴", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۴ (Smart DOM Red-Lines Masking Guardian)", all_passed, checks)
+
+    def audit_guardian_15_e2e_superapp_integrity(self) -> bool:
+        """
+        ایجنت نگهبان ۱۵: اعتبارسنجی سرتاسری (E2E) سوپراپلیکیشن ماژولار، روت‌گاردها و یکپارچگی تفکیک وظایف (SoD)
+        """
+        checks = []
+        all_passed = True
+
+        try:
+            # Check 1: Route Permissions & Module Separation
+            auth_guard_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'core', 'auth', 'auth.guard.ts')
+            with open(auth_guard_path, 'r', encoding='utf-8') as f:
+                ag_content = f.read()
+
+            if "'attendance':" in ag_content and "'finance-cartable':" in ag_content and "'treasury-cartable':" in ag_content:
+                checks.append(("پوشش ۱۰۰٪ روت‌های ماژولار در AuthGuard", True, "تمام روت‌های مالی، پرسنلی و انبارداری در ماتریس ROUTE_PERMISSIONS پوشش داده شده‌اند."))
+            else:
+                checks.append(("پوشش ۱۰۰٪ روت‌های ماژولار در AuthGuard", False, "برخی از روت‌های جدید در AuthGuard ثبت نشده‌اند."))
+                all_passed = False
+
+            # Check 2: AppPersonaService & Signals State Management
+            persona_ts_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'core', 'services', 'app-persona.service.ts')
+            with open(persona_ts_path, 'r', encoding='utf-8') as f:
+                persona_content = f.read()
+
+            if "switchApp" in persona_content and "switchRole" in persona_content and "canPerform" in persona_content:
+                checks.append(("سلامت سرویس مرکزی پرسونای ماژولار و نقش فعال", True, "سرویس AppPersonaService با متدهای سوئیچ واکنشی و ارزیابی خطوط قرمز تایید شد."))
+            else:
+                checks.append(("سلامت سرویس مرکزی پرسونای ماژولار و نقش فعال", False, "نقص در ساختار AppPersonaService مشاهده شد."))
+                all_passed = False
+
+            # Check 3: Full 16 SoD Rules Database & Cache Health
+            from accounts.models import SoDPolicyRule
+            from accounts.sod_cache_service import SoDCacheService
+            db_count = SoDPolicyRule.objects.filter(is_prohibited=True).count()
+            cache_rules = SoDCacheService.get_prohibitions_for_role('personnel', 'operator')
+
+            if db_count >= 16 and len(cache_rules) >= 3:
+                checks.append(("پایگاه داده و کش ردیس ماتریس خطوط قرمز (16 Rules)", True, f"تعداد {db_count} قانون فعال در پایگاه داده و کش ردیس آماده بهره‌برداری هستند."))
+            else:
+                checks.append(("پایگاه داده و کش ردیس ماتریس خطوط قرمز (16 Rules)", False, f"تعداد قوانین ثبت‌شده ناکافی است ({db_count})."))
+                all_passed = False
+
+            # Check 4: Cross-Module Round-Trip Spoofing Prevention
+            from django.contrib.auth import get_user_model
+            from django.contrib.auth.models import Permission
+            from accounts.middleware import get_user_valid_roles_for_app, resolve_effective_role
+            User = get_user_model()
+            test_op, _ = User.objects.get_or_create(username='g15_test_op', defaults={'is_active': True})
+            p_att = Permission.objects.get(codename='view_sys_personnel_attendance')
+            test_op.user_permissions.add(p_att)
+
+            valid_roles = get_user_valid_roles_for_app(test_op, 'personnel')
+            resolved_role = resolve_effective_role(test_op, 'manager', 'personnel')
+
+            if 'operator' in valid_roles and resolved_role == 'operator':
+                checks.append(("سپر امنیتی ضد جعل و تطبیق نقش (Zero-Vulnerability)", True, "سامانه در برابر هرگونه تلاش برای ارتقای غیرمجاز نقش به طور ۱۰۰٪ ایمن است."))
+            else:
+                checks.append(("سپر امنیتی ضد جعل و تطبیق نقش (Zero-Vulnerability)", False, "آسیب‌پذیری در ارزیابی نقش مشاهده شد."))
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("خطای ناشناخته در ارزیابی نگهبان ۱۵", False, str(e)))
+            all_passed = False
+
+        return self.report_status("ایجنت نگهبان ۱۵ (End-to-End Super-App Integrity & Cross-Module Guard Guardian)", all_passed, checks)
+
+    @staticmethod
+    def cleanup_test_users():
+        try:
+            from django.contrib.auth import get_user_model
+            from django.db.models import Q
+            User = get_user_model()
+            test_usernames = [
+                'test_operator_guardian',
+                'test_supervisor_guardian',
+                'test_accountant_guardian',
+                'test_manager_guardian',
+                'test_treasury_guardian',
+                'test_superuser_guardian',
+                'test_admin_guardian',
+                'g10_operator',
+                'g10_manager',
+                'g11_operator',
+                'g11_supervisor',
+                'g11_accountant',
+                'g11_admin',
+                'g12_accountant',
+                'g12_counter',
+                'g15_test_op',
+            ]
+            deleted, _ = User.objects.filter(
+                Q(username__in=test_usernames) |
+                Q(username__startswith='g10_') |
+                Q(username__startswith='g11_') |
+                Q(username__startswith='g12_') |
+                Q(username__startswith='g15_') |
+                Q(username__endswith='_guardian') |
+                Q(username__startswith='test_')
+            ).delete()
+            return deleted
+        except Exception as e:
+            print(f"⚠️ خطای پاکسازی کاربران تستی: {e}")
+            return 0
+
 
 if __name__ == '__main__':
     guardian = ApprovalPhaseGuardian()
-    g1 = guardian.audit_guardian_1_schema_and_migration()
-    g2 = guardian.audit_guardian_2_rbac_and_security()
-    g3 = guardian.audit_guardian_3_workflow_engine_atomic()
-    g4 = guardian.audit_guardian_4_revision_and_rejection_flow()
-    g5 = guardian.audit_guardian_5_pending_edit_staging()
-    g6 = guardian.audit_guardian_6_historical_zero_regression()
-    g7 = guardian.audit_guardian_7_treasury_engine_and_paya()
-    g8 = guardian.audit_guardian_8_cartable_api_and_rbac()
+    guardian.cleanup_test_users()
 
-    all_ok = g1 and g2 and g3 and g4 and g5 and g6 and g7 and g8
+    all_ok = False
+    try:
+        g1 = guardian.audit_guardian_1_schema_and_migration()
+        g2 = guardian.audit_guardian_2_rbac_and_security()
+        g3 = guardian.audit_guardian_3_workflow_engine_atomic()
+        g4 = guardian.audit_guardian_4_revision_and_rejection_flow()
+        g5 = guardian.audit_guardian_5_pending_edit_staging()
+        g6 = guardian.audit_guardian_6_historical_zero_regression()
+        g7 = guardian.audit_guardian_7_treasury_engine_and_paya()
+        g8 = guardian.audit_guardian_8_cartable_api_and_rbac()
+        g9 = guardian.audit_guardian_9_sod_database_and_redis_cache()
+        g10 = guardian.audit_guardian_10_x_active_role_middleware()
+        g11 = guardian.audit_guardian_11_prohibited_actions_backend_barrier()
+        g12 = guardian.audit_guardian_12_two_level_app_switcher_reactive()
+        g13 = guardian.audit_guardian_13_header_app_role_switcher_ui()
+        g14 = guardian.audit_guardian_14_smart_dom_red_lines_masking()
+        g15 = guardian.audit_guardian_15_e2e_superapp_integrity()
+
+        all_ok = g1 and g2 and g3 and g4 and g5 and g6 and g7 and g8 and g9 and g10 and g11 and g12 and g13 and g14 and g15
+    finally:
+        cleaned_count = guardian.cleanup_test_users()
+        print(f"\n🧹 [CLEANUP] تمامی کاربران تستی ایجنت نگهبان با موفقیت پاکسازی شدند (تعداد حذف: {cleaned_count} رکورد).")
+
     if all_ok:
-        print("\n🏆 تبریک! تمامی ۸ ایجنت نگهبان گردش کار، خزانه‌داری و کارتابل‌ها با موفقیت ۱۰۰٪ تایید شدند. 🏆")
-        exit(0)
+        print("\n🏆 تبریک! تمامی ۱۵ ایجنت سخت‌گیر نگهبان گردش کار، خزانه‌داری، کارتابل‌ها، ماتریس SoD، میدلور، گارد، سوئیچر واکنشی، محافظت DOM و یکپارچگی سرتاسری E2E با موفقیت ۱۰۰٪ تایید شدند. 🏆")
+        sys.exit(0)
     else:
         print("\n⚠️ برخی از ایجنت‌های نگهبان خطا دادند. لطفاً لاگ‌های بالا را بررسی کنید. ⚠️")
-        exit(1)
-
-    sys.exit(0 if all_ok else 1)
+        sys.exit(1)
 

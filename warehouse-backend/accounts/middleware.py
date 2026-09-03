@@ -1,9 +1,14 @@
 import contextvars
+import logging
+
+logger = logging.getLogger(__name__)
 
 _current_user_var = contextvars.ContextVar('current_user', default=None)
 _current_ip_var = contextvars.ContextVar('current_ip', default=None)
 _current_user_agent_var = contextvars.ContextVar('current_user_agent', default=None)
 _current_warehouse_var = contextvars.ContextVar('current_warehouse', default=None)
+_current_active_role_var = contextvars.ContextVar('current_active_role', default=None)
+_current_active_app_var = contextvars.ContextVar('current_active_app', default='personnel')
 
 def get_client_ip(request):
     """
@@ -38,6 +43,78 @@ def get_current_warehouse():
 
 def set_current_warehouse(warehouse):
     return _current_warehouse_var.set(warehouse)
+
+def get_current_active_role():
+    return _current_active_role_var.get()
+
+def set_current_active_role(role):
+    return _current_active_role_var.set(role)
+
+def get_current_active_app():
+    return _current_active_app_var.get()
+
+def set_current_active_app(app_module):
+    return _current_active_app_var.set(app_module)
+
+
+def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[str]:
+    """
+    محاسبه لیست نقش‌های معتبر و مجاز کاربر در ماژول انتخاب‌شده جهت جلوگیری از جعل نقش (Anti Role-Spoofing)
+    """
+    if not user or not user.is_authenticated:
+        return []
+
+    if user.is_superuser:
+        if app_module == 'personnel':
+            return ['operator', 'supervisor', 'accountant', 'manager', 'treasury', 'superuser']
+        return ['counter', 'warehouse_supervisor', 'docs_specialist', 'manager_review', 'superuser']
+
+    roles = []
+    if app_module == 'personnel':
+        if user.has_perm('accounts.view_sys_personnel_attendance') or user.has_perm('accounts.view_sys_personnel'):
+            roles.append('operator')
+        if user.has_perm('accounts.perm_approve_personnel_supervisor') or user.has_perm('accounts.perm_approve_fleet_supervisor'):
+            roles.append('supervisor')
+        if user.has_perm('accounts.perm_approve_personnel_finance') or user.has_perm('accounts.perm_approve_fleet_finance') or user.has_perm('accounts.view_sys_payroll'):
+            roles.append('accountant')
+        if user.has_perm('accounts.perm_manager_payment_authorize') or user.has_perm('accounts.can_act_as_manager') or user.has_perm('accounts.perm_approve_personnel_manager'):
+            roles.append('manager')
+        if user.has_perm('accounts.perm_treasury_disburse_action') or user.has_perm('accounts.view_sys_treasury'):
+            roles.append('treasury')
+        if not roles:
+            roles.append('operator')
+    else:
+        # Warehouse & Inventory App
+        if user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.view_wh_dispatch'):
+            roles.append('counter')
+        if user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.view_wh_doc_approvals'):
+            roles.append('warehouse_supervisor')
+        if user.has_perm('accounts.view_wh_docs') or user.has_perm('accounts.perm_doc_approve_action'):
+            roles.append('docs_specialist')
+        if user.has_perm('accounts.view_sys_manager_review') or user.has_perm('accounts.perm_inventory_finalize'):
+            roles.append('manager_review')
+        if not roles:
+            roles.append('counter')
+
+    return roles
+
+
+def resolve_effective_role(user, requested_role: str, app_module: str = 'personnel') -> str:
+    """
+    اعتبارسنجی نقش درخواستی در برابر اختیارات واقعی کاربر؛ در صورت عدم صلاحیت، بالاترین نقش معتبر جایگزین می‌شود.
+    """
+    if not user or not user.is_authenticated:
+        return 'anonymous'
+
+    valid_roles = get_user_valid_roles_for_app(user, app_module)
+    if user.is_superuser:
+        return requested_role if requested_role in valid_roles else 'superuser'
+
+    if requested_role and requested_role in valid_roles:
+        return requested_role
+
+    # اگر نقشی فرستاده نشده یا نامعتبر بود، آخرین (بالاترین) نقش معتبر را برمی‌گردانیم
+    return valid_roles[-1] if valid_roles else 'operator'
 
 
 class AuditContextMiddleware:
@@ -77,3 +154,41 @@ class AuditContextMiddleware:
             _current_ip_var.reset(t_ip)
             _current_user_agent_var.reset(t_ua)
             _current_warehouse_var.reset(t_wh)
+
+
+class ActiveRoleMiddleware:
+    """
+    میان‌افزار استخراج هدرهای X-Active-Role و X-Active-App، اعتبارسنجی ضدجعل و الصاق نقش فعال به request
+    """
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        if user and not user.is_authenticated:
+            user = None
+
+        # استخراج ماژول کلان از هدر X-Active-App (پیش‌فرض: personnel)
+        raw_app = request.META.get('HTTP_X_ACTIVE_APP', '').strip().lower()
+        active_app = 'warehouse' if raw_app == 'warehouse' else 'personnel'
+
+        # استخراج نقش درخواستی از هدر X-Active-Role
+        raw_role = request.META.get('HTTP_X_ACTIVE_ROLE', '').strip().lower()
+
+        # ارزیابی ضدجعل و تخصیص نقش نهایی
+        effective_role = resolve_effective_role(user, raw_role, active_app)
+
+        # الصاق به شیء درخواست
+        request.active_app = active_app
+        request.active_role = effective_role
+        request.valid_roles = get_user_valid_roles_for_app(user, active_app)
+
+        t_role = _current_active_role_var.set(effective_role)
+        t_app = _current_active_app_var.set(active_app)
+
+        try:
+            response = self.get_response(request)
+            return response
+        finally:
+            _current_active_role_var.reset(t_role)
+            _current_active_app_var.reset(t_app)

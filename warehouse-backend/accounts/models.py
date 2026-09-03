@@ -281,3 +281,35 @@ class AuditLog(models.Model):
     def __str__(self):
         return f"[{self.get_module_display()}] {self.get_action_display()} - {self.target_repr or self.target_object_id} ({self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''})"
 
+
+class SoDPolicyRule(models.Model):
+    """
+    مدل ماتریس تفکیک وظایف و خطوط قرمز (Separation of Duties Policy Matrix)
+    این جدول جهت ماندگاری و انطباق حاکمیتی در دیتابیس ذخیره شده و در زمان استارت‌آپ در کش Redis لود می‌شود.
+    """
+    APP_MODULE_CHOICES = [
+        ('warehouse', 'سامانه انبارداری و انبارگردانی'),
+        ('personnel', 'سامانه کارکرد، مالی و خزانه‌داری'),
+    ]
+
+    app_module = models.CharField(max_length=50, choices=APP_MODULE_CHOICES, default='personnel', db_index=True, verbose_name="ماژول کلان")
+    role_code = models.CharField(max_length=60, db_index=True, verbose_name="کد نقش سازمانی")
+    role_title_fa = models.CharField(max_length=150, blank=True, verbose_name="عنوان فارسی نقش")
+    page_route = models.CharField(max_length=150, db_index=True, verbose_name="مسیر صفحه فرانت‌اند")
+    action_code = models.CharField(max_length=100, db_index=True, verbose_name="کد عملیات / اقدام")
+    action_title_fa = models.CharField(max_length=255, blank=True, verbose_name="عنوان فارسی عملیات")
+    is_prohibited = models.BooleanField(default=True, verbose_name="آیا این اقدام خط قرمز و ممنوع است؟")
+    prohibition_reason_fa = models.TextField(blank=True, verbose_name="علت و پیام ممیزی فارسی ممنوعیت")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین بروزرسانی")
+
+    class Meta:
+        verbose_name = "قانون تفکیک وظایف (SoD Policy)"
+        verbose_name_plural = "ماتریس قوانین تفکیک وظایف (SoD Policies)"
+        unique_together = ('app_module', 'role_code', 'page_route', 'action_code')
+        ordering = ['app_module', 'role_code', 'page_route', 'action_code']
+
+    def __str__(self):
+        status = "🚫 ممنوع" if self.is_prohibited else "✅ مجاز"
+        return f"[{self.get_app_module_display()}] {self.role_title_fa or self.role_code} -> {self.action_title_fa or self.action_code} ({status})"
+

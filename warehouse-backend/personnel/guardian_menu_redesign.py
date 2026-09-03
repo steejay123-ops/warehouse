@@ -158,4 +158,8 @@ def run_guardian_checks():
     print("=" * 70)
 
 if __name__ == '__main__':
-    run_guardian_checks()
+    try:
+        run_guardian_checks()
+    finally:
+        User.objects.filter(username='test_admin_guardian').delete()
+        print("🧹 [CLEANUP] کاربر تستی test_admin_guardian با موفقیت پاکسازی شد.")

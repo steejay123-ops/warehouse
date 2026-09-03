@@ -2,6 +2,196 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
+# ==============================================================================
+# 0. مدل‌های ساختار سازمانی، پروژه، بخش و فاکتور هزینه‌ای (مستقل از انبارگردانی)
+# ==============================================================================
+
+class FinancialProject(models.Model):
+    """
+    پروژه مالی و عملیاتی مستقل (مرکز هزینه و عملیات)
+    """
+    code = models.CharField(max_length=50, unique=True, verbose_name="کد پروژه")
+    name = models.CharField(max_length=200, verbose_name="نام پروژه")
+    description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "پروژه مالی/عملیاتی"
+        verbose_name_plural = "پروژه‌های مالی/عملیاتی"
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class ProjectSection(models.Model):
+    """
+    بخش / دپارتمان تابعه پروژه مالی
+    """
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.CASCADE,
+        related_name='sections',
+        verbose_name="پروژه"
+    )
+    code = models.CharField(max_length=50, verbose_name="کد بخش")
+    name = models.CharField(max_length=200, verbose_name="نام بخش")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "بخش پروژه"
+        verbose_name_plural = "بخش‌های پروژه"
+        unique_together = ('project', 'code')
+        ordering = ['project', 'code']
+
+    def __str__(self):
+        return f"{self.project.name} - {self.name} ({self.code})"
+
+
+class UserSectionAssignment(models.Model):
+    """
+    انتساب کاربر به بخش پروژه و تعیین نقش سازمانی پویا
+    """
+    ROLE_CHOICES = (
+        ('employee', 'کارمند / اپراتور ثبت'),
+        ('supervisor', 'سرپرست بخش'),
+        ('accountant', 'حسابدار پروژه'),
+        ('manager', 'مدیر پروژه'),
+        ('treasury', 'خزانه‌دار کل'),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='section_assignments',
+        verbose_name="کاربر سیستم"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.CASCADE,
+        related_name='user_assignments',
+        verbose_name="بخش پروژه"
+    )
+    role = models.CharField(
+        max_length=30,
+        choices=ROLE_CHOICES,
+        default='employee',
+        verbose_name="نقش در بخش"
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "انتساب کاربر به بخش"
+        verbose_name_plural = "انتساب‌های کاربران به بخش‌ها"
+        unique_together = ('user', 'section', 'role')
+
+    def __str__(self):
+        return f"{self.user} -> {self.section.name} ({self.get_role_display()})"
+
+
+class Counterparty(models.Model):
+    """
+    طرف‌حساب مالی (تأمین‌کننده، راننده، تعمیرگاه، جایگاه سوخت و...)
+    """
+    TYPE_CHOICES = (
+        ('driver', 'راننده / مالک خودرو'),
+        ('repair_shop', 'تعمیرگاه و قطعات'),
+        ('fuel_station', 'جایگاه سوخت'),
+        ('contractor', 'پیمانکار خدماتی'),
+        ('other', 'سایر اشخاص حقیقی/حقوقی'),
+    )
+    name = models.CharField(max_length=200, verbose_name="نام شخص یا شرکت")
+    counterparty_type = models.CharField(
+        max_length=30,
+        choices=TYPE_CHOICES,
+        default='other',
+        verbose_name="نوع طرف‌حساب"
+    )
+    national_id = models.CharField(max_length=20, blank=True, null=True, verbose_name="کد ملی / شناسه اقتصادی")
+    phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="تلفن تماس")
+    bank_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام بانک")
+    account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
+    sheba_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="شماره شبا")
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='counterparties',
+        verbose_name="بخش منتسب"
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "طرف‌حساب مالی"
+        verbose_name_plural = "طرف‌حساب‌های مالی"
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.get_counterparty_type_display()})"
+
+
+class ExpenseInvoice(models.Model):
+    """
+    فاکتور هزینه‌ای / عملیاتی بخش پروژه
+    """
+    INVOICE_STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس کارمند'),
+        ('pending_supervisor', 'در انتظار تایید سرپرست'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('ready_to_pay', 'تایید مدیر / آماده پرداخت'),
+        ('paid', 'پرداخت‌شده توسط خزانه‌دار'),
+        ('rejected', 'رد شده'),
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.CASCADE,
+        related_name='invoices',
+        verbose_name="بخش پروژه"
+    )
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.CASCADE,
+        related_name='invoices',
+        verbose_name="طرف‌حساب"
+    )
+    invoice_number = models.CharField(max_length=100, verbose_name="شماره فاکتور / رسید")
+    invoice_date_shamsi = models.CharField(max_length=10, verbose_name="تاریخ فاکتور (شمسی)")
+    amount = models.DecimalField(max_digits=15, decimal_places=0, verbose_name="مبلغ فاکتور (ریال)")
+    category = models.CharField(max_length=100, verbose_name="سرفصل هزینه")
+    description = models.TextField(verbose_name="شرح هزینه")
+    attachment = models.FileField(upload_to='invoices/', blank=True, null=True, verbose_name="تصویر یا فایل فاکتور")
+    status = models.CharField(max_length=30, choices=INVOICE_STATUS_CHOICES, default='draft', verbose_name="وضعیت فاکتور")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_invoices',
+        verbose_name="ثبت‌کننده فاکتور"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "فاکتور هزینه"
+        verbose_name_plural = "فاکتورهای هزینه"
+        indexes = [
+            models.Index(fields=['section', 'invoice_date_shamsi']),
+            models.Index(fields=['counterparty', 'invoice_number']),
+        ]
+        ordering = ['-invoice_date_shamsi', '-created_at']
+
+    def __str__(self):
+        return f"فاکتور {self.invoice_number} - {self.counterparty.name} ({self.amount:,.0f} ریال)"
+
 
 class PersonnelProfile(models.Model):
     """
@@ -111,6 +301,22 @@ class PersonnelProfile(models.Model):
         blank=True,
         related_name='personnel_members',
         verbose_name="انبار تخصیص‌یافته"
+    )
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='personnel_profiles',
+        verbose_name="پروژه مالی/عملیاتی"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='personnel_profiles',
+        verbose_name="بخش/دپارتمان پروژه"
     )
     
     APPROVAL_STATUS_CHOICES = (
@@ -335,6 +541,22 @@ class VehicleDriverProfile(models.Model):
         blank=True,
         related_name='assigned_vehicles',
         verbose_name="انبار تخصیص‌یافته"
+    )
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_vehicles',
+        verbose_name="پروژه مالی/عملیاتی"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_vehicles',
+        verbose_name="بخش/دپارتمان پروژه"
     )
     
     APPROVAL_STATUS_CHOICES = (
@@ -890,6 +1112,22 @@ class DailyAttendance(models.Model):
         related_name='daily_attendances',
         verbose_name="انبار"
     )
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='daily_attendances',
+        verbose_name="پروژه مالی/عملیاتی"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='daily_attendances',
+        verbose_name="بخش/دپارتمان پروژه"
+    )
     date_shamsi = models.CharField(max_length=10, db_index=True, verbose_name="تاریخ شمسی (مثال ۱۴۰۴/۰۵/۱۲)")
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='PRESENT_10H', verbose_name="وضعیت حضور")
     
@@ -935,6 +1173,7 @@ class DailyAttendance(models.Model):
         indexes = [
             models.Index(fields=['warehouse', 'date_shamsi']),
             models.Index(fields=['personnel', 'date_shamsi']),
+            models.Index(fields=['section', 'date_shamsi']),
         ]
         ordering = ['-date_shamsi', 'personnel__last_name']
 
@@ -994,6 +1233,22 @@ class VehicleTripLog(models.Model):
         related_name='vehicle_trip_logs',
         verbose_name="انبار"
     )
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vehicle_trip_logs',
+        verbose_name="پروژه مالی/عملیاتی"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vehicle_trip_logs',
+        verbose_name="بخش/دپارتمان پروژه"
+    )
     date_shamsi = models.CharField(max_length=10, db_index=True, verbose_name="تاریخ شمسی")
     trip_count = models.PositiveIntegerField(default=1, verbose_name="تعداد سرویس")
     unit_rate = models.DecimalField(max_digits=14, decimal_places=0, default=0, verbose_name="مبلغ هر سرویس (ریال)")
@@ -1042,6 +1297,7 @@ class VehicleTripLog(models.Model):
         indexes = [
             models.Index(fields=['warehouse', 'date_shamsi']),
             models.Index(fields=['vehicle', 'date_shamsi']),
+            models.Index(fields=['section', 'date_shamsi']),
         ]
         ordering = ['-date_shamsi', '-created_at']
 
@@ -1097,7 +1353,15 @@ class PayrollYearlySettings(models.Model):
     """
     تنظیمات پایه و مالی سالانه حقوق و دستمزد (قانون کار و بخشنامه‌های سالانه)
     """
-    fiscal_year = models.CharField(max_length=4, unique=True, db_index=True, verbose_name="سال مالی (مثال ۱۴۰۵)")
+    fiscal_year = models.CharField(max_length=4, db_index=True, verbose_name="سال مالی (مثال ۱۴۰۵)")
+    project = models.ForeignKey(
+        FinancialProject,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='payroll_yearly_settings',
+        verbose_name="پروژه مالی/عملیاتی (خالی=سراسری سازمان)"
+    )
     title = models.CharField(max_length=150, default="تنظیمات پایه و قانون کار", verbose_name="عنوان دوره تنظیمات")
     is_active = models.BooleanField(default=True, verbose_name="سال مالی پیش‌فرض فعال")
     
@@ -1135,10 +1399,23 @@ class PayrollYearlySettings(models.Model):
     class Meta:
         verbose_name = "تنظیمات سالانه حقوق و دستمزد"
         verbose_name_plural = "تنظیمات سالانه حقوق و دستمزد"
-        ordering = ['-fiscal_year']
+        ordering = ['-fiscal_year', 'project']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['fiscal_year'],
+                condition=models.Q(project__isnull=True),
+                name='unique_global_fiscal_year_setting'
+            ),
+            models.UniqueConstraint(
+                fields=['fiscal_year', 'project'],
+                condition=models.Q(project__isnull=False),
+                name='unique_project_fiscal_year_setting'
+            ),
+        ]
 
     def __str__(self):
-        return f"تنظیمات سال {self.fiscal_year} ({'فعال' if self.is_active else 'غیرفعال'})"
+        proj_str = f" - پروژه {self.project.name}" if self.project else " (سراسری سازمان)"
+        return f"تنظیمات سال {self.fiscal_year}{proj_str} ({'فعال' if self.is_active else 'غیرفعال'})"
 
 
 class JobGradeTier(models.Model):

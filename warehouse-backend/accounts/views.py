@@ -45,9 +45,9 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         elif self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
             permission_classes = [HasMenuAccess('view_sys_users')]
         elif self.action in ['create', 'import_excel']:
-            permission_classes = [HasMenuAccess('perm_usr_add')]
+            permission_classes = [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_add')]
         else: # update, partial_update, destroy, toggle_status, user_avatar
-            permission_classes = [HasMenuAccess('perm_usr_edit')]
+            permission_classes = [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_edit')]
             
         return permission_classes
 
@@ -489,7 +489,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         from .permissions import HasMenuAccess
-        return [HasMenuAccess('perm_usr_role')]
+        return [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_role')]
 
     def get_queryset(self):
         return CustomRole.objects.all()
@@ -666,7 +666,7 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_permissions(self):
         from .permissions import HasMenuAccess
-        return [HasMenuAccess('perm_usr_role')]
+        return [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_role')]
 
 
 from rest_framework.permissions import IsAuthenticated

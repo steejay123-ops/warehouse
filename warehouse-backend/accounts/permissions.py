@@ -372,3 +372,94 @@ class CanViewTreasury(permissions.BasePermission):
             request.user.has_perm('accounts.perm_treasury_disburse_action')
         )
 
+
+def check_sod_prohibition(request, page_route: str, action_code: str, app_module: str = None):
+    """
+    بررسی صریح خطوط قرمز تفکیک وظایف (SoD Barrier Check).
+    در صورت ممنوعیت، استثنای PermissionDenied با پیام ممیزی پرتاب می‌شود.
+    """
+    from rest_framework.exceptions import PermissionDenied
+    from accounts.sod_cache_service import SoDCacheService
+    from accounts.middleware import get_current_active_role, get_current_active_app
+
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated or user.is_superuser:
+        return
+
+    role = getattr(request, 'active_role', None) or get_current_active_role() or 'operator'
+    app = app_module or getattr(request, 'active_app', None) or get_current_active_app() or 'personnel'
+
+    is_prohibited, reason = SoDCacheService.is_action_prohibited(app, role, page_route, action_code)
+    if is_prohibited:
+        raise PermissionDenied(detail={
+            'error': reason,
+            'code': 'sod_prohibited',
+            'action_code': action_code,
+            'role_code': role,
+            'page_route': page_route
+        })
+
+
+class SoDPolicyPermission(permissions.BasePermission):
+    """
+    گارد امنیتی تفکیک وظایف (SoD Policy Guard) در لایه DRF
+    به صورت خودکار یا با استفاده از اتریبیوت‌های ویو، خطوط قرمز نقش فعال جاری را بررسی و در صورت تخلف مسدود می‌کند.
+    """
+    message = "این عملیات طبق ماتریس تفکیک وظایف (SoD) برای نقش فعال شما مسدود شده است."
+
+    def has_permission(self, request, view):
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated or user.is_superuser:
+            return True
+
+        from accounts.sod_cache_service import SoDCacheService
+        from accounts.middleware import get_current_active_role, get_current_active_app
+
+        role = getattr(request, 'active_role', None) or get_current_active_role() or 'operator'
+        app = getattr(request, 'active_app', None) or get_current_active_app() or 'personnel'
+
+        # استخراج مسیر صفحه و کد عملیات از ویو یا مسیر درخواست
+        page_route = getattr(view, 'sod_page_route', None)
+        action_code = getattr(view, 'sod_action_code', None)
+
+        if not page_route:
+            path = request.path.lower()
+            if 'attendance' in path:
+                page_route = '/attendance'
+            elif 'profiles' in path:
+                page_route = '/profiles'
+            elif 'finance' in path or 'monthly-payroll' in path:
+                page_route = '/finance-cartable'
+            elif 'treasury' in path:
+                page_route = '/treasury-cartable'
+            elif 'manager' in path:
+                page_route = '/manager-approvals'
+            elif 'customs' in path:
+                page_route = '/customs'
+            else:
+                page_route = '/attendance'
+
+        if not action_code:
+            action_name = getattr(view, 'action', None)
+            method = request.method.upper()
+
+            if action_name in ['approve_manager', 'approve_finance', 'approve_supervisor']:
+                action_code = f"approve_{action_name.split('_')[-1]}"
+            elif action_name in ['disburse_period', 'disburse_single_payroll', 'disburse_fleet']:
+                action_code = 'disburse_treasury_payment'
+            elif action_name == 'create' and page_route == '/attendance':
+                action_code = 'create_daily_attendance_entry'
+            elif action_name in ['lock_period', 'approve_period'] and page_route == '/attendance':
+                action_code = 'approve_attendance_period'
+            elif method in ['POST', 'PUT', 'PATCH'] and 'wage' in str(request.data):
+                action_code = 'edit_base_wage_and_bonuses'
+            else:
+                action_code = action_name or method.lower()
+
+        is_prohibited, reason = SoDCacheService.is_action_prohibited(app, role, page_route, action_code)
+        if is_prohibited:
+            self.message = reason
+            return False
+
+        return True
+

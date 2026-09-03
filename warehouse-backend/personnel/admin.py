@@ -1,5 +1,10 @@
 from django.contrib import admin
 from .models import (
+    FinancialProject,
+    ProjectSection,
+    UserSectionAssignment,
+    Counterparty,
+    ExpenseInvoice,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -9,6 +14,42 @@ from .models import (
     AttendanceAuditLog,
     VehicleTripLog
 )
+
+
+@admin.register(FinancialProject)
+class FinancialProjectAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'is_active', 'created_at')
+    search_fields = ('code', 'name', 'description')
+    list_filter = ('is_active',)
+
+
+@admin.register(ProjectSection)
+class ProjectSectionAdmin(admin.ModelAdmin):
+    list_display = ('project', 'code', 'name', 'is_active')
+    search_fields = ('code', 'name', 'project__name', 'project__code')
+    list_filter = ('project', 'is_active')
+
+
+@admin.register(UserSectionAssignment)
+class UserSectionAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('user', 'section', 'role', 'is_active', 'created_at')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'section__name')
+    list_filter = ('role', 'is_active', 'section__project')
+
+
+@admin.register(Counterparty)
+class CounterpartyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'counterparty_type', 'phone', 'national_id', 'section', 'is_active')
+    search_fields = ('name', 'national_id', 'phone', 'sheba_number')
+    list_filter = ('counterparty_type', 'is_active', 'section')
+
+
+@admin.register(ExpenseInvoice)
+class ExpenseInvoiceAdmin(admin.ModelAdmin):
+    list_display = ('invoice_number', 'section', 'counterparty', 'amount', 'invoice_date_shamsi', 'status', 'created_by')
+    search_fields = ('invoice_number', 'counterparty__name', 'description')
+    list_filter = ('status', 'section__project', 'section')
+
 
 
 @admin.register(PersonnelProfile)

@@ -43,7 +43,44 @@ class UserSerializer(serializers.ModelSerializer):
             'groups', 'user_permissions', 'assigned_warehouses', 'is_superuser',
             'requires_password_change', 'ui_preferences', 'roles'
         ]
-        read_only_fields = ['id', 'date_joined', 'last_login', 'updated_at', 'created_by', 'modified_by']
+        extra_kwargs = {
+            'email': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'phone_number': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
+
+    def validate_email(self, value):
+        if value is None:
+            return ""
+        return value.strip()
+
+    def validate_phone_number(self, value):
+        if not value:
+            return None
+        from .excel_utils import normalize_digits
+        import re
+        raw = normalize_digits(str(value).strip())
+        digits = re.sub(r'[^\d+]', '', raw)
+        if digits.startswith('+98'):
+            digits = '0' + digits[3:]
+        elif digits.startswith('0098'):
+            digits = '0' + digits[4:]
+        elif digits.startswith('98') and len(digits) == 12:
+            digits = '0' + digits[2:]
+        elif digits.startswith('9') and len(digits) == 10:
+            digits = '0' + digits
+
+        if not re.match(r'^09\d{9}$', digits):
+            raise serializers.ValidationError(
+                "شماره تلفن همراه نامعتبر است. شماره معتبر باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789)."
+            )
+        return digits
+
+    def validate(self, attrs):
+        if not self.instance:
+            phone = attrs.get('phone_number')
+            if not phone:
+                raise serializers.ValidationError({'phone_number': 'وارد کردن شماره تلفن همراه الزامی است.'})
+        return super().validate(attrs)
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -82,6 +119,9 @@ class UserSerializer(serializers.ModelSerializer):
         assigned_warehouses = validated_data.pop('assigned_warehouses', [])
         password = validated_data.pop('password', None)
         
+        if not validated_data.get('email'):
+            validated_data['email'] = ''
+            
         user = CustomUser(**validated_data)
         if password:
             user.set_password(password)
@@ -104,6 +144,9 @@ class UserSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         from django.db.models import Q
         from rest_framework.exceptions import ValidationError
+        
+        if 'email' in validated_data and not validated_data['email']:
+            validated_data['email'] = ''
         
         request = self.context.get('request')
         if request and hasattr(request, 'user'):

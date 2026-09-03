@@ -21,6 +21,11 @@ from accounts.permissions import (
 )
 
 from .models import (
+    FinancialProject,
+    ProjectSection,
+    UserSectionAssignment,
+    Counterparty,
+    ExpenseInvoice,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -38,6 +43,11 @@ from .models import (
     MonthlyPayrollRecord
 )
 from .serializers import (
+    FinancialProjectSerializer,
+    ProjectSectionSerializer,
+    UserSectionAssignmentSerializer,
+    CounterpartySerializer,
+    ExpenseInvoiceSerializer,
     PersonnelProfileSerializer,
     VehicleDriverProfileSerializer,
     PersonnelChangeRequestSerializer,
@@ -2280,23 +2290,35 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         """
         گزارش تجمیعی ماهانه کارکرد پرسنل
         """
-        warehouse_id = request.query_params.get('warehouse_id')
+        raw_wh = request.query_params.get('warehouse_id')
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '', 'UNDEFINED', 'NULL']) else None
         year_month = request.query_params.get('year_month')
-        if not warehouse_id or not year_month:
-            return Response({'error': 'warehouse_id و year_month الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not year_month:
+            latest_period = MonthlyWorkPeriod.objects.order_by('-year_month').first()
+            year_month = latest_period.year_month if latest_period else '1405/06'
 
-        personnel_list = PersonnelProfile.objects.filter(
-            Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
-            is_active=True
-        ).order_by('last_name', 'first_name')
+        if warehouse_id:
+            personnel_list = PersonnelProfile.objects.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                is_active=True
+            ).order_by('last_name', 'first_name')
 
-        attendances = DailyAttendance.objects.filter(
-            warehouse_id=warehouse_id,
-            date_shamsi__startswith=year_month,
-            is_deleted=False
-        )
+            attendances = DailyAttendance.objects.filter(
+                warehouse_id=warehouse_id,
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
+            period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+        else:
+            personnel_list = PersonnelProfile.objects.filter(
+                is_active=True
+            ).order_by('last_name', 'first_name')
 
-        period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
+            attendances = DailyAttendance.objects.filter(
+                date_shamsi__startswith=year_month,
+                is_deleted=False
+            )
+            period = MonthlyWorkPeriod.objects.filter(year_month=year_month).first()
 
         summary_rows = []
         for p in personnel_list:
@@ -2342,7 +2364,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
             })
 
         return Response({
-            'warehouse_id': int(warehouse_id),
+            'warehouse_id': warehouse_id,
             'year_month': year_month,
             'period_status': period.status if period else 'OPEN',
             'is_locked': period.status == 'LOCKED' if period else False,
@@ -2589,10 +2611,11 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         گزارش کاردکس و عملکرد ماهانه خودروها
         """
         raw_wh = request.query_params.get('warehouse_id')
-        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '', 'UNDEFINED', 'NULL']) else None
         year_month = request.query_params.get('year_month')
         if not year_month:
-            return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+            latest_period = MonthlyWorkPeriod.objects.order_by('-year_month').first()
+            year_month = latest_period.year_month if latest_period else '1405/06'
 
         if warehouse_id:
             vehicles = VehicleDriverProfile.objects.filter(
@@ -3303,21 +3326,148 @@ class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
 
 class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
     queryset = PayrollYearlySettings.objects.all().prefetch_related(
-        'job_grades', 'workshop_insurance', 'tax_settings', 'bank_export_settings'
+        'job_grades', 'workshop_insurance', 'tax_settings', 'bank_export_settings', 'project'
     )
     serializer_class = PayrollYearlySettingsSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            return qs.filter(project_id=project_id)
+        is_global = self.request.query_params.get('is_global')
+        if is_global == 'true':
+            return qs.filter(project__isnull=True)
+        return qs
+
     @action(detail=False, methods=['get'], url_path='active-or-year')
     def get_active_or_year(self, request):
         year = request.query_params.get('year', '1405')
-        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year).first()
+        project_id = request.query_params.get('project_id')
+        
+        settings_obj = None
+        if project_id and project_id != 'null':
+            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year, project_id=project_id).first()
+
+        # ارث‌بری و Fallback هوشمند به تنظیمات سراسری سازمان در صورت عدم تعریف برای پروژه
         if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.filter(is_active=True).first()
+            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year, project__isnull=True).first()
+        if not settings_obj:
+            settings_obj = PayrollYearlySettings.objects.filter(is_active=True, project__isnull=True).first()
+        if not settings_obj:
+            settings_obj = PayrollYearlySettings.objects.first()
         if not settings_obj:
             return Response({'error': 'تنظیماتی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(PayrollYearlySettingsSerializer(settings_obj).data)
+
+    @action(detail=False, methods=['post'], url_path='clone-for-project')
+    def clone_for_project(self, request):
+        """
+        کپی هوشمند و سریع تنظیمات پایه سراسری برای یک پروژه مشخص
+        """
+        project_id = request.data.get('project_id')
+        year = request.data.get('year', '1405')
+
+        if not project_id:
+            return Response({'error': 'شناسه پروژه (project_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        project = FinancialProject.objects.filter(id=project_id).first()
+        if not project:
+            return Response({'error': 'پروژه مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        existing = PayrollYearlySettings.objects.filter(fiscal_year=year, project=project).first()
+        if existing:
+            return Response(PayrollYearlySettingsSerializer(existing).data)
+
+        # پیدا کردن تنظیمات مادر (سراسری)
+        source = PayrollYearlySettings.objects.filter(fiscal_year=year, project__isnull=True).first()
+        if not source:
+            source = PayrollYearlySettings.objects.filter(is_active=True, project__isnull=True).first()
+        if not source:
+            source = PayrollYearlySettings.objects.first()
+        if not source:
+            return Response({'error': 'تنظیمات مادر سراسری برای کپی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            new_settings = PayrollYearlySettings.objects.create(
+                fiscal_year=year,
+                project=project,
+                title=f"تنظیمات {project.name} - سال {year}",
+                is_active=True,
+                monthly_food_allowance=source.monthly_food_allowance,
+                monthly_housing_allowance=source.monthly_housing_allowance,
+                monthly_spouse_allowance=source.monthly_spouse_allowance,
+                monthly_child_allowance=source.monthly_child_allowance,
+                shift_percent=source.shift_percent,
+                transport_help_percent=source.transport_help_percent,
+                transport_fixed_amount=source.transport_fixed_amount,
+                specialist_attraction_percent=source.specialist_attraction_percent,
+                bad_weather_percent=source.bad_weather_percent,
+                remote_hardship_percent=source.remote_hardship_percent,
+                south_pars_percent=source.south_pars_percent,
+                travel_cost_per_day=source.travel_cost_per_day,
+                worker_insurance_rate=source.worker_insurance_rate,
+                employer_insurance_rate=source.employer_insurance_rate,
+                unemployment_insurance_rate=source.unemployment_insurance_rate,
+                surplus_overtime_percent=source.surplus_overtime_percent,
+                attendance_edit_past_days=source.attendance_edit_past_days,
+                attendance_edit_future_days=source.attendance_edit_future_days,
+            )
+
+            # کپی کارگاه بیمه
+            if hasattr(source, 'workshop_insurance'):
+                wi = source.workshop_insurance
+                WorkshopInsuranceSettings.objects.create(
+                    yearly_settings=new_settings,
+                    workshop_code=wi.workshop_code,
+                    workshop_name=f"{project.name} - {wi.workshop_name}",
+                    employer_name=wi.employer_name,
+                    workshop_address=wi.workshop_address,
+                    list_type=wi.list_type,
+                    list_number=wi.list_number,
+                    default_dsk_rate=wi.default_dsk_rate,
+                    default_mon_pym=wi.default_mon_pym,
+                )
+
+            # کپی تنظیمات مالیاتی
+            if hasattr(source, 'tax_settings'):
+                ts = source.tax_settings
+                TaxRuleSettings.objects.create(
+                    yearly_settings=new_settings,
+                    payment_type=ts.payment_type,
+                    service_location=ts.service_location,
+                    exceptions=ts.exceptions,
+                    currency_type=ts.currency_type,
+                    currency_exchange_rate=ts.currency_exchange_rate,
+                    housing_benefit_type=ts.housing_benefit_type,
+                    vehicle_benefit_type=ts.vehicle_benefit_type,
+                    wh_file_prefix=ts.wh_file_prefix,
+                    wp_file_prefix=ts.wp_file_prefix,
+                )
+
+            # کپی تنظیمات بانکی
+            if hasattr(source, 'bank_export_settings'):
+                bs = source.bank_export_settings
+                BankExportSettings.objects.create(
+                    yearly_settings=new_settings,
+                    bank_name=bs.bank_name,
+                    source_account_number=bs.source_account_number,
+                    default_deposit_id=bs.default_deposit_id,
+                    deposit_description_template=f"{project.name} - " + bs.deposit_description_template,
+                )
+
+            # کپی ۲۰ گروه شغلی
+            for tier in source.job_grades.all():
+                JobGradeTier.objects.create(
+                    yearly_settings=new_settings,
+                    grade_number=tier.grade_number,
+                    daily_base_wage=tier.daily_base_wage,
+                    daily_seniority_bonus=tier.daily_seniority_bonus,
+                )
+
+        return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'], url_path='job-grade-rate')
     def get_job_grade_rate(self, request):
@@ -3483,42 +3633,61 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
             'records': serialized
         })
 
+    @action(detail=False, methods=['get'], url_path='export-bimeh-diskettes')
+    def export_bimeh_diskettes(self, request):
+        return self.export_dsk_zip(request)
+
     @action(detail=False, methods=['get'], url_path='export-dsk-zip')
     def export_dsk_zip(self, request):
         """
         صدور پکیج فشرده ZIP شامل دو دیسکت استاندارد DSKWOR00.DBF و DSKKAR00.DBF
         """
         period_id = request.query_params.get('period_id')
+        project_id = request.query_params.get('project_id')
+
         if not period_id:
             return Response({'error': 'شناسه دوره (period_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not project_id:
+            return Response({'error': 'انتخاب پروژه جهت صدور دیسکت‌های بیمه تامین اجتماعی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
         period = MonthlyWorkPeriod.objects.filter(id=period_id).first()
         if not period:
             return Response({'error': 'دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        records = list(MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel'))
+        project = FinancialProject.objects.filter(id=project_id).first()
+        if not project:
+            return Response({'error': 'پروژه انتخاب‌شده یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        all_records = list(MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel', 'personnel__project'))
+        # فیلتر تک‌پروژه‌ای الزامی بر اساس انتساب پرسنل به پروژه
+        records = [r for r in all_records if r.personnel.project_id == project.id]
         if not records:
-            return Response({'error': 'رکوردی برای این دوره ثبت یا محاسبه نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'هیچ رکوردی برای پروژه «{project.name}» در این دوره محاسبه نشده است.'}, status=status.HTTP_404_NOT_FOUND)
 
         year_str = period.year_month.split('/')[0] if '/' in period.year_month else '1405'
         month_str = period.year_month.split('/')[1] if '/' in period.year_month else '04'
         fiscal_year_short = int(year_str[-2:]) # 05
         month_num = int(month_str)
 
-        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str).first()
+        # استخراج تنظیمات کارگاه به ترتیب: تنظیم اختصاصی پروژه -> تنظیم سراسری سال
+        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project=project).first()
+        if not settings_obj:
+            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project__isnull=True).first()
         ws_settings = getattr(settings_obj, 'workshop_insurance', None) if settings_obj else None
         if not ws_settings:
             ws_settings = WorkshopInsuranceSettings.objects.first()
         if not ws_settings:
             ws_settings = WorkshopInsuranceSettings(
                 workshop_code='4894290013',
-                workshop_name='شرکت پیمانکاری پارس',
+                workshop_name=f'کارگاه {project.name}',
                 employer_name='مدیریت انبارداری',
-                workshop_address='عسلویه، منطقه ویژه اقتصادی'
+                workshop_address='منطقه عملیاتی'
             )
 
         insured_recs = [r for r in records if r.include_in_insurance]
-        
+        if not insured_recs:
+            return Response({'error': f'هیچ پرسنل مشمول بیمه‌ای برای پروژه «{project.name}» در این دوره وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Calculate sums for DSKKAR
         sum_days = sum(r.insurance_days for r in insured_recs)
         sum_daily = sum(int(r.daily_wage) for r in insured_recs)
@@ -3534,7 +3703,7 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
 
         month_names = {1: 'فروردین', 2: 'اردیبهشت', 3: 'خرداد', 4: 'تیر', 5: 'مرداد', 6: 'شهریور', 7: 'مهر', 8: 'آبان', 9: 'آذر', 10: 'دی', 11: 'بهمن', 12: 'اسفند'}
         m_name = month_names.get(month_num, 'تیر')
-        list_desc = f"انبارداری بیمه {m_name} {year_str}"
+        list_desc = f"{project.name} بیمه {m_name} {year_str}"[:50]
 
         dskkar_bytes = generate_dskkar_bytes(
             workshop_settings=ws_settings,
@@ -3572,7 +3741,7 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
 
         zip_val = zip_buf.getvalue()
         resp = HttpResponse(zip_val, content_type='application/zip')
-        resp['Content-Disposition'] = f'attachment; filename="Bimeh_Diskettes_{year_str}_{month_str}.zip"'
+        resp['Content-Disposition'] = f'attachment; filename="Bimeh_{project.code}_{year_str}_{month_str}.zip"'
         return resp
 
     @action(detail=False, methods=['get'], url_path='export-tax-wh')
@@ -3622,19 +3791,38 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='export-bank-excel')
     def export_bank_excel(self, request):
         """
-        صدور فایل اکسل پرداخت گروهی بانک ملی
+        صدور فایل اکسل پرداخت گروهی بانک ملی به تفکیک اجباری پروژه
         """
         period_id = request.query_params.get('period_id')
-        records = list(MonthlyPayrollRecord.objects.filter(period_id=period_id).select_related('personnel'))
+        project_id = request.query_params.get('project_id')
+
+        if not period_id:
+            return Response({'error': 'شناسه دوره (period_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not project_id:
+            return Response({'error': 'انتخاب پروژه جهت صدور فایل پرداخت بانک ملی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        period = MonthlyWorkPeriod.objects.filter(id=period_id).first()
+        if not period:
+            return Response({'error': 'دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        project = FinancialProject.objects.filter(id=project_id).first()
+        if not project:
+            return Response({'error': 'پروژه انتخاب‌شده یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        all_records = list(MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel', 'personnel__project'))
+        records = [r for r in all_records if r.personnel.project_id == project.id]
         if not records:
-            return Response({'error': 'رکوردی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'error': f'رکوردی برای پروژه «{project.name}» در این دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        settings_obj = PayrollYearlySettings.objects.filter(is_active=True).first()
+        year_str = period.year_month.split('/')[0] if '/' in period.year_month else '1405'
+        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project=project).first()
+        if not settings_obj:
+            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project__isnull=True).first()
+
         bank_settings = getattr(settings_obj, 'bank_export_settings', None)
-        period = records[0].period
 
-        excel_bytes = generate_bank_meli_excel(records, bank_settings, year_month_title=period.year_month)
-        filename = f"Bank_Payment_{period.year_month.replace('/', '_')}.xlsx"
+        excel_bytes = generate_bank_meli_excel(records, bank_settings, year_month_title=f"{project.name} {period.year_month}")
+        filename = f"Bank_Payment_{project.code}_{period.year_month.replace('/', '_')}.xlsx"
 
         resp = HttpResponse(excel_bytes, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -3662,14 +3850,15 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
     def import_tax_excel(self, request):
         """
         درون‌ریزی فایل اکسل مالیات محاسبه‌شده توسط دارایی (نمونه مالیات محاسبه شده.xlsx)
-        و تطبیق خودکار با ستون مالیات و متادیتای رکوردهای دوره بر اساس کد ملی
+        یا لیست داده‌های مالیات ارسالی متنی/JSON و تطبیق خودکار با ستون مالیات دوره بر اساس کد ملی
         """
         excel_file = request.FILES.get('file')
+        items = request.data.get('items')
         period_id = request.data.get('period_id') or request.query_params.get('period_id')
         year_month = request.data.get('year_month') or request.query_params.get('year_month')
 
-        if not excel_file:
-            return Response({'error': 'لطفاً فایل اکسل مالیات دارایی را انتخاب کنید.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not excel_file and not items:
+            return Response({'error': 'لطفاً فایل اکسل مالیات دارایی یا داده‌های متنی را انتخاب کنید.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Locate target period
         if period_id:
@@ -3687,30 +3876,6 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
             return Response({'error': 'دوره ماهانه مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            file_bytes = excel_file.read()
-            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-            ws = wb.active
-
-            # Find header indices
-            col_map = {}
-            for c in range(1, ws.max_column + 1):
-                header_val = str(ws.cell(1, c).value or '').strip()
-                clean_h = header_val.replace(' ', '').replace('_', '')
-                if 'کدملی' in clean_h or 'کد_ملی' in clean_h:
-                    col_map['national_code'] = c
-                elif 'مالیاتمحاسبهشده' in clean_h or 'مالیات' in clean_h:
-                    col_map['tax_amount'] = c
-                elif 'تعدادماهاعمالشدهدرمعافیت' in clean_h or 'تعدادماه' in clean_h:
-                    col_map['exemption_months'] = c
-                elif 'بیشازیککارفرما' in clean_h or 'چندکارفرما' in clean_h:
-                    col_map['multiple_employers'] = c
-
-            if 'national_code' not in col_map or 'tax_amount' not in col_map:
-                col_map.setdefault('national_code', 1)
-                col_map.setdefault('tax_amount', 4)
-                col_map.setdefault('exemption_months', 5)
-                col_map.setdefault('multiple_employers', 6)
-
             matched_count = 0
             unmatched_rows = []
             total_imported_tax = Decimal(0)
@@ -3718,51 +3883,117 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
             records = MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel')
             record_map = {str(r.national_code).strip().zfill(10): r for r in records}
 
-            with transaction.atomic():
-                for r_idx in range(2, ws.max_row + 1):
-                    raw_code = ws.cell(r_idx, col_map['national_code']).value
-                    if raw_code is None:
-                        continue
-                    
-                    code_str = str(raw_code).split('.')[0].strip().zfill(10)
-                    if not code_str or not code_str.isdigit():
-                        continue
+            if items and isinstance(items, list):
+                with transaction.atomic():
+                    for idx, item in enumerate(items, 1):
+                        raw_code = item.get('national_code')
+                        if not raw_code:
+                            continue
+                        code_str = str(raw_code).split('.')[0].strip().zfill(10)
+                        if not code_str or not code_str.isdigit():
+                            continue
+                        try:
+                            tax_val = Decimal(str(item.get('tax_amount', 0)).replace(',', '').strip())
+                        except Exception:
+                            tax_val = Decimal(0)
+                        try:
+                            ex_months = int(item.get('exemption_months', 1) or 1)
+                        except Exception:
+                            ex_months = 1
+                        raw_mult = item.get('multiple_employers', 'خیر')
+                        has_mult = str(raw_mult).strip() in ['بله', 'true', 'True', '1', 'YES', 'yes']
 
-                    raw_tax = ws.cell(r_idx, col_map['tax_amount']).value or 0
-                    try:
-                        tax_val = Decimal(str(raw_tax).replace(',', '').strip())
-                    except Exception:
-                        tax_val = Decimal(0)
+                        if code_str in record_map:
+                            rec = record_map[code_str]
+                            rec.income_tax = tax_val
+                            rec.tax_source_type = 'IMPORTED_EXCEL'
+                            rec.tax_exemption_months = ex_months
+                            rec.has_multiple_employers = has_mult
+                            rec.is_tax_imported = True
 
-                    raw_months = ws.cell(r_idx, col_map.get('exemption_months', 5)).value if 'exemption_months' in col_map else 1
-                    try:
-                        ex_months = int(raw_months or 1)
-                    except Exception:
-                        ex_months = 1
+                            rec.net_salary = rec.gross_salary - rec.worker_insurance - rec.income_tax
+                            rec.payable_amount = rec.net_salary - rec.advance_payment_deduction
+                            rec.save()
 
-                    raw_mult = ws.cell(r_idx, col_map.get('multiple_employers', 6)).value if 'multiple_employers' in col_map else 'خیر'
-                    has_mult = str(raw_mult).strip() in ['بله', 'true', 'True', '1', 'YES', 'yes']
+                            matched_count += 1
+                            total_imported_tax += tax_val
+                        else:
+                            unmatched_rows.append({
+                                'row': idx,
+                                'national_code': code_str,
+                                'tax_amount': float(tax_val)
+                            })
 
-                    if code_str in record_map:
-                        rec = record_map[code_str]
-                        rec.income_tax = tax_val
-                        rec.tax_source_type = 'IMPORTED_EXCEL'
-                        rec.tax_exemption_months = ex_months
-                        rec.has_multiple_employers = has_mult
-                        rec.is_tax_imported = True
+            elif excel_file:
+                file_bytes = excel_file.read()
+                wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+                ws = wb.active
 
-                        rec.net_salary = rec.gross_salary - rec.worker_insurance - rec.income_tax
-                        rec.payable_amount = rec.net_salary - rec.advance_payment_deduction
-                        rec.save()
+                # Find header indices
+                col_map = {}
+                for c in range(1, ws.max_column + 1):
+                    header_val = str(ws.cell(1, c).value or '').strip()
+                    clean_h = header_val.replace(' ', '').replace('_', '')
+                    if 'کدملی' in clean_h or 'کد_ملی' in clean_h:
+                        col_map['national_code'] = c
+                    elif 'مالیاتمحاسبهشده' in clean_h or 'مالیات' in clean_h:
+                        col_map['tax_amount'] = c
+                    elif 'تعدادماهاعمالشدهدرمعافیت' in clean_h or 'تعدادماه' in clean_h:
+                        col_map['exemption_months'] = c
+                    elif 'بیشازیککارفرما' in clean_h or 'چندکارفرما' in clean_h:
+                        col_map['multiple_employers'] = c
 
-                        matched_count += 1
-                        total_imported_tax += tax_val
-                    else:
-                        unmatched_rows.append({
-                            'row': r_idx,
-                            'national_code': code_str,
-                            'tax_amount': float(tax_val)
-                        })
+                if 'national_code' not in col_map or 'tax_amount' not in col_map:
+                    col_map.setdefault('national_code', 1)
+                    col_map.setdefault('tax_amount', 4)
+                    col_map.setdefault('exemption_months', 5)
+                    col_map.setdefault('multiple_employers', 6)
+
+                with transaction.atomic():
+                    for r_idx in range(2, ws.max_row + 1):
+                        raw_code = ws.cell(r_idx, col_map['national_code']).value
+                        if raw_code is None:
+                            continue
+                        
+                        code_str = str(raw_code).split('.')[0].strip().zfill(10)
+                        if not code_str or not code_str.isdigit():
+                            continue
+
+                        raw_tax = ws.cell(r_idx, col_map['tax_amount']).value or 0
+                        try:
+                            tax_val = Decimal(str(raw_tax).replace(',', '').strip())
+                        except Exception:
+                            tax_val = Decimal(0)
+
+                        raw_months = ws.cell(r_idx, col_map.get('exemption_months', 5)).value if 'exemption_months' in col_map else 1
+                        try:
+                            ex_months = int(raw_months or 1)
+                        except Exception:
+                            ex_months = 1
+
+                        raw_mult = ws.cell(r_idx, col_map.get('multiple_employers', 6)).value if 'multiple_employers' in col_map else 'خیر'
+                        has_mult = str(raw_mult).strip() in ['بله', 'true', 'True', '1', 'YES', 'yes']
+
+                        if code_str in record_map:
+                            rec = record_map[code_str]
+                            rec.income_tax = tax_val
+                            rec.tax_source_type = 'IMPORTED_EXCEL'
+                            rec.tax_exemption_months = ex_months
+                            rec.has_multiple_employers = has_mult
+                            rec.is_tax_imported = True
+
+                            rec.net_salary = rec.gross_salary - rec.worker_insurance - rec.income_tax
+                            rec.payable_amount = rec.net_salary - rec.advance_payment_deduction
+                            rec.save()
+
+                            matched_count += 1
+                            total_imported_tax += tax_val
+                        else:
+                            unmatched_rows.append({
+                                'row': r_idx,
+                                'national_code': code_str,
+                                'tax_amount': float(tax_val)
+                            })
 
             return Response({
                 'message': f'اطلاعات مالیاتی با موفقیت بارگذاری شد. {matched_count} پرسنل تطبیق داده شدند.',
@@ -3775,7 +4006,7 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({
-                'error': f'خطا در پردازش فایل اکسل مالیات: {str(e)}'
+                'error': f'خطا در پردازش اطلاعات مالیات: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -3823,6 +4054,305 @@ class FleetSettlementViewSet(viewsets.ViewSet):
             return response
         except Exception as e:
             return Response({'error': f'خطا در تولید فایل اکسل پرداخت بانک ملی: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=None, project_id=None, client_tab_id=None, sender_id=None):
+    """
+    ارسال بلادرنگ رویداد تغییرات ساختار سازمانی (پروژه، بخش، انتساب، طرف‌حساب) به وب‌سوکت سراسری
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            payload = {
+                'type': 'send_notification',
+                'type_str': 'org_structure_updated',
+                'entity_type': entity_type,  # 'project' | 'section' | 'assignment' | 'counterparty'
+                'action': action,            # 'create' | 'update' | 'delete'
+                'entity_id': entity_id,
+                'name': name,
+                'project_id': project_id,
+                'client_tab_id': client_tab_id,
+                'sender_id': sender_id,
+                'message': f"ساختار سازمانی ({entity_type}) به‌روزرسانی شد."
+            }
+            async_to_sync(channel_layer.group_send)(
+                'global_notifications',
+                payload
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting org_structure_updated: {e}")
+
+
+# ویوست‌های مدیریت ساختار سازمانی، پروژه، بخش، طرف‌حساب و فاکتور
+# ══════════════════════════════════════════════════════════════════════════════
+
+class FinancialProjectViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت پروژه‌های مالی و عملیاتی (مراکز هزینه مستقل)
+    """
+    queryset = FinancialProject.objects.all().prefetch_related('sections')
+    serializer_class = FinancialProjectSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+        return qs.order_by('code')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('project', 'create', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('project', 'update', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        instance_id = instance.id
+        instance_name = instance.name
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('project', 'delete', instance_id, instance_name, None, tab_id, self.request.user.id)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        from .org_excel_engine import export_projects_excel
+        return export_projects_excel()
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        from .org_excel_engine import download_org_template
+        return download_org_template('projects')
+
+
+class ProjectSectionViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت بخش‌ها و دپارتمان‌های تابعه هر پروژه
+    """
+    queryset = ProjectSection.objects.all().select_related('project')
+    serializer_class = ProjectSectionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
+        if project_id:
+            qs = qs.filter(project_id=project_id)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+        return qs.order_by('project__code', 'code')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('section', 'create', instance.id, instance.name, instance.project_id, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('section', 'update', instance.id, instance.name, instance.project_id, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        instance_id = instance.id
+        instance_name = instance.name
+        project_id = instance.project_id
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('section', 'delete', instance_id, instance_name, project_id, tab_id, self.request.user.id)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        from .org_excel_engine import export_sections_excel
+        project_id = request.query_params.get('project_id')
+        return export_sections_excel(project_id)
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        from .org_excel_engine import download_org_template
+        return download_org_template('sections')
+
+
+class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت انتساب کاربران به بخش‌ها و تعیین نقش‌های سازمانی
+    """
+    queryset = UserSectionAssignment.objects.all().select_related('user', 'section', 'section__project')
+    serializer_class = UserSectionAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(section__project_id=project_id)
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        role = self.request.query_params.get('role')
+        if role:
+            qs = qs.filter(role=role)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        return qs.order_by('-created_at')
+
+    @action(detail=False, methods=['get'], url_path='my-sections')
+    def my_sections(self, request):
+        """
+        دریافت بخش‌های فعال منتسب به کاربر لاگین‌شده جاری
+        """
+        user = request.user
+        if not user.is_authenticated:
+            return Response([], status=status.HTTP_200_OK)
+
+        if user.is_superuser or user.is_staff:
+            sections = ProjectSection.objects.filter(is_active=True).select_related('project')
+            return Response(ProjectSectionSerializer(sections, many=True).data)
+
+        assignments = UserSectionAssignment.objects.filter(
+            user=user,
+            is_active=True,
+            section__is_active=True
+        ).select_related('section', 'section__project')
+
+        sections = [a.section for a in assignments]
+        unique_sections = {s.id: s for s in sections}.values()
+        return Response(ProjectSectionSerializer(unique_sections, many=True).data)
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        proj_id = instance.section.project_id if instance.section else None
+        broadcast_org_structure_updated('assignment', 'create', instance.id, str(instance.user), proj_id, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        proj_id = instance.section.project_id if instance.section else None
+        broadcast_org_structure_updated('assignment', 'update', instance.id, str(instance.user), proj_id, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        instance_id = instance.id
+        proj_id = instance.section.project_id if instance.section else None
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('assignment', 'delete', instance_id, None, proj_id, tab_id, self.request.user.id)
+
+
+class CounterpartyViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت طرف‌حساب‌های مالی (رانندگان، تعمیرگاه‌ها، جایگاه سوخت و پیمانکاران)
+    """
+    queryset = Counterparty.objects.all().select_related('section', 'section__project')
+    serializer_class = CounterpartySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(Q(section_id=section_id) | Q(section__isnull=True))
+        c_type = self.request.query_params.get('counterparty_type')
+        if c_type:
+            qs = qs.filter(counterparty_type=c_type)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(national_id__icontains=search) | Q(phone__icontains=search))
+        return qs.order_by('name')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('counterparty', 'create', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('counterparty', 'update', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        instance_id = instance.id
+        instance_name = instance.name
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('counterparty', 'delete', instance_id, instance_name, None, tab_id, self.request.user.id)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        from .org_excel_engine import export_counterparties_excel
+        section_id = request.query_params.get('section_id')
+        return export_counterparties_excel(section_id)
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        from .org_excel_engine import download_org_template
+        return download_org_template('counterparties')
+
+    @action(detail=False, methods=['post'], url_path='import-excel')
+    def import_excel(self, request):
+        from .org_excel_engine import import_counterparties_from_excel
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایلی ارسال نشده است'}, status=status.HTTP_400_BAD_REQUEST)
+        res = import_counterparties_from_excel(file_obj)
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('counterparty', 'import', None, 'Bulk Import', None, tab_id, request.user.id)
+        return Response(res, status=status.HTTP_200_OK if res['success'] else status.HTTP_400_BAD_REQUEST)
+
+
+class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت فاکتورهای هزینه‌ای بخش‌ها
+    """
+    queryset = ExpenseInvoice.objects.all().select_related('section', 'section__project', 'counterparty', 'created_by')
+    serializer_class = ExpenseInvoiceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(section__project_id=project_id)
+        inv_status = self.request.query_params.get('status')
+        if inv_status:
+            qs = qs.filter(status=inv_status)
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(invoice_number__icontains=search) | Q(counterparty__name__icontains=search) | Q(description__icontains=search))
+        return qs.order_by('-invoice_date_shamsi', '-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 
 

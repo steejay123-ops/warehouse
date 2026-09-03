@@ -1,6 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    FinancialProjectViewSet,
+    ProjectSectionViewSet,
+    UserSectionAssignmentViewSet,
+    CounterpartyViewSet,
+    ExpenseInvoiceViewSet,
     PersonnelProfileViewSet,
     VehicleDriverProfileViewSet,
     PersonnelChangeRequestViewSet,
@@ -22,6 +27,11 @@ from .cartable_views import (
 )
 
 router = DefaultRouter()
+router.register(r'financial-projects', FinancialProjectViewSet, basename='financial-projects')
+router.register(r'project-sections', ProjectSectionViewSet, basename='project-sections')
+router.register(r'user-section-assignments', UserSectionAssignmentViewSet, basename='user-section-assignments')
+router.register(r'counterparties', CounterpartyViewSet, basename='counterparties')
+router.register(r'expense-invoices', ExpenseInvoiceViewSet, basename='expense-invoices')
 router.register(r'profiles', PersonnelProfileViewSet, basename='personnel-profile')
 router.register(r'vehicles', VehicleDriverProfileViewSet, basename='vehicle-profile')
 router.register(r'personnel-change-requests', PersonnelChangeRequestViewSet, basename='personnel-change-requests')

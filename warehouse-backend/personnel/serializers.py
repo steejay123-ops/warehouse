@@ -2,6 +2,11 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 from .models import (
+    FinancialProject,
+    ProjectSection,
+    UserSectionAssignment,
+    Counterparty,
+    ExpenseInvoice,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -63,6 +68,7 @@ class PayrollYearlySettingsSerializer(serializers.ModelSerializer):
     workshop_insurance = WorkshopInsuranceSettingsSerializer(read_only=True)
     tax_settings = TaxRuleSettingsSerializer(read_only=True)
     bank_export_settings = BankExportSettingsSerializer(read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
 
     class Meta:
         model = PayrollYearlySettings
@@ -384,6 +390,8 @@ class DailyAttendanceSerializer(serializers.ModelSerializer):
 class AttendanceItemInputSerializer(serializers.Serializer):
     personnel_id = serializers.IntegerField()
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     status = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
     effective_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     overtime_hours = serializers.DecimalField(max_digits=5, decimal_places=2, default=0.00)
@@ -395,6 +403,8 @@ class AttendanceItemInputSerializer(serializers.Serializer):
 
 class BulkAttendanceMatrixSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     date_shamsi = serializers.CharField(max_length=15)
     client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = AttendanceItemInputSerializer(many=True)
@@ -414,6 +424,8 @@ class MonthlyGridItemInputSerializer(serializers.Serializer):
 
 class BulkMonthlyAttendanceGridSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     year_month = serializers.CharField(max_length=10)
     client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = MonthlyGridItemInputSerializer(many=True)
@@ -425,6 +437,8 @@ class VehicleTripLogSerializer(serializers.ModelSerializer):
     plate_number = serializers.CharField(source='vehicle.plate_number', read_only=True)
     vehicle_type_display = serializers.CharField(source='vehicle.get_vehicle_type_display', read_only=True)
     warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    section_name = serializers.CharField(source='section.name', read_only=True)
 
     class Meta:
         model = VehicleTripLog
@@ -443,6 +457,8 @@ class VehicleTripItemInputSerializer(serializers.Serializer):
 
 class BulkVehicleTripMatrixSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     date_shamsi = serializers.CharField(max_length=15)
     client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = VehicleTripItemInputSerializer(many=True)
@@ -451,6 +467,8 @@ class BulkVehicleTripMatrixSerializer(serializers.Serializer):
 class VehicleDayTripUpdateSerializer(serializers.Serializer):
     vehicle_id = serializers.IntegerField()
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     date_shamsi = serializers.CharField(max_length=15)
     trip_count = serializers.IntegerField(default=0)
     unit_rate = serializers.DecimalField(max_digits=14, decimal_places=0, required=False, allow_null=True)
@@ -472,6 +490,8 @@ class VehicleMonthlyGridItemInputSerializer(serializers.Serializer):
 
 class BulkVehicleMonthlyGridSerializer(serializers.Serializer):
     warehouse_id = serializers.IntegerField(required=False, allow_null=True)
+    project_id = serializers.IntegerField(required=False, allow_null=True)
+    section_id = serializers.IntegerField(required=False, allow_null=True)
     year_month = serializers.CharField(max_length=10)
     client_tab_id = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
     items = VehicleMonthlyGridItemInputSerializer(many=True)
@@ -497,3 +517,76 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
         if obj.submitted_by:
             return f"{obj.submitted_by.first_name} {obj.submitted_by.last_name}".strip() or obj.submitted_by.username
         return None
+
+
+# ==============================================================================
+# سریالایزرهای ساختار سازمانی، پروژه، بخش، طرف‌حساب و فاکتور هزینه
+# ==============================================================================
+
+class FinancialProjectSerializer(serializers.ModelSerializer):
+    sections_count = serializers.IntegerField(source='sections.count', read_only=True)
+
+    class Meta:
+        model = FinancialProject
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class ProjectSectionSerializer(serializers.ModelSerializer):
+    project_name = serializers.CharField(source='project.name', read_only=True)
+    project_code = serializers.CharField(source='project.code', read_only=True)
+
+    class Meta:
+        model = ProjectSection
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class UserSectionAssignmentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_full_name = serializers.SerializerMethodField()
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    section_code = serializers.CharField(source='section.code', read_only=True)
+    project_id = serializers.IntegerField(source='section.project.id', read_only=True)
+    project_name = serializers.CharField(source='section.project.name', read_only=True)
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+
+    class Meta:
+        model = UserSectionAssignment
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_user_full_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+
+
+class CounterpartySerializer(serializers.ModelSerializer):
+    counterparty_type_display = serializers.CharField(source='get_counterparty_type_display', read_only=True)
+    section_name = serializers.CharField(source='section.name', read_only=True)
+
+    class Meta:
+        model = Counterparty
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class ExpenseInvoiceSerializer(serializers.ModelSerializer):
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    project_id = serializers.IntegerField(source='section.project.id', read_only=True)
+    project_name = serializers.CharField(source='section.project.name', read_only=True)
+    counterparty_name = serializers.CharField(source='counterparty.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ExpenseInvoice
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+

@@ -9,6 +9,10 @@ from datetime import datetime
 from django.conf import settings
 from django.db import connections
 from django.utils import timezone
+try:
+    import jdatetime
+except ImportError:
+    jdatetime = None
 from .audit_utils import log_audit_event
 
 logger = logging.getLogger(__name__)
@@ -310,3 +314,120 @@ def restore_database_backup(filename, user=None, ip_address=None):
 
     else:
         raise NotImplementedError(f"موتور دیتابیس {engine} پشتیبانی نمی‌شود.")
+
+
+def format_shamsi(iso_or_datetime_str):
+    """تبدیل تاریخ ISO یا دیت‌تایم به رشته استاندارد هجری شمسی"""
+    if not iso_or_datetime_str:
+        return ''
+    if jdatetime is None:
+        return str(iso_or_datetime_str)
+    try:
+        if isinstance(iso_or_datetime_str, str):
+            dt = datetime.fromisoformat(iso_or_datetime_str)
+        else:
+            dt = iso_or_datetime_str
+        return jdatetime.datetime.fromgregorian(datetime=dt).strftime('%Y/%m/%d %H:%M:%S')
+    except Exception:
+        return str(iso_or_datetime_str)
+
+
+def rotate_snapshots(keep_count=7):
+    """حفظ N نسخه اخیر از اسنپ‌شات‌های روتین سرور و پاکسازی نسخه‌های قدیمی‌تر"""
+    _ensure_backup_dir()
+    backups = get_backup_list()
+    routine_backups = [b for b in backups if not b.get('is_emergency')]
+
+    deleted_count = 0
+    if len(routine_backups) > keep_count:
+        to_delete = routine_backups[keep_count:]
+        for b in to_delete:
+            data_file = os.path.join(BACKUP_DIR, b.get('filename', ''))
+            meta_file = os.path.join(BACKUP_DIR, f"{b.get('filename', '')}.meta.json")
+
+            if os.path.exists(data_file):
+                try:
+                    os.remove(data_file)
+                except Exception as e:
+                    logger.warning(f"Failed to remove old backup file {data_file}: {e}")
+            if os.path.exists(meta_file):
+                try:
+                    os.remove(meta_file)
+                except Exception as e:
+                    logger.warning(f"Failed to remove old meta file {meta_file}: {e}")
+            deleted_count += 1
+
+    return deleted_count
+
+
+def create_server_snapshot(user=None, description="اسنپ‌شات دستی سرور", is_emergency=False, keep_count=7):
+    """ایجاد اسنپ‌شات کامل از دیتابیس در سرور با چرخش خودکار و نگهداری ۷ نسخه اخیر"""
+    meta = create_database_backup(
+        user=user,
+        description=description,
+        is_emergency=is_emergency
+    )
+    if not is_emergency:
+        rotate_snapshots(keep_count=keep_count)
+
+    meta['shamsi_date'] = format_shamsi(meta.get('created_at'))
+    return meta
+
+
+def get_snapshot_list(limit=7):
+    """دریافت لیست اسنپ‌شات‌های معتبر سرور به همراه تاریخ هجری شمسی"""
+    all_backups = get_backup_list()
+    enriched = []
+    for b in all_backups[:limit]:
+        item = dict(b)
+        item['shamsi_date'] = format_shamsi(item.get('created_at'))
+        item['size_mb'] = round(item.get('size', 0) / (1024 * 1024), 2)
+        enriched.append(item)
+    return enriched
+
+
+def get_snapshot_summary():
+    """خلاصه وضعیت اسنپ‌شات‌ها جهت نمایش در داشبورد سلامت و پایش سیستم"""
+    snapshots = get_snapshot_list(limit=7)
+    total_count = len(snapshots)
+    total_size = sum(s.get('size', 0) for s in snapshots)
+    last_snapshot = snapshots[0] if snapshots else None
+
+    return {
+        'total_count': total_count,
+        'max_retention': 7,
+        'total_size_bytes': total_size,
+        'total_size_mb': round(total_size / (1024 * 1024), 2),
+        'last_snapshot_filename': last_snapshot.get('filename') if last_snapshot else None,
+        'last_snapshot_shamsi': last_snapshot.get('shamsi_date') if last_snapshot else 'هنوز ثبت نشده',
+        'last_snapshot_iso': last_snapshot.get('created_at') if last_snapshot else None,
+        'status': 'optimal' if total_count > 0 else 'warning'
+    }
+
+
+def quick_rollback_snapshot(filename, user=None, confirm_text="", ip_address=None):
+    """
+    بازگردانی سریع دیتابیس به یک اسنپ‌شات مشخص با الزامات سد امنیتی و تاییدیه صریح
+    """
+    if confirm_text != 'ROLLBACK_CONFIRM':
+        raise ValueError("جهت اعمال بازگشت سریع به اسنپ‌شات، عبارت تاییدیه امنیتی ROLLBACK_CONFIRM الزامی است.")
+
+    result = restore_database_backup(filename=filename, user=user, ip_address=ip_address)
+
+    log_audit_event(
+        module='backup',
+        action='RESTORE_COMPLETE',
+        severity='critical',
+        user=user,
+        target_model='DatabaseSnapshot',
+        target_repr=f"بازگشت سریع موفقیت‌آمیز به اسنپ‌شات: {filename}",
+        details={
+            'restored_file': filename,
+            'result': result,
+            'emergency_snapshot': result.get('emergency_snapshot')
+        },
+        ip_address=ip_address
+    )
+
+    return result
+

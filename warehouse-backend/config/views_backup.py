@@ -558,3 +558,106 @@ class BackupRestoreView(APIView):
             {"message": "بازیابی اطلاعات با موفقیت انجام شد. لطفاً صفحه را مجدداً بارگذاری کنید."},
             status=status.HTTP_200_OK,
         )
+
+
+class SnapshotListView(APIView):
+    """
+    GET /api/backup/snapshots/
+    دریافت لیست ۷ اسنپ‌شات اخیر دیتابیس سرور همراه با متادیتای شمسی و حجم
+    منحصر به کاربران دارای مجوز CanManageDatabaseBackup
+    """
+    permission_classes = [CanManageDatabaseBackup]
+
+    def get(self, request):
+        from accounts.backup_service import get_snapshot_list, get_snapshot_summary
+        snapshots = get_snapshot_list(limit=7)
+        summary = get_snapshot_summary()
+        return Response({
+            'snapshots': snapshots,
+            'summary': summary
+        }, status=status.HTTP_200_OK)
+
+
+class SnapshotCreateView(APIView):
+    """
+    POST /api/backup/snapshots/create/
+    ایجاد اسنپ‌شات کامل از دیتابیس در سرور بدون نیاز به دانلود فایل و چرخش ۷ نسخه اخیر
+    منحصر به کاربران دارای مجوز CanManageDatabaseBackup
+    """
+    permission_classes = [CanManageDatabaseBackup]
+
+    def post(self, request):
+        description = request.data.get('description', 'اسنپ‌شات دستی سرور')
+        from accounts.backup_service import create_server_snapshot
+        try:
+            snapshot = create_server_snapshot(
+                user=request.user,
+                description=description,
+                is_emergency=False,
+                keep_count=7
+            )
+            return Response({
+                'message': 'اسنپ‌شات سرور با موفقیت ایجاد و ذخیره شد.',
+                'snapshot': snapshot
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Snapshot creation failed: {e}")
+            return Response({
+                'error': f"خطا در ایجاد اسنپ‌شات: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SnapshotRollbackView(APIView):
+    """
+    POST /api/backup/snapshots/rollback/
+    بازگشت سریع به یک اسنپ‌شات سرور با تاییدیه امنیتی ROLLBACK_CONFIRM
+    منحصر به کاربران دارای مجوز CanRestoreDatabase
+    """
+    permission_classes = [CanRestoreDatabase]
+
+    def post(self, request):
+        filename = request.data.get('filename', '').strip()
+        confirm_text = request.data.get('confirm_text', '').strip()
+
+        if not filename:
+            return Response({
+                'error': 'نام فایل اسنپ‌شات الزامی است.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if confirm_text != 'ROLLBACK_CONFIRM':
+            return Response({
+                'error': 'جهت بازگشت سریع به اسنپ‌شات، عبارت تاییدیه امنیتی ROLLBACK_CONFIRM باید وارد شود.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        from accounts.backup_service import quick_rollback_snapshot
+        ip_addr = getattr(request, 'META', {}).get('REMOTE_ADDR')
+        try:
+            res = quick_rollback_snapshot(
+                filename=filename,
+                user=request.user,
+                confirm_text=confirm_text,
+                ip_address=ip_addr
+            )
+            return Response({
+                'message': 'بازگشت سریع به اسنپ‌شات با موفقیت انجام شد. اطلاعات بازیابی شدند.',
+                'result': res
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Snapshot rollback failed: {e}")
+            return Response({
+                'error': f"خطا در اعمال بازگشت سریع: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class SnapshotSummaryView(APIView):
+    """
+    GET /api/backup/snapshots/summary/
+    خلاصه وضعیت اسنپ‌شات‌های سرور برای داشبورد پایش سلامت
+    """
+    permission_classes = [CanManageDatabaseBackup]
+
+    def get(self, request):
+        from accounts.backup_service import get_snapshot_summary
+        summary = get_snapshot_summary()
+        return Response(summary, status=status.HTTP_200_OK)
+

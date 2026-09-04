@@ -7,7 +7,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     UserViewSet, CustomTokenObtainPairView, CustomRoleViewSet, PermissionViewSet,
     UserTableViewStateViewSet, UserLoginLogViewSet, AuditLogViewSet, LogoutView,
-    DatabaseBackupViewSet, SwitchAppScopeView
+    DatabaseBackupViewSet, SwitchAppScopeView, SystemHealthView, ConcurrencyStressTestView
 )
 
 router = DefaultRouter()
@@ -24,5 +24,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(), name='logout'),
     path('refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('token/switch-app/', SwitchAppScopeView.as_view(), name='token_switch_app'),
+    path('health/', SystemHealthView.as_view(), name='system_health'),
+    path('health/stress-test/', ConcurrencyStressTestView.as_view(), name='concurrency_stress_test'),
     path('', include(router.urls)),
 ]

@@ -10,6 +10,8 @@ testsprite_tests/tmp/config.json
 .claude-flow/data/
 .claude-flow/logs/
 .claude-flow/sessions/
+.claude/tmp/
+.claude/review-tmp/
 
 # Python cache & build artifacts
 __pycache__/

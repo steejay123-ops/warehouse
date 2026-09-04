@@ -90,7 +90,12 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(venv/Scripts/python.exe manage.py test common.tests.test_date_utils)",
       "Bash(venv/Scripts/python.exe manage.py test inventory.tests_security_import --noinput)",
-      "Bash(grep -E \"^Ran |^OK$|^FAILED|Error\")"
+      "Bash(grep -E \"^Ran |^OK$|^FAILED|Error\")",
+      "Skill(comprehensive-code-review)",
+      "Skill(comprehensive-code-review:*)",
+      "Bash(mkdir -p \".claude/tmp\")",
+      "Bash(git diff *)",
+      "Bash(mkdir -p .claude/review-tmp)"
     ]
   }
 }

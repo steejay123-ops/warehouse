@@ -509,6 +509,7 @@ export class Layout implements OnInit, OnDestroy {
     {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
     {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
     {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
+    {id:'health', label:'پایش سلامت سامانه', icon:'activity', permission: 'view_sys_settings'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'},
     // بخش کارکرد و حسابداری (پورتال‌های ماژولار سامانه مالی و حسابداری)
@@ -519,7 +520,8 @@ export class Layout implements OnInit, OnDestroy {
     {id:'treasury-cartable', label:'🏦 کارتابل خزانه‌داری و پرداخت', icon:'dollar-sign', permission: 'view_sys_treasury', isAccounting: true},
     {id:'profiles', label:'👥 بانک پرونده‌های پرسنل و ناوگان', icon:'users', permission: 'view_sys_personnel', isAccounting: true},
     {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'finance-audit', label:'🔍 رهگیری و ممیزی مالی', icon:'file-text', permission: 'view_sys_payroll', isAccounting: true}
+    {id:'finance-audit', label:'🔍 رهگیری و ممیزی مالی', icon:'file-text', permission: 'view_sys_payroll', isAccounting: true},
+    {id:'finance-health', label:'🩺 سلامت و تاب‌آوری سامانه', icon:'activity', permission: 'view_sys_payroll', isAccounting: true}
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
@@ -534,6 +536,7 @@ export class Layout implements OnInit, OnDestroy {
 
     {id:'feeding', label:'مدیریت و تغذیه MT26/49 (به‌زودی)', icon:'database', permission: 'view_wh_feeding'},
     {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
+    {id:'health', label:'پایش سلامت سامانه', icon:'activity', permission: 'view_wh_settings'},
     {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
     {id:'wh-settings', label:'تنظیمات انبار', icon:'settings', permission: 'view_wh_settings'}
   ];
@@ -563,6 +566,9 @@ export class Layout implements OnInit, OnDestroy {
       const segments = clean.split('/').filter(Boolean);
       if (segments[0] === 'app' && segments[1] === 'finance' && (segments[2] === 'audit' || segments[2] === 'finance-audit')) {
         return 'finance-audit';
+      }
+      if (segments[0] === 'app' && segments[1] === 'finance' && (segments[2] === 'health' || segments[2] === 'finance-health')) {
+        return 'finance-health';
       }
       if (segments[0] === 'app' && segments[2]) {
         return segments[2];
@@ -1106,6 +1112,10 @@ export class Layout implements OnInit, OnDestroy {
       this.router.navigate(['/app/finance/audit']);
       return;
     }
+    if (tabId === 'finance-health') {
+      this.router.navigate(['/app/finance/health']);
+      return;
+    }
     const accountingTabs = [
       'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
@@ -1249,7 +1259,9 @@ export class Layout implements OnInit, OnDestroy {
       'profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی',
-      'finance-audit': 'رهگیری و ممیزی مالی و اداری'
+      'finance-audit': 'رهگیری و ممیزی مالی و اداری',
+      health: 'مرکز جامع پایش سلامت و تاب‌آوری سامانه',
+      'finance-health': 'مرکز جامع پایش سلامت و تاب‌آوری سامانه'
     };
     this.currentTitle = titles[tab] || tab;
   }

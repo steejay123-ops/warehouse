@@ -1,8 +1,10 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, HostListener, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, HostListener, ElementRef, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { NetworkStatusService, ConnectionState } from '../../../core/services/network-status.service';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
-import { SyncQueueEntry, SyncErrorEntry, offlineDb } from '../../../core/services/offline-db';
+import { SyncQueueEntry, SyncErrorEntry, offlineDb, getCurrentActiveAppScope } from '../../../core/services/offline-db';
+import { SystemHealthService, ServerHealthResponse, ClientStorageHealth } from '../../../core/services/system-health.service';
 import { StateService } from '../../../services/state.service';
 import { Subscription } from 'rxjs';
 import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/conflict-resolution-modal.component';
@@ -118,16 +120,6 @@ import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/c
         <div class="flex border-b border-slate-100 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-800/50 p-1.5 gap-1 shrink-0 text-xs font-bold">
           <button
             type="button"
-            (click)="activeTab = 'status'"
-            class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer text-[11px]"
-            [ngClass]="activeTab === 'status' 
-              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-black' 
-              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
-          >
-            وضعیت شبکه
-          </button>
-          <button
-            type="button"
             (click)="activeTab = 'queue'"
             class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer flex items-center justify-center gap-1 text-[11px]"
             [ngClass]="activeTab === 'queue' 
@@ -142,6 +134,16 @@ import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/c
             >
               {{ pendingCount }}
             </span>
+          </button>
+          <button
+            type="button"
+            (click)="activeTab = 'status'"
+            class="flex-1 py-1.5 px-2 rounded-xl text-center transition-all cursor-pointer text-[11px]"
+            [ngClass]="activeTab === 'status' 
+              ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-black' 
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'"
+          >
+            سلامت و شبکه
           </button>
           <button
             type="button"
@@ -164,17 +166,70 @@ import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/c
         <!-- ─── Tab Content Scrollable Area ─── -->
         <div class="overflow-y-auto flex-1 p-3.5 space-y-3 text-xs">
 
-          <!-- ─── TAB 1: وضعیت و همگام‌سازی ─── -->
-          <div *ngIf="activeTab === 'status'" class="space-y-2.5 fade-in">
-            <!-- Server Status -->
-            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">وضعیت سرور:</span>
-              <span class="font-bold text-[11px]" [ngClass]="serverStatusClass">{{ serverStatusText }}</span>
+          <!-- ─── TAB 1: سلامت و شبکه (Live Health Matrix & Sync) ─── -->
+          <div *ngIf="activeTab === 'status'" class="space-y-2 fade-in">
+            <!-- Health Score Mini Widget -->
+            <div class="p-2.5 rounded-xl bg-slate-900 text-white border border-slate-800 flex items-center justify-between shadow-xs">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full" [ngClass]="healthScore >= 85 ? 'bg-emerald-400 animate-ping' : healthScore >= 60 ? 'bg-amber-400' : 'bg-rose-500'"></span>
+                <span class="text-[11px] font-bold text-slate-300">نمره سلامت زیرساخت:</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="font-mono font-black text-sm" [ngClass]="healthScore >= 85 ? 'text-emerald-400' : healthScore >= 60 ? 'text-amber-400' : 'text-rose-400'">
+                  {{ healthScore }}٪
+                </span>
+                <span class="text-[9px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  {{ healthScore >= 85 ? 'پایدار' : healthScore >= 60 ? 'هشدار' : 'خطا' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Network Ping & Latency -->
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-[11px]">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>
+                <span>تاخیر شبکه (Ping):</span>
+              </div>
+              <span dir="ltr" class="font-bold font-mono text-[11px]" [ngClass]="networkPingMs && networkPingMs <= 300 ? 'text-emerald-600 dark:text-emerald-400' : networkPingMs && networkPingMs <= 700 ? 'text-amber-600' : 'text-rose-600'">
+                {{ networkPingMs !== null && networkPingMs >= 0 ? (networkPingMs + ' ms') : 'قطع ارتباط' }}
+              </span>
+            </div>
+
+            <!-- Server Core Services Status (Postgres, Redis, WebSocket) -->
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 space-y-1.5">
+              <div class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-bold">
+                <span>سرویس‌های هسته سرور:</span>
+                <span class="text-[9px] text-slate-400 font-normal" *ngIf="serverHealth?.total_check_time_ms">
+                  پاسخ: <span dir="ltr" class="font-mono font-bold">{{ serverHealth?.total_check_time_ms }} ms</span>
+                </span>
+              </div>
+              <div class="grid grid-cols-3 gap-1 text-[10px] font-bold">
+                <!-- PostgreSQL -->
+                <div class="p-1 rounded-lg border text-center" [ngClass]="serverHealth?.components?.database?.status === 'healthy' ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700'">
+                  دیتابیس
+                </div>
+                <!-- Redis -->
+                <div class="p-1 rounded-lg border text-center" [ngClass]="serverHealth?.components?.redis?.status === 'healthy' ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300' : 'border-amber-200 bg-amber-50 text-amber-700'">
+                  ردیس
+                </div>
+                <!-- WebSocket -->
+                <div class="p-1 rounded-lg border text-center" [ngClass]="serverHealth?.components?.websocket?.status === 'healthy' ? 'border-emerald-200 bg-emerald-50/60 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300' : 'border-amber-200 bg-amber-50 text-amber-700'">
+                  سوکت
+                </div>
+              </div>
+            </div>
+
+            <!-- Local Client Offline Storage -->
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+              <span class="text-slate-500 dark:text-slate-400">حافظه مرورگر (IndexedDB):</span>
+              <span class="font-mono font-bold text-slate-700 dark:text-slate-200 text-[10px]">
+                {{ clientStorage?.formattedUsed || '۰' }} ({{ clientStorage?.usagePercent || 0 }}٪)
+              </span>
             </div>
 
             <!-- Pending Queue Summary -->
-            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">صف ارسال محلی:</span>
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]">
+              <span class="text-slate-500 dark:text-slate-400 font-medium">صف ارسال محلی:</span>
               <div class="flex items-center gap-2">
                 <span class="font-bold text-[11px]" [class.text-amber-600]="pendingCount > 0" [class.text-emerald-600]="pendingCount === 0">
                   {{ pendingCount > 0 ? (pendingCount + ' رکورد در انتظار') : 'همگام و بدون صف' }}
@@ -190,43 +245,41 @@ import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/c
               </div>
             </div>
 
-            <!-- Last Sync Detail -->
-            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span class="text-slate-500 dark:text-slate-400 font-medium text-[11px]">آخرین ارسال موفق:</span>
-              <span class="font-bold text-slate-700 dark:text-slate-300 text-[11px] font-mono">{{ formattedLastSync }}</span>
+            <!-- Actions Row: Diagnostic Check + Manual Sync -->
+            <div class="grid grid-cols-2 gap-1.5 pt-1">
+              <button
+                type="button"
+                (click)="onRunQuickDiagnostic()"
+                [disabled]="isDiagnosing"
+                class="py-1.5 px-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [class.animate-spin]="isDiagnosing"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                <span>{{ isDiagnosing ? 'در حال تست...' : 'تست عیب‌یابی' }}</span>
+              </button>
+
+              <button
+                type="button"
+                (click)="onManualSync()"
+                [disabled]="isSyncing || networkState !== 'online'"
+                class="py-1.5 px-2 rounded-xl text-[10px] font-bold text-white transition-all flex items-center justify-center gap-1 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                [ngClass]="networkState === 'online' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400'"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [class.animate-spin]="isSyncing"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                <span>{{ isSyncing ? 'در حال ارسال...' : 'ارسال دستی' }}</span>
+              </button>
             </div>
 
-            <!-- Error Summary Warning if any -->
-            <div
-              *ngIf="errorCount > 0"
-              (click)="activeTab = 'errors'"
-              class="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-950/60 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-[11px] font-bold flex items-center justify-between gap-2 transition-all cursor-pointer shadow-2xs select-none"
-              title="کلیک برای مشاهده خطاها"
-            >
-              <div class="flex items-center gap-1.5 min-w-0">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <span class="truncate">{{ errorCount }} خطا در پردازش درخواست‌ها رخ داده است</span>
-              </div>
-              <span class="text-[10px] text-rose-600 dark:text-rose-400 font-extrabold shrink-0 bg-white/80 dark:bg-slate-900 px-2 py-0.5 rounded-md border border-rose-200/70">
-                بررسی
-              </span>
+            <!-- Full Dashboard Link for Managerial Roles -->
+            <div class="pt-1 text-center" *ngIf="canAccessFullHealthDashboard">
+              <button
+                type="button"
+                (click)="navigateToFullHealthDashboard()"
+                class="w-full py-1.5 px-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <span>مشاهده داشبورد کامل مانیتورینگ</span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
             </div>
-
-            <!-- Manual Sync Button -->
-            <button
-              type="button"
-              (click)="onManualSync()"
-              [disabled]="isSyncing || networkState !== 'online'"
-              class="w-full mt-2 py-2 px-3 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-98 cursor-pointer"
-              [ngClass]="networkState === 'online' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400'"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isSyncing">
-                <polyline points="23 4 23 10 17 10"></polyline>
-                <polyline points="1 20 1 14 7 14"></polyline>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-              <span>{{ isSyncing ? 'در حال ارسال داده‌ها...' : 'همگام‌سازی دستی اکنون' }}</span>
-            </button>
           </div>
 
           <!-- ─── TAB 2: جزئیات صف انتظار و امکان لغو ─── -->
@@ -427,7 +480,7 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
   errorCount = 0;
 
   isPopoverOpen = false;
-  activeTab: 'status' | 'queue' | 'errors' = 'status';
+  activeTab: 'queue' | 'status' | 'errors' = 'queue';
 
   queueEntries: SyncQueueEntry[] = [];
   syncErrors: SyncErrorEntry[] = [];
@@ -436,8 +489,16 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
   isConflictModalOpen = false;
   selectedConflictError: SyncErrorEntry | null = null;
 
+  healthScore = 100;
+  networkPingMs: number | null = null;
+  serverHealth: ServerHealthResponse | null = null;
+  clientStorage: ClientStorageHealth | null = null;
+  isDiagnosing = false;
+
   private network = NetworkStatusService.getInstance();
   private sync = OfflineSyncService.getInstance();
+  private healthService = inject(SystemHealthService);
+  private router = inject(Router);
   private subs: Subscription[] = [];
 
   constructor(
@@ -492,6 +553,29 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
           this.cdr.markForCheck();
         })
       );
+
+      this.subs.push(
+        this.healthService.healthScore$.subscribe(score => {
+          this.healthScore = score;
+          this.cdr.markForCheck();
+        }),
+        this.healthService.networkPingMs$.subscribe(ping => {
+          this.networkPingMs = ping;
+          this.cdr.markForCheck();
+        }),
+        this.healthService.serverHealth$.subscribe(srv => {
+          this.serverHealth = srv;
+          this.cdr.markForCheck();
+        }),
+        this.healthService.clientStorage$.subscribe(st => {
+          this.clientStorage = st;
+          this.cdr.markForCheck();
+        }),
+        this.healthService.isDiagnosing$.subscribe(d => {
+          this.isDiagnosing = d;
+          this.cdr.markForCheck();
+        })
+      );
     }
   }
 
@@ -514,10 +598,8 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       // انتخاب هوشمند تب فعال بر اساس اولویت
       if (this.errorCount > 0) {
         this.activeTab = 'errors';
-      } else if (this.pendingCount > 0) {
-        this.activeTab = 'queue';
       } else {
-        this.activeTab = 'status';
+        this.activeTab = 'queue';
       }
       this.refreshData();
     }
@@ -696,6 +778,26 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
       console.error('[SyncBadge] Manual sync error:', e);
     }
     this.cdr.markForCheck();
+  }
+
+  async onRunQuickDiagnostic(): Promise<void> {
+    try {
+      await this.healthService.runFullDiagnostic(true);
+    } catch (e) {
+      console.error('[SyncBadge] Diagnostic error:', e);
+    }
+    this.cdr.markForCheck();
+  }
+
+  get canAccessFullHealthDashboard(): boolean {
+    const role = sessionStorage.getItem('active_role_persona') || '';
+    return ['supervisor', 'accountant', 'manager', 'admin', 'superuser'].includes(role) || !['operator', 'counter'].includes(role);
+  }
+
+  navigateToFullHealthDashboard(): void {
+    this.closePopover();
+    const scope = getCurrentActiveAppScope();
+    this.router.navigate(['/app', scope, 'health']);
   }
 
   togglePayload(id: number): void {

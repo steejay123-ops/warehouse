@@ -1,10 +1,10 @@
-import { Component, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SettingsService } from '../../../../services/settings';
 import { ToastService } from '../../../../services/toast.service';
 import { finalize } from 'rxjs/operators';
-import { offlineDb } from '../../../../core/services/offline-db';
+import { offlineDb, downloadLocalDatabaseSnapshotFile } from '../../../../core/services/offline-db';
 import { AuthService } from '../../../../core/auth/auth.service';
 
 @Component({
@@ -13,9 +13,20 @@ import { AuthService } from '../../../../core/auth/auth.service';
   imports: [CommonModule, FormsModule],
   templateUrl: './settings-backup-tab.html'
 })
-export class SettingsBackupTabComponent {
+export class SettingsBackupTabComponent implements OnInit {
   @ViewChild('confirmTextInput') confirmTextInput?: ElementRef<HTMLInputElement>;
   @ViewChild('confirmDialogContainer') confirmDialogContainer?: ElementRef<HTMLElement>;
+
+  // ─── اسنپ‌شات‌های سرور و بازگشت سریع ───
+  snapshots: any[] = [];
+  snapshotSummary: any = null;
+  isLoadingSnapshots = false;
+  isCreatingSnapshot = false;
+  isRollingBack = false;
+  selectedRollbackSnapshot: any = null;
+  showRollbackConfirm = false;
+  rollbackConfirmInput = '';
+  isExportingLocalDb = false;
 
   backupPassword = '';
   backupShowPassword = false;
@@ -45,6 +56,119 @@ export class SettingsBackupTabComponent {
     private cdr: ChangeDetectorRef,
     private auth: AuthService
   ) {}
+
+  ngOnInit() {
+    if (this.canManageBackup() || this.canRestoreDatabase()) {
+      this.loadSnapshots();
+    }
+  }
+
+  loadSnapshots() {
+    this.isLoadingSnapshots = true;
+    this.cdr.detectChanges();
+    this.settingsService.getSnapshots()
+      .pipe(finalize(() => {
+        this.isLoadingSnapshots = false;
+        this.cdr.detectChanges();
+      }))
+      .subscribe({
+        next: (res) => {
+          this.snapshots = res.snapshots || [];
+          this.snapshotSummary = res.summary || null;
+        },
+        error: (err) => {
+          console.warn('Could not load snapshots:', err);
+        }
+      });
+  }
+
+  createManualSnapshot() {
+    this.isCreatingSnapshot = true;
+    this.cdr.detectChanges();
+    this.settingsService.createSnapshot('اسنپ‌شات دستی سرور')
+      .pipe(finalize(() => {
+        this.isCreatingSnapshot = false;
+        this.cdr.detectChanges();
+      }))
+      .subscribe({
+        next: (res) => {
+          this.toast.show('success', res.message || 'اسنپ‌شات جدید با موفقیت ثبت شد.');
+          this.loadSnapshots();
+        },
+        error: (err) => {
+          this.toast.show('error', err?.error?.error || 'خطا در ثبت اسنپ‌شات سرور.');
+        }
+      });
+  }
+
+  async openRollbackConfirm(snapshot: any) {
+    const q = await offlineDb.syncQueue.toArray();
+    if (q.length > 0) {
+      this.toast.show('error', `صف آفلاین شامل ${q.length} رکورد همگام‌نشده است. جهت جلوگیری از نابودی داده‌ها، ابتدا باید آنها را به سرور ارسال کنید.`);
+      return;
+    }
+
+    this.selectedRollbackSnapshot = snapshot;
+    this.rollbackConfirmInput = '';
+    this.showRollbackConfirm = true;
+    this.cdr.detectChanges();
+  }
+
+  cancelRollback() {
+    this.showRollbackConfirm = false;
+    this.selectedRollbackSnapshot = null;
+    this.rollbackConfirmInput = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmRollback() {
+    if (this.rollbackConfirmInput.trim() !== 'ROLLBACK_CONFIRM') {
+      this.toast.show('error', 'جهت تایید، عبارت ROLLBACK_CONFIRM را به درستی وارد کنید.');
+      return;
+    }
+    if (!this.selectedRollbackSnapshot) return;
+
+    this.isRollingBack = true;
+    this.cdr.detectChanges();
+
+    this.settingsService.rollbackSnapshot(this.selectedRollbackSnapshot.filename, this.rollbackConfirmInput.trim())
+      .pipe(finalize(() => {
+        this.isRollingBack = false;
+        this.cdr.detectChanges();
+      }))
+      .subscribe({
+        next: async (res) => {
+          this.toast.show('success', res.message || 'دیتابیس با موفقیت به اسنپ‌شات بازگردانی شد.');
+          this.showRollbackConfirm = false;
+          this.selectedRollbackSnapshot = null;
+          this.rollbackConfirmInput = '';
+
+          await offlineDb.clearServerDerivedCaches();
+          setTimeout(() => {
+            this.auth.logout();
+          }, 1500);
+        },
+        error: (err) => {
+          this.toast.show('error', err?.error?.error || 'خطا در بازگردانی اسنپ‌شات.');
+          this.showRollbackConfirm = false;
+          this.selectedRollbackSnapshot = null;
+        }
+      });
+  }
+
+  async downloadLocalIndexedDb() {
+    this.isExportingLocalDb = true;
+    this.cdr.detectChanges();
+    try {
+      const res = await downloadLocalDatabaseSnapshotFile();
+      this.toast.show('success', `نسخه پشتیبان تبلت (${res.totalRecords} رکورد) با موفقیت دانلود شد.`);
+    } catch (err: any) {
+      this.toast.show('error', 'خطا در تهیه نسخه پشتیبان پایگاه‌داده محلی مرورگر.');
+    } finally {
+      this.isExportingLocalDb = false;
+      this.cdr.detectChanges();
+    }
+  }
 
   downloadBackup() {
     if (!this.backupPassword) {

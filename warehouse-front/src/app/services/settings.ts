@@ -84,5 +84,32 @@ export class SettingsService {
       context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
     });
   }
+
+  getSnapshots(): Observable<{ snapshots: any[]; summary: any }> {
+    return this.http.get<{ snapshots: any[]; summary: any }>(`${this.apiUrl}/backup/snapshots/`, {
+      context: new HttpContext().set(SKIP_OFFLINE, true)
+    });
+  }
+
+  createSnapshot(description: string = 'اسنپ‌شات دستی سرور'): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/snapshots/create/`, { description }, {
+      context: new HttpContext().set(SKIP_OFFLINE, true)
+    });
+  }
+
+  rollbackSnapshot(filename: string, confirmText: string = 'ROLLBACK_CONFIRM'): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/snapshots/rollback/`, {
+      filename,
+      confirm_text: confirmText
+    }, {
+      context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
+    });
+  }
+
+  getSnapshotSummary(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/snapshots/summary/`, {
+      context: new HttpContext().set(SKIP_OFFLINE, true)
+    });
+  }
 }
 

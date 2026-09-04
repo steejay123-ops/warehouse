@@ -13,6 +13,141 @@
           </div>
         </div>
 
+        <!-- ── کارت اسنپ‌شات‌ها و نقاط بازگشت سریع سرور (Server Snapshots & Quick Rollback) ── -->
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden" [class.opacity-60]="!canManageBackup()" [class.pointer-events-none]="!canManageBackup()">
+          <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-slate-50 border-b border-emerald-100/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm text-white" style="background: linear-gradient(135deg, #059669, #0d9488)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3">
+                  <path d="M12 8v4l3 3"></path>
+                  <circle cx="12" cy="12" r="9"></circle>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h4 class="font-black text-slate-800 text-sm">اسنپ‌شات‌ها و نقاط بازگشت سریع سرور (Server Snapshots)</h4>
+                  <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    چرخش ۷ نسخه اخیر
+                  </span>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  بایگانی خودکار دیتابیس در سرور با قابلیت بازگشت لحظه‌ای (Rollback) بدون نیاز به دانلود یا آپلود فایل
+                </p>
+              </div>
+            </div>
+
+            <!-- دکمه‌های اقدام سریع -->
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                (click)="downloadLocalIndexedDb()"
+                [disabled]="isExportingLocalDb"
+                class="px-3.5 py-2 rounded-xl text-xs font-bold text-teal-800 bg-teal-50 border border-teal-200 hover:bg-teal-100 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                title="دانلود نسخه پشتیبان از پایگاه‌داده محلی مرورگر/تبلت"
+              >
+                <svg *ngIf="!isExportingLocalDb" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span *ngIf="isExportingLocalDb" class="animate-spin w-3.5 h-3.5 border-2 border-teal-700 border-t-transparent rounded-full"></span>
+                <span>{{ isExportingLocalDb ? 'در حال خروجی...' : 'پشتیبان تبلت (IndexedDB)' }}</span>
+              </button>
+
+              <button
+                type="button"
+                (click)="createManualSnapshot()"
+                [disabled]="isCreatingSnapshot || !canManageBackup()"
+                class="px-4 py-2 rounded-xl text-xs font-bold text-white flex items-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+                style="background: linear-gradient(135deg, #059669, #047857)"
+              >
+                <span *ngIf="isCreatingSnapshot" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+                <svg *ngIf="!isCreatingSnapshot" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <span>{{ isCreatingSnapshot ? 'در حال ساخت اسنپ‌شات...' : '+ اسنپ‌شات دستی فوری' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <!-- نوار خلاصه وضعیت -->
+            <div *ngIf="snapshotSummary" class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+              <div class="text-right">
+                <span class="text-[10px] text-slate-400 font-bold block">نسخه‌های ذخیره‌شده</span>
+                <span class="text-sm font-black text-slate-800 font-mono mt-0.5 block">
+                  {{ snapshotSummary.total_count }} از {{ snapshotSummary.max_retention }}
+                </span>
+              </div>
+              <div class="text-right">
+                <span class="text-[10px] text-slate-400 font-bold block">حجم کل اسنپ‌شات‌ها</span>
+                <span class="text-sm font-black text-indigo-700 font-mono mt-0.5 block" dir="ltr">
+                  {{ snapshotSummary.total_size_mb }} MB
+                </span>
+              </div>
+              <div class="text-right col-span-2">
+                <span class="text-[10px] text-slate-400 font-bold block">آخرین نقطه بازگشت ثبت‌شده</span>
+                <span class="text-xs font-black text-slate-700 font-mono mt-0.5 block" dir="ltr">
+                  {{ snapshotSummary.last_snapshot_shamsi }}
+                </span>
+              </div>
+            </div>
+
+            <!-- وضعیت لودینگ و خالی -->
+            <div *ngIf="isLoadingSnapshots" class="py-8 text-center text-xs text-slate-400 font-bold flex items-center justify-center gap-2">
+              <span class="animate-spin w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full"></span>
+              <span>در حال بارگذاری لیست اسنپ‌شات‌های سرور...</span>
+            </div>
+
+            <div *ngIf="!isLoadingSnapshots && snapshots.length === 0" class="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center space-y-2">
+              <p class="text-xs font-bold text-slate-500">هنوز هیچ اسنپ‌شاتی در سرور ثبت نشده است.</p>
+              <p class="text-[11px] text-slate-400">با زدن دکمه «+ اسنپ‌شات دستی فوری» می‌توانید اولین نقطه بازگشت سیستم را ثبت کنید.</p>
+            </div>
+
+            <!-- جدول اسنپ‌شات‌ها -->
+            <div *ngIf="!isLoadingSnapshots && snapshots.length > 0" class="overflow-x-auto rounded-2xl border border-slate-200">
+              <table class="w-full text-right text-xs">
+                <thead>
+                  <tr class="bg-slate-100/80 text-slate-600 font-black border-b border-slate-200">
+                    <th class="p-3">نام و مشخصات اسنپ‌شات</th>
+                    <th class="p-3">تاریخ و ساعت (شمسی)</th>
+                    <th class="p-3">حجم</th>
+                    <th class="p-3">کاربر ثبت‌کننده</th>
+                    <th class="p-3 text-center">عملیات بازگشت</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 bg-white">
+                  <tr *ngFor="let snap of snapshots; let i = index" class="hover:bg-slate-50/80 transition-colors">
+                    <td class="p-3 font-semibold text-slate-800">
+                      <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full" [ngClass]="snap.is_emergency ? 'bg-amber-500' : 'bg-emerald-500'"></span>
+                        <span class="font-mono font-bold text-[11px] text-slate-700" dir="ltr">{{ snap.filename }}</span>
+                        <span *ngIf="snap.is_emergency" class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">اضطراری</span>
+                        <span *ngIf="i === 0" class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">جدیدترین</span>
+                      </div>
+                      <span class="text-[10px] text-slate-400 block mt-0.5">{{ snap.description }}</span>
+                    </td>
+                    <td class="p-3 text-slate-600 font-mono text-[11px]" dir="ltr">
+                      {{ snap.shamsi_date }}
+                    </td>
+                    <td class="p-3 text-slate-700 font-mono text-[11px]" dir="ltr">
+                      {{ snap.size_mb }} MB
+                    </td>
+                    <td class="p-3 text-slate-500 font-medium">
+                      {{ snap.created_by_name || snap.created_by || 'سیستم' }}
+                    </td>
+                    <td class="p-3 text-center">
+                      <button
+                        type="button"
+                        (click)="openRollbackConfirm(snap)"
+                        [disabled]="isRollingBack || !canRestoreDatabase()"
+                        class="px-3 py-1.5 rounded-lg text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:border-rose-300 active:scale-95 transition-all cursor-pointer disabled:opacity-40"
+                        title="بازگردانی دیتابیس به این اسنپ‌شات"
+                      >
+                        بازگشت سریع
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- ── کارت ۱: دانلود نسخه پشتیبان ── -->
         <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden" [class.opacity-60]="!canManageBackup()" [class.pointer-events-none]="!canManageBackup()">
           <div class="bg-slate-50 border-b border-slate-100 p-5 flex items-center gap-3">
@@ -223,5 +358,70 @@
       </button>
     </div>
 
+  </div>
+</div>
+
+<!-- ── مودال تایید بازگشت سریع به اسنپ‌شات (Rollback Confirm Dialog) ── -->
+<div *ngIf="showRollbackConfirm" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in" dir="rtl">
+  <div class="bg-white rounded-3xl border border-rose-200 shadow-2xl max-w-md w-full p-6 space-y-5">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </div>
+      <div>
+        <h4 class="font-black text-rose-900 text-sm">تایید بازگشت اضطراری به اسنپ‌شات</h4>
+        <p class="text-[11px] text-rose-600 mt-0.5">بازگردانی دیتابیس سرور به نقطه بازگشت مشخص‌شده</p>
+      </div>
+    </div>
+
+    <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-xs text-rose-800 space-y-2">
+      <div class="flex justify-between items-center border-b border-rose-200/60 pb-1.5 font-mono text-[11px]">
+        <span>فایل اسنپ‌شات:</span>
+        <span class="font-bold" dir="ltr">{{ selectedRollbackSnapshot?.filename }}</span>
+      </div>
+      <div class="flex justify-between items-center border-b border-rose-200/60 pb-1.5 font-mono text-[11px]">
+        <span>تاریخ نقطه بازگشت:</span>
+        <span class="font-bold" dir="ltr">{{ selectedRollbackSnapshot?.shamsi_date }}</span>
+      </div>
+      <p class="text-[11px] text-rose-700 leading-relaxed font-semibold pt-1">
+        <strong>توجه:</strong> تمامی اطلاعات و اسناد ثبت‌شده پس از این تاریخ بازنویسی خواهند شد. سیستم به طور خودکار قبل از بازگشت، یک اسنپ‌شات ایمنی از وضعیت فعلی می‌گیرد.
+      </p>
+    </div>
+
+    <div>
+      <label class="block text-xs font-bold text-slate-700 mb-1.5">
+        جهت تایید، عبارت امنیتی زیر را در کادر تایپ نمایید:
+      </label>
+      <div class="bg-slate-100 border border-slate-200 rounded-xl p-2 mb-2 text-center select-all font-mono font-black text-xs text-rose-600 tracking-wider">
+        ROLLBACK_CONFIRM
+      </div>
+      <input
+        type="text"
+        [(ngModel)]="rollbackConfirmInput"
+        class="w-full text-center font-mono text-xs px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 bg-white"
+        placeholder="ROLLBACK_CONFIRM"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="flex gap-3">
+      <button
+        type="button"
+        (click)="cancelRollback()"
+        class="flex-1 py-3 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+      >
+        انصراف
+      </button>
+      <button
+        type="button"
+        (click)="confirmRollback()"
+        [disabled]="rollbackConfirmInput.trim() !== 'ROLLBACK_CONFIRM' || isRollingBack"
+        class="flex-1 py-3 rounded-xl text-xs font-bold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+        style="background: linear-gradient(135deg, #dc2626, #b91c1c)"
+      >
+        <span *ngIf="isRollingBack" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full inline-block mr-1"></span>
+        <span>{{ isRollingBack ? 'در حال بازگردانی دیتابیس...' : 'بله، بازگردانی شود' }}</span>
+      </button>
+    </div>
   </div>
 </div>

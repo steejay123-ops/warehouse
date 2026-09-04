@@ -434,3 +434,97 @@ export async function migrateLegacyDatabaseIfNeeded(): Promise<void> {
     console.warn('[OfflineDB Migration] عدم اجرای مهاجرت دیتابیس قبلی:', err);
   }
 }
+
+/**
+ * خروجی جامع و ساختاریافته از تمام داده‌های محلی هر دو پایگاه‌داده تفکیک‌شده (انبارداری و مالی)
+ */
+export async function exportLocalDatabaseSnapshot(): Promise<{
+  schemaVersion: number;
+  exportedAt: string;
+  exportedAtUnix: number;
+  warehouse: { [tableName: string]: any[] };
+  finance: { [tableName: string]: any[] };
+  metrics: {
+    totalRecords: number;
+    warehouseRecords: number;
+    financeRecords: number;
+    pendingSyncCount: number;
+  };
+}> {
+  const exportTable = async (db: Dexie): Promise<{ [tableName: string]: any[] }> => {
+    const result: { [tableName: string]: any[] } = {};
+    for (const table of db.tables) {
+      try {
+        result[table.name] = await table.toArray();
+      } catch (e) {
+        result[table.name] = [];
+      }
+    }
+    return result;
+  };
+
+  const [whData, finData] = await Promise.all([
+    exportTable(warehouseOfflineDb),
+    exportTable(financeOfflineDb)
+  ]);
+
+  const countRecords = (data: { [k: string]: any[] }) =>
+    Object.values(data).reduce((acc, arr) => acc + (arr?.length || 0), 0);
+
+  const whCount = countRecords(whData);
+  const finCount = countRecords(finData);
+  const pendingSync = (whData['syncQueue']?.length || 0) + (finData['syncQueue']?.length || 0);
+
+  const now = new Date();
+  let shamsiDate = '';
+  try {
+    shamsiDate = new Intl.DateTimeFormat('fa-IR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).format(now);
+  } catch {
+    shamsiDate = now.toISOString();
+  }
+
+  return {
+    schemaVersion: 4,
+    exportedAt: shamsiDate,
+    exportedAtUnix: Date.now(),
+    warehouse: whData,
+    finance: finData,
+    metrics: {
+      totalRecords: whCount + finCount,
+      warehouseRecords: whCount,
+      financeRecords: finCount,
+      pendingSyncCount: pendingSync,
+    }
+  };
+}
+
+/**
+ * ایجاد و دانلود فایل JSON نسخه پشتیبان پایگاه داده محلی روی سیستم یا تبلت
+ */
+export async function downloadLocalDatabaseSnapshotFile(): Promise<{ fileName: string; totalRecords: number }> {
+  const snapshot = await exportLocalDatabaseSnapshot();
+  const dateSlug = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const fileName = `warehouse_indexeddb_snapshot_${dateSlug}.json`;
+
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, 100);
+
+  return { fileName, totalRecords: snapshot.metrics.totalRecords };
+}
+

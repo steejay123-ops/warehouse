@@ -12,6 +12,7 @@ import { Docs } from './components/docs/docs';
 import { Users } from './components/users/users';
 import { Settings } from './components/settings/settings';
 import { Audit } from './components/audit/audit';
+import { HealthDashboardComponent } from './components/health-dashboard/health-dashboard';
 import { Feeding } from './components/feeding/feeding';
 import { Placeholders } from './components/placeholders/placeholders';
 import { Customs } from './components/customs/customs';
@@ -90,6 +91,7 @@ export const routes: Routes = [
       },
       { path: 'wh-settings', component: WhSettings },
       { path: 'audit', component: Audit, data: { appScope: 'warehouse' } },
+      { path: 'health', component: HealthDashboardComponent, data: { appScope: 'warehouse', reuse: false } },
       { path: 'feeding', component: Feeding },
       { path: 'field', redirectTo: 'counter', pathMatch: 'full' },
       { path: 'placeholders', component: Placeholders },
@@ -127,6 +129,7 @@ export const routes: Routes = [
       { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
       { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
       { path: 'audit', component: Audit, data: { appScope: 'finance', reuse: true } },
+      { path: 'health', component: HealthDashboardComponent, data: { appScope: 'finance', reuse: false } },
       { path: 'finance-audit', redirectTo: 'audit', pathMatch: 'full' },
       { path: 'personnel', redirectTo: 'finance-cartable', pathMatch: 'full' },
       { path: 'payroll', redirectTo: 'finance-cartable', pathMatch: 'full' },

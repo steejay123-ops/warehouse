@@ -192,6 +192,26 @@ from .models import UserLoginLog, AuditLog
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     device_model = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+
+        from accounts.middleware import get_user_allowed_apps, get_user_valid_roles_for_app
+        allowed_apps = get_user_allowed_apps(user)
+        token['allowed_apps'] = allowed_apps
+        token['scopes'] = {
+            'finance': get_user_valid_roles_for_app(user, 'personnel'),
+            'warehouse': get_user_valid_roles_for_app(user, 'warehouse')
+        }
+        if 'finance' in allowed_apps and 'warehouse' not in allowed_apps:
+            token['active_app'] = 'finance'
+        elif 'warehouse' in allowed_apps and 'finance' not in allowed_apps:
+            token['active_app'] = 'warehouse'
+        else:
+            token['active_app'] = 'warehouse' if 'warehouse' in allowed_apps else 'finance'
+
+        return token
+
     def validate(self, attrs):
         request = self.context.get('request')
         ip_address = get_client_ip(request) if request else None
@@ -300,6 +320,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             except Exception:
                 role_titles.append(group.name)
 
+        from accounts.middleware import get_user_allowed_apps, get_user_valid_roles_for_app
+        allowed_apps = get_user_allowed_apps(user)
+        app_scopes = {
+            'finance': get_user_valid_roles_for_app(user, 'personnel'),
+            'warehouse': get_user_valid_roles_for_app(user, 'warehouse')
+        }
+        default_active_app = (
+            'finance' if 'finance' in allowed_apps and 'warehouse' not in allowed_apps
+            else ('warehouse' if 'warehouse' in allowed_apps else 'finance')
+        )
+
         data['user'] = {
             'id': user.id,
             'username': user.username,
@@ -318,6 +349,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'ui_preferences': user.ui_preferences,
             'is_superuser': user.is_superuser,
             'permissions': list(user_perms),
+            'allowed_apps': allowed_apps,
+            'scopes': app_scopes,
+            'active_app': default_active_app,
         }
         return {
             'tokens': {
@@ -363,7 +397,7 @@ class AuditLogListSerializer(serializers.ModelSerializer):
             'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role', 'warehouse', 'warehouse_name',
             'module', 'module_display', 'action', 'action_display',
             'severity', 'severity_display', 'target_model', 'target_object_id',
-            'target_repr', 'has_diff', 'ip_address', 'created_at'
+            'target_repr', 'has_diff', 'details', 'ip_address', 'created_at'
         ]
         read_only_fields = fields
 

@@ -9,6 +9,7 @@ _current_user_agent_var = contextvars.ContextVar('current_user_agent', default=N
 _current_warehouse_var = contextvars.ContextVar('current_warehouse', default=None)
 _current_active_role_var = contextvars.ContextVar('current_active_role', default=None)
 _current_active_app_var = contextvars.ContextVar('current_active_app', default='personnel')
+_current_client_tab_id_var = contextvars.ContextVar('current_client_tab_id', default=None)
 
 def get_client_ip(request):
     """
@@ -55,6 +56,53 @@ def get_current_active_app():
 
 def set_current_active_app(app_module):
     return _current_active_app_var.set(app_module)
+
+def get_current_client_tab_id():
+    return _current_client_tab_id_var.get()
+
+def set_current_client_tab_id(tab_id):
+    return _current_client_tab_id_var.set(tab_id)
+
+
+def get_user_allowed_apps(user) -> list[str]:
+    """
+    محاسبه دامنه‌ها/برنامه‌های مجاز کاربر (warehouse و finance) بر اساس مجوزها یا وضعیت سوپریوزر
+    """
+    if not user or not user.is_authenticated:
+        return []
+    if user.is_superuser:
+        return ['warehouse', 'finance']
+
+    allowed = set()
+    user_perms = user.get_all_permissions()
+
+    # بررسی دسترسی به انبارداری
+    warehouse_perm_markers = [
+        'accounts.view_sys_counter', 'accounts.view_sys_supervisor',
+        'accounts.view_sys_manager_review', 'accounts.view_sys_reports',
+        'accounts.view_wh_dispatch', 'accounts.view_wh_docs',
+        'accounts.view_wh_doc_approvals', 'accounts.perm_inventory_finalize',
+        'accounts.perm_doc_approve_action', 'inventory.view_item',
+        'warehouses.view_warehouse', 'inventory.add_item', 'inventory.change_item'
+    ]
+    if any(p in user_perms for p in warehouse_perm_markers):
+        allowed.add('warehouse')
+
+    # بررسی دسترسی به مالی و پرسنلی
+    finance_perm_markers = [
+        'accounts.view_sys_personnel', 'accounts.view_sys_personnel_attendance',
+        'accounts.view_sys_payroll', 'accounts.view_sys_treasury',
+        'accounts.view_sys_fleet_attendance', 'accounts.view_sys_fleet_settlement',
+        'accounts.perm_approve_personnel_supervisor', 'accounts.perm_approve_fleet_supervisor',
+        'accounts.perm_approve_personnel_finance', 'accounts.perm_approve_fleet_finance',
+        'accounts.perm_approve_personnel_manager', 'accounts.perm_approve_fleet_manager',
+        'accounts.perm_manager_payment_authorize', 'accounts.perm_treasury_disburse_action',
+        'accounts.perm_manage_projects_sections'
+    ]
+    if any(p in user_perms for p in finance_perm_markers):
+        allowed.add('finance')
+
+    return sorted(list(allowed))
 
 
 def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[str]:
@@ -175,16 +223,21 @@ class ActiveRoleMiddleware:
         # استخراج نقش درخواستی از هدر X-Active-Role
         raw_role = request.META.get('HTTP_X_ACTIVE_ROLE', '').strip().lower()
 
+        # استخراج شناسه سشن تب مرورگر از هدر X-Client-Tab-Id
+        client_tab_id = request.META.get('HTTP_X_CLIENT_TAB_ID', '').strip() or None
+
         # ارزیابی ضدجعل و تخصیص نقش نهایی
         effective_role = resolve_effective_role(user, raw_role, active_app)
 
         # الصاق به شیء درخواست
         request.active_app = active_app
         request.active_role = effective_role
+        request.client_tab_id = client_tab_id
         request.valid_roles = get_user_valid_roles_for_app(user, active_app)
 
         t_role = _current_active_role_var.set(effective_role)
         t_app = _current_active_app_var.set(active_app)
+        t_tab = _current_client_tab_id_var.set(client_tab_id)
 
         try:
             response = self.get_response(request)
@@ -192,3 +245,4 @@ class ActiveRoleMiddleware:
         finally:
             _current_active_role_var.reset(t_role)
             _current_active_app_var.reset(t_app)
+            _current_client_tab_id_var.reset(t_tab)

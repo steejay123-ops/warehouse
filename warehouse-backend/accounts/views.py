@@ -1461,6 +1461,41 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         if user_id:
             qs = qs.filter(user_id=user_id)
 
+        # فیلتر اختصاصی بر اساس قلمرو سامانه (Domain App-Scope Filtering)
+        app_scope = params.get('app_scope')
+        if app_scope and str(app_scope).lower().strip() != 'all':
+            app_scope = str(app_scope).lower().strip()
+            from django.db.models import Q
+            if app_scope == 'warehouse':
+                qs = qs.filter(
+                    Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
+                    Q(warehouse__isnull=False)
+                ).exclude(
+                    Q(details__event='CROSS_APP_DENIED') |
+                    Q(details__event='APP_SCOPE_SWITCH') |
+                    Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance'])
+                )
+            elif app_scope in ['finance', 'personnel']:
+                qs = qs.filter(
+                    Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance']) |
+                    Q(target_model__in=['PersonnelProfile', 'MonthlyPayrollRecord', 'VehicleDriverProfile', 'VehicleTripLog', 'MonthlyWorkPeriod', 'AttendanceDailyRecord']) |
+                    Q(details__target_module='finance')
+                ).exclude(
+                    Q(details__event='CROSS_APP_DENIED') |
+                    Q(details__event='APP_SCOPE_SWITCH')
+                )
+            elif app_scope in ['security', 'incidents']:
+                qs = qs.filter(
+                    Q(details__event__in=['CROSS_APP_DENIED', 'APP_SCOPE_SWITCH', 'ROLE_BREACH_ATTEMPT']) |
+                    Q(module__in=['security', 'users']) |
+                    Q(action='ROLLBACK') |
+                    Q(severity='critical')
+                )
+
+        event_param = params.get('event')
+        if event_param:
+            qs = qs.filter(details__event=event_param)
+
         search = params.get('search')
         if search:
             from django.db.models import Q
@@ -1506,6 +1541,34 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         warning_24h = base_qs.filter(created_at__gte=last_24h, severity='warning').count()
 
+        # شاخص‌های تفکیک‌شده ممیزی و امنیت
+        security_all_time = base_qs.filter(
+            Q(details__event__in=['CROSS_APP_DENIED', 'APP_SCOPE_SWITCH', 'ROLE_BREACH_ATTEMPT']) |
+            Q(module__in=['security', 'users']) |
+            Q(action='ROLLBACK') |
+            Q(severity='critical')
+        ).count()
+        cross_app_denied_count = base_qs.filter(details__event='CROSS_APP_DENIED').count()
+        app_switch_count = base_qs.filter(details__event='APP_SCOPE_SWITCH').count()
+
+        warehouse_logs_count = base_qs.filter(
+            Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
+            Q(warehouse__isnull=False)
+        ).exclude(
+            Q(details__event='CROSS_APP_DENIED') |
+            Q(details__event='APP_SCOPE_SWITCH') |
+            Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance'])
+        ).count()
+
+        finance_logs_count = base_qs.filter(
+            Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance']) |
+            Q(target_model__in=['PersonnelProfile', 'MonthlyPayrollRecord', 'VehicleDriverProfile', 'VehicleTripLog', 'MonthlyWorkPeriod', 'AttendanceDailyRecord']) |
+            Q(details__target_module='finance')
+        ).exclude(
+            Q(details__event='CROSS_APP_DENIED') |
+            Q(details__event='APP_SCOPE_SWITCH')
+        ).count()
+
         module_breakdown = dict(
             base_qs.filter(created_at__gte=last_24h)
             .values_list('module')
@@ -1528,6 +1591,11 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             'warning_24h': warning_24h,
             'warning_count': warning_24h,
             'rollbacks_24h': rollbacks_24h,
+            'security_all_time': security_all_time,
+            'cross_app_denied_count': cross_app_denied_count,
+            'app_switch_count': app_switch_count,
+            'warehouse_logs_count': warehouse_logs_count,
+            'finance_logs_count': finance_logs_count,
             'module_breakdown': module_breakdown,
             'storage': storage_info
         })
@@ -1565,6 +1633,38 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             user_id = data.get('user')
             if user_id:
                 qs = qs.filter(user_id=user_id)
+            app_scope = data.get('app_scope')
+            if app_scope and str(app_scope).lower().strip() != 'all':
+                app_scope = str(app_scope).lower().strip()
+                from django.db.models import Q
+                if app_scope == 'warehouse':
+                    qs = qs.filter(
+                        Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
+                        Q(warehouse__isnull=False)
+                    ).exclude(
+                        Q(details__event='CROSS_APP_DENIED') |
+                        Q(details__event='APP_SCOPE_SWITCH') |
+                        Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance'])
+                    )
+                elif app_scope in ['finance', 'personnel']:
+                    qs = qs.filter(
+                        Q(module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance']) |
+                        Q(target_model__in=['PersonnelProfile', 'MonthlyPayrollRecord', 'VehicleDriverProfile', 'VehicleTripLog', 'MonthlyWorkPeriod', 'AttendanceDailyRecord']) |
+                        Q(details__target_module='finance')
+                    ).exclude(
+                        Q(details__event='CROSS_APP_DENIED') |
+                        Q(details__event='APP_SCOPE_SWITCH')
+                    )
+                elif app_scope in ['security', 'incidents']:
+                    qs = qs.filter(
+                        Q(details__event__in=['CROSS_APP_DENIED', 'APP_SCOPE_SWITCH', 'ROLE_BREACH_ATTEMPT']) |
+                        Q(module__in=['security', 'users']) |
+                        Q(action='ROLLBACK') |
+                        Q(severity='critical')
+                    )
+            event_param = data.get('event')
+            if event_param:
+                qs = qs.filter(details__event=event_param)
             search = data.get('search')
             if search:
                 from django.db.models import Q
@@ -2187,6 +2287,101 @@ class DatabaseBackupViewSet(viewsets.ViewSet):
         from django.http import FileResponse
         response = FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
         return response
+
+
+class SwitchAppScopeView(APIView):
+    """
+    اندپوینت رسمی تغییر قلمرو فعال (App Scope Switcher)
+    کاربران دوماژوله می‌توانند قلمرو فعال توکن خود را بدون نیاز به ورود مجدد به سامانه دیگر سوئیچ کنند.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        target_app = (request.data.get('app') or request.data.get('target_app') or '').strip().lower()
+        if target_app not in ('warehouse', 'finance'):
+            return Response({
+                'success': False,
+                'error': 'قلمرو نامعتبر است. فقط warehouse یا finance مجاز است.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        from .middleware import get_user_allowed_apps, get_user_valid_roles_for_app
+        user = request.user
+        allowed_apps = get_user_allowed_apps(user)
+
+        if not user.is_superuser and target_app not in allowed_apps:
+            try:
+                from .models import AuditLog
+                AuditLog.objects.create(
+                    user=user,
+                    actor_username=user.username,
+                    actor_name=f"{user.first_name} {user.last_name}".strip() or user.username,
+                    module='system',
+                    action='REJECT',
+                    severity='warning',
+                    target_model='AppScope',
+                    target_object_id=str(user.id),
+                    target_repr=f"تلاش غیرمجاز برای تغییر قلمرو به {target_app}",
+                    details={
+                        'event': 'CROSS_APP_DENIED',
+                        'target_app': target_app,
+                        'allowed_apps': allowed_apps
+                    },
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+            except Exception:
+                pass
+
+            return Response({
+                'success': False,
+                'error': f'کاربر جاری فاقد مجوز دسترسی به سامانه {target_app} است.',
+                'allowed_apps': allowed_apps
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        # تولید RefreshToken جدید با قلمرو فعال به‌روزرسانی شده
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+        refresh['allowed_apps'] = allowed_apps
+        refresh['scopes'] = {
+            'finance': get_user_valid_roles_for_app(user, 'personnel'),
+            'warehouse': get_user_valid_roles_for_app(user, 'warehouse')
+        }
+        refresh['active_app'] = target_app
+
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+
+        # ثبت رویداد ممیزی موفقیت تغییر قلمرو در AuditLog
+        try:
+            from .models import AuditLog
+            AuditLog.objects.create(
+                user=user,
+                actor_username=user.username,
+                actor_name=f"{user.first_name} {user.last_name}".strip() or user.username,
+                module='system',
+                action='UPDATE',
+                severity='info',
+                target_model='AppScope',
+                target_object_id=str(user.id),
+                target_repr=f"تغییر موفقیت‌آمیز قلمرو فعال به {target_app}",
+                details={
+                    'event': 'APP_SCOPE_SWITCH',
+                    'active_app': target_app,
+                    'allowed_apps': allowed_apps
+                },
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+        except Exception:
+            pass
+
+        return Response({
+            'success': True,
+            'active_app': target_app,
+            'allowed_apps': allowed_apps,
+            'tokens': {
+                'access': access_token,
+                'refresh': refresh_token
+            }
+        }, status=status.HTTP_200_OK)
 
 
 

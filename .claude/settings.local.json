@@ -95,7 +95,8 @@
       "Skill(comprehensive-code-review:*)",
       "Bash(mkdir -p \".claude/tmp\")",
       "Bash(git diff *)",
-      "Bash(mkdir -p .claude/review-tmp)"
+      "Bash(mkdir -p .claude/review-tmp)",
+      "Workflow(comprehensive-code-review)"
     ]
   }
 }

@@ -1,7 +1,8 @@
-import { Component, OnInit, OnDestroy, HostListener, computed, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, computed, ChangeDetectorRef, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { AppPersonaService } from '../../core/services/app-persona.service';
 import { Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { ToastService } from '../../services/toast.service';
@@ -136,7 +137,23 @@ export const AUDIT_FIELD_LABELS_MAP: Record<string, string> = {
   styleUrl: './audit.css'
 })
 export class Audit implements OnInit, OnDestroy {
-  activeTab: 'audit' | 'login' = 'audit';
+  private personaService = inject(AppPersonaService);
+
+  get isFinanceScope(): boolean {
+    return this.selectedAppScope === 'finance' ||
+           this.route.snapshot.data['appScope'] === 'finance' ||
+           this.router.url.includes('/app/finance');
+  }
+
+  get isWarehouseScope(): boolean {
+    return this.selectedAppScope === 'warehouse' ||
+           this.route.snapshot.data['appScope'] === 'warehouse' ||
+           this.router.url.includes('/app/warehouse');
+  }
+
+  activeTab: 'audit' | 'security' | 'login' = 'audit';
+  selectedAppScope: 'all' | 'warehouse' | 'finance' = 'all';
+  selectedEvent: string = '';
   isLoading = false;
   hasError = false;
 
@@ -443,12 +460,14 @@ export class Audit implements OnInit, OnDestroy {
   ) {}
 
   get currentWarehouseId(): number | undefined {
+    if (this.isFinanceScope) return undefined;
     const val = this.authStore.activeWarehouseId();
     if (!val || val === 'ALL') return undefined;
     return typeof val === 'number' ? val : Number(val);
   }
 
   get currentWarehouseName(): string | null {
+    if (this.isFinanceScope) return null;
     const val = this.authStore.activeWarehouseId();
     if (!val || val === 'ALL') return null;
     const wh = this.state.appState?.projects?.find((p: any) => p.id === Number(val));
@@ -463,6 +482,16 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // ── تشخیص و قفل هوشمند قلمرو سامانه بر اساس مسیر و پرسونای فعال ──
+    const routeScope = this.route.snapshot.data['appScope'];
+    if (routeScope === 'finance' || this.router.url.includes('/app/finance')) {
+      this.selectedAppScope = 'finance';
+    } else if (routeScope === 'warehouse' || this.router.url.includes('/app/warehouse')) {
+      this.selectedAppScope = 'warehouse';
+    } else if (this.personaService?.activeApp) {
+      this.selectedAppScope = this.personaService.activeApp() === 'personnel' ? 'finance' : 'warehouse';
+    }
+
     // ── وضعیت آنلاین/آفلاین ──
     const network = NetworkStatusService.getInstance();
     this.isOnline = network.isOnline;
@@ -577,13 +606,14 @@ export class Audit implements OnInit, OnDestroy {
     }
   }
 
-  setTab(tab: 'audit' | 'login'): void {
+  setTab(tab: 'audit' | 'security' | 'login'): void {
     if (this.activeTab !== tab) {
       this.activeTab = tab;
       this.searchTerm = '';
       this.selectedModule = '';
       this.selectedSeverity = '';
       this.selectedAction = '';
+      this.selectedEvent = '';
       this.selectedLoginStatus = '';
       this.fromDate = '';
       this.toDate = '';
@@ -593,6 +623,22 @@ export class Audit implements OnInit, OnDestroy {
       this.syncQueryParams();
       this.loadActiveTabData();
     }
+  }
+
+  setAppScope(scope: 'all' | 'warehouse' | 'finance'): void {
+    if (this.selectedAppScope !== scope) {
+      this.selectedAppScope = scope;
+      this.resetPageAndReload();
+    }
+  }
+
+  filterByEvent(event: string): void {
+    if (this.selectedEvent === event) {
+      this.selectedEvent = '';
+    } else {
+      this.selectedEvent = event;
+    }
+    this.resetPageAndReload();
   }
 
   onSearchChange(): void {
@@ -688,9 +734,13 @@ export class Audit implements OnInit, OnDestroy {
     const params = this.route.snapshot.queryParams;
     if (!params || Object.keys(params).length === 0) return;
 
-    if (params['tab'] === 'login' || params['tab'] === 'audit') {
+    if (params['tab'] === 'login' || params['tab'] === 'audit' || params['tab'] === 'security') {
       this.activeTab = params['tab'];
     }
+    if (params['app_scope'] && ['all', 'warehouse', 'finance'].includes(params['app_scope'])) {
+      this.selectedAppScope = params['app_scope'];
+    }
+    if (params['event']) this.selectedEvent = params['event'];
     if (params['module']) this.selectedModule = params['module'];
     if (params['action']) this.selectedAction = params['action'];
     if (params['severity']) this.selectedSeverity = params['severity'];
@@ -699,14 +749,14 @@ export class Audit implements OnInit, OnDestroy {
     if (params['page']) {
       const p = parseInt(params['page'], 10);
       if (p > 0) {
-        if (this.activeTab === 'audit') this.auditPage = p;
+        if (this.activeTab === 'audit' || this.activeTab === 'security') this.auditPage = p;
         else this.loginPage = p;
       }
     }
     if (params['pageSize']) {
       const ps = parseInt(params['pageSize'], 10);
       if ([20, 50, 100].includes(ps)) {
-        if (this.activeTab === 'audit') this.auditPageSize = ps;
+        if (this.activeTab === 'audit' || this.activeTab === 'security') this.auditPageSize = ps;
         else this.loginPageSize = ps;
       }
     }
@@ -733,8 +783,14 @@ export class Audit implements OnInit, OnDestroy {
     if (this.searchTerm?.trim()) queryParams['q'] = this.searchTerm.trim();
 
     if (this.activeTab === 'audit') {
+      if (this.selectedAppScope && this.selectedAppScope !== 'all') queryParams['app_scope'] = this.selectedAppScope;
       if (this.selectedModule) queryParams['module'] = this.selectedModule;
       if (this.selectedAction) queryParams['action'] = this.selectedAction;
+      if (this.selectedSeverity) queryParams['severity'] = this.selectedSeverity;
+      if (this.auditPage > 1) queryParams['page'] = this.auditPage;
+      if (this.auditPageSize !== 20) queryParams['pageSize'] = this.auditPageSize;
+    } else if (this.activeTab === 'security') {
+      if (this.selectedEvent) queryParams['event'] = this.selectedEvent;
       if (this.selectedSeverity) queryParams['severity'] = this.selectedSeverity;
       if (this.auditPage > 1) queryParams['page'] = this.auditPage;
       if (this.auditPageSize !== 20) queryParams['pageSize'] = this.auditPageSize;
@@ -760,6 +816,8 @@ export class Audit implements OnInit, OnDestroy {
 
   resetFilters(): void {
     this.searchTerm = '';
+    this.selectedAppScope = 'all';
+    this.selectedEvent = '';
     this.selectedModule = '';
     this.selectedSeverity = '';
     this.selectedAction = '';
@@ -777,10 +835,22 @@ export class Audit implements OnInit, OnDestroy {
     if (this.searchTerm?.trim()) return true;
     if (this.fromDate || this.toDate) return true;
     if (this.activeTab === 'audit') {
-      return !!(this.selectedModule || this.selectedSeverity || this.selectedAction);
+      return !!(this.selectedModule || this.selectedSeverity || this.selectedAction || (this.selectedAppScope && this.selectedAppScope !== 'all'));
+    } else if (this.activeTab === 'security') {
+      return !!(this.selectedEvent || this.selectedSeverity);
     } else {
       return !!this.selectedLoginStatus;
     }
+  }
+
+  clearAppScopeFilter(): void {
+    this.selectedAppScope = 'all';
+    this.resetPageAndReload();
+  }
+
+  clearEventFilter(): void {
+    this.selectedEvent = '';
+    this.resetPageAndReload();
   }
 
   clearSearch(): void {
@@ -897,7 +967,7 @@ export class Audit implements OnInit, OnDestroy {
 
   resetPageAndReload(): void {
     this.syncQueryParams();
-    if (this.activeTab === 'audit') {
+    if (this.activeTab === 'audit' || this.activeTab === 'security') {
       this.auditPage = 1;
       this.loadAuditLogs();
     } else {
@@ -907,7 +977,7 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   loadActiveTabData(): void {
-    if (this.activeTab === 'audit') {
+    if (this.activeTab === 'audit' || this.activeTab === 'security') {
       this.loadAuditLogs();
     } else {
       this.loadLoginLogs();
@@ -976,6 +1046,8 @@ export class Audit implements OnInit, OnDestroy {
       module: this.selectedModule || undefined,
       severity: this.selectedSeverity || undefined,
       action_type: this.selectedAction || undefined,
+      event: this.selectedEvent || undefined,
+      app_scope: this.activeTab === 'security' ? 'security' : (this.selectedAppScope !== 'all' ? this.selectedAppScope : undefined),
       from_date: this.formatIsoDate(this.fromDate, false),
       to_date: this.formatIsoDate(this.toDate, true),
     };
@@ -1044,19 +1116,19 @@ export class Audit implements OnInit, OnDestroy {
 
   // Pagination controls
   get totalPages(): number {
-    if (this.activeTab === 'audit') {
+    if (this.activeTab === 'audit' || this.activeTab === 'security') {
       return Math.ceil(this.auditTotalCount / this.auditPageSize) || 1;
     }
     return Math.ceil(this.loginTotalCount / this.loginPageSize) || 1;
   }
 
   get currentPage(): number {
-    return this.activeTab === 'audit' ? this.auditPage : this.loginPage;
+    return (this.activeTab === 'audit' || this.activeTab === 'security') ? this.auditPage : this.loginPage;
   }
 
   nextPage(): void {
     if (this.currentPage < this.totalPages) {
-      if (this.activeTab === 'audit') {
+      if (this.activeTab === 'audit' || this.activeTab === 'security') {
         this.auditPage++;
         this.syncQueryParams();
         this.loadAuditLogs();
@@ -1070,7 +1142,7 @@ export class Audit implements OnInit, OnDestroy {
 
   prevPage(): void {
     if (this.currentPage > 1) {
-      if (this.activeTab === 'audit') {
+      if (this.activeTab === 'audit' || this.activeTab === 'security') {
         this.auditPage--;
         this.syncQueryParams();
         this.loadAuditLogs();
@@ -1083,7 +1155,7 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   onPageSizeChange(newSize: number): void {
-    if (this.activeTab === 'audit') {
+    if (this.activeTab === 'audit' || this.activeTab === 'security') {
       this.auditPageSize = Number(newSize);
       this.auditPage = 1;
       this.syncQueryParams();
@@ -1325,7 +1397,7 @@ export class Audit implements OnInit, OnDestroy {
     this.cdr.markForCheck();
     const format = this.exportFormat;
 
-    if (this.activeTab === 'audit') {
+    if (this.activeTab === 'audit' || this.activeTab === 'security') {
       const cols = this.exportColumnsScope === 'custom'
         ? Array.from(this.selectedAuditColumns)
         : this.availableAuditColumns.map(c => c.key);
@@ -1336,6 +1408,7 @@ export class Audit implements OnInit, OnDestroy {
         module: this.exportModule || undefined,
         severity: this.exportSeverity || undefined,
         action_type: this.exportAction || undefined,
+        app_scope: this.activeTab === 'security' ? 'security' : (this.selectedAppScope !== 'all' ? this.selectedAppScope : undefined),
         from_date: this.formatIsoDate(this.exportFromDate, false),
         to_date: this.formatIsoDate(this.exportToDate, true),
         format: format,
@@ -1778,7 +1851,7 @@ export class Audit implements OnInit, OnDestroy {
       this.toast.show('error', 'شما دسترسی لازم برای پاکسازی لاگ‌ها را ندارید.');
       return;
     }
-    this.purgeTargetType = this.activeTab;
+    this.purgeTargetType = this.activeTab === 'login' ? 'login' : 'audit';
     this.purgeFromDate = '';
     this.purgeToDate = '';
     this.purgeFromDateControl.setValue('', { emitEvent: false });
@@ -2081,7 +2154,7 @@ export class Audit implements OnInit, OnDestroy {
       // همیشه آمار عمومی را به‌روز کن
       this.incrementAuditStats(log);
 
-      if (this.activeTab === 'audit') {
+      if (this.activeTab === 'audit' || this.activeTab === 'security') {
         if (matchesWarehouse && this.isFilterMatch(log)) {
           if (this.auditPage === 1) {
             const exists = this.auditLogs.some(l => l.id === log.id);
@@ -2128,6 +2201,27 @@ export class Audit implements OnInit, OnDestroy {
   }
 
   private isFilterMatch(log: AuditLog): boolean {
+    if (this.activeTab === 'security') {
+      const isSec = log.details?.event === 'CROSS_APP_DENIED' ||
+                    log.details?.event === 'APP_SCOPE_SWITCH' ||
+                    log.severity === 'critical' ||
+                    log.module === 'security' ||
+                    log.module === 'users' ||
+                    log.action === 'ROLLBACK';
+      if (!isSec) return false;
+      if (this.selectedEvent && log.details?.event !== this.selectedEvent) return false;
+    } else if (this.activeTab === 'audit') {
+      if (this.selectedAppScope === 'warehouse') {
+        const isWh = ['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses'].includes(log.module) || (log.warehouse !== undefined && log.warehouse !== null);
+        const isCross = log.details?.event === 'CROSS_APP_DENIED' || log.details?.event === 'APP_SCOPE_SWITCH';
+        if (!isWh || isCross) return false;
+      } else if (this.selectedAppScope === 'finance') {
+        const isFin = ['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance'].includes(log.module) || log.details?.target_module === 'finance';
+        const isCross = log.details?.event === 'CROSS_APP_DENIED' || log.details?.event === 'APP_SCOPE_SWITCH';
+        if (!isFin || isCross) return false;
+      }
+    }
+
     if (this.selectedModule && log.module !== this.selectedModule) return false;
     if (this.selectedSeverity && log.severity !== this.selectedSeverity) return false;
     if (this.selectedAction && log.action !== this.selectedAction) return false;
@@ -2196,6 +2290,20 @@ export class Audit implements OnInit, OnDestroy {
       this.auditStats.module_breakdown = this.auditStats.module_breakdown || {};
       this.auditStats.module_breakdown[log.module] = (this.auditStats.module_breakdown[log.module] || 0) + 1;
     }
+
+    const isSecurity = log.details?.event === 'CROSS_APP_DENIED' ||
+                       log.details?.event === 'APP_SCOPE_SWITCH' ||
+                       log.severity === 'critical' ||
+                       log.module === 'security' ||
+                       log.action === 'ROLLBACK';
+    if (isSecurity) {
+      this.auditStats.security_all_time = (this.auditStats.security_all_time || 0) + 1;
+      if (log.details?.event === 'CROSS_APP_DENIED') {
+        this.auditStats.cross_app_denied_count = (this.auditStats.cross_app_denied_count || 0) + 1;
+      } else if (log.details?.event === 'APP_SCOPE_SWITCH') {
+        this.auditStats.app_switch_count = (this.auditStats.app_switch_count || 0) + 1;
+      }
+    }
   }
 
   private incrementLoginStats(log: UserLoginLog): void {
@@ -2230,7 +2338,7 @@ export class Audit implements OnInit, OnDestroy {
     if (!url || !data) return;
 
     if (url.includes('auth/audit-logs') && !url.includes('/stats') && !url.includes('/export_csv')) {
-      if (this.activeTab === 'audit') {
+      if (this.activeTab === 'audit' || this.activeTab === 'security') {
         const freshList: AuditLog[] = Array.isArray(data) ? data : (data.results || []);
         const count = data.count !== undefined ? data.count : freshList.length;
         if (freshList.length > 0) {

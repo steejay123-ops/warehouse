@@ -1,6 +1,9 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { AuthService } from '../auth/auth.service';
-import { Router } from '@angular/router';
+import { Router, NavigationEnd } from '@angular/router';
+import { WebSocketService } from '../http/websocket.service';
+import { SessionTabService } from './session-tab.service';
+import { filter } from 'rxjs';
 
 export type AppModuleType = 'warehouse' | 'personnel';
 
@@ -141,15 +144,17 @@ export const FRONTEND_SOD_PROHIBITIONS: Record<string, string[]> = {
 export class AppPersonaService {
   private auth = inject(AuthService);
   private router = inject(Router);
+  private ws = inject(WebSocketService);
+  private sessionTab = inject(SessionTabService);
 
   // سیگنال ماژول فعال (انبارداری یا مالی)
   public activeApp = signal<AppModuleType>(
-    (localStorage.getItem('active_app_module') as AppModuleType) || 'personnel'
+    this.sessionTab.getActiveApp()
   );
 
   // سیگنال کد نقش فعال
   public activeRole = signal<string>(
-    localStorage.getItem('active_role_persona') || 'operator'
+    this.sessionTab.getActiveRole()
   );
 
   public isSuperuser(): boolean {
@@ -166,6 +171,10 @@ export class AppPersonaService {
   // بررسی دسترسی کاربر به سامانه انبارداری
   public hasWarehouseAccess = computed<boolean>(() => {
     if (this.isSuperuser()) return true;
+    const u = this.auth.user();
+    if (u?.allowed_apps && Array.isArray(u.allowed_apps)) {
+      return u.allowed_apps.includes('warehouse');
+    }
     const perms = this.auth.userPermissions() || [];
     const warehousePerms = [
       'view_sys_dashboard', 'view_wh_dashboard', 'view_sys_counter',
@@ -184,6 +193,10 @@ export class AppPersonaService {
   // بررسی دسترسی کاربر به سامانه مالی و کارکرد پرسنل
   public hasPersonnelAccess = computed<boolean>(() => {
     if (this.isSuperuser()) return true;
+    const u = this.auth.user();
+    if (u?.allowed_apps && Array.isArray(u.allowed_apps)) {
+      return u.allowed_apps.includes('finance') || u.allowed_apps.includes('personnel');
+    }
     const perms = this.auth.userPermissions() || [];
     const personnelPerms = [
       'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
@@ -277,6 +290,33 @@ export class AppPersonaService {
 
   constructor() {
     this.sanitizeActiveRole();
+    this.setupUrlSyncListener();
+  }
+
+  private setupUrlSyncListener(): void {
+    if (typeof window === 'undefined') return;
+    this.router.events.pipe(
+      filter((e): e is NavigationEnd => e instanceof NavigationEnd)
+    ).subscribe((event) => {
+      this.syncScopeFromUrl(event.urlAfterRedirects || event.url);
+    });
+  }
+
+  public syncScopeFromUrl(url: string): void {
+    const cleanUrl = url.split('?')[0];
+    if (cleanUrl.startsWith('/app/warehouse') && this.activeApp() !== 'warehouse' && this.hasWarehouseAccess()) {
+      this.activeApp.set('warehouse');
+      this.sessionTab.setActiveApp('warehouse');
+      localStorage.setItem('active_app_module', 'warehouse');
+      try { this.ws.switchAppChannel('warehouse'); } catch {}
+      this.sanitizeActiveRole();
+    } else if (cleanUrl.startsWith('/app/finance') && this.activeApp() !== 'personnel' && this.hasPersonnelAccess()) {
+      this.activeApp.set('personnel');
+      this.sessionTab.setActiveApp('personnel');
+      localStorage.setItem('active_app_module', 'personnel');
+      try { this.ws.switchAppChannel('finance'); } catch {}
+      this.sanitizeActiveRole();
+    }
   }
 
   public sanitizeActiveRole(): void {
@@ -285,9 +325,11 @@ export class AppPersonaService {
 
     if (!hasWh && hasPers && this.activeApp() !== 'personnel') {
       this.activeApp.set('personnel');
+      this.sessionTab.setActiveApp('personnel');
       localStorage.setItem('active_app_module', 'personnel');
     } else if (!hasPers && hasWh && this.activeApp() !== 'warehouse') {
       this.activeApp.set('warehouse');
+      this.sessionTab.setActiveApp('warehouse');
       localStorage.setItem('active_app_module', 'warehouse');
     }
 
@@ -306,8 +348,23 @@ export class AppPersonaService {
     }
 
     this.activeApp.set(app);
+    this.sessionTab.setActiveApp(app);
     localStorage.setItem('active_app_module', app);
     
+    // تبادل زنده قلمرو فعال توکن در بک‌اند (Live Token Exchange)
+    const targetScope = app === 'warehouse' ? 'warehouse' : 'finance';
+    this.auth.switchAppScope(targetScope).subscribe({
+      next: () => {},
+      error: (err) => console.warn('[AppPersonaService] خطا در تبادل زنده توکن:', err)
+    });
+
+    // تغییر کانال رویدادهای زنده وب‌سوکت متناسب با قلمرو جدید (Domain Isolation)
+    try {
+      this.ws.switchAppChannel(targetScope);
+    } catch (e) {
+      console.warn('[AppPersonaService] خطا در تغییر کانال وب‌سوکت:', e);
+    }
+
     // انتخاب اولین نقش مجاز در ماژول مقصد
     const roles = this.availableRoles();
     if (roles.length > 0) {
@@ -341,6 +398,7 @@ export class AppPersonaService {
 
   public switchRole(roleCode: string, redirectIfUnauthorized: boolean = true): void {
     this.activeRole.set(roleCode);
+    this.sessionTab.setActiveRole(roleCode);
     localStorage.setItem('active_role_persona', roleCode);
 
     if (redirectIfUnauthorized) {

@@ -12,7 +12,15 @@ export class WebSocketService implements OnDestroy {
   public connected$ = new BehaviorSubject<boolean>(false);
 
   // شناسه یکتای تب مرورگر جهت جلوگیری از اکو روی همان تب بدون بلاک کردن سایر دستگاه‌های کاربر
-  public readonly tabId: string = 'tab_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+  public readonly tabId: string = typeof window !== 'undefined'
+    ? (sessionStorage.getItem('wh_tab_session_id') || this.initTabId())
+    : 'tab_server';
+
+  private initTabId(): string {
+    const id = 'tab_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now();
+    try { sessionStorage.setItem('wh_tab_session_id', id); } catch {}
+    return id;
+  }
 
   private isExplicitlyClosed = false;
   private reconnectTimeout: any = null;
@@ -83,7 +91,10 @@ export class WebSocketService implements OnDestroy {
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
-      const url = `${protocol}//${host}/ws/notifications/`;
+      const activeApp = typeof window !== 'undefined' 
+        ? (sessionStorage.getItem('active_app_module') || localStorage.getItem('active_app_module') || 'warehouse') 
+        : 'warehouse';
+      const url = `${protocol}//${host}/ws/notifications/?app=${encodeURIComponent(activeApp)}&tab_id=${encodeURIComponent(this.tabId)}`;
 
       this.ws = new WebSocket(url);
 
@@ -92,6 +103,7 @@ export class WebSocketService implements OnDestroy {
         this.connected$.next(true);
         this.reconnectAttempts = 0;
         this.startPing();
+        this.switchAppChannel(activeApp);
       };
 
       this.ws.onmessage = (event: MessageEvent) => {
@@ -146,6 +158,21 @@ export class WebSocketService implements OnDestroy {
       this.ws = null;
     }
     this.connected$.next(false);
+  }
+
+  /**
+   * سوئیچ پویای کانال رویدادهای زنده قلمرو به ماژول فعال (Domain Isolation)
+   */
+  switchAppChannel(app: string): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const normalizedApp = app === 'personnel' ? 'finance' : app;
+      this.ws.send(JSON.stringify({
+        type: 'switch_app',
+        app: normalizedApp,
+        tab_id: this.tabId
+      }));
+      console.log(`[WebSocket] 🔀 کانال رویدادهای زنده به قلمرو ${normalizedApp} تغییر یافت.`);
+    }
   }
 
   private scheduleReconnect(): void {

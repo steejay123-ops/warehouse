@@ -54,6 +54,9 @@ export interface AuthUserProfile {
   is_superuser?: boolean;
   requires_password_change: boolean;
   ui_preferences?: any;
+  allowed_apps?: string[];
+  scopes?: Record<string, string[]>;
+  active_app?: string;
 }
 
 /** پیلود لاگین */

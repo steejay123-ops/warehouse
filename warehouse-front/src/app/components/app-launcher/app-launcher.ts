@@ -39,28 +39,14 @@ export class AppLauncherComponent {
 
   enterWarehouse(): void {
     if (!this.hasWarehouse) return;
-    this.persona.activeApp.set('warehouse');
-    localStorage.setItem('active_app_module', 'warehouse');
     this.store.setWarehouseContext(false);
-    this.router.navigate(['/app/warehouse/dashboard']);
+    this.persona.switchApp('warehouse');
   }
 
   enterFinance(): void {
     if (!this.hasFinance) return;
-    this.persona.activeApp.set('personnel');
-    localStorage.setItem('active_app_module', 'personnel');
     this.store.setWarehouseContext(false);
-
-    const perms = this.auth.userPermissions() || [];
-    if (perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
-      this.router.navigate(['/app/finance/finance-cartable']);
-    } else if (perms.includes('view_sys_treasury') || perms.includes('perm_treasury_disburse_action')) {
-      this.router.navigate(['/app/finance/treasury-cartable']);
-    } else if (perms.includes('perm_approve_personnel_manager')) {
-      this.router.navigate(['/app/finance/manager-approvals']);
-    } else {
-      this.router.navigate(['/app/finance/attendance']);
-    }
+    this.persona.switchApp('personnel');
   }
 
   logout(): void {

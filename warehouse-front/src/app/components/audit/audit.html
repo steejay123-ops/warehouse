@@ -10,16 +10,23 @@
         <div class="space-y-0.5">
           <div class="flex flex-wrap items-center gap-2">
             <h1 class="font-black text-slate-800 text-sm sm:text-base leading-tight">
-              مرکز ممیزی، امنیت و رهگیری رویدادها
+              {{ isFinanceScope ? 'مرکز ممیزی و رهگیری رویدادهای مالی و اداری' : 'مرکز ممیزی، امنیت و رهگیری رویدادها' }}
             </h1>
-            <span *ngIf="currentWarehouseName" class="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-indigo-100 shrink-0 whitespace-nowrap">
-              انبار: {{currentWarehouseName}}
+            <span *ngIf="isFinanceScope" class="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-emerald-200 shrink-0 whitespace-nowrap">
+              سامانه مالی و پرسنلی (سازمانی)
             </span>
-            <span *ngIf="!currentWarehouseName" class="bg-slate-100 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-slate-200 shrink-0 whitespace-nowrap">
-              همه انبارها (سراسری)
-            </span>
+            <ng-container *ngIf="!isFinanceScope">
+              <span *ngIf="currentWarehouseName" class="bg-indigo-50 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-indigo-100 shrink-0 whitespace-nowrap">
+                انبار: {{currentWarehouseName}}
+              </span>
+              <span *ngIf="!currentWarehouseName" class="bg-slate-100 text-slate-700 text-[10px] font-black px-2 py-0.5 rounded-lg border border-slate-200 shrink-0 whitespace-nowrap">
+                همه انبارها (سراسری)
+              </span>
+            </ng-container>
           </div>
-          <p class="text-[11px] text-slate-500 hidden sm:block">مانیتورینگ بلادرنگ تغییرات داده‌ها، لاگین کاربران، هشدارهای امنیتی و مقایسه تفاضل (Diff)</p>
+          <p class="text-[11px] text-slate-500 hidden sm:block">
+            {{ isFinanceScope ? 'مانیتورینگ بلادرنگ احکام پرسنل، کارکرد، تردد ناوگان، فیش‌های حقوقی و خزانه‌داری' : 'مانیتورینگ بلادرنگ تغییرات داده‌ها، لاگین کاربران، هشدارهای امنیتی و مقایسه تفاضل (Diff)' }}
+          </p>
         </div>
       </div>
     </div>
@@ -103,7 +110,7 @@
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-xs font-black text-slate-800">شاخص‌های آماری و وضعیت حجم داده‌ها</span>
           <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white text-indigo-700 border border-slate-200 font-mono shadow-2xs">
-            {{activeTab === 'audit' ? (auditStats.total_all_time | number) : (loginStats.total_all_time | number)}} رکورد ثبت‌شده
+            {{activeTab === 'audit' ? (auditStats.total_all_time | number) : (activeTab === 'security' ? ((auditStats.security_all_time || 0) | number) : (loginStats.total_all_time | number))}} رکورد ثبت‌شده
           </span>
         </div>
       </div>
@@ -185,6 +192,64 @@
               <div class="bg-gradient-to-r from-purple-500 to-indigo-600 h-full rounded-full transition-all duration-500" [style.width.%]="auditStats.storage?.audit_percent || 0"></div>
             </div>
             <span class="font-mono text-purple-700 font-bold">{{(auditStats.storage?.audit_percent || 0) | number:'1.0-1'}}٪</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- کارت‌های مانیتورینگ امنیت و قلمروها -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5" *ngIf="activeTab === 'security'">
+        <!-- کل رخدادهای امنیتی -->
+        <div (click)="selectedEvent = ''; filterBySeverity('')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-rose-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedEvent === '' && selectedSeverity === ''" [class.ring-rose-500]="selectedEvent === '' && selectedSeverity === ''" [class.bg-rose-50/25]="selectedEvent === '' && selectedSeverity === ''">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-slate-500 group-hover:text-rose-700 transition-colors">کل رخدادهای امنیت</p>
+            <h4 class="text-base font-black text-rose-700 font-mono tracking-tight leading-none">{{(auditStats.security_all_time || 0) | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-rose-100 transition-all shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+        </div>
+
+        <!-- انسداد عبور غیرمجاز از مرز -->
+        <div (click)="filterByEvent('CROSS_APP_DENIED')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-rose-400 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedEvent === 'CROSS_APP_DENIED'" [class.ring-rose-600]="selectedEvent === 'CROSS_APP_DENIED'" [class.bg-rose-50/40]="selectedEvent === 'CROSS_APP_DENIED'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-rose-600 group-hover:text-rose-800 transition-colors">انسداد نقض قلمرو</p>
+            <h4 class="text-base font-black text-rose-800 font-mono tracking-tight leading-none">{{(auditStats.cross_app_denied_count || 0) | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          </div>
+        </div>
+
+        <!-- جابجایی موفق قلمرو فعال -->
+        <div (click)="filterByEvent('APP_SCOPE_SWITCH')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-indigo-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedEvent === 'APP_SCOPE_SWITCH'" [class.ring-indigo-500]="selectedEvent === 'APP_SCOPE_SWITCH'" [class.bg-indigo-50/25]="selectedEvent === 'APP_SCOPE_SWITCH'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-indigo-600 group-hover:text-indigo-800 transition-colors">سوئیچ قلمرو فعال</p>
+            <h4 class="text-base font-black text-indigo-700 font-mono tracking-tight leading-none">{{(auditStats.app_switch_count || 0) | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          </div>
+        </div>
+
+        <!-- رویدادهای بحرانی امنیتی -->
+        <div (click)="filterBySeverity('critical')" class="bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-amber-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedSeverity === 'critical'" [class.ring-amber-500]="selectedSeverity === 'critical'" [class.bg-amber-50/25]="selectedSeverity === 'critical'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-amber-600 group-hover:text-amber-700 transition-colors">هشدارهای بحرانی</p>
+            <h4 class="text-base font-black text-amber-600 font-mono tracking-tight leading-none">{{(auditStats.critical_count || 0) | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+        </div>
+
+        <!-- بازگردانی‌های حساس -->
+        <div (click)="selectedAction = 'ROLLBACK'; onFilterChange()" class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-2xs hover:shadow-xs hover:border-purple-300 transition-all flex items-center justify-between cursor-pointer group active:scale-98" [class.ring-2]="selectedAction === 'ROLLBACK'" [class.ring-purple-500]="selectedAction === 'ROLLBACK'" [class.bg-purple-50/25]="selectedAction === 'ROLLBACK'">
+          <div class="space-y-0.5">
+            <p class="text-[10px] font-bold text-purple-600 group-hover:text-purple-700 transition-colors">بازگردانی‌ها (Rollback)</p>
+            <h4 class="text-base font-black text-purple-700 font-mono tracking-tight leading-none">{{(auditStats.rollbacks_all_time || 0) | number}}</h4>
+          </div>
+          <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center font-bold shrink-0 shadow-2xs">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           </div>
         </div>
       </div>
@@ -276,6 +341,11 @@
           <span>تغییرات داده‌ها (Audit Trail)</span>
           <span class="bg-indigo-100 text-indigo-800 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold mr-1">{{auditTotalCount | number}}</span>
         </button>
+        <button (click)="setTab('security')" [class.bg-white]="activeTab === 'security'" [class.text-rose-600]="activeTab === 'security'" [class.shadow-xs]="activeTab === 'security'" [class.text-slate-600]="activeTab !== 'security'" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-black">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>مانیتورینگ امنیت و قلمرو</span>
+          <span class="bg-rose-100 text-rose-800 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold mr-1">{{(auditStats.security_all_time || 0) | number}}</span>
+        </button>
         <button (click)="setTab('login')" [class.bg-white]="activeTab === 'login'" [class.text-indigo-600]="activeTab === 'login'" [class.shadow-xs]="activeTab === 'login'" [class.text-slate-600]="activeTab !== 'login'" class="flex-1 sm:flex-initial px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer font-black">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
           <span>تاریخچه ورود و نشست‌ها</span>
@@ -302,8 +372,15 @@
     
     <!-- ردیف فیلدهای فیلتر (یک خطی متوازن در دسکتاپ) -->
     <div class="flex flex-wrap lg:flex-nowrap items-center gap-2">
-      <!-- انتخابگر انبار (در تب ممیزی داده‌ها) -->
-      <div class="w-full sm:w-[150px] lg:w-[160px] shrink-0" *ngIf="activeTab === 'audit'">
+      <!-- انتخاب قلمرو سامانه (همه / انبارداری / مالی) -->
+      <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-bold shrink-0" *ngIf="activeTab === 'audit'">
+        <button (click)="setAppScope('all')" type="button" [class.bg-white]="selectedAppScope === 'all'" [class.text-indigo-600]="selectedAppScope === 'all'" [class.shadow-xs]="selectedAppScope === 'all'" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold">همه</button>
+        <button (click)="setAppScope('warehouse')" type="button" [class.bg-white]="selectedAppScope === 'warehouse'" [class.text-indigo-600]="selectedAppScope === 'warehouse'" [class.shadow-xs]="selectedAppScope === 'warehouse'" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold">انبارداری</button>
+        <button (click)="setAppScope('finance')" type="button" [class.bg-white]="selectedAppScope === 'finance'" [class.text-indigo-600]="selectedAppScope === 'finance'" [class.shadow-xs]="selectedAppScope === 'finance'" class="px-2.5 py-1 rounded-lg transition-all cursor-pointer font-bold">مالی و اداری</button>
+      </div>
+
+      <!-- انتخابگر انبار (در تب ممیزی داده‌های انبار) -->
+      <div class="w-full sm:w-[150px] lg:w-[160px] shrink-0" *ngIf="activeTab === 'audit' && !isFinanceScope">
         <app-warehouse-selector
           [allowAll]="true"
           [projects]="state.appState.projects"
@@ -313,8 +390,8 @@
       </div>
 
       <!-- فیلد جستجوی متنی (ابعاد متوازن) -->
-      <div class="relative shrink-0" [class.w-full]="true" [class.sm:w-[200px]]="activeTab === 'audit'" [class.lg:w-[230px]]="activeTab === 'audit'" [class.sm:w-[260px]]="activeTab === 'login'" [class.lg:w-[280px]]="activeTab === 'login'">
-        <input [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()" type="text" [placeholder]="activeTab === 'audit' ? 'جستجوی کاربر، شرح رویداد یا شناسه...' : 'جستجوی نام کاربری، پرسنل یا IP...'" class="w-full pl-3 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/10 focus:bg-white transition-all shadow-xs">
+      <div class="relative shrink-0" [class.w-full]="true" [class.sm:w-[200px]]="activeTab === 'audit' || activeTab === 'security'" [class.lg:w-[230px]]="activeTab === 'audit' || activeTab === 'security'" [class.sm:w-[260px]]="activeTab === 'login'" [class.lg:w-[280px]]="activeTab === 'login'">
+        <input [(ngModel)]="searchTerm" (ngModelChange)="onSearchChange()" type="text" [placeholder]="activeTab === 'audit' ? 'جستجوی کاربر، شرح رویداد یا شناسه...' : (activeTab === 'security' ? 'جستجوی کاربر، آی‌پی، شرح رخداد...' : 'جستجوی نام کاربری، پرسنل یا IP...')" class="w-full pl-3 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/10 focus:bg-white transition-all shadow-xs">
         <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>
@@ -325,17 +402,27 @@
         <div class="w-full sm:w-[135px] lg:w-[145px] shrink-0">
           <select [(ngModel)]="selectedModule" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-indigo-400 focus:bg-white custom-select cursor-pointer shadow-xs">
             <option value="">همه ماژول‌ها</option>
-            <option value="docs">مدیریت کالا</option>
-            <option value="dispatch">تخصیص کالا</option>
-            <option value="customs">مالی و گمرکی</option>
-            <option value="feeding">تغذیه سامانه‌ها (MT)</option>
-            <option value="labels">لیبلینگ و بارکد</option>
-            <option value="counter">میزکار شمارش</option>
-            <option value="supervisor">کارتابل سرپرست</option>
-            <option value="manager">بررسی مدیر</option>
+            <ng-container *ngIf="!isFinanceScope">
+              <option value="docs">مدیریت کالا</option>
+              <option value="dispatch">تخصیص کالا</option>
+              <option value="customs">مالی و گمرکی</option>
+              <option value="feeding">تغذیه سامانه‌ها (MT)</option>
+              <option value="labels">لیبلینگ و بارکد</option>
+              <option value="counter">میزکار شمارش</option>
+              <option value="supervisor">کارتابل سرپرست</option>
+              <option value="manager">بررسی مدیر</option>
+              <option value="warehouses">مدیریت انبارها</option>
+              <option value="settings">تنظیمات انبار و سیستم</option>
+            </ng-container>
+            <ng-container *ngIf="isFinanceScope">
+              <option value="payroll">حقوق و دستمزد</option>
+              <option value="personnel">پرونده پرسنل</option>
+              <option value="attendance">کارکرد و تردد</option>
+              <option value="fleet">ناوگان و لجستیک</option>
+              <option value="treasury">خزانه‌داری و پرداخت</option>
+              <option value="finance">عملیات حسابداری</option>
+            </ng-container>
             <option value="users">کاربران و نقش‌ها</option>
-            <option value="warehouses">مدیریت انبارها</option>
-            <option value="settings">تنظیمات انبار و سیستم</option>
             <option value="system">رویدادهای سیستمی</option>
           </select>
         </div>
@@ -363,6 +450,26 @@
             <option value="info">عادی (اطلاع‌رسانی)</option>
             <option value="warning">هشدار (محدود)</option>
             <option value="critical">بحرانی (حذف/عمده)</option>
+          </select>
+        </div>
+      </ng-container>
+
+      <!-- فیلترهای مخصوص تب مانیتورینگ امنیت -->
+      <ng-container *ngIf="activeTab === 'security'">
+        <div class="w-full sm:w-[170px] lg:w-[185px] shrink-0">
+          <select [(ngModel)]="selectedEvent" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-400 focus:bg-white custom-select cursor-pointer shadow-xs">
+            <option value="">همه رخدادهای امنیتی</option>
+            <option value="CROSS_APP_DENIED">🚫 انسداد نقض قلمرو</option>
+            <option value="APP_SCOPE_SWITCH">🔄 سوئیچ قلمرو فعال</option>
+          </select>
+        </div>
+
+        <div class="w-full sm:w-[125px] lg:w-[135px] shrink-0">
+          <select [(ngModel)]="selectedSeverity" (change)="onFilterChange()" class="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-rose-400 focus:bg-white custom-select cursor-pointer shadow-xs">
+            <option value="">همه سطوح ریسک</option>
+            <option value="critical">بحرانی (Critical)</option>
+            <option value="warning">هشدار (Warning)</option>
+            <option value="info">عادی (Info)</option>
           </select>
         </div>
       </ng-container>
@@ -425,8 +532,20 @@
         <button (click)="clearActionFilter()" type="button" class="hover:bg-purple-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
       </span>
 
+      <!-- چیپ قلمرو -->
+      <span *ngIf="activeTab === 'audit' && selectedAppScope !== 'all'" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs">
+        <span>قلمرو: {{selectedAppScope === 'warehouse' ? 'سامانه انبارداری' : 'مالی و اداری'}}</span>
+        <button (click)="clearAppScopeFilter()" type="button" class="hover:bg-indigo-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
+      <!-- چیپ رویداد امنیتی -->
+      <span *ngIf="activeTab === 'security' && selectedEvent" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shadow-xs">
+        <span>رویداد: {{selectedEvent === 'CROSS_APP_DENIED' ? 'انسداد نقض قلمرو' : (selectedEvent === 'APP_SCOPE_SWITCH' ? 'سوئیچ قلمرو' : selectedEvent)}}</span>
+        <button (click)="clearEventFilter()" type="button" class="hover:bg-rose-200/60 rounded-full w-4 h-4 flex items-center justify-center transition-colors cursor-pointer">×</button>
+      </span>
+
       <!-- چیپ سطح اهمیت -->
-      <span *ngIf="activeTab === 'audit' && selectedSeverity" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold" [ngClass]="selectedSeverity === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+      <span *ngIf="(activeTab === 'audit' || activeTab === 'security') && selectedSeverity" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold" [ngClass]="selectedSeverity === 'critical' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
         <span>اهمیت: {{getSeverityLabel(selectedSeverity)}}</span>
         <button (click)="clearSeverityFilter()" type="button" class="rounded-full w-4 h-4 flex items-center justify-center transition-colors hover:bg-black/10 cursor-pointer">×</button>
       </span>
@@ -449,8 +568,8 @@
     </div>
   </div>
 
-  <!-- ═══ جدول لاگ‌های ممیزی (Audit Trail Table) ═══ -->
-  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" *ngIf="activeTab === 'audit'">
+  <!-- ═══ جدول لاگ‌های ممیزی و مانیتورینگ امنیت (Audit & Security Trail Table) ═══ -->
+  <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" *ngIf="activeTab === 'audit' || activeTab === 'security'">
     <div class="overflow-x-auto min-h-[380px]">
       <table class="w-full text-right border-collapse text-xs">
         <thead>
@@ -459,7 +578,7 @@
             <th class="py-3 px-4 w-40 text-center">زمان ثبت رویداد</th>
             <th class="py-3 px-4 w-44">کاربر / نقش</th>
             <th class="py-3 px-4 w-36">ماژول</th>
-            <th class="py-3 px-4">شرح رویداد و تارگت</th>
+            <th class="py-3 px-4">شرح رویداد و قلمرو</th>
             <th class="py-3 px-4 w-28">انبار</th>
             <th class="py-3 px-4 w-28 text-center">سطح اهمیت</th>
             <th class="py-3 px-4 w-36 text-center">عملیات و تفاضل</th>
@@ -482,26 +601,38 @@
 
           <!-- رکوردهای داده واقعی -->
           <ng-container *ngIf="!isLoading && !hasError">
-            <tr *ngFor="let log of auditLogs; let i = index; trackBy: trackByLogId" class="hover:bg-slate-50/80 transition-colors" [class.status-updated-flash]="updatedLogIds.has(log.id)" [ngClass]="log.action === 'ROLLBACK' ? 'bg-purple-50/30' : (log.severity === 'critical' ? 'bg-rose-50/20' : (log.severity === 'warning' ? 'bg-amber-50/10' : ''))">
+            <tr *ngFor="let log of auditLogs; let i = index; trackBy: trackByLogId" class="hover:bg-slate-50/80 transition-colors" [class.status-updated-flash]="updatedLogIds.has(log.id)" [ngClass]="log.details?.event === 'CROSS_APP_DENIED' ? 'bg-rose-50/30' : (log.details?.event === 'APP_SCOPE_SWITCH' ? 'bg-indigo-50/20' : (log.action === 'ROLLBACK' ? 'bg-purple-50/30' : (log.severity === 'critical' ? 'bg-rose-50/20' : (log.severity === 'warning' ? 'bg-amber-50/10' : ''))))">
               <td class="py-3 px-4 text-center font-bold text-slate-400 font-mono">{{((auditPage - 1) * auditPageSize + i + 1) | number}}</td>
               <td class="py-3 px-4 font-mono text-[10px] font-bold text-slate-600 text-center">{{log.created_at | persianDate:'short-time'}}</td>
               <td class="py-3 px-4">
                 <p class="text-slate-800 font-bold text-[11px]">{{log.user_display}}</p>
-                <span class="text-[10px] text-slate-500 font-medium">{{log.user ? (log.user_role || 'کاربر سیستم') : 'رویداد سیستمی'}}</span>
+                <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+                  <span class="text-[10px] text-slate-500 font-medium">{{log.user ? (log.user_role || 'کاربر سیستم') : 'رویداد سیستمی'}}</span>
+                  <span *ngIf="log.ip_address" class="text-[9px] font-mono font-bold px-1 rounded bg-slate-100 text-slate-600 border border-slate-200">{{log.ip_address}}</span>
+                </div>
               </td>
               <td class="py-3 px-4">
                 <span class="bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg text-[10px] font-bold border border-slate-200 whitespace-nowrap inline-block">{{log.module_display || log.module}}</span>
               </td>
               <td class="py-3 px-4">
                 <div class="flex items-center gap-1.5 flex-wrap">
+                  <span *ngIf="log.details?.event === 'CROSS_APP_DENIED'" class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-rose-100 text-rose-800 border border-rose-300 flex items-center gap-1 animate-pulse">
+                    🚫 انسداد عبور غیرمجاز از مرز قلمرو
+                  </span>
+                  <span *ngIf="log.details?.event === 'APP_SCOPE_SWITCH'" class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-100 text-indigo-800 border border-indigo-300 flex items-center gap-1">
+                    🔄 جابجایی قلمرو فعال به {{log.details?.active_app === 'finance' ? 'مالی و اداری' : 'انبارداری'}}
+                  </span>
                   <span *ngIf="log.action === 'ROLLBACK'" class="px-2 py-0.5 rounded-lg text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                     بازگردانی داده (Rollback)
                   </span>
-                  <span *ngIf="log.action !== 'ROLLBACK'" class="font-bold text-slate-800 text-[11px]">{{log.action_display || log.action}}</span>
+                  <span *ngIf="log.action !== 'ROLLBACK' && log.details?.event !== 'CROSS_APP_DENIED' && log.details?.event !== 'APP_SCOPE_SWITCH'" class="font-bold text-slate-800 text-[11px]">{{log.action_display || log.action}}</span>
                 </div>
                 <div *ngIf="log.target_repr" class="mt-0.5 text-right">
                   <bdi class="text-[11px] text-slate-600 font-mono inline-block text-right font-medium" dir="auto">{{log.target_repr}}</bdi>
+                </div>
+                <div *ngIf="log.details?.attempted_app" class="mt-0.5 text-[10px] text-rose-700 font-bold">
+                  قلمرو مقصد مسدودشده: {{log.details.attempted_app === 'warehouse' ? 'سامانه انبارداری' : 'سامانه مالی و اداری'}}
                 </div>
               </td>
               <td class="py-3 px-4 text-slate-600 font-bold text-[11px]">{{log.warehouse_name || '—'}}</td>

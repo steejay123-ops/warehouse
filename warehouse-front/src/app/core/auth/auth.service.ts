@@ -12,6 +12,7 @@ import {
   AuthUserProfile,
 } from '../models/api-response.model';
 import { detectClientDeviceModel } from '../utils/device-detector';
+import { SessionTabService } from '../services/session-tab.service';
 
 const TOKEN_KEY = 'wh_access_token';
 const REFRESH_KEY = 'wh_refresh_token';
@@ -95,7 +96,26 @@ export class AuthService {
     },
   };
 
-  constructor(private router: Router, private http: HttpClient) {}
+  constructor(
+    private router: Router,
+    private http: HttpClient,
+    private sessionTab: SessionTabService
+  ) {
+    this.sessionTab.onMessage((msg) => {
+      if (msg.type === 'AUTH_LOGOUT') {
+        this.handleRemoteLogout();
+      }
+    });
+  }
+
+  private handleRemoteLogout(): void {
+    this.sessionTab.clearTabSession();
+    this.removeItem(TOKEN_KEY);
+    this.removeItem(REFRESH_KEY);
+    this.removeItem(USER_KEY);
+    this._user.set(null);
+    this.router.navigate(['/login']);
+  }
 
   /** لاگین — mock یا API واقعی */
   login(username: string, password: string, deviceModel?: string): Observable<LoginResponse> {
@@ -208,9 +228,55 @@ export class AuthService {
       );
   }
 
-  /** دریافت access token فعلی */
-  getAccessToken(): string | null {
-    return this.getItem(TOKEN_KEY);
+  /**
+   * تبادل زنده قلمرو فعال توکن (Live App-Scope Token Exchange)
+   * صدور و جایگزینی آنی توکن امضاشده برای سامانه مقصد (warehouse یا finance)
+   */
+  switchAppScope(targetApp: 'warehouse' | 'finance'): Observable<any> {
+    if (environment.useMockData) {
+      return of({ success: true, active_app: targetApp });
+    }
+
+    return this.http
+      .post<{
+        success: boolean;
+        active_app: string;
+        allowed_apps: string[];
+        tokens: { access: string; refresh: string };
+      }>(
+        `${environment.apiUrl}/auth/token/switch-app/`,
+        { app: targetApp, target_app: targetApp },
+        { context: new HttpContext().set(SKIP_OFFLINE, true) }
+      )
+      .pipe(
+        tap((response) => {
+          if (response?.tokens?.access) {
+            this.sessionTab.setScopedAccessToken(response.tokens.access, targetApp);
+            this.setItem(TOKEN_KEY, response.tokens.access);
+          }
+          if (response?.tokens?.refresh) {
+            this.setItem(REFRESH_KEY, response.tokens.refresh);
+          }
+          const u = this._user();
+          if (u) {
+            const updated = {
+              ...u,
+              allowed_apps: response.allowed_apps || u.allowed_apps,
+            };
+            this._user.set(updated);
+            this.setItem(USER_KEY, JSON.stringify(updated));
+          }
+        }),
+        catchError((err) => {
+          console.warn('[AuthService] خطا در سوئیچ قلمرو توکن:', err);
+          return throwError(() => err);
+        })
+      );
+  }
+
+  /** دریافت access token فعلی متناسب با قلمرو فعال تب (Multi-Tab Multi-App Isolation) */
+  getAccessToken(preferredScope?: 'warehouse' | 'finance'): string | null {
+    return this.sessionTab.getScopedAccessToken(preferredScope) || this.getItem(TOKEN_KEY);
   }
 
   /** بررسی دسترسی */
@@ -262,15 +328,24 @@ export class AuthService {
   // ────────── Storage Helpers ──────────
 
   private setItem(key: string, value: string): void {
-    localStorage.setItem(key, value);
+    if (typeof window !== 'undefined') {
+      try { sessionStorage.setItem(key, value); } catch {}
+      try { localStorage.setItem(key, value); } catch {}
+    }
   }
 
   private getItem(key: string): string | null {
-    return localStorage.getItem(key);
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(key) || localStorage.getItem(key);
+    }
+    return null;
   }
 
   private removeItem(key: string): void {
-    localStorage.removeItem(key);
+    if (typeof window !== 'undefined') {
+      try { sessionStorage.removeItem(key); } catch {}
+      try { localStorage.removeItem(key); } catch {}
+    }
   }
 
   // ────────── Private ──────────
@@ -296,7 +371,17 @@ export class AuthService {
   }
 
   private handleLoginSuccess(response: LoginResponse): void {
-    this.setItem(TOKEN_KEY, response.tokens.access);
+    const access = response.tokens.access;
+    this.sessionTab.setScopedAccessToken(access);
+    const allowed = response.user.allowed_apps || [];
+    if (allowed.includes('warehouse')) {
+      this.sessionTab.setScopedAccessToken(access, 'warehouse');
+    }
+    if (allowed.includes('finance') || allowed.includes('personnel')) {
+      this.sessionTab.setScopedAccessToken(access, 'finance');
+    }
+
+    this.setItem(TOKEN_KEY, access);
     this.setItem(REFRESH_KEY, response.tokens.refresh);
     this.setItem(USER_KEY, JSON.stringify(response.user));
     this._user.set(response.user);
@@ -304,6 +389,8 @@ export class AuthService {
   }
 
   private clearAuth(): void {
+    this.sessionTab.clearTabSession();
+    this.sessionTab.broadcastMessage('AUTH_LOGOUT');
     this.removeItem(TOKEN_KEY);
     this.removeItem(REFRESH_KEY);
     this.removeItem(USER_KEY);

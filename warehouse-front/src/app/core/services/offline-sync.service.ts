@@ -1,5 +1,17 @@
 import { Injectable } from '@angular/core';
-import { offlineDb, SyncQueueEntry, SyncErrorEntry } from './offline-db';
+import {
+  offlineDb,
+  warehouseOfflineDb,
+  financeOfflineDb,
+  getOfflineDb,
+  resolveScopeFromUrl,
+  getCurrentActiveAppScope,
+  migrateLegacyDatabaseIfNeeded,
+  AppScope,
+  OfflineDatabase,
+  SyncQueueEntry,
+  SyncErrorEntry,
+} from './offline-db';
 import { SyncPullService } from './sync-pull.service';
 import { NetworkStatusService } from './network-status.service';
 import { PhotoUploadQueueService, PhotoFlushOutcome } from './photo-upload-queue.service';
@@ -153,8 +165,17 @@ export class OfflineSyncService {
    * راه‌اندازی اولیه — در app initializer فراخوانی می‌شود
    */
   initialize(): void {
-    // رکوردهای گیرکرده در وضعیت sending (مثلا بسته شدن برنامه وسط ارسال) را آزاد کن
-    offlineDb.syncQueue
+    // مهاجرت امن در صورت وجود پایگاه‌داده قدیمی
+    migrateLegacyDatabaseIfNeeded().catch(() => {});
+
+    // رکوردهای گیرکرده در وضعیت sending در هر دو پایگاه‌داده تفکیک‌شده را آزاد کن
+    warehouseOfflineDb.syncQueue
+      .where('status')
+      .equals('sending')
+      .modify({ status: 'pending' })
+      .catch(() => {});
+
+    financeOfflineDb.syncQueue
       .where('status')
       .equals('sending')
       .modify({ status: 'pending' })
@@ -339,15 +360,16 @@ export class OfflineSyncService {
   // ════════════════════════════════════════════
 
   /**
-   * افزودن یک درخواست تغییری به صف همگام‌سازی
-   * @param meta متادیتای Local-First: مالک، نوع/شناسه موجودیت، نسخهٔ مبنا (409)
+   * افزودن یک درخواست تغییری به صف همگام‌سازی با تفکیک قلمرو برنامه
+   * @param meta متادیتای Local-First: مالک، نوع/شناسه موجودیت، نسخهٔ مبنا (409) و قلمرو
    */
   async enqueue(
     method: string,
     url: string,
     body: any,
-    meta?: { userId?: number; entityType?: string; entitySyncId?: string; baseUpdatedAt?: string }
+    meta?: { userId?: number; entityType?: string; entitySyncId?: string; baseUpdatedAt?: string; appScope?: AppScope }
   ): Promise<SyncQueueEntry> {
+    const appScope: AppScope = meta?.appScope || resolveScopeFromUrl(url);
     const entry: SyncQueueEntry = {
       method,
       url,
@@ -355,11 +377,13 @@ export class OfflineSyncService {
       createdAt: Date.now(),
       retryCount: 0,
       status: 'pending',
+      appScope,
       ...(meta || {}),
     };
-    const id = await offlineDb.syncQueue.add(entry);
+    const targetDb = getOfflineDb(appScope);
+    const id = await targetDb.syncQueue.add(entry);
     entry.id = id;
-    console.log(`[OfflineSync] 📥 درخواست ${method} ${url} به صف اضافه شد (id: ${id})`);
+    console.log(`[OfflineSync] 📥 درخواست ${method} ${url} در صف قلمرو [${appScope}] اضافه شد (id: ${id})`);
     await this.refreshCounts();
     return entry;
   }
@@ -367,59 +391,86 @@ export class OfflineSyncService {
   /**
    * لغو و حذف یک درخواست معلق از صف انتظار محلی قبل از ارسال به سرور
    */
-  async cancelQueueEntry(id: number): Promise<void> {
-    const entry = await offlineDb.syncQueue.get(id);
-    await offlineDb.syncQueue.delete(id);
+  async cancelQueueEntry(id: number, scope?: AppScope): Promise<void> {
+    let entry: SyncQueueEntry | undefined;
+    if (scope) {
+      const targetDb = getOfflineDb(scope);
+      entry = await targetDb.syncQueue.get(id);
+      if (entry) await targetDb.syncQueue.delete(id);
+    } else {
+      entry = await warehouseOfflineDb.syncQueue.get(id);
+      if (entry) {
+        await warehouseOfflineDb.syncQueue.delete(id);
+      } else {
+        entry = await financeOfflineDb.syncQueue.get(id);
+        if (entry) await financeOfflineDb.syncQueue.delete(id);
+      }
+    }
     if (entry?.url) {
-      await this.invalidateCache(entry.url);
+      await this.invalidateCache(entry.url, entry.appScope);
     }
     await this.refreshCounts();
     console.log(`[OfflineSync] 🗑️ درخواست با شناسه ${id} از صف انتظار محلی لغو و حذف شد.`);
   }
 
   /**
-   * دریافت تمام رکوردهای صف (برای ادغام با کش و نمایش به کاربر)
+   * دریافت تمام رکوردهای صف (با تفکیک قلمرو یا ادغام سراسری برای نمایش به کاربر)
    */
-  async getQueueEntries(): Promise<SyncQueueEntry[]> {
-    return offlineDb.syncQueue
-      .where('status')
-      .anyOf(['pending', 'failed'])
-      .sortBy('createdAt');
+  async getQueueEntries(scope?: AppScope | 'all'): Promise<SyncQueueEntry[]> {
+    const targetScope = scope || 'all';
+    if (targetScope === 'warehouse') {
+      return warehouseOfflineDb.syncQueue
+        .where('status')
+        .anyOf(['pending', 'failed'])
+        .sortBy('createdAt');
+    }
+    if (targetScope === 'finance') {
+      return financeOfflineDb.syncQueue
+        .where('status')
+        .anyOf(['pending', 'failed'])
+        .sortBy('createdAt');
+    }
+    const [wh, fin] = await Promise.all([
+      warehouseOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).toArray(),
+      financeOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).toArray(),
+    ]);
+    return [...wh, ...fin].sort((a, b) => a.createdAt - b.createdAt);
   }
 
   // ════════════════════════════════════════════
-  //  کش API (با TTL قابل تنظیم)
+  //  کش API (با TTL قابل تنظیم و تفکیک قلمرو)
   // ════════════════════════════════════════════
 
   /**
-   * ذخیره پاسخ GET در کش.
-   *
-   * پاسخ تهی هرگز جایگزین کش سالم نمی‌شود: روی شبکه ضعیف ممکن است سرور
-   * ۲۰۰ با بدنه خالی برگرداند و تنها نسخه‌ای که کاربر آفلاین در اختیار دارد
-   * از بین برود. جایگزینی فقط با داده واقعی انجام می‌شود.
+   * ذخیره پاسخ GET در کش اختصاصی قلمرو مربوطه.
    */
-  async cacheResponse(url: string, response: any): Promise<void> {
+  async cacheResponse(url: string, response: any, scope?: AppScope): Promise<void> {
     if (response === null || response === undefined) return;
 
+    const appScope = scope || resolveScopeFromUrl(url);
     const ttl = this.getCacheTTL();
-    await offlineDb.apiCache.put({
+    const targetDb = getOfflineDb(appScope);
+    await targetDb.apiCache.put({
       url,
       response,
       cachedAt: Date.now(),
       // TTL صفر یعنی «هیچ‌وقت کهنه نشود»
       expiresAt: ttl === 0 ? Number.MAX_SAFE_INTEGER : Date.now() + ttl,
+      appScope,
     });
   }
 
   /**
-   * خواندن رکورد کش‌شده GET.
-   *
-   * کش فقط در حالت آفلاین خوانده می‌شود، پس تنها نسخه‌ای است که کاربر در
-   * اختیار دارد و هرگز حذف نمی‌شود — حتی وقتی از TTL گذشته باشد. گذشتن
-   * از TTL فقط یعنی «کهنه است»، نه «دور انداخته شود».
+   * خواندن رکورد کش‌شده GET از دیتابیس اختصاصی قلمرو
    */
-  async getCachedEntry(url: string): Promise<{ response: any; cachedAt: number; isStale: boolean } | null> {
-    const entry = await offlineDb.apiCache.get(url);
+  async getCachedEntry(url: string, scope?: AppScope): Promise<{ response: any; cachedAt: number; isStale: boolean } | null> {
+    const appScope = scope || resolveScopeFromUrl(url);
+    let entry = await getOfflineDb(appScope).apiCache.get(url);
+    if (!entry) {
+      // جستجو در قلمرو دیگر به عنوان پشتیبان در صورت اشتراک اندپوینت‌ها
+      const otherScope: AppScope = appScope === 'warehouse' ? 'finance' : 'warehouse';
+      entry = await getOfflineDb(otherScope).apiCache.get(url);
+    }
     if (!entry) return null;
     return {
       response: entry.response,
@@ -432,14 +483,17 @@ export class OfflineSyncService {
    * ابطال و پاکسازی یک مسیر یا الگوی URL از کش محلی IndexedDB
    * برای جلوگیری از دیدن داده‌های استیل پس از اعمال تغییرات یا حذف‌ها
    */
-  async invalidateCache(urlPatternOrExact: string): Promise<void> {
+  async invalidateCache(urlPatternOrExact: string, scope?: AppScope): Promise<void> {
     try {
-      await offlineDb.apiCache.delete(urlPatternOrExact);
-      const matchingKeys = await offlineDb.apiCache
-        .filter(entry => entry.url.startsWith(urlPatternOrExact) || entry.url.includes(urlPatternOrExact))
-        .primaryKeys();
-      if (matchingKeys.length > 0) {
-        await offlineDb.apiCache.bulkDelete(matchingKeys as string[]);
+      const dbs = scope ? [getOfflineDb(scope)] : [warehouseOfflineDb, financeOfflineDb];
+      for (const db of dbs) {
+        await db.apiCache.delete(urlPatternOrExact);
+        const matchingKeys = await db.apiCache
+          .filter(entry => entry.url.startsWith(urlPatternOrExact) || entry.url.includes(urlPatternOrExact))
+          .primaryKeys();
+        if (matchingKeys.length > 0) {
+          await db.apiCache.bulkDelete(matchingKeys as string[]);
+        }
       }
     } catch (err) {
       console.warn('[OfflineSync] خطا در ابطال کش:', err);
@@ -450,60 +504,206 @@ export class OfflineSyncService {
   //  صندوق خطای همگام‌سازی (Sync Error Inbox)
   // ════════════════════════════════════════════
 
-  /** دریافت تمام خطاهای خوانده‌نشده */
-  async getErrors(): Promise<SyncErrorEntry[]> {
-    const errors = await offlineDb.syncErrors
-      .where('dismissed')
-      .equals(0)
-      .sortBy('failedAt');
-    return errors.reverse();
+  /** دریافت تمام خطاهای خوانده‌نشده از پایگاه‌های داده تفکیک‌شده */
+  async getErrors(scope?: AppScope | 'all'): Promise<SyncErrorEntry[]> {
+    const targetScope = scope || 'all';
+    if (targetScope === 'warehouse') {
+      const errors = await warehouseOfflineDb.syncErrors
+        .where('dismissed')
+        .equals(0)
+        .sortBy('failedAt');
+      return errors.reverse();
+    }
+    if (targetScope === 'finance') {
+      const errors = await financeOfflineDb.syncErrors
+        .where('dismissed')
+        .equals(0)
+        .sortBy('failedAt');
+      return errors.reverse();
+    }
+    const [wh, fin] = await Promise.all([
+      warehouseOfflineDb.syncErrors.where('dismissed').equals(0).toArray(),
+      financeOfflineDb.syncErrors.where('dismissed').equals(0).toArray(),
+    ]);
+    return [...wh, ...fin].sort((a, b) => b.failedAt - a.failedAt);
   }
 
   /** دریافت تمام خطاها (حتی خوانده‌شده‌ها) */
-  async getAllErrors(): Promise<SyncErrorEntry[]> {
-    return offlineDb.syncErrors.reverse().sortBy('failedAt');
+  async getAllErrors(scope?: AppScope | 'all'): Promise<SyncErrorEntry[]> {
+    const targetScope = scope || 'all';
+    if (targetScope === 'warehouse') {
+      return warehouseOfflineDb.syncErrors.reverse().sortBy('failedAt');
+    }
+    if (targetScope === 'finance') {
+      return financeOfflineDb.syncErrors.reverse().sortBy('failedAt');
+    }
+    const [wh, fin] = await Promise.all([
+      warehouseOfflineDb.syncErrors.toArray(),
+      financeOfflineDb.syncErrors.toArray(),
+    ]);
+    return [...wh, ...fin].sort((a, b) => b.failedAt - a.failedAt);
   }
 
-  /** حذف (Dismiss) یک خطا */
+  /** حذف (Dismiss) یک خطا از دیتابیس مربوطه */
   async dismissError(id: number): Promise<void> {
-    await offlineDb.syncErrors.update(id, { dismissed: 1 });
+    const whErr = await warehouseOfflineDb.syncErrors.get(id);
+    if (whErr) {
+      await warehouseOfflineDb.syncErrors.update(id, { dismissed: 1 });
+    } else {
+      await financeOfflineDb.syncErrors.update(id, { dismissed: 1 });
+    }
     await this.refreshCounts();
   }
 
-  /** حذف تمام خطاها */
+  /** حذف تمام خطاها از هر دو دیتابیس */
   async dismissAllErrors(): Promise<void> {
-    await offlineDb.syncErrors.toCollection().modify({ dismissed: 1 });
+    await Promise.all([
+      warehouseOfflineDb.syncErrors.toCollection().modify({ dismissed: 1 }),
+      financeOfflineDb.syncErrors.toCollection().modify({ dismissed: 1 }),
+    ]);
     await this.refreshCounts();
   }
 
   /** حذف دائمی یک خطا از دیتابیس */
   async deleteError(id: number): Promise<void> {
-    await offlineDb.syncErrors.delete(id);
+    const whErr = await warehouseOfflineDb.syncErrors.get(id);
+    if (whErr) {
+      await warehouseOfflineDb.syncErrors.delete(id);
+    } else {
+      await financeOfflineDb.syncErrors.delete(id);
+    }
     await this.refreshCounts();
   }
 
-  /** حذف دائمی تمام خطاها */
+  /** حذف دائمی تمام خطاها از هر دو دیتابیس */
   async clearAllErrors(): Promise<void> {
-    await offlineDb.syncErrors.clear();
+    await Promise.all([
+      warehouseOfflineDb.syncErrors.clear(),
+      financeOfflineDb.syncErrors.clear(),
+    ]);
     await this.refreshCounts();
   }
 
   /**
    * تلاش مجدد یک درخواست ردشده — از Inbox خطاها.
-   * رکورد به صف برمی‌گردد (با متادیتای اصلی) و صف بلافاصله پردازش می‌شود.
+   * رکورد به صف برمی‌گردد (با متادیتای اصلی و قلمرو) و صف بلافاصله پردازش می‌شود.
    */
   async retryError(errorId: number): Promise<void> {
-    const err = await offlineDb.syncErrors.get(errorId);
+    let err = await warehouseOfflineDb.syncErrors.get(errorId);
+    let db = warehouseOfflineDb;
+    if (!err) {
+      err = await financeOfflineDb.syncErrors.get(errorId);
+      db = financeOfflineDb;
+    }
     if (!err) return;
+
     await this.enqueue(err.method, err.url, err.body, {
       userId: err.userId,
       entityType: err.entityType,
       entitySyncId: err.entitySyncId,
+      appScope: err.appScope,
     });
-    await offlineDb.syncErrors.delete(errorId);
+    await db.syncErrors.delete(errorId);
     await this.refreshCounts();
     console.log(`[OfflineSync] 🔁 خطای ${errorId} به صف برگشت (${err.method} ${err.url})`);
     this.processQueue();
+  }
+
+  /**
+   * حل تداخل داده‌های همگام‌سازی (409 Conflict Resolution):
+   * اعمال نسخه ادغام‌شده با base_updated_at سرور و ارسال مستقیم به سرور
+   * یا صف‌بندی ایمن در صورت آفلاین بودن دستگاه
+   */
+  async resolveConflict(
+    errorId: number,
+    mergedBody: any
+  ): Promise<{ success: boolean; message: string; online: boolean }> {
+    let err = await warehouseOfflineDb.syncErrors.get(errorId);
+    let db = warehouseOfflineDb;
+    if (!err) {
+      err = await financeOfflineDb.syncErrors.get(errorId);
+      db = financeOfflineDb;
+    }
+    if (!err) {
+      return { success: false, message: 'رکورد تداخل یافت نشد.', online: this.network.isBrowserOnline };
+    }
+
+    const appScope: AppScope = err.appScope || resolveScopeFromUrl(err.url);
+    const serverRecord = err.serverResponse?.server_record;
+    const finalPayload = {
+      ...mergedBody,
+      base_updated_at: serverRecord?.updated_at || new Date().toISOString(),
+    };
+
+    // اگر آنلاین است، تلاش برای ارسال مستقیم به سرور
+    if (this.network.isBrowserOnline) {
+      try {
+        const tokenKey = appScope === 'finance' ? 'wh_access_token_finance' : 'wh_access_token_warehouse';
+        const token =
+          sessionStorage.getItem(tokenKey) ||
+          sessionStorage.getItem('wh_access_token') ||
+          localStorage.getItem(tokenKey) ||
+          localStorage.getItem('wh_access_token');
+        const tabId = sessionStorage.getItem('wh_tab_session_id') || 'tab_conflict_resolver';
+        const role =
+          sessionStorage.getItem('active_role_persona') ||
+          (appScope === 'finance' ? 'operator' : 'counter');
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Active-App': appScope === 'finance' ? 'personnel' : 'warehouse',
+          'X-Active-Role': role,
+          'X-Client-Tab-Id': tabId,
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(err.url, {
+          method: err.method || 'PATCH',
+          headers,
+          body: JSON.stringify(finalPayload),
+        });
+
+        if (res.ok) {
+          await db.syncErrors.delete(errorId);
+          if (err.url) await this.invalidateCache(err.url.split('?')[0], appScope);
+          await this.refreshCounts();
+          console.log(`[OfflineSync] 🤝 تداخل خطای ${errorId} حل و با موفقیت در سرور ثبت شد.`);
+          return { success: true, message: 'تداخل داده‌ها حل و با موفقیت در سرور ثبت شد.', online: true };
+        } else if (res.status === 409) {
+          // در صورتی که سرور دوباره در همین لحظه تغییر کرده باشد
+          const newConflictBody = await res.json().catch(() => null);
+          await db.syncErrors.update(errorId, {
+            body: finalPayload,
+            serverResponse: newConflictBody,
+            failedAt: Date.now(),
+          });
+          await this.refreshCounts();
+          return {
+            success: false,
+            message: 'سرور در این لحظه مجدداً توسط کاربر دیگری به‌روزرسانی شد. لطفاً تداخل جدید را بازبینی کنید.',
+            online: true,
+          };
+        }
+      } catch (networkErr) {
+        console.warn('[OfflineSync] ارسال مستقیم با خطا مواجه شد، ذخیره در صف آفلاین:', networkErr);
+      }
+    }
+
+    // حالت آفلاین یا خطای اتصال: حذف خطا و انتقال نسخه ادغام‌شده به صف آفلاین
+    await this.enqueue(err.method, err.url, finalPayload, {
+      userId: err.userId,
+      entityType: err.entityType,
+      entitySyncId: err.entitySyncId,
+      appScope,
+      baseUpdatedAt: finalPayload.base_updated_at,
+    });
+    await db.syncErrors.delete(errorId);
+    await this.refreshCounts();
+    return {
+      success: true,
+      message: 'رکورد ادغام‌شده در صف آفلاین ذخیره شد و به محض برقراری اتصال ارسال خواهد شد.',
+      online: false,
+    };
   }
 
   /**
@@ -516,7 +716,7 @@ export class OfflineSyncService {
     // ۱. ابطال کش متناظر در apiCache برای دریافت نسخه تازه از سرور
     if (err.url) {
       const baseUrl = err.url.split('?')[0];
-      await this.invalidateCache(baseUrl);
+      await this.invalidateCache(baseUrl, err.appScope);
     }
 
     if (!err.entitySyncId || !err.entityType) return;
@@ -527,11 +727,12 @@ export class OfflineSyncService {
     };
     const tableName = tableMap[err.entityType];
     if (!tableName) return;
-    const table = offlineDb[tableName];
+    const db = getOfflineDb(err.appScope);
+    const table = (db as any)[tableName] || (offlineDb as any)[tableName];
 
     try {
       // آیا تغییر دیگری از همین رکورد هنوز در صف است؟ اگر بله پرچم می‌ماند.
-      const stillPending = await offlineDb.syncQueue
+      const stillPending = await db.syncQueue
         .where('entitySyncId').equals(err.entitySyncId)
         .and((e) => ['pending', 'sending', 'failed'].includes(e.status))
         .count();
@@ -630,30 +831,43 @@ export class OfflineSyncService {
     let transportAborted = false;
     let authRequired = false;
 
-    console.log('[OfflineSync] 🔄 شروع پردازش صف همگام‌سازی...');
+    console.log('[OfflineSync] 🔄 شروع پردازش صف همگام‌سازی تفکیک‌شده...');
 
     try {
-      const pendingEntries = await offlineDb.syncQueue
-        .where('status')
-        .anyOf(['pending', 'failed'])
-        .sortBy('createdAt');
+      const currentScope = getCurrentActiveAppScope();
+      const otherScope: AppScope = currentScope === 'warehouse' ? 'finance' : 'warehouse';
 
-      if (pendingEntries.length === 0) {
-        console.log('[OfflineSync] ✅ صف خالی است');
+      const currentDb = getOfflineDb(currentScope);
+      const otherDb = getOfflineDb(otherScope);
+
+      const [currentEntries, otherEntries] = await Promise.all([
+        currentDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
+        otherDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
+      ]);
+
+      const queueJobs: { entry: SyncQueueEntry; db: OfflineDatabase }[] = [
+        ...currentEntries.map((e) => ({ entry: e, db: currentDb })),
+        ...otherEntries.map((e) => ({ entry: e, db: otherDb })),
+      ];
+
+      if (queueJobs.length === 0) {
+        console.log('[OfflineSync] ✅ صف‌های هر دو قلمرو خالی هستند');
         this._lastSyncTime$.next(Date.now());
         return { status: 'nothing-to-sync' };
       }
 
-      console.log(`[OfflineSync] 📋 ${pendingEntries.length} درخواست در صف`);
+      console.log(
+        `[OfflineSync] 📋 ${queueJobs.length} درخواست در صف‌های تفکیک‌شده (${currentEntries.length} در ${currentScope}، ${otherEntries.length} در ${otherScope})`
+      );
 
-      for (const entry of pendingEntries) {
+      for (const { entry, db } of queueJobs) {
         if (!this.network.isBrowserOnline) {
           console.log('[OfflineSync] 📴 اتصال قطع شد — پردازش متوقف شد (داده‌ها محفوظ است)');
           transportAborted = true;
           break;
         }
 
-        const result = await this.sendEntry(entry);
+        const result = await this.sendEntry(entry, db);
         await this.refreshCounts();
 
         if (result === 'sent') {
@@ -700,20 +914,40 @@ export class OfflineSyncService {
   }
 
   /**
-   * ارسال یک درخواست از صف به سرور
+   * ارسال یک درخواست از صف تفکیک‌شده به سرور با هدرها و توکن متناسب قلمرو
    * @returns نتیجه دقیق ارسال (نگاه کنید به EntryResult)
    */
-  private async sendEntry(entry: SyncQueueEntry, hasRetriedAuth = false): Promise<EntryResult> {
+  private async sendEntry(
+    entry: SyncQueueEntry,
+    targetDb?: OfflineDatabase,
+    hasRetriedAuth = false
+  ): Promise<EntryResult> {
     if (!entry.id) return 'rejected';
 
-    try {
-      // علامت‌گذاری به عنوان در حال ارسال
-      await offlineDb.syncQueue.update(entry.id, { status: 'sending' });
+    const appScope: AppScope = entry.appScope || resolveScopeFromUrl(entry.url);
+    const db = targetDb || getOfflineDb(appScope);
 
-      // ساخت و ارسال درخواست fetch
-      const token = sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
+    try {
+      // علامت‌گذاری به عنوان در حال ارسال در دیتابیس اختصاصی قلمرو
+      await db.syncQueue.update(entry.id, { status: 'sending' });
+
+      // ساخت هدرهای تفکیک‌شده قلمرو و شناسه تب
+      const tokenKey = appScope === 'finance' ? 'wh_access_token_finance' : 'wh_access_token_warehouse';
+      const token =
+        sessionStorage.getItem(tokenKey) ||
+        sessionStorage.getItem('wh_access_token') ||
+        localStorage.getItem(tokenKey) ||
+        localStorage.getItem('wh_access_token');
+      const tabId = sessionStorage.getItem('wh_tab_session_id') || 'tab_offline_sync';
+      const role =
+        sessionStorage.getItem('active_role_persona') ||
+        (appScope === 'finance' ? 'operator' : 'counter');
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
+        'X-Active-App': appScope === 'finance' ? 'personnel' : 'warehouse',
+        'X-Active-Role': role,
+        'X-Client-Tab-Id': tabId,
       };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -731,10 +965,7 @@ export class OfflineSyncService {
 
       const response = await fetch(entry.url, fetchOptions);
 
-      // پاسخ گرفتن با «به بک‌اند رسیدن» یکی نیست: یک 502 از Cloudflare هم یک
-      // پاسخ کامل HTTP است، در حالی که origin اصلاً بالا نیست. اگر اینجا
-      // reachable گزارش کنیم، رابط کاربری خود را آنلاین نشان می‌دهد در حالی
-      // که هیچ درخواستی واقعاً به بک‌اند نمی‌رسد.
+      // بررسی دسترس‌پذیری سرور
       if (isServerUnreachable(response.status)) {
         this.network.reportServerUnreachable();
       } else {
@@ -742,26 +973,25 @@ export class OfflineSyncService {
       }
 
       if (response.ok) {
-        // موفقیت‌آمیز — حذف از صف
-        await offlineDb.syncQueue.delete(entry.id);
-        console.log(`[OfflineSync] ✅ ارسال موفق: ${entry.method} ${entry.url}`);
+        // موفقیت‌آمیز — حذف از صف اختصاصی
+        await db.syncQueue.delete(entry.id);
+        console.log(`[OfflineSync] ✅ ارسال موفق [${appScope}]: ${entry.method} ${entry.url}`);
         return 'sent';
       } else if (response.status === 401) {
         // توکن منقضی — تلاش برای refresh و ارسال مجدد (فقط یک بار)
         if (!hasRetriedAuth && (await this.refreshAccessToken())) {
-          return this.sendEntry(entry, true);
+          return this.sendEntry(entry, db, true);
         }
         // refresh ناموفق — رکورد در صف بماند تا بعد از login مجدد ارسال شود
-        await offlineDb.syncQueue.update(entry.id, {
+        await db.syncQueue.update(entry.id, {
           status: 'pending',
           lastError: 'نشست منقضی شده — پس از ورود مجدد ارسال می‌شود',
         });
-        console.warn(`[OfflineSync] 🔒 توکن منقضی — ${entry.url} در صف ماند`);
+        console.warn(`[OfflineSync] 🔒 توکن منقضی [${appScope}] — ${entry.url} در صف ماند`);
         return 'auth-failed';
       } else if (response.status === 408 || response.status === 429) {
-        // 408 (مهلت درخواست) و 429 (محدودیت نرخ) رد صریح نیستند — موقتی‌اند و
-        // تلاش بعدی به احتمال زیاد موفق می‌شود. مثل 5xx در صف می‌مانند.
-        await this.handleRetry(entry, `خطای موقت سرور (${response.status}) — بعداً دوباره تلاش می‌شود`);
+        // خطاهای موقت نرخ یا مهلت
+        await this.handleRetry(entry, `خطای موقت سرور (${response.status}) — بعداً دوباره تلاش می‌شود`, db);
         return 'server-error';
       } else if (response.status >= 400 && response.status < 500) {
         // خطای کلاینت (4xx شامل 409) — انتقال به صندوق خطاها
@@ -770,9 +1000,10 @@ export class OfflineSyncService {
         try {
           errorBody = await response.json();
           if (errorBody.detail) {
-            serverMessage = errorBody.detail === 'conflict'
-              ? 'تداخل: این رکورد هم‌زمان توسط شخص دیگری تغییر کرده است'
-              : errorBody.detail;
+            serverMessage =
+              errorBody.detail === 'conflict'
+                ? 'تداخل: این رکورد هم‌زمان توسط شخص دیگری تغییر کرده است'
+                : errorBody.detail;
           } else if (typeof errorBody === 'object') {
             const firstField = Object.keys(errorBody)[0];
             const firstError = errorBody[firstField];
@@ -780,9 +1011,11 @@ export class OfflineSyncService {
               ? `${firstField}: ${firstError[0]}`
               : String(firstError);
           }
-        } catch { /* ignore JSON parse error */ }
+        } catch {
+          /* ignore JSON parse error */
+        }
 
-        // ذخیره در صندوق خطاها (payload کامل حفظ می‌شود — داده کاربر گم نمی‌شود)
+        // ذخیره در صندوق خطاها در همان دیتابیس تفکیک‌شده
         const syncError: SyncErrorEntry = {
           method: entry.method,
           url: entry.url,
@@ -795,37 +1028,34 @@ export class OfflineSyncService {
           entityType: entry.entityType,
           entitySyncId: entry.entitySyncId,
           serverResponse: errorBody,
+          appScope,
         };
-        syncError.id = await offlineDb.syncErrors.add(syncError);
+        syncError.id = await db.syncErrors.add(syncError);
 
-        // حذف از صف — سرور صریحاً رد کرده و تکرار آن بی‌فایده است
-        await offlineDb.syncQueue.delete(entry.id);
-        console.error(`[OfflineSync] ❌ خطای ${response.status} برای ${entry.url} — منتقل به صندوق خطاها`);
+        // حذف از صف
+        await db.syncQueue.delete(entry.id);
+        console.error(
+          `[OfflineSync] ❌ خطای ${response.status} برای [${appScope}] ${entry.url} — منتقل به صندوق خطاها`
+        );
 
-        // Reconciliation: رکورد خوش‌بینانه محلی به وضعیت سروری برگردد
+        // Reconciliation: بازگشت رکورد محلی به نسخه سرور
         await this.reconcileRejected(syncError);
         this._rejected$.next(syncError);
         return 'rejected';
       } else {
-        // خطای سرور (5xx) — در صف می‌ماند، بعداً دوباره تلاش می‌شود
-        await this.handleRetry(entry, `خطای سرور (${response.status})`);
+        // خطای سرور (5xx)
+        await this.handleRetry(entry, `خطای سرور (${response.status})`, db);
         return 'server-error';
       }
     } catch (error: any) {
-      // اصلاً به سرور نرسیدیم (قطع شبکه / سرور خاموش)
-      // این «شکست همگام‌سازی» نیست — فقط هنوز فرصتش نشده است.
       this.network.reportServerUnreachable();
-      await this.markTransportFailure(entry, error?.message || 'اتصال برقرار نشد');
+      await this.markTransportFailure(entry, error?.message || 'اتصال برقرار نشد', db);
       return 'transport-failed';
     }
   }
 
   /**
    * تلاش برای تازه‌سازی access token با استفاده از refresh token
-   *
-   * عمومی است چون صف آپلود عکس (PhotoUploadQueueService) هم پس از ۴۰۱ به آن
-   * نیاز دارد و دو نسخه از منطق چرخش توکن دردسر می‌شود.
-   * @returns true = توکن جدید گرفته شد / false = ناموفق
    */
   async refreshAccessToken(): Promise<boolean> {
     const refresh = localStorage.getItem('wh_refresh_token');
@@ -844,7 +1074,7 @@ export class OfflineSyncService {
 
       // ذخیره توکن جدید در localStorage
       localStorage.setItem('wh_access_token', data.access);
-      // ذخیره refresh token جدید (بعد از چرخش توکن، توکن قبلی باطل می‌شود)
+      // ذخیره refresh token جدید
       if (data.refresh) {
         localStorage.setItem('wh_refresh_token', data.refresh);
       }
@@ -857,16 +1087,17 @@ export class OfflineSyncService {
 
   /**
    * مدیریت خطای سرور (۵xx) — رکورد هرگز حذف نمی‌شود
-   *
-   * صف، کار ناتمام کاربر است. تنها دو چیز آن را حذف می‌کند:
-   * پذیرش صریح سرور (۲xx) یا رد صریح سرور (۴xx).
-   * خطای موقت سرور فقط شمارنده تلاش را بالا می‌برد.
    */
-  private async handleRetry(entry: SyncQueueEntry, errorMessage: string): Promise<void> {
+  private async handleRetry(
+    entry: SyncQueueEntry,
+    errorMessage: string,
+    targetDb?: OfflineDatabase
+  ): Promise<void> {
     if (!entry.id) return;
+    const db = targetDb || getOfflineDb(entry.appScope);
     const newRetryCount = entry.retryCount + 1;
 
-    await offlineDb.syncQueue.update(entry.id, {
+    await db.syncQueue.update(entry.id, {
       status: 'failed',
       retryCount: newRetryCount,
       lastError:
@@ -881,14 +1112,16 @@ export class OfflineSyncService {
   }
 
   /**
-   * خطای انتقال (به سرور نرسیدیم) — رکورد بدون هیچ تغییری به صف برمی‌گردد
-   *
-   * مهم: retryCount افزایش نمی‌یابد. قطعی اینترنت تقصیر داده نیست و
-   * نباید رکورد را به سمت «سوختن» ببرد.
+   * خطای انتقال (به سرور نرسیدیم) — رکورد بدون تغییر به صف برمی‌گردد
    */
-  private async markTransportFailure(entry: SyncQueueEntry, errorMessage: string): Promise<void> {
+  private async markTransportFailure(
+    entry: SyncQueueEntry,
+    errorMessage: string,
+    targetDb?: OfflineDatabase
+  ): Promise<void> {
     if (!entry.id) return;
-    await offlineDb.syncQueue.update(entry.id, {
+    const db = targetDb || getOfflineDb(entry.appScope);
+    await db.syncQueue.update(entry.id, {
       status: 'pending',
       lastError: `در انتظار اتصال: ${errorMessage}`,
     });
@@ -899,38 +1132,48 @@ export class OfflineSyncService {
   //  ابزارهای کمکی
   // ════════════════════════════════════════════
 
-  /** به‌روزرسانی شمارنده‌های Observable */
+  /** به‌روزرسانی شمارنده‌های Observable از هر دو پایگاه‌داده تفکیک‌شده */
   async refreshCounts(): Promise<void> {
     try {
-      const pending = await offlineDb.syncQueue
-        .where('status')
-        .anyOf(['pending', 'failed'])
-        .count();
-      // عکس منتظر ارسال هم «کار ناتمام کاربر» است و باید در همان شمارنده دیده شود
-      const photosPending = await this.photoQueue.countPending();
-      this._pendingCount$.next(pending + photosPending);
-
-      const errors = await offlineDb.syncErrors
-        .where('dismissed')
-        .equals(0)
-        .count();
-      this._errorCount$.next(errors);
+      const [whPending, finPending, whErrors, finErrors, photosPending] = await Promise.all([
+        warehouseOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count(),
+        financeOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count(),
+        warehouseOfflineDb.syncErrors.where('dismissed').equals(0).count(),
+        financeOfflineDb.syncErrors.where('dismissed').equals(0).count(),
+        this.photoQueue.countPending().catch(() => 0),
+      ]);
+      this._pendingCount$.next(whPending + finPending + photosPending);
+      this._errorCount$.next(whErrors + finErrors);
     } catch (e) {
       // DB may not be ready
     }
   }
 
   /** دریافت تعداد درخواست‌های در صف */
-  async getPendingCount(): Promise<number> {
-    return offlineDb.syncQueue
-      .where('status')
-      .anyOf(['pending', 'failed'])
-      .count();
+  async getPendingCount(scope?: AppScope | 'all'): Promise<number> {
+    const targetScope = scope || 'all';
+    if (targetScope === 'warehouse') {
+      return warehouseOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count();
+    }
+    if (targetScope === 'finance') {
+      return financeOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count();
+    }
+    const [wh, fin] = await Promise.all([
+      warehouseOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count(),
+      financeOfflineDb.syncQueue.where('status').anyOf(['pending', 'failed']).count(),
+    ]);
+    return wh + fin;
   }
 
   /** تخلیه کامل صف (برای حالت‌های اضطراری یا لغو کاربر) */
-  async clearQueue(): Promise<void> {
-    await offlineDb.syncQueue.clear();
+  async clearQueue(scope?: AppScope | 'all'): Promise<void> {
+    const targetScope = scope || 'all';
+    if (targetScope === 'warehouse' || targetScope === 'all') {
+      await warehouseOfflineDb.syncQueue.clear();
+    }
+    if (targetScope === 'finance' || targetScope === 'all') {
+      await financeOfflineDb.syncQueue.clear();
+    }
     await this.refreshCounts();
   }
 

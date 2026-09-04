@@ -521,12 +521,65 @@
           </div>
 
           <div class="col-span-1 md:col-span-3">
-            <label class="block text-[11px] font-bold text-slate-600 mb-2">تخصیص نقش‌های سازمانی (Roles)</label>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 max-h-32 overflow-y-auto">
-                <label *ngFor="let r of state.appState.roles" class="flex items-center gap-2 cursor-pointer hover:bg-indigo-50 p-2 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
-                    <input type="checkbox" [checked]="userForm.groups.includes(r.id)" (change)="toggleUserRoleCheckbox(r.id, $event)" class="rounded text-indigo-600 focus:ring-0">
-                    <span class="text-[11px] text-slate-800 font-bold truncate" [title]="r.title || r.name">{{getRoleTitleForForm(r)}}</span>
-                </label>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-[11px] font-bold text-slate-700">تخصیص نقش‌های سازمانی (Roles) بر اساس سامانه</label>
+              <span class="text-[10px] text-slate-500 font-medium">مجموع نقش‌های انتخابی: <strong class="text-indigo-600 font-black">{{userForm.groups.length}}</strong></span>
+            </div>
+
+            <!-- تب‌های تفکیک‌شده قلمرو نقش‌ها -->
+            <div class="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200 mb-2.5">
+              <button type="button" (click)="userRoleModalTab = 'warehouse'"
+                [ngClass]="userRoleModalTab === 'warehouse' ? 'bg-white text-sky-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
+                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <span>📦 سامانه انبارداری</span>
+                <span *ngIf="getSelectedRolesCountForScope('warehouse') > 0" class="px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-700 text-[9px] font-black border border-sky-200">
+                  {{getSelectedRolesCountForScope('warehouse')}}
+                </span>
+              </button>
+
+              <button type="button" (click)="userRoleModalTab = 'finance'"
+                [ngClass]="userRoleModalTab === 'finance' ? 'bg-white text-emerald-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
+                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <span>💳 سامانه مالی و پرسنلی</span>
+                <span *ngIf="getSelectedRolesCountForScope('finance') > 0" class="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black border border-emerald-200">
+                  {{getSelectedRolesCountForScope('finance')}}
+                </span>
+              </button>
+
+              <button type="button" (click)="userRoleModalTab = 'global'"
+                [ngClass]="userRoleModalTab === 'global' ? 'bg-white text-purple-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
+                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <span>⚡ سراسری / ادمین</span>
+                <span *ngIf="getSelectedRolesCountForScope('global') > 0" class="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 text-[9px] font-black border border-purple-200">
+                  {{getSelectedRolesCountForScope('global')}}
+                </span>
+              </button>
+
+              <button type="button" (click)="userRoleModalTab = 'all'"
+                [ngClass]="userRoleModalTab === 'all' ? 'bg-white text-slate-800 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
+                class="py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center transition-all cursor-pointer">
+                <span>همه</span>
+              </button>
+            </div>
+
+            <!-- لیست نقش‌ها متناسب با تب فعال -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 bg-slate-50/60 p-3 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
+              <label *ngFor="let r of getFilteredRolesForModal(userRoleModalTab)"
+                class="flex items-center justify-between p-2 rounded-xl transition-colors border cursor-pointer group select-none"
+                [ngClass]="userForm.groups.includes(r.id) ? 'bg-indigo-50/80 border-indigo-300 shadow-xs' : 'bg-white border-slate-200 hover:border-indigo-100 hover:bg-slate-50'">
+                <div class="flex items-center gap-2 overflow-hidden">
+                  <input type="checkbox" [checked]="userForm.groups.includes(r.id)" (change)="toggleUserRoleCheckbox(r.id, $event)" class="rounded text-indigo-600 focus:ring-0">
+                  <span class="text-[11px] text-slate-800 font-bold truncate" [title]="r.title || r.name">{{getRoleTitleForForm(r)}}</span>
+                </div>
+                <span class="text-[9px] px-1.5 py-0.5 rounded-md shrink-0 font-medium"
+                  [ngClass]="getRoleAppScope(r) === 'finance' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (getRoleAppScope(r) === 'warehouse' ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-purple-50 text-purple-700 border border-purple-200')">
+                  {{ getRoleAppScope(r) === 'finance' ? 'مالی' : (getRoleAppScope(r) === 'warehouse' ? 'انبار' : 'سراسری') }}
+                </span>
+              </label>
+
+              <div *ngIf="getFilteredRolesForModal(userRoleModalTab).length === 0" class="col-span-full py-4 text-center text-slate-400 text-xs font-bold">
+                نقشی در این قلمرو سازمانی تعریف نشده است.
+              </div>
             </div>
           </div>
           

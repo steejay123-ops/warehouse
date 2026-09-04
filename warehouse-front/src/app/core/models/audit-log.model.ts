@@ -3,6 +3,15 @@
  * مطابق با مدل‌های Accounts در جنگو (AuditLog و UserLoginLog)
  */
 
+export interface AuditLogDetails {
+  event?: string;
+  active_app?: string;
+  attempted_app?: string;
+  allowed_apps?: string[];
+  target_module?: string;
+  [key: string]: any;
+}
+
 export interface AuditLog {
   id: number;
   user: number | null;
@@ -23,7 +32,7 @@ export interface AuditLog {
   target_repr?: string;
   before_state?: Record<string, any> | null;
   after_state?: Record<string, any> | null;
-  details?: Record<string, any>;
+  details?: AuditLogDetails;
   ip_address?: string | null;
   created_at: string;
 }
@@ -70,6 +79,11 @@ export interface AuditStats {
   warning_count?: number;
   rollbacks_24h?: number;
   rollbacks_all_time?: number;
+  security_all_time?: number;
+  cross_app_denied_count?: number;
+  app_switch_count?: number;
+  warehouse_logs_count?: number;
+  finance_logs_count?: number;
   module_breakdown: Record<string, number>;
   storage?: AuditStorageStats;
 }
@@ -147,6 +161,8 @@ export interface AuditFilters {
   action_type?: string;
   severity?: string;
   warehouse?: number | string;
+  app_scope?: 'all' | 'warehouse' | 'finance' | 'security' | string;
+  event?: string;
   from_date?: string;
   to_date?: string;
   search?: string;

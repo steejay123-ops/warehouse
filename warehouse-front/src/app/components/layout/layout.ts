@@ -518,7 +518,8 @@ export class Layout implements OnInit, OnDestroy {
     {id:'finance-cartable', label:'💳 کارتابل مالی و حقوق', icon:'dollar-sign', permission: 'view_sys_payroll', isAccounting: true},
     {id:'treasury-cartable', label:'🏦 کارتابل خزانه‌داری و پرداخت', icon:'dollar-sign', permission: 'view_sys_treasury', isAccounting: true},
     {id:'profiles', label:'👥 بانک پرونده‌های پرسنل و ناوگان', icon:'users', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true}
+    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true},
+    {id:'finance-audit', label:'🔍 رهگیری و ممیزی مالی', icon:'file-text', permission: 'view_sys_payroll', isAccounting: true}
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
@@ -560,6 +561,9 @@ export class Layout implements OnInit, OnDestroy {
     const parseTabFromUrl = (url: string): string => {
       const clean = (url || '').split('?')[0];
       const segments = clean.split('/').filter(Boolean);
+      if (segments[0] === 'app' && segments[1] === 'finance' && (segments[2] === 'audit' || segments[2] === 'finance-audit')) {
+        return 'finance-audit';
+      }
       if (segments[0] === 'app' && segments[2]) {
         return segments[2];
       }
@@ -572,7 +576,7 @@ export class Layout implements OnInit, OnDestroy {
     const initialTab = parseTabFromUrl(this.router.url);
     this.store.setCurrentTab(initialTab);
     this.updateTitle(initialTab);
-    if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(initialTab)) {
+    if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'finance-audit'].includes(initialTab)) {
       this.isAccountingMenuOpen = true;
     }
 
@@ -582,7 +586,7 @@ export class Layout implements OnInit, OnDestroy {
       const tab = parseTabFromUrl(e.urlAfterRedirects || e.url);
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
-      if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings'].includes(tab)) {
+      if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'finance-audit'].includes(tab)) {
         this.isAccountingMenuOpen = true;
       }
     });
@@ -1098,6 +1102,10 @@ export class Layout implements OnInit, OnDestroy {
 
   switchTab(tabId: string) {
     this.closeSidebar();
+    if (tabId === 'finance-audit') {
+      this.router.navigate(['/app/finance/audit']);
+      return;
+    }
     const accountingTabs = [
       'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
@@ -1240,7 +1248,8 @@ export class Layout implements OnInit, OnDestroy {
       'treasury': 'کارتابل خزانه‌داری، پرداخت و دیسکت‌های بانکی',
       'profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
-      'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی'
+      'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی',
+      'finance-audit': 'رهگیری و ممیزی مالی و اداری'
     };
     this.currentTitle = titles[tab] || tab;
   }

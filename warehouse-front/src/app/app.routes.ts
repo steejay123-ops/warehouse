@@ -89,7 +89,7 @@ export const routes: Routes = [
         canDeactivate: [settingsLeaveGuard]
       },
       { path: 'wh-settings', component: WhSettings },
-      { path: 'audit', component: Audit },
+      { path: 'audit', component: Audit, data: { appScope: 'warehouse' } },
       { path: 'feeding', component: Feeding },
       { path: 'field', redirectTo: 'counter', pathMatch: 'full' },
       { path: 'placeholders', component: Placeholders },
@@ -126,6 +126,8 @@ export const routes: Routes = [
       { path: 'personnel-profiles', component: PersonnelProfilesHub, data: { reuse: true } },
       { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
       { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
+      { path: 'audit', component: Audit, data: { appScope: 'finance', reuse: true } },
+      { path: 'finance-audit', redirectTo: 'audit', pathMatch: 'full' },
       { path: 'personnel', redirectTo: 'finance-cartable', pathMatch: 'full' },
       { path: 'payroll', redirectTo: 'finance-cartable', pathMatch: 'full' },
       { path: 'fleet-settlement', redirectTo: 'treasury-cartable', pathMatch: 'full' },
@@ -219,6 +221,7 @@ export const routes: Routes = [
   { path: 'personnel', redirectTo: 'app/finance/finance-cartable', pathMatch: 'full' },
   { path: 'payroll', redirectTo: 'app/finance/finance-cartable', pathMatch: 'full' },
   { path: 'fleet-settlement', redirectTo: 'app/finance/treasury-cartable', pathMatch: 'full' },
+  { path: 'finance-audit', redirectTo: 'app/finance/audit', pathMatch: 'full' },
 
   // ─── هدایت ریشه اصلی به پورتال هوشمند ─────────────────
   { 

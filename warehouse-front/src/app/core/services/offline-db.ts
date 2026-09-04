@@ -28,6 +28,9 @@ export interface SyncQueueEntry {
   entitySyncId?: string;
   /** updated_at نسخه‌ای که تغییر رویش اعمال شده (تشخیص تداخل 409) */
   baseUpdatedAt?: string;
+  // ─── تفکیک قلمرو برنامه (Domain-Segregated Local Storage) ───
+  /** قلمرو برنامه: warehouse یا finance */
+  appScope?: 'warehouse' | 'finance';
 }
 
 /**
@@ -42,6 +45,8 @@ export interface ApiCacheEntry {
   cachedAt: number;
   /** زمان انقضا */
   expiresAt: number;
+  /** قلمرو برنامه */
+  appScope?: 'warehouse' | 'finance';
 }
 
 /**
@@ -58,21 +63,16 @@ export interface SyncErrorEntry {
   body: any;
   /** کد وضعیت HTTP (4xx) */
   statusCode: number;
-  /** پیام خطا از سرور */
   serverMessage: string;
-  /** زمان رد شدن درخواست */
   failedAt: number;
-  /** آیا کاربر این خطا را خوانده؟ (0 = خیر، 1 = بله — boolean در IndexedDB قابل ایندکس نیست) */
   dismissed: 0 | 1;
   // ─── فیلدهای Local-First (v3) ───
-  /** شناسه کاربر صاحب درخواست ردشده */
   userId?: number;
-  /** نوع موجودیت (برای reconciliation) */
   entityType?: string;
-  /** sync_id رکورد هدف */
   entitySyncId?: string;
-  /** بدنه کامل پاسخ سرور (مثلاً server_record در 409) */
   serverResponse?: any;
+  /** قلمرو برنامه */
+  appScope?: 'warehouse' | 'finance';
 }
 
 /**
@@ -146,6 +146,81 @@ export interface SyncCursorEntry {
  *
  * قاعده: هیچ جدولی هرگز Clear نمی‌شود مگر صف خالی باشد و کاربر صریحاً تأیید کند.
  */
+
+export type AppScope = 'warehouse' | 'finance';
+
+export const SCOPED_DB_NAMES: Record<AppScope, string> = {
+  warehouse: 'WarehouseOfflineDB_warehouse',
+  finance: 'WarehouseOfflineDB_finance',
+};
+
+/**
+ * نرمال‌سازی نام قلمرو به یکی از دو قلمرو استاندارد: warehouse یا finance
+ */
+export function normalizeScope(scope?: string | null): AppScope {
+  if (!scope) return 'warehouse';
+  const s = scope.toLowerCase();
+  if (s === 'finance' || s === 'personnel') return 'finance';
+  return 'warehouse';
+}
+
+/**
+ * دریافت قلمرو فعال برنامه از روی سشن تب، URL یا حافظه محلی
+ */
+export function getCurrentActiveAppScope(): AppScope {
+  if (typeof window === 'undefined') return 'warehouse';
+  try {
+    // ۱. اولویت سشن اختصاصی تب جاری
+    const tabApp = sessionStorage.getItem('active_app_module') || sessionStorage.getItem('wh_active_app');
+    if (tabApp) return normalizeScope(tabApp);
+
+    // ۲. کانتکست آدرس مرورگر
+    const path = window.location.pathname.toLowerCase();
+    if (
+      path.includes('/app/finance') ||
+      path.includes('/finance') ||
+      path.includes('/personnel') ||
+      path.includes('/payroll')
+    ) {
+      return 'finance';
+    }
+    if (path.includes('/app/warehouse') || path.includes('/warehouse')) {
+      return 'warehouse';
+    }
+
+    // ۳. حافظه سراسری محلی
+    const globalApp = localStorage.getItem('active_app_module') || localStorage.getItem('wh_active_app');
+    if (globalApp) return normalizeScope(globalApp);
+
+    return 'warehouse';
+  } catch {
+    return 'warehouse';
+  }
+}
+
+/**
+ * تشخیص هوشمند قلمرو از روی URL مسیر اندپوینت سرور
+ */
+export function resolveScopeFromUrl(url?: string | null): AppScope {
+  if (!url) return getCurrentActiveAppScope();
+  const u = url.toLowerCase();
+  if (
+    u.includes('/personnel') ||
+    u.includes('/payroll') ||
+    u.includes('/finance') ||
+    u.includes('/treasury') ||
+    u.includes('/doc-tasks') ||
+    u.includes('/doc_tasks') ||
+    u.includes('/attendance') ||
+    u.includes('/paya') ||
+    u.includes('/slips') ||
+    u.includes('/fiscal')
+  ) {
+    return 'finance';
+  }
+  return 'warehouse';
+}
+
 export class OfflineDatabase extends Dexie {
   syncQueue!: Table<SyncQueueEntry, number>;
   apiCache!: Table<ApiCacheEntry, string>;
@@ -156,59 +231,87 @@ export class OfflineDatabase extends Dexie {
   syncCursors!: Table<SyncCursorEntry, string>;
   docTasks!: Table<any, string>;
   photoQueue!: Table<PhotoQueueEntry, number>;
+  attendanceRecords!: Table<any, string>;
+  public readonly dbScope: AppScope;
 
-  constructor() {
-    super('WarehouseOfflineDB');
+  constructor(dbName: string = 'WarehouseOfflineDB_warehouse', scope: AppScope = 'warehouse') {
+    super(dbName);
+    this.dbScope = scope;
 
-    // نسخه ۱ — جداول اولیه
-    this.version(1).stores({
-      syncQueue: '++id, status, createdAt',
-      apiCache: 'url, expiresAt',
-    });
+    if (scope === 'finance') {
+      // ساختار دیتابیس قلمرو مالی و پرسنلی (Finance & Personnel DB)
+      this.version(1).stores({
+        syncQueue: '++id, status, createdAt, userId, entitySyncId, appScope',
+        apiCache: 'url, expiresAt, appScope',
+        syncErrors: '++id, failedAt, dismissed, userId, appScope',
+        docTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        syncCursors: 'key, userId, warehouseId',
+        attendanceRecords: 'id, date, status, updated_at',
+        countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+        dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+        photoQueue: '++id, status, createdAt, userId, itemId, syncId',
+      });
+    } else {
+      // نسخه ۱ تا ۵ برای حفظ سازگاری کامل پایگاه داده انبارداری
+      this.version(1).stores({
+        syncQueue: '++id, status, createdAt',
+        apiCache: 'url, expiresAt',
+      });
 
-    // نسخه ۲ — اضافه کردن جدول syncErrors
-    this.version(2).stores({
-      syncQueue: '++id, status, createdAt',
-      apiCache: 'url, expiresAt',
-      syncErrors: '++id, failedAt, dismissed',
-    });
+      this.version(2).stores({
+        syncQueue: '++id, status, createdAt',
+        apiCache: 'url, expiresAt',
+        syncErrors: '++id, failedAt, dismissed',
+      });
 
-    // نسخه ۳ — Local-First: دادهٔ دامنه + cursorها؛ داده‌های v2 دست‌نخورده می‌مانند
-    // (upgrade فقط ایندکس اضافه می‌کند؛ رکوردهای موجود صف/کش حفظ می‌شوند)
-    this.version(3).stores({
-      syncQueue: '++id, status, createdAt, userId, entitySyncId',
-      apiCache: 'url, expiresAt',
-      syncErrors: '++id, failedAt, dismissed, userId',
-      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
-      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
-      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
-      syncCursors: 'key, userId, warehouseId',
-    });
-    // نسخه ۴ — اضافه کردن جدول docTasks برای کارتابل مالی Local-First
-    this.version(4).stores({
-      syncQueue: '++id, status, createdAt, userId, entitySyncId',
-      apiCache: 'url, expiresAt',
-      syncErrors: '++id, failedAt, dismissed, userId',
-      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
-      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
-      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
-      syncCursors: 'key, userId, warehouseId',
-      docTasks: 'sync_id, id, warehouse_id, status, updated_at',
-    });
+      this.version(3).stores({
+        syncQueue: '++id, status, createdAt, userId, entitySyncId',
+        apiCache: 'url, expiresAt',
+        syncErrors: '++id, failedAt, dismissed, userId',
+        countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+        dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+        syncCursors: 'key, userId, warehouseId',
+      });
 
-    // نسخه ۵ — صف آپلود عکس؛ فایل به‌صورت Blob اینجا می‌ماند تا سرور آن را
-    // بپذیرد. جداول قبلی دست‌نخورده‌اند (upgrade فقط جدول جدید اضافه می‌کند).
-    this.version(5).stores({
-      syncQueue: '++id, status, createdAt, userId, entitySyncId',
-      apiCache: 'url, expiresAt',
-      syncErrors: '++id, failedAt, dismissed, userId',
-      countTasks: 'sync_id, id, warehouse_id, status, updated_at',
-      items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
-      dynamicFields: 'sync_id, id, warehouse_id, updated_at',
-      syncCursors: 'key, userId, warehouseId',
-      docTasks: 'sync_id, id, warehouse_id, status, updated_at',
-      photoQueue: '++id, status, createdAt, userId, itemId, syncId',
-    });
+      this.version(4).stores({
+        syncQueue: '++id, status, createdAt, userId, entitySyncId',
+        apiCache: 'url, expiresAt',
+        syncErrors: '++id, failedAt, dismissed, userId',
+        countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+        dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+        syncCursors: 'key, userId, warehouseId',
+        docTasks: 'sync_id, id, warehouse_id, status, updated_at',
+      });
+
+      this.version(5).stores({
+        syncQueue: '++id, status, createdAt, userId, entitySyncId',
+        apiCache: 'url, expiresAt',
+        syncErrors: '++id, failedAt, dismissed, userId',
+        countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+        dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+        syncCursors: 'key, userId, warehouseId',
+        docTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        photoQueue: '++id, status, createdAt, userId, itemId, syncId',
+      });
+
+      // نسخه ۶ — تفکیک قلمرو با ایندکس appScope و پشتیبانی از attendanceRecords
+      this.version(6).stores({
+        syncQueue: '++id, status, createdAt, userId, entitySyncId, appScope',
+        apiCache: 'url, expiresAt, appScope',
+        syncErrors: '++id, failedAt, dismissed, userId, appScope',
+        countTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
+        dynamicFields: 'sync_id, id, warehouse_id, updated_at',
+        syncCursors: 'key, userId, warehouseId',
+        docTasks: 'sync_id, id, warehouse_id, status, updated_at',
+        photoQueue: '++id, status, createdAt, userId, itemId, syncId',
+        attendanceRecords: 'id, date, status, updated_at',
+      });
+    }
   }
 
   /**
@@ -216,16 +319,118 @@ export class OfflineDatabase extends Dexie {
    * جداول صف (syncQueue, photoQueue, syncErrors) به هیچ عنوان پاک نمی‌شوند.
    */
   async clearServerDerivedCaches(): Promise<void> {
-    await Promise.all([
-      this.apiCache.clear(),
-      this.countTasks.clear(),
-      this.docTasks.clear(),
-      this.items.clear(),
-      this.dynamicFields.clear(),
-      this.syncCursors.clear()
-    ]);
+    const promises: Promise<any>[] = [this.apiCache.clear()];
+    if (this.countTasks) promises.push(this.countTasks.clear());
+    if (this.docTasks) promises.push(this.docTasks.clear());
+    if (this.items) promises.push(this.items.clear());
+    if (this.dynamicFields) promises.push(this.dynamicFields.clear());
+    if (this.syncCursors) promises.push(this.syncCursors.clear());
+    if (this.attendanceRecords) promises.push(this.attendanceRecords.clear());
+    await Promise.all(promises);
   }
 }
 
-/** نمونه سینگلتون از دیتابیس — در کل اپلیکیشن استفاده می‌شود */
-export const offlineDb = new OfflineDatabase();
+// ─── کارخانه و رجیستری نمونه‌های دیتابیس تفکیک‌شده ───
+const dbInstances = new Map<string, OfflineDatabase>();
+
+/**
+ * دریافت یا ایجاد نمونه پایگاه‌داده متناسب با قلمرو درخواستی
+ */
+export function getOfflineDb(scope?: AppScope | 'personnel' | null): OfflineDatabase {
+  const normScope = normalizeScope(scope || getCurrentActiveAppScope());
+  const dbName = SCOPED_DB_NAMES[normScope];
+  if (!dbInstances.has(dbName)) {
+    const db = new OfflineDatabase(dbName, normScope);
+    dbInstances.set(dbName, db);
+  }
+  return dbInstances.get(dbName)!;
+}
+
+/** نمونه صریح دیتابیس آفلاین انبارداری */
+export const warehouseOfflineDb: OfflineDatabase = getOfflineDb('warehouse');
+
+/** نمونه صریح دیتابیس آفلاین مالی و پرسنلی */
+export const financeOfflineDb: OfflineDatabase = getOfflineDb('finance');
+
+/**
+ * پروکسی هوشمند و شفاف offlineDb — سازگاری ۱۰۰٪ با کدهای پیشین بدون نیاز به تغییر ایمپورت‌ها
+ * دسترسی‌ها به جداول و متدها را به طور خودکار به دیتابیس قلمرو فعال جاری هدایت می‌کند.
+ */
+export const offlineDb: OfflineDatabase = new Proxy({} as OfflineDatabase, {
+  get(_target, prop: string | symbol) {
+    // ۱. جداول اختصاصی دامنه انبارداری
+    if (['countTasks', 'items', 'dynamicFields', 'photoQueue'].includes(prop as string)) {
+      const whDb = getOfflineDb('warehouse');
+      const val = (whDb as any)[prop];
+      return typeof val === 'function' ? val.bind(whDb) : val;
+    }
+
+    // ۲. جداول اختصاصی دامنه مالی
+    if (prop === 'docTasks' || prop === 'attendanceRecords') {
+      const finDb = getOfflineDb('finance');
+      const val = (finDb as any)[prop];
+      return typeof val === 'function' ? val.bind(finDb) : val;
+    }
+
+    // ۳. سایر جداول و متدها بر اساس قلمرو فعال جاری هدایت می‌شوند
+    const currentDb = getOfflineDb();
+    const val = (currentDb as any)[prop];
+    return typeof val === 'function' ? val.bind(currentDb) : val;
+  },
+  set(_target, prop: string | symbol, value: any) {
+    const currentDb = getOfflineDb();
+    (currentDb as any)[prop] = value;
+    return true;
+  }
+});
+
+/**
+ * پاکسازی کش‌های مشتق‌شده از سرور در تمامی دیتابیس‌های تفکیک‌شده
+ */
+export async function clearAllScopedCaches(): Promise<void> {
+  await Promise.all([
+    warehouseOfflineDb.clearServerDerivedCaches(),
+    financeOfflineDb.clearServerDerivedCaches(),
+  ]);
+}
+
+/**
+ * مهاجرت خودکار و امن داده‌ها از پایگاه داده قدیمی WarehouseOfflineDB در صورت وجود
+ */
+export async function migrateLegacyDatabaseIfNeeded(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const dbs = await Dexie.getDatabaseNames();
+    if (!dbs.includes('WarehouseOfflineDB')) return;
+
+    const legacyDb = new Dexie('WarehouseOfflineDB');
+    await legacyDb.open();
+    const tableNames = legacyDb.tables.map(t => t.name);
+
+    // ۱. انتقال رکوردهای مالی (docTasks) به دیتابیس مالی
+    if (tableNames.includes('docTasks')) {
+      const legacyDocs = await legacyDb.table('docTasks').toArray();
+      if (legacyDocs.length > 0) {
+        await financeOfflineDb.docTasks.bulkPut(legacyDocs);
+        console.log(`[OfflineDB Migration] 🚚 ${legacyDocs.length} سند مالی به دیتابیس مالی منتقل شد.`);
+      }
+    }
+
+    // ۲. انتقال صف همگام‌سازی بر اساس تفکیک URL
+    if (tableNames.includes('syncQueue')) {
+      const legacyQueue: SyncQueueEntry[] = await legacyDb.table('syncQueue').toArray();
+      for (const item of legacyQueue) {
+        const scope = resolveScopeFromUrl(item.url);
+        const targetDb = getOfflineDb(scope);
+        const exists = await targetDb.syncQueue.where('url').equals(item.url).first();
+        if (!exists) {
+          await targetDb.syncQueue.add({ ...item, appScope: scope });
+        }
+      }
+    }
+
+    legacyDb.close();
+  } catch (err) {
+    console.warn('[OfflineDB Migration] عدم اجرای مهاجرت دیتابیس قبلی:', err);
+  }
+}

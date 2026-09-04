@@ -24,7 +24,8 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   'feed_approvals': ['view_wh_feed_approvals'],
   'labels': ['view_wh_labels'],
   'label-designer': ['view_wh_label_designer'],
-  'audit': ['view_wh_audit', 'perm_sys_logs'],
+  'audit': ['view_wh_audit', 'perm_sys_logs', 'view_sys_payroll', 'view_sys_personnel', 'admin_all'],
+  'finance-audit': ['view_sys_payroll', 'view_sys_personnel', 'perm_sys_logs', 'view_wh_audit', 'admin_all'],
   'count-tracking': ['view_sys_manager_review', 'view_sys_supervisor', 'view_sys_dashboard', 'perm_inventory_finalize', 'view_wh_stocktaking', 'can_act_as_manager', 'can_act_as_supervisor'],
   
   // Personnel, Attendance, Fleet, Finance & Treasury

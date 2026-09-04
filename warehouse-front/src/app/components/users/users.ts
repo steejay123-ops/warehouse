@@ -26,6 +26,7 @@ export class Users implements OnInit, OnDestroy {
   activeTab = 'users';
   activeRoleTab = 'custom';
   activePermTab = 'MAIN_MENU';
+  userRoleModalTab: 'all' | 'warehouse' | 'finance' | 'global' = 'warehouse';
   searchQuery = '';
   searchSubject = new Subject<string>();
   private searchSub?: Subscription;
@@ -986,6 +987,48 @@ export class Users implements OnInit, OnDestroy {
 
   getRoleTitleForForm(r: any) {
     return r.title || r.name;
+  }
+
+  getRoleAppScope(r: any): 'warehouse' | 'finance' | 'global' {
+    const name = (r.name || '').toLowerCase();
+    const title = (r.title || '').toLowerCase();
+    
+    if (name === 'admin' || name === 'superuser' || title.includes('مدیر کل') || title.includes('مدیر ارشد') || title.includes('ادمین')) {
+      return 'global';
+    }
+    
+    // قلمرو مالی و پرسنلی (Finance & Personnel)
+    if (
+      name === 'hesabdar' || name === 'accountant' || name === 'treasury' || name === 'operator' ||
+      name.includes('personnel') || name.includes('payroll') || name.includes('finance') ||
+      title.includes('حسابدار') || title.includes('مالی') || title.includes('حقوق') ||
+      title.includes('خزانه') || title.includes('پرسنل') || title.includes('کارکرد')
+    ) {
+      return 'finance';
+    }
+    
+    // قلمرو انبارداری و شمارش (Warehouse & Inventory)
+    if (
+      name === 'counter' || name.startsWith('doc_') || name.includes('warehouse') ||
+      name.includes('supervisor') || title.includes('انبار') || title.includes('شمارش') ||
+      title.includes('اسناد') || title.includes('تطبیق')
+    ) {
+      return 'warehouse';
+    }
+
+    return 'warehouse';
+  }
+
+  getFilteredRolesForModal(tab: 'all' | 'warehouse' | 'finance' | 'global'): any[] {
+    const roles = this.state.appState.roles || [];
+    if (tab === 'all') return roles;
+    return roles.filter((r: any) => this.getRoleAppScope(r) === tab);
+  }
+
+  getSelectedRolesCountForScope(scope: 'warehouse' | 'finance' | 'global'): number {
+    const selectedIds = this.userForm.groups || [];
+    const roles = this.state.appState.roles || [];
+    return roles.filter((r: any) => selectedIds.includes(r.id) && this.getRoleAppScope(r) === scope).length;
   }
 
   // ── Excel Import/Export ──────────────────────────────────────────

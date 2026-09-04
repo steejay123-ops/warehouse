@@ -5,6 +5,7 @@ import { OfflineSyncService } from '../../../core/services/offline-sync.service'
 import { SyncQueueEntry, SyncErrorEntry, offlineDb } from '../../../core/services/offline-db';
 import { StateService } from '../../../services/state.service';
 import { Subscription } from 'rxjs';
+import { ConflictResolutionModalComponent } from '../conflict-resolution-modal/conflict-resolution-modal.component';
 
 /**
  * مرکز یکپارچه وضعیت اتصال، صف انتظار و صندوق خطاهای همگام‌سازی
@@ -17,7 +18,7 @@ import { Subscription } from 'rxjs';
 @Component({
   selector: 'app-offline-pending-badge',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ConflictResolutionModalComponent],
   template: `
     <!-- Inline Mode (مخصوص سطرهای جدول) -->
     <ng-container *ngIf="mode === 'inline'">
@@ -346,8 +347,25 @@ import { Subscription } from 'rxjs';
                 </button>
               </div>
 
-              <!-- Actions: Retry + View Data -->
-              <div class="flex items-center gap-2 pt-1 border-t border-rose-100 dark:border-rose-900/50">
+              <!-- Actions: Conflict Resolver (3-Way Merge) + Retry + View Data -->
+              <div class="flex flex-wrap items-center gap-1.5 pt-1 border-t border-rose-100 dark:border-rose-900/50">
+                <!-- 3-Way Merge Button for 409 Conflicts -->
+                <button
+                  *ngIf="isConflictError(err)"
+                  type="button"
+                  (click)="openConflictResolver(err)"
+                  class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 animate-pulse"
+                  title="مقایسه بصری نسخه‌ها و حل تداخل خوش‌بینانه"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="18" cy="18" r="3"></circle>
+                    <circle cx="6" cy="6" r="3"></circle>
+                    <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
+                    <line x1="6" y1="9" x2="6" y2="21"></line>
+                  </svg>
+                  <span>حل تداخل (۳-Way Merge)</span>
+                </button>
+
                 <button
                   type="button"
                   (click)="onRetryError(err.id!)"
@@ -378,6 +396,14 @@ import { Subscription } from 'rxjs';
 
         </div>
       </div>
+
+      <!-- Visual 3-Way Conflict Resolution Modal -->
+      <app-conflict-resolution-modal
+        [isOpen]="isConflictModalOpen"
+        [errorEntry]="selectedConflictError"
+        (closed)="onConflictModalClosed()"
+        (resolved)="onConflictResolved($event)"
+      ></app-conflict-resolution-modal>
     </div>
   `,
   styles: [`
@@ -406,6 +432,9 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
   queueEntries: SyncQueueEntry[] = [];
   syncErrors: SyncErrorEntry[] = [];
   expandedPayloadId: number | null = null;
+
+  isConflictModalOpen = false;
+  selectedConflictError: SyncErrorEntry | null = null;
 
   private network = NetworkStatusService.getInstance();
   private sync = OfflineSyncService.getInstance();
@@ -617,6 +646,33 @@ export class OfflinePendingBadgeComponent implements OnInit, OnDestroy {
     } catch (e) {
       console.error('[SyncBadge] Failed to dismiss all errors:', e);
     }
+    this.cdr.markForCheck();
+  }
+
+  isConflictError(err: SyncErrorEntry): boolean {
+    return (
+      err.statusCode === 409 ||
+      !!err.serverResponse?.server_record ||
+      (err.serverMessage?.includes('تداخل') ?? false)
+    );
+  }
+
+  openConflictResolver(err: SyncErrorEntry): void {
+    this.selectedConflictError = err;
+    this.isConflictModalOpen = true;
+    this.cdr.markForCheck();
+  }
+
+  onConflictModalClosed(): void {
+    this.isConflictModalOpen = false;
+    this.selectedConflictError = null;
+    this.cdr.markForCheck();
+  }
+
+  async onConflictResolved(result: { success: boolean; message: string; online: boolean }): Promise<void> {
+    this.isConflictModalOpen = false;
+    this.selectedConflictError = null;
+    await this.refreshData();
     this.cdr.markForCheck();
   }
 

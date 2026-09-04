@@ -7,6 +7,7 @@ import {
 } from '@angular/common/http';
 import { catchError, switchMap, throwError, BehaviorSubject, filter, take } from 'rxjs';
 import { AuthService } from './auth.service';
+import { SessionTabService } from '../services/session-tab.service';
 import { environment } from '../../../environments/environment';
 
 /**
@@ -26,6 +27,7 @@ export const authInterceptor: HttpInterceptorFn = (
   next: HttpHandlerFn
 ) => {
   const auth = inject(AuthService);
+  const sessionTab = inject(SessionTabService);
 
   // فقط روی request‌های API اعمال شود (نه CDN، font و...)
   if (!req.url.startsWith(environment.apiUrl)) {
@@ -39,7 +41,7 @@ export const authInterceptor: HttpInterceptorFn = (
   }
 
   const token = auth.getAccessToken();
-  const authReq = token ? addToken(req, token) : req;
+  const authReq = token ? addToken(req, token, sessionTab) : req;
 
   return next(authReq).pipe(
     catchError((error: HttpErrorResponse) => {
@@ -50,7 +52,7 @@ export const authInterceptor: HttpInterceptorFn = (
             filter((newToken) => newToken !== null),
             take(1),
             switchMap((newToken) => {
-              const retryReq = addToken(req, newToken!);
+              const retryReq = addToken(req, newToken!, sessionTab);
               return next(retryReq);
             })
           );
@@ -64,7 +66,7 @@ export const authInterceptor: HttpInterceptorFn = (
           switchMap((newToken) => {
             isRefreshing = false;
             refreshTokenSubject.next(typeof newToken === 'string' ? newToken : '');
-            const retryReq = addToken(req, typeof newToken === 'string' ? newToken : '');
+            const retryReq = addToken(req, typeof newToken === 'string' ? newToken : '', sessionTab);
             return next(retryReq);
           }),
           catchError((refreshError) => {
@@ -82,15 +84,23 @@ export const authInterceptor: HttpInterceptorFn = (
   );
 };
 
-function addToken(req: HttpRequest<unknown>, token: string): HttpRequest<unknown> {
-  const activeRole = localStorage.getItem('active_role_persona') || 'operator';
-  const activeApp = localStorage.getItem('active_app_module') || 'personnel';
+function addToken(req: HttpRequest<unknown>, token: string, sessionTab?: SessionTabService): HttpRequest<unknown> {
+  const activeRole = sessionTab
+    ? sessionTab.getActiveRole()
+    : ((typeof window !== 'undefined' && (sessionStorage.getItem('active_role_persona') || localStorage.getItem('active_role_persona'))) || 'operator');
+  const activeApp = sessionTab
+    ? sessionTab.getActiveApp()
+    : ((typeof window !== 'undefined' && (sessionStorage.getItem('active_app_module') || localStorage.getItem('active_app_module'))) || 'personnel');
+  const clientTabId = sessionTab
+    ? sessionTab.tabId
+    : ((typeof window !== 'undefined' && sessionStorage.getItem('wh_tab_session_id')) || 'tab_main');
 
   return req.clone({
     setHeaders: {
       Authorization: `Bearer ${token}`,
       'X-Active-Role': activeRole,
       'X-Active-App': activeApp,
+      'X-Client-Tab-Id': clientTabId,
     },
   });
 }

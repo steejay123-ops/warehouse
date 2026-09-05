@@ -2,6 +2,7 @@ import json
 import logging
 from urllib.parse import parse_qs
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +93,61 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                             'active_app': normalized_app,
                             'tab_id': self.client_tab_id
                         }))
+
+                    # به‌روزرسانی بلادرنگ فیلد app_scope در نشست کلاینت و برودکست به ناوگان
+                    if self.client_tab_id:
+                        await self.update_tab_session_app_scope(self.client_tab_id, normalized_app)
+                        await self.channel_layer.group_send(
+                            'global_notifications',
+                            {
+                                'type': 'send_notification',
+                                'type_str': 'fleet_update',
+                                'message': '',
+                                'client_tab_id': self.client_tab_id,
+                                'broadcast_to_sender': False
+                            }
+                        )
+
+            elif msg_type == 'logout':
+                target_tab = payload.get('tab_id') or self.client_tab_id
+                if target_tab:
+                    await self.remove_tab_session_on_logout(target_tab)
+                    await self.channel_layer.group_send(
+                        'global_notifications',
+                        {
+                            'type': 'send_notification',
+                            'type_str': 'fleet_update',
+                            'message': '',
+                            'client_tab_id': target_tab,
+                            'broadcast_to_sender': False
+                        }
+                    )
+                await self.send(text_data=json.dumps({
+                    'type': 'logout_acknowledged',
+                    'tab_id': target_tab
+                }))
         except Exception as e:
             logger.warning(f"[NotificationConsumer] Receive error: {e}")
+
+    @database_sync_to_async
+    def update_tab_session_app_scope(self, tab_id, app_scope):
+        try:
+            from accounts.models import UserDeviceSession
+            from django.utils import timezone
+            UserDeviceSession.objects.filter(tab_id=tab_id).update(
+                app_scope=app_scope,
+                last_heartbeat=timezone.now()
+            )
+        except Exception as e:
+            logger.debug(f"[NotificationConsumer] Error updating tab app scope: {e}")
+
+    @database_sync_to_async
+    def remove_tab_session_on_logout(self, tab_id):
+        try:
+            from accounts.models import UserDeviceSession
+            UserDeviceSession.objects.filter(tab_id=tab_id).delete()
+        except Exception as e:
+            logger.debug(f"[NotificationConsumer] Error removing tab session on logout: {e}")
 
     # Receive message from room group
     async def send_notification(self, event):
@@ -119,7 +173,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'type': type_str,
                 'event': type_str,
             }
-            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats', 'date_shamsi', 'year_month', 'attendance_data', 'sender_id', 'client_tab_id', 'app_module'):
+            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats', 'date_shamsi', 'year_month', 'attendance_data', 'sender_id', 'client_tab_id', 'app_module', 'session_id', 'revoked_tab_id', 'fleet_data'):
                 if k in event:
                     out_data[k] = event[k]
 

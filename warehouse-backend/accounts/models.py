@@ -313,3 +313,40 @@ class SoDPolicyRule(models.Model):
         status = "🚫 ممنوع" if self.is_prohibited else "✅ مجاز"
         return f"[{self.get_app_module_display()}] {self.role_title_fa or self.role_code} -> {self.action_title_fa or self.action_code} ({status})"
 
+
+class UserDeviceSession(models.Model):
+    """
+    پایش زنده نشست‌ها، تبلت‌ها و پایانه‌های متصل به سامانه (Active Multi-Device Telemetry & Session Hub)
+    """
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name='device_sessions',
+        verbose_name="کاربر متصل"
+    )
+    session_key = models.CharField(max_length=128, unique=True, db_index=True, verbose_name="کلید یکتای سشن")
+    tab_id = models.CharField(max_length=120, db_index=True, verbose_name="شناسه تب کلاینت")
+    device_model = models.CharField(max_length=200, default="ناشناخته", verbose_name="مدل دستگاه")
+    os_name = models.CharField(max_length=100, default="Unknown", verbose_name="سیستم‌عامل")
+    browser_name = models.CharField(max_length=100, default="Unknown", verbose_name="مرورگر")
+    ip_address = models.GenericIPAddressField(null=True, blank=True, verbose_name="آدرس آی‌پی")
+    app_scope = models.CharField(max_length=50, default="warehouse", verbose_name="قلمرو فعال (انبار/مالی)")
+    active_role = models.CharField(max_length=50, default="counter", verbose_name="نقش فعال")
+    pending_queue_count = models.PositiveIntegerField(default=0, verbose_name="تعداد تراکنش‌های معلق صف")
+    conflict_count = models.PositiveIntegerField(default=0, verbose_name="تعداد تداخل‌های حل‌نشده")
+    is_revoked = models.BooleanField(default=False, db_index=True, verbose_name="آیا نشست ابطال شده است؟")
+    last_heartbeat = models.DateTimeField(auto_now=True, db_index=True, verbose_name="آخرین پالس زنده")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان شروع نشست")
+
+    class Meta:
+        verbose_name = "نشست فعال دستگاه"
+        verbose_name_plural = "نشست‌های فعال دستگاه‌ها و ناوگان"
+        ordering = ['-last_heartbeat']
+        indexes = [
+            models.Index(fields=['user', 'is_revoked', 'last_heartbeat']),
+            models.Index(fields=['session_key']),
+            models.Index(fields=['tab_id']),
+        ]
+
+    def __str__(self):
+        status = "🚫 ابطال‌شده" if self.is_revoked else "🟢 آنلاین"
+        return f"{self.user.username} ({self.device_model}) - {self.tab_id} [{status}]"
+

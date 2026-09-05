@@ -118,7 +118,7 @@ export class WebSocketService implements OnDestroy {
           this.notifications$.next(data);
 
           // نمایش اعلان‌های سیستم در Toast (به جز رویدادهای بی‌صدای پس‌زمینه)
-          const silentTypes = ['count_task_update', 'doc_task_update', 'pong', 'ping'];
+          const silentTypes = ['count_task_update', 'doc_task_update', 'pong', 'ping', 'fleet_update', 'telemetry_update'];
           if (data.message && data.type && !silentTypes.includes(data.type)) {
             this.toast.show(data.type, data.message);
           }
@@ -172,6 +172,22 @@ export class WebSocketService implements OnDestroy {
         tab_id: this.tabId
       }));
       console.log(`[WebSocket] 🔀 کانال رویدادهای زنده به قلمرو ${normalizedApp} تغییر یافت.`);
+    }
+  }
+
+  /**
+   * مخابره بلادرنگ رویداد خروج تب جاری روی وب‌سوکت
+   */
+  sendLogout(tabId?: string): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          type: 'logout',
+          tab_id: tabId || this.tabId
+        }));
+      } catch (e) {
+        console.warn('[WebSocket] خطا در ارسال پیام خروج:', e);
+      }
     }
   }
 

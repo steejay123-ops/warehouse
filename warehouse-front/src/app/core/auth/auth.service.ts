@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject, Injector } from '@angular/core';
 import { Router } from '@angular/router';
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, of, from, throwError, tap, catchError, map, switchMap } from 'rxjs';
@@ -13,6 +13,7 @@ import {
 } from '../models/api-response.model';
 import { detectClientDeviceModel } from '../utils/device-detector';
 import { SessionTabService } from '../services/session-tab.service';
+import { WebSocketService } from '../http/websocket.service';
 
 const TOKEN_KEY = 'wh_access_token';
 const REFRESH_KEY = 'wh_refresh_token';
@@ -180,10 +181,26 @@ export class AuthService {
     });
   }
 
+  private injector = inject(Injector);
+
   /** لاگ‌اوت */
   logout(): void {
-    // Note: SimpleJWT doesn't have a built-in logout endpoint unless token blacklisting is explicitly configured.
-    // So we just clear the auth tokens locally to avoid 404 errors.
+    // ۱. مخابره بلادرنگ خروج از طریق وب‌سوکت جهت حذف آنی سشن و به‌روزرسانی ناوگان
+    try {
+      const ws = this.injector.get(WebSocketService);
+      ws?.sendLogout(this.sessionTab.tabId);
+    } catch {}
+
+    // ۲. ارسال درخواست خروج رسمی به سرور همراه با شناسه تب جهت ابطال سشن
+    try {
+      const token = this.getItem(TOKEN_KEY);
+      if (token) {
+        this.http.post(`${environment.apiUrl}/auth/logout/`, { tab_id: this.sessionTab.tabId }, {
+          headers: { 'X-Client-Tab-Id': this.sessionTab.tabId }
+        }).subscribe({ error: () => {} });
+      }
+    } catch {}
+
     this.clearAuth();
     offlineDb.clearServerDerivedCaches().catch(() => {});
     this.router.navigate(['/login']);
@@ -371,6 +388,9 @@ export class AuthService {
   }
 
   private handleLoginSuccess(response: LoginResponse): void {
+    // چرخش امنیتی شناسه سشن تب با هر لاگین موفق (Session Rotation on Authentication)
+    this.sessionTab.rotateTabId();
+
     const access = response.tokens.access;
     this.sessionTab.setScopedAccessToken(access);
     const allowed = response.user.allowed_apps || [];

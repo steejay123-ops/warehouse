@@ -4,6 +4,7 @@ import { ToastContainerComponent } from './shared/components/toast/toast.compone
 import { ConfirmDialogComponent, ConfirmDialogService } from './shared/components/confirm-dialog/confirm-dialog.component';
 import { AuthService } from './core/auth/auth.service';
 import { WebSocketService } from './core/http/websocket.service';
+import { ClientTelemetryService } from './core/services/client-telemetry.service';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { interval, concat, fromEvent } from 'rxjs';
 import { first, filter } from 'rxjs/operators';
@@ -19,6 +20,7 @@ export class App {
   private router = inject(Router);
   private auth = inject(AuthService);
   private ws = inject(WebSocketService);
+  private telemetry = inject(ClientTelemetryService);
   private swUpdate = inject(SwUpdate);
   private confirmDialog = inject(ConfirmDialogService);
   private appRef = inject(ApplicationRef);
@@ -39,6 +41,7 @@ export class App {
       if (this.auth.isLoggedIn()) {
         this.ws.connect();
         this.auth.sendDailyHeartbeat();
+        this.telemetry.sendHeartbeat();
       } else {
         this.ws.disconnect();
       }

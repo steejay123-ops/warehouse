@@ -779,6 +779,13 @@ export class OfflineSyncService {
   }
 
   /**
+   * اجرای صریح و دستی همگام‌سازی و تخلیه صف آفلاین (Trigger Sync)
+   */
+  async triggerSync(): Promise<SyncOutcome> {
+    return this.processQueue();
+  }
+
+  /**
    * تخلیه صف عکس و ادغام نتیجه‌اش با نتیجه صف اصلی.
    *
    * ادغام لازم است چون بدون آن، وقتی صف JSON خالی بود ولی عکسی گیر کرده،

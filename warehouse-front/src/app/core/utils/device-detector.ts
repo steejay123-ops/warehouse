@@ -104,6 +104,17 @@ export function formatDeviceModelName(rawModel?: string | null): string {
   if (KNOWN_DEVICE_MODELS[trimmed]) {
     return KNOWN_DEVICE_MODELS[trimmed];
   }
+
+  // بررسی بر اساس پیشوند مدل‌های خانواده سامسونگ (مثلاً SM-A546E -> سامسونگ Galaxy A54 5G)
+  const smPrefixMatch = trimmed.match(/^(SM-[A-Z][0-9]{3})/i);
+  if (smPrefixMatch && smPrefixMatch[1]) {
+    const basePrefix = smPrefixMatch[1].toUpperCase();
+    for (const [knownKey, knownLabel] of Object.entries(KNOWN_DEVICE_MODELS)) {
+      if (knownKey.toUpperCase().startsWith(basePrefix)) {
+        return knownLabel;
+      }
+    }
+  }
   
   if (trimmed.startsWith('SM-')) {
     return `سامسونگ (${trimmed})`;
@@ -205,14 +216,44 @@ export async function detectClientDeviceModel(): Promise<string> {
     // لایه ۲: جستجو در User-Agent سنتی
     const ua = navigator.userAgent || '';
     const match = ua.match(/;\s*([A-Z0-9_-]+)\s+Build\//i);
-    if (match && match[1] && match[1] !== 'K') {
+    if (match && match[1] && match[1] !== 'K' && match[1] !== 'Android') {
       return match[1];
+    }
+
+    const smMatch = ua.match(/(SM-[A-Z0-9]+)/i);
+    if (smMatch && smMatch[1]) {
+      return smMatch[1];
+    }
+
+    const xiaomiMatch = ua.match(/(Redmi[A-Za-z0-9\s_-]+|POCO[A-Za-z0-9\s_-]+|Mi\s*[A-Za-z0-9\s_-]+)/i);
+    if (xiaomiMatch && xiaomiMatch[1]) {
+      return xiaomiMatch[1].trim();
     }
 
     // لایه ۳: شناسایی سخت‌افزاری بر پایه چیپ گرافیکی WebGL و رزولوشن صفحه
     const fpModel = detectDeviceByFingerprint();
     if (fpModel) {
       return fpModel;
+    }
+
+    // لایه ۴: تشخیص بر مبنای نوع پلتفرم و نوع سخت‌افزار (Fallback فارسی معتبر)
+    const isMobile = /Android|iPhone|iPod|Mobile/i.test(ua);
+    const isTablet = /Tablet|iPad/i.test(ua);
+
+    if (isTablet) {
+      return /iPad/i.test(ua) ? 'تبلت اپل آیپد (iPadOS)' : 'تبلت اندروید';
+    }
+    if (isMobile) {
+      return /iPhone/i.test(ua) ? 'گوشی هوشمند اپل آیفون' : 'گوشی هوشمند اندروید';
+    }
+    if (ua.includes('Windows')) {
+      return 'رایانه رومیزی / لپ‌تاپ ویندوز';
+    }
+    if (ua.includes('Macintosh')) {
+      return 'رایانه اپل مکینتاش (macOS)';
+    }
+    if (ua.includes('Linux')) {
+      return 'رایانه رومیزی لینوکس';
     }
   }
   return '';

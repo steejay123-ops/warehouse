@@ -5,7 +5,7 @@ import { WebSocketService } from '../http/websocket.service';
 import { SessionTabService } from './session-tab.service';
 import { filter } from 'rxjs';
 
-export type AppModuleType = 'warehouse' | 'personnel';
+export type AppModuleType = 'warehouse' | 'personnel' | 'operations';
 
 export interface RolePersona {
   code: string;
@@ -18,6 +18,16 @@ export interface RolePersona {
 }
 
 export const ALL_APP_ROLES: RolePersona[] = [
+  // --- Operations / Infrastructure Roles ---
+  {
+    code: 'ops_commander',
+    title: 'فرمانده عملیات و پدافند',
+    app: 'operations',
+    badgeColor: '#06b6d4',
+    bgClass: 'bg-cyan-600',
+    icon: '🛡️',
+    tierLevel: 6
+  },
   // --- Personnel / Payroll / Treasury Roles ---
   {
     code: 'operator',
@@ -209,16 +219,31 @@ export class AppPersonaService {
     return personnelPerms.some(p => perms.includes(p));
   });
 
+  // بررسی دسترسی کاربر به مرکز عملیات و زیرساخت سازمان (ویژه سوپریوزر)
+  public hasOperationsAccess = computed<boolean>(() => {
+    return this.isSuperuser();
+  });
+
   public canAccessApp(app: AppModuleType): boolean {
     if (this.isSuperuser()) return true;
     if (app === 'warehouse') return this.hasWarehouseAccess();
     if (app === 'personnel') return this.hasPersonnelAccess();
+    if (app === 'operations') return this.hasOperationsAccess();
     return false;
   }
 
-  // آیا کاربر مجوز سوئیچ بین دو سامانه را دارد؟ (نیازمند دسترسی به هر دو)
+  // فهرست سامانه‌های مجاز در دسترس کاربر
+  public accessibleApps = computed<AppModuleType[]>(() => {
+    const apps: AppModuleType[] = [];
+    if (this.hasWarehouseAccess()) apps.push('warehouse');
+    if (this.hasPersonnelAccess()) apps.push('personnel');
+    if (this.hasOperationsAccess()) apps.push('operations');
+    return apps;
+  });
+
+  // آیا کاربر مجوز سوئیچ بین سامانه‌ها را دارد؟ (نیازمند دسترسی به حداقل دو سامانه)
   public canSwitchApps = computed<boolean>(() => {
-    return this.hasWarehouseAccess() && this.hasPersonnelAccess();
+    return this.accessibleApps().length > 1;
   });
 
   // لیست نقش‌های واجد شرایط کاربر در ماژول جاری
@@ -256,7 +281,7 @@ export class AppPersonaService {
       if (perms.includes('perm_treasury_disburse_action') || perms.includes('view_sys_treasury')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'treasury')!);
       }
-    } else {
+    } else if (app === 'warehouse') {
       // Warehouse App
       if (perms.includes('view_sys_counter') || perms.includes('view_wh_dispatch')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'counter')!);
@@ -269,6 +294,13 @@ export class AppPersonaService {
       }
       if (perms.includes('view_sys_manager_review') || perms.includes('perm_inventory_finalize')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'manager_review')!);
+      }
+    } else if (app === 'operations') {
+      if (isSuper) {
+        const opsRole = ALL_APP_ROLES.find(r => r.code === 'ops_commander');
+        if (opsRole) roles.push(opsRole);
+        const superRole = ALL_APP_ROLES.find(r => r.code === 'superuser');
+        if (superRole) roles.push(superRole);
       }
     }
 
@@ -304,7 +336,13 @@ export class AppPersonaService {
 
   public syncScopeFromUrl(url: string): void {
     const cleanUrl = url.split('?')[0];
-    if (cleanUrl.startsWith('/app/warehouse') && this.activeApp() !== 'warehouse' && this.hasWarehouseAccess()) {
+    if (cleanUrl.startsWith('/app/operations') && this.activeApp() !== 'operations' && this.hasOperationsAccess()) {
+      this.activeApp.set('operations');
+      this.sessionTab.setActiveApp('operations');
+      localStorage.setItem('active_app_module', 'operations');
+      try { this.ws.switchAppChannel('operations'); } catch {}
+      this.sanitizeActiveRole();
+    } else if (cleanUrl.startsWith('/app/warehouse') && this.activeApp() !== 'warehouse' && this.hasWarehouseAccess()) {
       this.activeApp.set('warehouse');
       this.sessionTab.setActiveApp('warehouse');
       localStorage.setItem('active_app_module', 'warehouse');
@@ -352,15 +390,21 @@ export class AppPersonaService {
     localStorage.setItem('active_app_module', app);
     
     // تبادل زنده قلمرو فعال توکن در بک‌اند (Live Token Exchange)
-    const targetScope = app === 'warehouse' ? 'warehouse' : 'finance';
-    this.auth.switchAppScope(targetScope).subscribe({
-      next: () => {},
-      error: (err) => console.warn('[AppPersonaService] خطا در تبادل زنده توکن:', err)
-    });
+    const targetScope: 'warehouse' | 'finance' = app === 'warehouse' ? 'warehouse' : 'finance';
+    if (app !== 'operations') {
+      this.auth.switchAppScope(targetScope).subscribe({
+        next: () => {},
+        error: (err) => console.warn('[AppPersonaService] خطا در تبادل زنده توکن:', err)
+      });
+    }
 
     // تغییر کانال رویدادهای زنده وب‌سوکت متناسب با قلمرو جدید (Domain Isolation)
     try {
-      this.ws.switchAppChannel(targetScope);
+      if (app === 'operations') {
+        this.ws.switchAppChannel('operations');
+      } else {
+        this.ws.switchAppChannel(targetScope);
+      }
     } catch (e) {
       console.warn('[AppPersonaService] خطا در تغییر کانال وب‌سوکت:', e);
     }
@@ -374,6 +418,8 @@ export class AppPersonaService {
     // ریدایرکت خودکار به صفحه پیش‌فرض اپلیکیشن مقصد
     if (app === 'warehouse') {
       this.router.navigate(['/app/warehouse/dashboard']);
+    } else if (app === 'operations') {
+      this.router.navigate(['/app/operations/cockpit']);
     } else {
       const perms = this.auth.userPermissions() || [];
       if (perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
@@ -392,8 +438,10 @@ export class AppPersonaService {
     if (!this.canSwitchApps()) {
       return;
     }
-    const nextApp: AppModuleType = this.activeApp() === 'warehouse' ? 'personnel' : 'warehouse';
-    this.switchApp(nextApp);
+    const apps = this.accessibleApps();
+    const currentIndex = apps.indexOf(this.activeApp());
+    const nextIndex = (currentIndex + 1) % apps.length;
+    this.switchApp(apps[nextIndex]);
   }
 
   public switchRole(roleCode: string, redirectIfUnauthorized: boolean = true): void {

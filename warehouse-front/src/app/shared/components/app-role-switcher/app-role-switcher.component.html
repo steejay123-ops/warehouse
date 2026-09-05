@@ -71,41 +71,104 @@
     </div>
   </div>
 
-  <!-- ۲. دکمه تک سوئیچر ماژول کلان (نمایش نام و آیکون اپلیکیشن جاری: مالی و کارکرد / انبارگردانی) -->
-  <button
-    type="button"
-    (click)="toggleApp()"
-    [disabled]="!persona.canSwitchApps()"
-    [class.cursor-pointer]="persona.canSwitchApps()"
-    [class.cursor-default]="!persona.canSwitchApps()"
-    class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:active:scale-100 shrink-0 select-none"
-    [ngClass]="persona.activeApp() === 'warehouse' 
-      ? 'border-indigo-200/90 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' + (persona.canSwitchApps() ? ' hover:bg-indigo-100/80' : '') 
-      : 'border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' + (persona.canSwitchApps() ? ' hover:bg-emerald-100/80' : '')"
-    [title]="!persona.canSwitchApps() 
-      ? (persona.activeApp() === 'warehouse' ? 'شما صرفاً به ماژول انبارگردانی دسترسی دارید' : 'شما صرفاً به سامانه مالی و کارکرد دسترسی دارید') 
-      : (persona.activeApp() === 'warehouse' ? 'ماژول فعال: انبارگردانی (کلیک برای سوئیچ به مالی و کارکرد)' : 'سامانه فعال: مالی و کارکرد (کلیک برای سوئیچ به انبارگردانی)')"
-  >
-    <span class="text-sm">{{ persona.activeApp() === 'warehouse' ? '📦' : '💳' }}</span>
-    <span class="hidden sm:inline font-black text-[11px]">{{ persona.activeApp() === 'warehouse' ? 'انبارگردانی' : 'مالی و کارکرد' }}</span>
-    <svg *ngIf="persona.canSwitchApps()" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="opacity-60 hidden sm:inline shrink-0">
-      <path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/>
-    </svg>
-  </button>
+  <!-- ۲. سوئیچر هوشمند ماژول‌های سامانه (انبارگردانی / مالی و کارکرد / مرکز عملیات SOC) -->
+  <div class="relative">
+    <button
+      type="button"
+      (click)="toggleAppDropdown($event)"
+      [disabled]="!persona.canSwitchApps()"
+      [class.cursor-pointer]="persona.canSwitchApps()"
+      [class.cursor-default]="!persona.canSwitchApps()"
+      class="app-trigger-btn flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:active:scale-100 shrink-0 select-none"
+      [ngClass]="persona.activeApp() === 'warehouse' 
+        ? 'border-indigo-200/90 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' + (persona.canSwitchApps() ? ' hover:bg-indigo-100/80' : '') 
+        : (persona.activeApp() === 'operations'
+          ? 'border-cyan-500/40 bg-cyan-950/60 text-cyan-300' + (persona.canSwitchApps() ? ' hover:bg-cyan-900/60' : '')
+          : 'border-emerald-200/90 dark:border-emerald-800/70 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' + (persona.canSwitchApps() ? ' hover:bg-emerald-100/80' : ''))"
+      [title]="!persona.canSwitchApps() 
+        ? (persona.activeApp() === 'warehouse' ? 'شما صرفاً به ماژول انبارگردانی دسترسی دارید' : (persona.activeApp() === 'operations' ? 'مرکز عملیات و زیرساخت سازمان' : 'شما صرفاً به سامانه مالی و کارکرد دسترسی دارید')) 
+        : 'سامانه فعال: ' + (persona.activeApp() === 'warehouse' ? 'انبارگردانی' : (persona.activeApp() === 'operations' ? 'مرکز عملیات' : 'مالی و کارکرد')) + ' (کلیک برای باز کردن لیست سامانه‌ها)'"
+    >
+      <span class="text-sm">{{ persona.activeApp() === 'warehouse' ? '📦' : (persona.activeApp() === 'operations' ? '🛡️' : '💳') }}</span>
+      <span class="hidden sm:inline font-black text-[11px]">{{ persona.activeApp() === 'warehouse' ? 'انبارگردانی' : (persona.activeApp() === 'operations' ? 'مرکز عملیات' : 'مالی و کارکرد') }}</span>
+      <svg *ngIf="persona.canSwitchApps()" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="opacity-60 hidden sm:inline shrink-0 transition-transform duration-200" [class.rotate-180]="isAppDropdownOpen()">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
 
-  <!-- ۳. دکمه بازگشت به پورتال لانچر (مخصوص کاربران با دسترسی به دو ماژول) -->
-  <button
-    *ngIf="persona.canSwitchApps()"
-    type="button"
-    (click)="goToLauncher()"
-    class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/80 text-slate-400 hover:text-white transition-all active:scale-95 cursor-pointer shrink-0"
-    title="پورتال انتخاب برنامه (App Launcher)"
-  >
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-      <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-      <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-      <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
-    </svg>
-  </button>
+    <!-- منوی بازشونده ماژول‌ها و سامانه‌ها (App Dropdown Menu) -->
+    <div
+      *ngIf="isAppDropdownOpen()"
+      class="absolute left-0 top-full mt-2 w-60 sm:w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl z-50 overflow-hidden py-1.5 animate-in fade-in zoom-in-95 duration-150"
+    >
+      <div class="px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 flex items-center justify-between">
+        <span class="text-[11px] font-bold text-slate-600 dark:text-slate-300">سامانه‌ها و ماژول‌ها</span>
+        <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 border border-indigo-200/50 font-bold">
+          {{ persona.accessibleApps().length }} سامانه
+        </span>
+      </div>
+
+      <div class="p-1.5 space-y-1">
+        <!-- ۱. ماژول انبارگردانی -->
+        <button
+          *ngIf="persona.hasWarehouseAccess()"
+          type="button"
+          (click)="selectApp('warehouse')"
+          [class.bg-indigo-50]="persona.activeApp() === 'warehouse'"
+          [class.dark:bg-indigo-950/60]="persona.activeApp() === 'warehouse'"
+          class="w-full text-right flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer group"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-base shrink-0 p-1 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">📦</span>
+            <div class="flex flex-col min-w-0">
+              <span class="truncate text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-300 font-extrabold">انبارگردانی</span>
+              <span class="text-[10px] text-slate-400 font-normal">مدیریت و شمارش موجودی انبار</span>
+            </div>
+          </div>
+          <span *ngIf="persona.activeApp() === 'warehouse'" class="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] shrink-0">✓</span>
+        </button>
+
+        <!-- ۲. سامانه مالی و کارکرد -->
+        <button
+          *ngIf="persona.hasPersonnelAccess()"
+          type="button"
+          (click)="selectApp('personnel')"
+          [class.bg-emerald-50]="persona.activeApp() === 'personnel'"
+          [class.dark:bg-emerald-950/60]="persona.activeApp() === 'personnel'"
+          class="w-full text-right flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer group"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-base shrink-0 p-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">💳</span>
+            <div class="flex flex-col min-w-0">
+              <span class="truncate text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-300 font-extrabold">مالی و کارکرد</span>
+              <span class="text-[10px] text-slate-400 font-normal">حقوق، دستمزد و کارکرد پرسنل</span>
+            </div>
+          </div>
+          <span *ngIf="persona.activeApp() === 'personnel'" class="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] shrink-0">✓</span>
+        </button>
+
+        <!-- ۳. مرکز عملیات و پدافند سازمان (SOC) -->
+        <button
+          *ngIf="persona.hasOperationsAccess()"
+          type="button"
+          (click)="selectApp('operations')"
+          [class.bg-cyan-50]="persona.activeApp() === 'operations'"
+          [class.dark:bg-cyan-950/60]="persona.activeApp() === 'operations'"
+          class="w-full text-right flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer group"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-base shrink-0 p-1 rounded-lg bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300">🛡️</span>
+            <div class="flex flex-col min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="truncate text-slate-800 dark:text-slate-200 group-hover:text-cyan-600 dark:group-hover:text-cyan-300 font-extrabold">مرکز عملیات</span>
+                <span class="text-[9px] font-mono font-black px-1.5 py-0.2 rounded bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300/40">SOC</span>
+              </div>
+              <span class="text-[10px] text-slate-400 font-normal">پدافند، سلامت سرور و زیرساخت</span>
+            </div>
+          </div>
+          <span *ngIf="persona.activeApp() === 'operations'" class="w-4 h-4 rounded-full bg-cyan-600 text-white flex items-center justify-center text-[10px] shrink-0">✓</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>

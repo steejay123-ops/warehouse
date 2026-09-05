@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-export type AppModuleScope = 'warehouse' | 'personnel';
+export type AppModuleScope = 'warehouse' | 'personnel' | 'operations';
 
 export interface TabSessionMessage {
   type: 'AUTH_LOGOUT' | 'PROFILE_UPDATED' | 'SCOPE_CHANGED' | 'PING';
@@ -20,10 +20,17 @@ export class SessionTabService {
   private readonly CHANNEL_NAME = 'wh_enterprise_multi_tab_bus';
 
   private broadcastChannel: BroadcastChannel | null = null;
-  public readonly tabId: string;
+  private _tabId: string = '';
+
+  public get tabId(): string {
+    if (!this._tabId) {
+      this._tabId = this.initTabId();
+    }
+    return this._tabId;
+  }
 
   constructor() {
-    this.tabId = this.initTabId();
+    this._tabId = this.initTabId();
     this.initBroadcastChannel();
   }
 
@@ -45,18 +52,36 @@ export class SessionTabService {
   }
 
   /**
+   * چرخش و تولید شناسه سشن تازه برای تب (Session ID Rotation)
+   * جهت جلوگیری از انتقال وضعیت‌های ابطال‌شده قبلی به لاگین‌های جدید
+   */
+  public rotateTabId(): string {
+    if (typeof window === 'undefined') return 'tab_server';
+    const newId = 'tab_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
+    try {
+      sessionStorage.setItem(this.TAB_ID_KEY, newId);
+    } catch {}
+    this._tabId = newId;
+    return newId;
+  }
+
+  /**
    * دریافت قلمرو فعال تب با اولویت حافظه تب، سپس کانتکست آدرس صفحه و نهایتاً پیش‌فرض سراسری
    */
   public getActiveApp(): AppModuleScope {
     if (typeof window === 'undefined') return 'personnel';
     try {
       const tabScoped = sessionStorage.getItem(this.APP_MODULE_KEY) as AppModuleScope | null;
-      if (tabScoped && (tabScoped === 'warehouse' || tabScoped === 'personnel')) {
+      if (tabScoped && (tabScoped === 'warehouse' || tabScoped === 'personnel' || tabScoped === 'operations')) {
         return tabScoped;
       }
 
       // اگر تب به تازگی با یک آدرس مستقیم باز شده است:
       const path = window.location.pathname;
+      if (path.includes('/app/operations')) {
+        this.setActiveApp('operations');
+        return 'operations';
+      }
       if (path.includes('/app/warehouse')) {
         this.setActiveApp('warehouse');
         return 'warehouse';
@@ -175,6 +200,7 @@ export class SessionTabService {
       sessionStorage.removeItem(`${this.TOKEN_KEY}_finance`);
       sessionStorage.removeItem(this.APP_MODULE_KEY);
       sessionStorage.removeItem(this.ROLE_PERSONA_KEY);
+      this.rotateTabId();
     } catch {}
   }
 

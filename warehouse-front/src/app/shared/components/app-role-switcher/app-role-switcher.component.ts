@@ -16,11 +16,13 @@ export class AppRoleSwitcherComponent {
   private router = inject(Router);
 
   public isDropdownOpen = signal<boolean>(false);
+  public isAppDropdownOpen = signal<boolean>(false);
 
   public toggleDropdown(event?: Event): void {
     if (event) {
       event.stopPropagation();
     }
+    this.closeAppDropdown();
     if (this.persona.isMultiRole()) {
       this.isDropdownOpen.update(v => !v);
     }
@@ -30,40 +32,62 @@ export class AppRoleSwitcherComponent {
     this.isDropdownOpen.set(false);
   }
 
+  public toggleAppDropdown(event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.closeDropdown();
+    if (this.persona.canSwitchApps()) {
+      this.isAppDropdownOpen.update(v => !v);
+    }
+  }
+
+  public closeAppDropdown(): void {
+    this.isAppDropdownOpen.set(false);
+  }
+
+  public closeAllDropdowns(): void {
+    this.closeDropdown();
+    this.closeAppDropdown();
+  }
+
   public selectRole(role: RolePersona, event?: Event): void {
     if (event) {
       event.stopPropagation();
     }
     this.persona.switchRole(role.code);
-    this.closeDropdown();
+    this.closeAllDropdowns();
   }
 
-  public selectApp(app: AppModuleType): void {
+  public selectApp(app: AppModuleType, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
     if (this.persona.activeApp() !== app) {
       this.persona.switchApp(app);
-      this.closeDropdown();
     }
+    this.closeAllDropdowns();
   }
 
   public toggleApp(): void {
     this.persona.toggleApp();
-    this.closeDropdown();
+    this.closeAllDropdowns();
   }
 
   public goToLauncher(): void {
-    this.closeDropdown();
+    this.closeAllDropdowns();
     this.router.navigate(['/app/launcher']);
   }
 
   @HostListener('document:click', ['$event'])
   public onDocumentClick(event: MouseEvent): void {
     if (!this.elementRef.nativeElement.contains(event.target)) {
-      this.closeDropdown();
+      this.closeAllDropdowns();
     }
   }
 
   @HostListener('document:keydown.escape')
   public onEscape(): void {
-    this.closeDropdown();
+    this.closeAllDropdowns();
   }
 }

@@ -37,6 +37,10 @@ export class AppLauncherComponent {
     return this.persona.hasPersonnelAccess();
   }
 
+  get hasOperations(): boolean {
+    return this.persona.hasOperationsAccess();
+  }
+
   enterWarehouse(): void {
     if (!this.hasWarehouse) return;
     this.store.setWarehouseContext(false);
@@ -47,6 +51,12 @@ export class AppLauncherComponent {
     if (!this.hasFinance) return;
     this.store.setWarehouseContext(false);
     this.persona.switchApp('personnel');
+  }
+
+  enterOperations(): void {
+    if (!this.hasOperations) return;
+    this.store.setWarehouseContext(false);
+    this.persona.switchApp('operations');
   }
 
   logout(): void {

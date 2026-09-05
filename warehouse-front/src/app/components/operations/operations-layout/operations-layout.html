@@ -1,0 +1,256 @@
+<div dir="rtl" class="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans select-none relative overflow-x-hidden">
+  
+  <!-- نوار بالای صفحه با تم رسمی و اداری یکپارچه کل سیستم (Unified Enterprise Header) -->
+  <header class="bg-white border-b border-slate-200 p-4 h-[70px] flex items-center justify-between shadow-sm relative z-[45] transition-all">
+    
+    <!-- Right Side (RTL Start): Mobile Toggle, Desktop Toggle, User Menu, Chat, Network Badge -->
+    <div class="flex items-center gap-2 md:gap-4 flex-1 justify-start shrink-0">
+      <!-- دکمه منوی همبرگر موبایل -->
+      <button 
+        (click)="toggleMobileMenu()" 
+        class="lg:hidden p-2 rounded-lg hover:bg-slate-50 text-slate-600 shrink-0 cursor-pointer" 
+        title="نمایش منو" 
+        aria-label="نمایش منو"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      <!-- دکمه جمع / باز کردن سایدبار دسکتاپ -->
+      <button 
+        (click)="toggleSidebar()" 
+        class="hidden lg:block p-2 rounded-lg hover:bg-slate-50 text-slate-600 shrink-0 transition-colors cursor-pointer" 
+        title="نمایش/مخفی کردن منو" 
+        aria-label="نمایش/مخفی کردن منو"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+      
+      <!-- User Menu Dropdown (دقیقاً مشابه هدر اصلی سیستم) -->
+      <div class="relative">
+        <div *ngIf="isUserMenuOpen" class="fixed inset-0 z-40" (click)="closeUserMenu()"></div>
+        <button (click)="toggleUserMenu()" class="relative z-50 flex items-center p-0.5 rounded-full hover:ring-2 hover:ring-cyan-300 transition-all border border-transparent cursor-pointer" [title]="'پروفایل کاربری و تنظیمات (' + userName + ')'">
+          <img *ngIf="auth.userAvatarUrl()" [src]="auth.userAvatarUrl()" class="w-8 h-8 rounded-full object-cover border border-cyan-200 shadow-sm shrink-0" alt="avatar" />
+          <div *ngIf="!auth.userAvatarUrl()" class="w-8 h-8 rounded-full flex items-center justify-center font-black text-xs text-white shrink-0 shadow-sm" style="background:linear-gradient(135deg,#06b6d4,#4f46e5)">{{userAvatar}}</div>
+        </button>
+        
+        <div *ngIf="isUserMenuOpen" class="absolute right-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden fade-in">
+          <div class="p-3 border-b border-slate-200 bg-slate-50">
+            <p class="text-xs font-bold text-slate-800 truncate mb-0.5">{{userName}}</p>
+            <p class="text-[10px] font-semibold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-md inline-block truncate max-w-full">{{userRole}}</p>
+          </div>
+          <div class="p-2 flex flex-col">
+            <button (click)="goToChangePassword(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-slate-600 hover:text-cyan-600 hover:bg-cyan-50 cursor-pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <span>تغییر رمز ورود</span>
+            </button>
+            <button (click)="goToLauncher(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-slate-600 hover:text-cyan-600 hover:bg-cyan-50 cursor-pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              <span>پورتال لانچر برنامه‌ها</span>
+            </button>
+            <div class="h-px bg-slate-100 my-1"></div>
+            <button (click)="logout(); closeUserMenu()" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-rose-500 hover:bg-rose-50 mt-0.5 cursor-pointer" title="خروج امن از سیستم">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              <span>خروج از حساب</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── پیام‌رسان سازمانی ─── -->
+      <button 
+        *ngIf="commService.isChatEnabled()"
+        (click)="toggleChatDrawer()" 
+        class="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all active:scale-95 cursor-pointer shrink-0" 
+        title="پیام‌رسان سازمانی" 
+        aria-label="پیام‌رسان سازمانی">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span *ngIf="commService.totalUnreadCount() > 0" 
+              class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] text-white text-[9px] font-black rounded-full flex items-center justify-center px-1 border-2 border-white dark:border-slate-900 shadow-sm transition-all"
+              [ngClass]="commService.hasNewIncomingPulse() ? 'animate-bounce bg-rose-600 ring-2 ring-rose-300' : 'animate-pulse bg-blue-600'">
+          {{ commService.totalUnreadCount() }}
+        </span>
+      </button>
+
+      <!-- Dynamic Unified Network, Queue & Sync Hub -->
+      <app-offline-pending-badge mode="header" />
+    </div>
+
+    <!-- Center: Page Title (مخفی در موبایل برای باز شدن فضا) -->
+    <div class="hidden md:flex flex-1 justify-center min-w-0 shrink-0 px-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-cyan-500 animate-pulse shrink-0"></span>
+        <h1 class="text-sm font-bold text-slate-800 truncate">{{ currentTitle() }}</h1>
+      </div>
+    </div>
+    
+    <!-- Left Side (RTL End): App & Role Switcher + Nav History (انتهای سمت چپ) -->
+    <div class="flex items-center gap-2 flex-1 min-w-0 justify-end">
+      <!-- سوئیچر دولایه ماژول کلان و نقش فعال -->
+      <app-role-switcher class="shrink-0" />
+
+      <!-- ─── History Navigation Segmented Pill (انتهای سمت چپ) ─── -->
+      <div class="hidden sm:flex items-center bg-slate-100/90 hover:bg-slate-200/60 p-0.5 rounded-xl border border-slate-200/90 shadow-xs transition-all shrink-0 select-none" dir="rtl">
+        <!-- Back Button (صفحه قبل) -->
+        <button 
+          type="button"
+          (click)="navHistory.back()" 
+          [disabled]="!navHistory.canGoBack()" 
+          class="p-1.5 rounded-lg text-slate-600 hover:text-cyan-600 hover:bg-white active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed disabled:active:scale-100 transition-all flex items-center justify-center cursor-pointer shadow-xs disabled:shadow-none"
+          title="صفحه قبل (Alt + راست)"
+          aria-label="صفحه قبل">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+        
+        <!-- Subtle Divider -->
+        <div class="w-px h-3.5 bg-slate-300/70 mx-0.5"></div>
+        
+        <!-- Forward Button (صفحه بعد) -->
+        <button 
+          type="button"
+          (click)="navHistory.forward()" 
+          [disabled]="!navHistory.canGoForward()" 
+          class="p-1.5 rounded-lg text-slate-600 hover:text-cyan-600 hover:bg-white active:scale-90 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed disabled:active:scale-100 transition-all flex items-center justify-center cursor-pointer shadow-xs disabled:shadow-none"
+          title="صفحه بعد (Alt + چپ)"
+          aria-label="صفحه بعد">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- بدنه اصلی شامل سایدبار و ناحیه محتوا -->
+  <div class="relative z-10 flex-1 flex overflow-hidden">
+    
+    <!-- سایدبار دسکتاپ (Cockpit Sidebar مطابق استاندارد Layout کل نرم‌افزار) -->
+    <aside 
+      class="hidden lg:flex flex-col justify-between bg-slate-900 border-l border-slate-800 transition-all duration-300 shrink-0"
+      [ngClass]="isSidebarCollapsed() ? 'w-20' : 'w-64'"
+    >
+      <!-- هدر سایدبار مرکز عملیات -->
+      <div class="p-4 border-b border-slate-800 flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs" style="background:linear-gradient(135deg,#06b6d4,#4f46e5)">
+          🛡️
+        </div>
+        <div *ngIf="!isSidebarCollapsed()" class="flex-1 min-w-0">
+          <h2 class="font-black text-white text-xs truncate">مرکز عملیات و زیرساخت سازمان</h2>
+          <span class="text-[10px] text-cyan-400 font-mono">SOC / NOC · فرماندهی کل</span>
+        </div>
+      </div>
+
+      <!-- لیست منوها -->
+      <div class="p-3 flex flex-col gap-1.5 overflow-y-auto">
+        <div class="px-3 py-2 text-[10px] font-black tracking-wider text-slate-400 uppercase">
+          {{ isSidebarCollapsed() ? 'SOC' : 'ارکان مرکز عملیات' }}
+        </div>
+
+        <button 
+          *ngFor="let item of navItems"
+          (click)="navigateTo(item.route)"
+          class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer text-right group relative overflow-hidden"
+          [ngClass]="activeRoute() === item.id 
+            ? 'bg-indigo-600 text-white shadow-xs' 
+            : 'text-slate-400 hover:text-white hover:bg-slate-800/80'"
+          [title]="item.label"
+        >
+          <span class="text-base shrink-0 group-hover:scale-105 transition-transform">{{ item.icon }}</span>
+          <span *ngIf="!isSidebarCollapsed()" class="truncate flex-1">{{ item.label }}</span>
+          <span *ngIf="!isSidebarCollapsed() && item.badge" class="px-1.5 py-0.5 rounded text-[9px] font-mono" [ngClass]="activeRoute() === item.id ? 'bg-indigo-700 text-white' : 'bg-slate-800 text-slate-300 border border-slate-700'">
+            {{ item.badge }}
+          </span>
+        </button>
+      </div>
+
+      <!-- پاورقی سایدبار: سوئیچ سریع به ماژول‌های انبارداری و مالی -->
+      <div class="p-3 border-t border-slate-800 flex flex-col gap-2">
+        <div *ngIf="!isSidebarCollapsed()" class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800 flex flex-col gap-2">
+          <div class="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+            <span>سامانه‌های متصل:</span>
+            <span class="text-[10px] text-indigo-400 font-mono">یکپارچه</span>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button 
+              (click)="goToWarehouse()" 
+              class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-bold text-indigo-300 transition-colors text-center cursor-pointer"
+            >
+              📦 انبارداری
+            </button>
+            <button 
+              (click)="goToFinance()" 
+              class="px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] font-bold text-emerald-300 transition-colors text-center cursor-pointer"
+            >
+              💳 مالی
+            </button>
+          </div>
+        </div>
+
+        <button 
+          (click)="toggleSidebar()" 
+          class="w-full flex items-center justify-center p-2 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-slate-400 hover:text-white transition-all text-xs cursor-pointer"
+          [title]="isSidebarCollapsed() ? 'گسترش منو' : 'جمع کردن منو'"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.rotate-180]="isSidebarCollapsed()">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- دراور منوی موبایل -->
+    <div 
+      *ngIf="isMobileMenuOpen()" 
+      class="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-xs lg:hidden"
+      (click)="closeMobileMenu()"
+    >
+      <div 
+        class="w-72 h-full bg-slate-900 border-l border-slate-800 p-4 flex flex-col justify-between"
+        (click)="$event.stopPropagation()"
+      >
+        <div>
+          <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+            <span class="text-sm font-black text-white">منوی مرکز عملیات</span>
+            <button (click)="closeMobileMenu()" class="text-slate-400 hover:text-white cursor-pointer">✕</button>
+          </div>
+          <div class="flex flex-col gap-1">
+            <button 
+              *ngFor="let item of navItems"
+              (click)="navigateTo(item.route)"
+              class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold text-right cursor-pointer"
+              [ngClass]="activeRoute() === item.id ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-800'"
+            >
+              <span>{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 pt-4 border-t border-slate-800">
+          <button (click)="goToWarehouse()" class="w-full py-2 rounded-xl bg-slate-800 text-indigo-300 text-xs font-bold cursor-pointer">ورود به انبارداری</button>
+          <button (click)="goToFinance()" class="w-full py-2 rounded-xl bg-slate-800 text-emerald-300 text-xs font-bold cursor-pointer">ورود به سامانه مالی</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ناحیه اصلی نمایش صفحات (Router Outlet Workspace) -->
+    <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-50 text-slate-800">
+      <router-outlet></router-outlet>
+    </main>
+
+  </div>
+
+  <!-- دراور پیام‌رسان سازمانی -->
+  <app-chat-drawer *ngIf="commService.isChatDrawerOpen()" />
+</div>

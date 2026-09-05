@@ -34,6 +34,12 @@ import { ProjectsAndSectionsComponent } from './components/organization/projects
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
 import { importLeaveGuard } from './core/guards/import-leave.guard';
 import { settingsLeaveGuard } from './core/guards/settings-leave.guard';
+import { OperationsGuard, OperationsGuardChild } from './core/guards/operations.guard';
+import { OperationsLayoutComponent } from './components/operations/operations-layout/operations-layout';
+import { OperationsCockpitComponent } from './components/operations/operations-cockpit/operations-cockpit';
+import { SettingsBackupTabComponent } from './components/settings/tabs/settings-backup-tab/settings-backup-tab';
+import { OperationsSyncMonitorComponent } from './components/operations/operations-sync-monitor/operations-sync-monitor';
+import { OperationsRbacGovernanceComponent } from './components/operations/operations-rbac-governance/operations-rbac-governance';
 
 const WAREHOUSE_CHECK_PERMS = [
   'view_sys_dashboard', 'view_wh_dashboard', 'view_sys_counter',
@@ -155,6 +161,25 @@ export const routes: Routes = [
     ]
   },
 
+  // ─── ماژول ۳: مرکز عملیات و زیرساخت سازمان (/app/operations/...) ───
+  {
+    path: 'app/operations',
+    component: OperationsLayoutComponent,
+    canActivate: [AuthGuard, OperationsGuard],
+    canActivateChild: [AuthGuardChild, OperationsGuardChild],
+    children: [
+      { path: 'cockpit', component: OperationsCockpitComponent, data: { reuse: true } },
+      { path: 'snapshots', component: SettingsBackupTabComponent, data: { reuse: true } },
+      { path: 'backup', redirectTo: 'snapshots', pathMatch: 'full' },
+      { path: 'users', component: Users, data: { reuse: true } },
+      { path: 'health', component: HealthDashboardComponent, data: { appScope: 'operations', reuse: false } },
+      { path: 'audit', component: Audit, data: { appScope: 'security', reuse: true } },
+      { path: 'sync-monitor', component: OperationsSyncMonitorComponent, data: { reuse: true } },
+      { path: 'rbac-governance', component: OperationsRbacGovernanceComponent, data: { reuse: true } },
+      { path: '', redirectTo: 'cockpit', pathMatch: 'full' }
+    ]
+  },
+
   // ─── هدایت هوشمند ریشه ماژولار (/app) ───────────────────
   {
     path: 'app',
@@ -225,6 +250,8 @@ export const routes: Routes = [
   { path: 'payroll', redirectTo: 'app/finance/finance-cartable', pathMatch: 'full' },
   { path: 'fleet-settlement', redirectTo: 'app/finance/treasury-cartable', pathMatch: 'full' },
   { path: 'finance-audit', redirectTo: 'app/finance/audit', pathMatch: 'full' },
+  { path: 'operations', redirectTo: 'app/operations/cockpit', pathMatch: 'full' },
+  { path: 'cockpit', redirectTo: 'app/operations/cockpit', pathMatch: 'full' },
 
   // ─── هدایت ریشه اصلی به پورتال هوشمند ─────────────────
   { 

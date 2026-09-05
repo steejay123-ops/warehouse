@@ -1,0 +1,227 @@
+<div class="max-w-7xl mx-auto flex flex-col gap-6 text-right" dir="rtl">
+
+  <!-- بنر خوش‌آمدگویی و کارت وضعیت کلی اتاق فرماندهی (Enterprise Light Hero Banner) -->
+  <div class="relative rounded-2xl p-6 sm:p-8 bg-white border border-slate-200 shadow-xs overflow-hidden">
+    <div class="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      
+      <div class="flex items-start gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-2xl text-indigo-600 shadow-xs shrink-0">
+          🚀
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h2 class="text-xl sm:text-2xl font-black text-slate-900">اتاق فرماندهی پدافند و زیرساخت سازمان</h2>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 border border-emerald-200 text-emerald-700">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+              سامانه‌ها آنلاین و پایدار
+            </span>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-600 mt-2 max-w-2xl leading-relaxed">
+            نقطه ثقل رصد، تاب‌آوری، بازیابی اضطراری پایگاه‌داده، شبکه وب‌سوکت، صفوف آفلاین تبلت‌ها و ممیزی امنیتی متصل مستقیم به سورس‌های نرم‌افزار.
+          </p>
+        </div>
+      </div>
+
+      <!-- دکمه‌های عملیات سریع -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <button 
+          (click)="createInstantSnapshot()" 
+          [disabled]="isCreatingSnapshot()"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer disabled:opacity-50"
+        >
+          <span>{{ isCreatingSnapshot() ? '⏳ در حال ایجاد...' : '⚡ ثبت اسنپ‌شات فوری سرور' }}</span>
+        </button>
+
+        <button 
+          (click)="exportIndexedDB()"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+        >
+          <span>📥 پشتیبان محلی (IndexedDB)</span>
+        </button>
+
+        <button 
+          (click)="navigateTo('/app/warehouse/wh-settings')"
+          class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-indigo-600 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+          title="مشاهده مستقیم در تنظیمات انبارداری"
+        >
+          <span>⚙️ تنظیمات منبع (انبار)</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- گرید کارت‌های ۵گانه ارکان عملیاتی با تم روشن سازمانی -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+    <!-- کارت ۱: اسنپ‌شات‌ها و بازیابی اضطراری -->
+    <div 
+      (click)="navigateTo('/app/operations/snapshots')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-indigo-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl text-indigo-600 group-hover:scale-105 transition-transform">
+            💾
+          </div>
+          <span class="text-xs font-black text-indigo-600 font-mono bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+            {{ snapshotCount() }} از ۷ نسخه
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+          اسنپ‌شات‌ها و بازیابی سرور
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          چرخش ۷ نسخه خودکار، بازگشت اضطراری به وضعیت گذشته بدون نشت داده و بازیابی فشرده دیتابیس متصل به API پشتیبان‌گیری.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>آخرین نسخه: <strong class="text-slate-800 font-mono">{{ lastSnapshotTime() }}</strong></span>
+        <span class="text-indigo-600 font-bold group-hover:translate-x-[-3px] transition-transform">مدیریت اسنپ‌شات‌ها ←</span>
+      </div>
+    </div>
+
+    <!-- کارت ۲: ماتریس پایش سلامت زنده -->
+    <div 
+      (click)="navigateTo('/app/operations/health')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-emerald-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xl text-emerald-600 group-hover:scale-105 transition-transform">
+            🩺
+          </div>
+          <span class="inline-flex items-center gap-1 text-xs font-black text-emerald-700 font-mono bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+            نمره سلامت: ۱۰۰٪
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-emerald-700 transition-colors">
+          ماتریس سلامت و تست همروندی
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          پایش علائم حیاتی PostgreSQL، ردیس، وب‌سوکت، زمان پینگ، سهمیه دیسک محلی و آزمایشگاه تست استرس همروندی.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>وضعیت سرویس‌ها: <strong class="text-emerald-600 font-bold">سبز و پایدار</strong></span>
+        <span class="text-emerald-600 font-bold group-hover:translate-x-[-3px] transition-transform">رصد عمیق ←</span>
+      </div>
+    </div>
+
+    <!-- کارت ۳: ممیزی امنیتی و سد رویدادها -->
+    <div 
+      (click)="navigateTo('/app/operations/audit')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-rose-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-xl text-rose-600 group-hover:scale-105 transition-transform">
+            🛡️
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+            سد حفاظتی فعال
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-rose-700 transition-colors">
+          ممیزی امنیتی و لاگ رویدادها
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          ثبت جامع رویدادهای تغییر قلمرو (APP_SCOPE_SWITCH)، نقض دسترسی (CROSS_APP_DENIED) و ردپای ورود مدیران.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>سطح حفاظت: <strong class="text-slate-800">سازمانی (SoD)</strong></span>
+        <span class="text-rose-600 font-bold group-hover:translate-x-[-3px] transition-transform">بررسی وقایع ←</span>
+      </div>
+    </div>
+
+    <!-- کارت ۴: مانیتورینگ کلاینت‌های آفلاین و تداخل -->
+    <div 
+      (click)="navigateTo('/app/operations/sync-monitor')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-amber-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-xl text-amber-600 group-hover:scale-105 transition-transform">
+            🔄
+          </div>
+          <span class="text-xs font-black text-amber-700 font-mono bg-amber-50 px-2 py-0.5 rounded-md border border-amber-100">
+            3-Way Merge
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-amber-700 transition-colors">
+          پایش همگام‌سازی و حل تداخل
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          رصد وضعیت صفوف همگام‌سازی آفلاین تبلت‌های انبارداری و حل تداخل سه‌سویه در زمان وقوع مغایرت‌های کلاینت/سرور.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>صف همگام‌سازی: <strong class="text-emerald-600">تخلیه‌شده</strong></span>
+        <span class="text-amber-600 font-bold group-hover:translate-x-[-3px] transition-transform">مدیریت صف ←</span>
+      </div>
+    </div>
+
+    <!-- کارت ۵: حاکمیت کاربران و مجوزهای حساس -->
+    <div 
+      (click)="navigateTo('/app/operations/rbac-governance')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-purple-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-xl text-purple-600 group-hover:scale-105 transition-transform">
+            👥
+          </div>
+          <span class="text-xs font-black text-purple-700 font-mono bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
+            ۶ مجوز حساس
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-purple-700 transition-colors">
+          حاکمیت دسترسی‌ها و مدیران
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          کنترل انحصاری ۶ مجوز بحرانی (Rollback, Backup, Freeze, Hard-Delete, Purge-Logs, Factory-Reset) منحصراً برای سوپریوزرها.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>سطح حاکمیت: <strong class="text-purple-700 font-bold">Superuser-Only</strong></span>
+        <span class="text-purple-600 font-bold group-hover:translate-x-[-3px] transition-transform">کنترل نقش‌ها ←</span>
+      </div>
+    </div>
+
+    <!-- کارت ۶: مدیریت کاربران و نقش‌ها (سورس واحد) -->
+    <div 
+      (click)="navigateTo('/app/operations/users')"
+      class="group relative rounded-2xl p-6 bg-white hover:border-indigo-300 border border-slate-200 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between"
+    >
+      <div>
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xl text-indigo-600 group-hover:scale-105 transition-transform">
+            👤
+          </div>
+          <span class="text-xs font-black text-indigo-700 font-mono bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+            سورس واحد
+          </span>
+        </div>
+        <h3 class="text-base font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+          مدیریت کاربران و نقش‌های سیستمی
+        </h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          دسترسی مستقیم و متمرکز به سورس اصلی مدیریت کاربران، تعریف نقش‌ها، سطوح دسترسی، تغییر رمز، کارت شناسایی و ورود اکسل.
+        </p>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+        <span>مدیریت: <strong class="text-slate-800">حساب‌ها و مجوزها</strong></span>
+        <span class="text-indigo-600 font-bold group-hover:translate-x-[-3px] transition-transform">ورود به کاربران ←</span>
+      </div>
+    </div>
+
+  </div>
+
+</div>

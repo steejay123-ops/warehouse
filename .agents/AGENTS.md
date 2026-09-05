@@ -27,6 +27,7 @@
 
 ### 4. Chat Interactions
 - **Investigatory Override (The "?" Rule):** If the user's prompt contains a question mark ("؟" or "?"), you MUST assume the request is purely investigatory. Do NOT enter Planning Mode, do NOT write any code, and do NOT make any changes. Your ONLY action should be to provide a clear, concise explanation or answer to the question.
+- **Ultra-Concise Response (The "??" Rule):** If the user's prompt contains double question marks ("؟؟" or "??"), the response MUST be extremely concise, brief, and direct (خیلی خیلی خلاصه), omitting pleasantries, filler phrases, and unnecessary background explanations.
 
 ### 5. Phased Execution & Granular Tasks
 - **Mandatory Task Decomposition:** Break down large, multi-step, or complex requests into small, self-contained, and reviewable phases.

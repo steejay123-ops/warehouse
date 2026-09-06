@@ -96,7 +96,22 @@
       "Bash(mkdir -p \".claude/tmp\")",
       "Bash(git diff *)",
       "Bash(mkdir -p .claude/review-tmp)",
-      "Workflow(comprehensive-code-review)"
+      "Workflow(comprehensive-code-review)",
+      "Bash(./venv/Scripts/python.exe -m pip list)",
+      "Bash(./venv/Scripts/python.exe --version)",
+      "Bash(./venv/Scripts/python.exe -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(./venv/Scripts/python.exe -m pip install \"import-linter==2.3\")",
+      "Bash(PYTHONUTF8=1 PYTHONPATH=\"E:/warehouse project/warehouse-backend\" \"E:/warehouse project/warehouse-backend/venv/Scripts/lint-imports.exe\")",
+      "Bash(ls venv/Lib/site-packages/importlinter/)",
+      "Bash(tail -20 venv/Lib/site-packages/importlinter/cli.py)",
+      "Bash(./venv/Scripts/python.exe -c \"import grimp; print\\([m for m in dir\\(grimp\\) if not m.startswith\\('_'\\)]\\)\")",
+      "Bash(cat venv/Lib/site-packages/importlinter/api.py)",
+      "Bash(grep -rn \"console_scripts\" -A3 venv/Lib/site-packages/import_linter-2.3.dist-info/entry_points.txt)",
+      "Bash(cat venv/Lib/site-packages/import_linter-2.3.dist-info/entry_points.txt)",
+      "Bash(\"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" scripts/e2e/guardian_modularization.py)",
+      "Bash(PYTHONUTF8=1 ./venv/Scripts/python.exe manage.py makemigrations --check --dry-run)",
+      "Read(//c/Users/Payandeh/.claude/projects/E--warehouse-project/memory/**)",
+      "Bash(ls -1 *.md)"
     ]
   }
 }

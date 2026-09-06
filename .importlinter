@@ -35,6 +35,7 @@ root_packages =
     notifications
     personnel
     reports
+    settings_core
     warehouses
 
 # ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ type = layers
 layers =
     config
     warehouses : inventory : reports : personnel
-    accounts : common : communications : notifications
+    accounts : common : communications : notifications : settings_core
 
 # ---------------------------------------------------------------------------
 #  C2 — استقلال ماژول‌ها (دو طرفه). هیچ یالی در هیچ جهتی مجاز نیست.
@@ -90,6 +91,7 @@ source_modules =
     common
     communications
     notifications
+    settings_core
 forbidden_modules =
     warehouses
     inventory

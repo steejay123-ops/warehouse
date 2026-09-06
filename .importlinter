@@ -1,0 +1,111 @@
+# ===========================================================================
+#  NOTE (ASCII, on purpose): this file contains UTF-8 Persian comments.
+#  On Windows, run lint-imports in UTF-8 mode, otherwise Python reads this file
+#  with the cp1252 locale codec and aborts with:
+#      'charmap' codec can't decode byte ... in position ...
+#  Correct invocation from the repository root:
+#      PYTHONUTF8=1 PYTHONPATH=warehouse-backend lint-imports
+#  Guardian 29 sets both variables itself, so it always works:
+#      python scripts/e2e/guardian_modularization.py
+# ===========================================================================
+#  قراردادهای وابستگی سامانه (C1 تا C4) — فاز ۰ طرح جداسازی
+#  مرجع: Documents/Modular_Split_Warehouse_Accounting/implementation_plan_modular_split.md §۳
+#
+#  ⚠️ حالت report-only:
+#     امروز این قراردادها عمداً شکسته‌اند، پس `lint-imports` با کد خروجی ۱
+#     تمام می‌شود. این طبیعی است و در فاز ۰ «شکست» محسوب نمی‌شود.
+#     دروازهٔ واقعی، نگهبان ۲۹ است:
+#         python scripts/e2e/guardian_modularization.py
+#     نگهبان ۲۹ شمار نقض‌ها را با snapshot مبنا مقایسه می‌کند و تنها در صورت
+#     *افزایش* نقض شکست می‌دهد (کاهش یکنوا الزامی است).
+#
+#  اجرا (از ریشهٔ مخزن) — یکی از دو راه:
+#     ۱) pip install -e ".[dev]"  و سپس  PYTHONUTF8=1 lint-imports
+#     ۲) PYTHONUTF8=1 PYTHONPATH=warehouse-backend lint-imports
+#     نگهبان ۲۹ خودش هر دو متغیر را ست می‌کند، پس بدون نصب هم کار می‌کند.
+# ===========================================================================
+
+[importlinter]
+root_packages =
+    accounts
+    common
+    communications
+    config
+    inventory
+    notifications
+    personnel
+    reports
+    warehouses
+
+# ---------------------------------------------------------------------------
+#  C1 — لایه‌بندی
+#  ترتیب از بالا به پایین. لایهٔ بالاتر می‌تواند پایین‌تر را ایمپورت کند، برعکس نه.
+#    · config              ریشهٔ ترکیب (composition root): امروز مجاز است همه را
+#                          بشناسد، ولی از فاز ۳ باید از رجیستری ساخته شود.
+#    · لایهٔ ماژول‌ها        warehouses/inventory/reports (انبار) و personnel (حسابداری)
+#    · لایهٔ پلتفرم         هرگز رو به بالا ایمپورت نمی‌کند
+#  جداکنندهٔ «:» یعنی هم‌لایه‌های *وابسته‌پذیر*؛ استقلال انبار↔حسابداری وظیفهٔ C2 است.
+# ---------------------------------------------------------------------------
+[importlinter:contract:c1-layering]
+name = C1 — لایه‌بندی پلتفرم → ماژول‌ها → ریشهٔ ترکیب
+type = layers
+layers =
+    config
+    warehouses : inventory : reports : personnel
+    accounts : common : communications : notifications
+
+# ---------------------------------------------------------------------------
+#  C2 — استقلال ماژول‌ها (دو طرفه). هیچ یالی در هیچ جهتی مجاز نیست.
+# ---------------------------------------------------------------------------
+[importlinter:contract:c2-warehouse-independent-of-accounting]
+name = C2 (الف) — انبار هرگز حسابداری را ایمپورت نمی‌کند
+type = forbidden
+source_modules =
+    warehouses
+    inventory
+    reports
+forbidden_modules =
+    personnel
+
+[importlinter:contract:c2-accounting-independent-of-warehouse]
+name = C2 (ب) — حسابداری هرگز انبار را ایمپورت نمی‌کند
+type = forbidden
+source_modules =
+    personnel
+forbidden_modules =
+    warehouses
+    inventory
+    reports
+
+# ---------------------------------------------------------------------------
+#  C3 — پاکی هسته
+#  هستهٔ پلتفرم هیچ‌گاه نام هیچ ماژولی را نمی‌شناسد. (settings_core و
+#  platform_core در فازهای ۱ و ۵ به source_modules اضافه می‌شوند.)
+# ---------------------------------------------------------------------------
+[importlinter:contract:c3-core-purity]
+name = C3 — پاکی هستهٔ پلتفرم نسبت به هر دو ماژول
+type = forbidden
+source_modules =
+    accounts
+    common
+    communications
+    notifications
+forbidden_modules =
+    warehouses
+    inventory
+    reports
+    personnel
+
+# ===========================================================================
+#  C4 — استثنای مهارشده
+#  این بخش قرارداد import-linter نیست؛ فهرست صریح استثناهاست و نگهبان ۲۹ آن را
+#  می‌خواند و راستی‌آزمایی می‌کند. تنها شکل مجاز استثنا:
+#      ایمپورت تنبل *درون تابع* + گارد `apps.is_installed('<app>')`
+#  قالب هر سطر (همان قالب ignore_imports تا کپی‌کردنش بی‌دردسر باشد):
+#      importer.module -> imported.module
+#  نگهبان ۲۹ برای هر سطر بررسی می‌کند که ایمپورت واقعاً درون تابع است و گارد
+#  apps.is_installed در همان تابع وجود دارد. سطر نامعتبر = شکست نگهبان.
+#  در فاز ۰ این فهرست عمداً خالی است (گاردها در فاز ۲.۵ اضافه می‌شوند).
+# ===========================================================================
+[wh-c4-allowlist]
+guarded_lazy_imports =

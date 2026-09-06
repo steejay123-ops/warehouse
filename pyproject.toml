@@ -1,0 +1,128 @@
+# ===========================================================================
+#  اعلام سه توزیع مستقل سامانه — فاز ۰ طرح «جداسازی انبارگردانی و حسابداری»
+#  مرجع: Documents/Modular_Split_Warehouse_Accounting/implementation_plan_modular_split.md
+#
+#  در فاز ۰ هیچ خط منطقی عوض نمی‌شود. این فایل فقط «مالکیت» را اعلام می‌کند:
+#  کدام بستهٔ پایتون به کدام توزیع تعلق دارد. جدول [tool.wh.distributions]
+#  تنها منبع حقیقت این نقشهٔ مالکیت است و مصرف‌کنندگان آن عبارت‌اند از:
+#    · نگهبان ۲۹  (scripts/e2e/guardian_modularization.py) — از همین حالا
+#    · رجیستری قابلیت‌ها (فاز ۳)
+#    · سه pyproject نهایی هر توزیع (فاز ۷، تسک id 65)
+#
+#  توزیع `wh-suite` زیر یک بستهٔ چتر «فقط برای محیط توسعه» است تا مطابق
+#  تسک id 1 هر سه ماژول کنار هم نصب بمانند و رفتار امروز عیناً حفظ شود:
+#      pip install -e ".[dev]"
+#  در فاز ۷ همین چتر با سه pyproject واقعی جایگزین می‌شود.
+# ===========================================================================
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wh-suite"
+version = "1.0.0"
+description = "چتر توسعهٔ سامانهٔ انبارگردانی و حسابداری — هر سه توزیع کنار هم"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+classifiers = [
+    # جلوگیری از آپلود تصادفی روی PyPI؛ این بسته توزیع عمومی نیست.
+    "Private :: Do Not Upload",
+]
+
+[project.optional-dependencies]
+# ابزارهای سنجش مرز (حصار فاز ۰). عمداً در requirements.txt تولیدی نیست.
+dev = [
+    "import-linter==2.3",
+]
+
+[tool.setuptools.dynamic]
+# فهرست وابستگی‌ها تکرار نمی‌شود تا از واگرایی با requirements.txt جلوگیری شود.
+dependencies = { file = ["warehouse-backend/requirements.txt"] }
+
+[tool.setuptools]
+package-dir = { "" = "warehouse-backend" }
+
+[tool.setuptools.packages.find]
+where = ["warehouse-backend"]
+include = [
+    "accounts*",
+    "common*",
+    "communications*",
+    "config*",
+    "inventory*",
+    "notifications*",
+    "personnel*",
+    "reports*",
+    "warehouses*",
+]
+
+# ---------------------------------------------------------------------------
+#  نقشهٔ مالکیت سه توزیع
+#  کلیدها:
+#    layer            نام لایه در قرارداد C1 فایل .importlinter
+#    packages         بسته‌های پایتونی که امروز به این توزیع تعلق دارند
+#    future_packages  بسته‌هایی که در فازهای بعدی به این توزیع اضافه می‌شوند
+#    entry_point      مقدار برنامه‌ریزی‌شده برای گروه `wh.module` (فعال‌سازی: فاز ۷)
+# ---------------------------------------------------------------------------
+
+[tool.wh.distributions.wh-platform]
+version = "1.0.0"
+title_fa = "هستهٔ مشترک"
+layer = "platform"
+mandatory = true
+packages = ["accounts", "common", "communications", "config", "notifications"]
+future_packages = ["platform_core", "settings_core"]
+django_apps = [
+    "accounts.apps.AccountsConfig",
+    "notifications.apps.NotificationsConfig",
+    "communications.apps.CommunicationsConfig",
+]
+api_prefixes = [
+    "api/auth/",
+    "api/accounts/",
+    "api/communications/",
+    "api/notifications/",
+    "api/settings/global/",
+    "api/public/config/",
+    "api/backup/",
+]
+requires = []
+entry_point = ""
+
+[tool.wh.distributions.wh-warehouse]
+version = "1.0.0"
+title_fa = "انبارگردانی"
+layer = "warehouse"
+mandatory = false
+packages = ["warehouses", "inventory", "reports"]
+future_packages = []
+django_apps = [
+    "warehouses.apps.WarehousesConfig",
+    "inventory.apps.InventoryConfig",
+    "reports.apps.ReportsConfig",
+]
+api_prefixes = ["api/warehouses/", "api/inventory/", "api/reports/"]
+requires = ["wh-platform>=1.0,<2.0"]
+entry_point = "warehouse = warehouses.module_spec:SPEC"
+
+[tool.wh.distributions.wh-accounting]
+version = "1.0.0"
+title_fa = "حسابداری"
+layer = "accounting"
+mandatory = false
+packages = ["personnel"]
+future_packages = []
+django_apps = ["personnel.apps.PersonnelConfig"]
+api_prefixes = ["api/personnel/"]
+requires = ["wh-platform>=1.0,<2.0"]
+entry_point = "accounting = personnel.module_spec:SPEC"
+
+[tool.wh.notes]
+# `reports` امروز کامل انباری است. فاز ۵ موتور کوئری عام آن را به
+# `platform_core/query_engine` می‌برد و فقط JOINS انباری در wh-warehouse می‌ماند.
+# `wh-accounting-gl` صرفاً در گراف وابستگی رزرو است؛ در این پروژه ساخته نمی‌شود.
+reports_split_phase = 5
+settings_core_phase = 1
+registry_phase = 3
+packaging_phase = 7

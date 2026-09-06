@@ -240,7 +240,7 @@ class EntityConfig:
     def get_fields(self, warehouse_id=None):
         """همه FieldDefهای این موجودیت با پرچم sensitive نهایی."""
         from warehouses.services import get_setting
-        from warehouses.models import SystemSetting
+        from settings_core.models import SystemSetting
 
         sensitive_keys = set()
         if self.key == 'items':

@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Warehouse, SystemSetting
+from .models import Warehouse
+from settings_core.models import SystemSetting
 
 class WarehouseSerializer(serializers.ModelSerializer):
     total_quantity = serializers.SerializerMethodField()

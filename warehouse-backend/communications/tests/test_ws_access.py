@@ -287,14 +287,14 @@ class WebSocketSecurityTestCase(TransactionTestCase):
 
     async def test_chat_disabled_rejects_websocket(self):
         """هنگامی که چت غیرفعال است، اتصال وب‌سوکت باید با کد ۴۰۰۳ بسته شود"""
-        from warehouses.models import SystemSetting
+        from settings_core.models import SystemSetting
         from warehouses.services import clear_setting_cache
         from channels.db import database_sync_to_async
         from asgiref.sync import sync_to_async
 
         await database_sync_to_async(SystemSetting.objects.update_or_create)(
             key='chat_enabled',
-            warehouse=None,
+            warehouse_id=None,
             defaults={'value': False}
         )
         await sync_to_async(clear_setting_cache)('chat_enabled')

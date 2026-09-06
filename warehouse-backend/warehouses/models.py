@@ -47,38 +47,6 @@ class Warehouse(models.Model):
     def __str__(self):
         return f"{self.code} - {self.name}"
 
-class SystemSetting(models.Model):
-    """
-    Stores hierarchical settings.
-    If warehouse is null, it's a global setting.
-    If warehouse is set, it's an override for that specific warehouse.
-    """
-    key = models.CharField(max_length=100)
-    value = models.JSONField()
-    warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, null=True, blank=True, related_name='settings')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('key', 'warehouse')
-        
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        from .services import clear_setting_cache
-        clear_setting_cache(self.key, self.warehouse_id)
-
-    def delete(self, *args, **kwargs):
-        key = self.key
-        wh_id = self.warehouse_id
-        super().delete(*args, **kwargs)
-        from .services import clear_setting_cache
-        clear_setting_cache(key, wh_id)
-
-    def __str__(self):
-        return f"{self.key} - {'Global' if not self.warehouse else self.warehouse.name}"
-
-
-
 class LabelTemplate(models.Model):
     """
     Stores label layout design.

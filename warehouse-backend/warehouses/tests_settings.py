@@ -3,7 +3,8 @@ from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.test import APITestCase
 from rest_framework import status
-from warehouses.models import SystemSetting
+from settings_core.models import SystemSetting
+from .models import Warehouse
 
 User = get_user_model()
 
@@ -147,3 +148,40 @@ class GlobalSettingsSmokeTests(APITestCase):
         )
         self.assertEqual(post_conflict.status_code, status.HTTP_412_PRECONDITION_FAILED)
         self.assertEqual(post_conflict.data.get('code'), 'CONCURRENT_MODIFICATION')
+
+
+class CascadeSettingsTests(APITestCase):
+    """
+    فاز ۱ §۱.۳ — بازسازی رفتار CASCADE. پیش از فاز ۱، `SystemSetting.warehouse`
+    یک FK با `on_delete=CASCADE` بود؛ اکنون `warehouse_id` عددی ساده است و
+    سیگنال `post_delete` ثبت‌شده از سمت `wh-warehouse` حذف آبشاری را بازتولید
+    می‌کند. این تست تضمین می‌کند حذف انبار تنظیماتِ متعلق به آن را هم پاک کند.
+    """
+
+    def setUp(self):
+        self.wh = Warehouse.objects.create(
+            name='انبار تست', code='CASCADE-TEST',
+        )
+        # یک تنظیم سراسری (نباید حذف شود) و یک override انباری.
+        self.global_setting = SystemSetting.objects.create(
+            key='system_version', value='1.0', warehouse_id=None
+        )
+        self.wh_setting = SystemSetting.objects.create(
+            key='system_version', value='9.9', warehouse_id=self.wh.id
+        )
+
+    def test_warehouse_delete_purges_its_settings_but_keeps_global(self):
+        wh_id = self.wh.id  # پس از delete، Django `instance.pk` را None می‌کند
+        before_keys = set(SystemSetting.objects.values_list('warehouse_id', flat=True))
+        self.assertIn(wh_id, before_keys)
+
+        self.wh.delete()
+
+        self.assertFalse(
+            SystemSetting.objects.filter(warehouse_id=wh_id).exists(),
+            "تنظیمات override انبار پس از حذف انبار باید پاک شوند."
+        )
+        self.assertTrue(
+            SystemSetting.objects.filter(key='system_version', warehouse_id__isnull=True).exists(),
+            "تنظیمات سراسری نباید با حذف یک انبار حذف شوند."
+        )

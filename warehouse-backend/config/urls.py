@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
-from warehouses.views import SettingsViewSet, PublicConfigViewSet
+from settings_core.views import SettingsViewSet, PublicConfigViewSet
 from config.views_backup import (
     BackupCreateView,
     BackupRestoreView,

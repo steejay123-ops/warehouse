@@ -14,7 +14,8 @@ from rest_framework.test import APIClient
 
 from accounts.models import CustomUser
 from inventory.models import CountTask, CountTaskHistory, Item, ItemFieldDefinition
-from warehouses.models import SystemSetting, Warehouse
+from warehouses.models import Warehouse
+from settings_core.models import SystemSetting
 
 from .engine import ReportEngine, ReportError
 from .excel import _run_export_job, cleanup_old_jobs, start_export_job
@@ -46,7 +47,7 @@ class BaseReportTest(TestCase):
         cls.wh2 = Warehouse.objects.create(name='انبار ۲')
 
         # شمارش کور را برای این تست‌ها خاموش کن (پیش‌فرض سیستم blind است)
-        SystemSetting.objects.create(key='blind_counting', value='normal', warehouse=None)
+        SystemSetting.objects.create(key='blind_counting', value='normal', warehouse_id=None)
 
         cls.counter_user = make_user('counter1', first_name='علی', last_name='رضایی')
         cls.supervisor_user = make_user('super1', first_name='محمد', last_name='محمدی')
@@ -800,8 +801,8 @@ class JoinQueryTests(BaseReportTest):
         """در کوئری بدون انتخاب انبار (چندانباری)، اگر حتی یک انبار blind باشد فیلدهای حساس باید ماسک شوند."""
         from warehouses.services import clear_setting_cache
         # تنظیم سراسری عادی، اما انبار ۲ روی blind
-        SystemSetting.objects.filter(key='blind_counting', warehouse__isnull=True).update(value='normal')
-        SystemSetting.objects.create(key='blind_counting', value='blind', warehouse=self.wh2)
+        SystemSetting.objects.filter(key='blind_counting', warehouse_id__isnull=True).update(value='normal')
+        SystemSetting.objects.create(key='blind_counting', value='blind', warehouse_id=self.wh2.id)
         clear_setting_cache('blind_counting', self.wh2.id)
         clear_setting_cache('blind_counting', None)
 
@@ -812,7 +813,7 @@ class JoinQueryTests(BaseReportTest):
         self.assertNotIn('inventory', allowed)
 
         # پاک‌سازی رکورد تستی
-        SystemSetting.objects.filter(key='blind_counting', warehouse=self.wh2).delete()
+        SystemSetting.objects.filter(key='blind_counting', warehouse_id=self.wh2.id).delete()
         clear_setting_cache('blind_counting', self.wh2.id)
         clear_setting_cache('blind_counting', None)
 

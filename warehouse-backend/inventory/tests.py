@@ -7,7 +7,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from warehouses.models import Warehouse, SystemSetting
+from warehouses.models import Warehouse
+from settings_core.models import SystemSetting
 from inventory.models import Item, CountTask, CountTaskHistory, ItemFieldDefinition
 
 User = get_user_model()
@@ -1056,7 +1057,7 @@ class InventoryAdvancedWorkflowsAndRBACTests(BaseInventoryTestCase):
         """تست پنهان‌سازی موجودی دفتری در حالت شمارش کور برای انبارگردان"""
         SystemSetting.objects.update_or_create(
             key='blind_counting',
-            warehouse=self.warehouse,
+            warehouse_id=self.warehouse.id,
             defaults={'value': 'blind'}
         )
 
@@ -1082,7 +1083,7 @@ class InventoryAdvancedWorkflowsAndRBACTests(BaseInventoryTestCase):
         """تست عدم پنهان‌سازی موجودی دفتری برای مدیر حتی در حالت شمارش کور"""
         SystemSetting.objects.update_or_create(
             key='blind_counting',
-            warehouse=self.warehouse,
+            warehouse_id=self.warehouse.id,
             defaults={'value': 'blind'}
         )
 
@@ -1295,7 +1296,7 @@ class InventoryAdvancedWorkflowsAndRBACTests(BaseInventoryTestCase):
     def test_47_manager_supervisor_blind_mode_context(self):
         """تست نمایش موجودی دفتری و سیستم برای مدیر و سرپرست حتی در حالت شمارش کور"""
         SystemSetting.objects.create(
-            warehouse=self.warehouse,
+            warehouse_id=self.warehouse.id,
             key='blind_counting',
             value='blind'
         )

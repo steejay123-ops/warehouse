@@ -13,7 +13,7 @@ from communications.models import (
 )
 from communications.consumers import ChatConsumer
 from communications.tests.base import BaseCommsTestCase
-from warehouses.models import SystemSetting
+from settings_core.models import SystemSetting
 from warehouses.services import get_setting, clear_setting_cache
 
 
@@ -43,7 +43,7 @@ class SettingsAndPurgeTestCase(BaseCommsTestCase):
         # تنظیم سراسری: chat_enabled = True
         SystemSetting.objects.update_or_create(
             key='chat_enabled',
-            warehouse=None,
+            warehouse_id=None,
             defaults={'value': True}
         )
         clear_setting_cache('chat_enabled')
@@ -64,7 +64,7 @@ class SettingsAndPurgeTestCase(BaseCommsTestCase):
         """هنگامی که چت غیرفعال است، درخواست‌های REST باید با کد ۴۰۳ مسدود شوند"""
         SystemSetting.objects.update_or_create(
             key='chat_enabled',
-            warehouse=None,
+            warehouse_id=None,
             defaults={'value': False}
         )
         clear_setting_cache('chat_enabled')
@@ -78,7 +78,7 @@ class SettingsAndPurgeTestCase(BaseCommsTestCase):
         """هنگامی که اشتراک فایل غیرفعال است، آپلود پیوست باید ۴۰۳ برگرداند"""
         SystemSetting.objects.update_or_create(
             key='chat_file_sharing',
-            warehouse=None,
+            warehouse_id=None,
             defaults={'value': False}
         )
         clear_setting_cache('chat_file_sharing')

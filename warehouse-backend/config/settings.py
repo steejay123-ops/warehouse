@@ -53,6 +53,7 @@ INSTALLED_APPS = [
 
     # Local apps
     'accounts.apps.AccountsConfig',
+    'settings_core.apps.SettingsCoreConfig',
     'warehouses.apps.WarehousesConfig',
     'inventory.apps.InventoryConfig',
     'notifications.apps.NotificationsConfig',

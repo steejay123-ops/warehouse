@@ -7,7 +7,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from warehouses.models import Warehouse, SystemSetting
+from warehouses.models import Warehouse
+from settings_core.models import SystemSetting
 from inventory.models import Item, DocTask, DocTaskHistory, ItemFieldDefinition
 from inventory.serializers import DocTaskSerializer
 
@@ -459,14 +460,14 @@ class FinancialDocsCycleTests(TestCase):
     def test_07_doc_field_permissions_sync(self):
         """بررسی خواندن و اعمال تنظیمات سیستم برای فیلدهای کارتابل مالی"""
         from warehouses.services import get_setting, clear_setting_cache
-        from warehouses.models import SystemSetting
+        from settings_core.models import SystemSetting
         
         # پیش‌فرض تایید سرپرست اسناد
         default_req_sup = get_setting('require_doc_supervisor_approval', self.warehouse.id)
         self.assertTrue(default_req_sup)
 
         # تغییر تنظیم به عدم نیاز به سرپرست اسناد
-        SystemSetting.objects.create(key='require_doc_supervisor_approval', value=False, warehouse=self.warehouse)
+        SystemSetting.objects.create(key='require_doc_supervisor_approval', value=False, warehouse_id=self.warehouse.id)
         clear_setting_cache('require_doc_supervisor_approval', self.warehouse.id)
         updated_req_sup = get_setting('require_doc_supervisor_approval', self.warehouse.id)
         self.assertFalse(updated_req_sup)

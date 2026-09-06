@@ -253,6 +253,12 @@ def extract_all_conversations():
                                     if mcid in known_metadata and not known_metadata[mcid].get('created_iso'):
                                         known_metadata[mcid]['created_iso'] = c_iso
 
+                                for m in re.finditer(r'##\s*Conversation\s+([0-9a-f\-]{36}):[\s\S]*?-\s*Last modified:\s*([^\n\r\\]+)', line):
+                                    mcid = m.group(1).lower().strip()
+                                    u_iso = m.group(2).strip()
+                                    if mcid in known_metadata and not known_metadata[mcid].get('updated_iso'):
+                                        known_metadata[mcid]['updated_iso'] = u_iso
+
                             if 'USER Objective:' in line:
                                 obj_match = re.search(r'###\s*USER\s*Objective:\s*([^\n\r\\]+)', line)
                                 if obj_match:
@@ -514,15 +520,19 @@ def extract_all_conversations():
             del_title = clean_extracted_title(meta.get('title') or meta.get('objective') or '')
             if del_title and len(del_title) >= 2:
                 c_iso = meta.get('created_iso')
-                c_time = parse_iso_datetime(c_iso) if c_iso else datetime.datetime.now()
+                u_iso = meta.get('updated_iso') or c_iso
+                c_time = parse_iso_datetime(c_iso) if c_iso else None
+                u_time = parse_iso_datetime(u_iso) if u_iso else c_time
+                created_dict = format_date(c_time) if c_time else {"gregorian": "", "jalali": "", "jalali_month_year": "", "timestamp": 0, "iso": ""}
+                updated_dict = format_date(u_time) if u_time else created_dict
                 del_conv_item = {
                     'id': mcid,
                     'title': del_title,
                     'title_en': del_title,
                     'summary_fa': f"این چت با عنوان «{del_title}» پیش‌تر در سایدبار ثبت شده و از روی دیسک حذف گردیده است.",
                     'tags': detect_tags(del_title, ""),
-                    'created_at': format_date(c_time),
-                    'updated_at': format_date(c_time),
+                    'created_at': created_dict,
+                    'updated_at': updated_dict,
                     'messages_count': 0,
                     'tools_count': 0,
                     'has_plan': False,
@@ -532,7 +542,7 @@ def extract_all_conversations():
                     'messages': [{
                         'sender': 'assistant',
                         'text': f'این مکالمه با شناسه {mcid} و عنوان «{del_title}» پیش‌تر در سایدبار نرم‌افزار قرار داشته و حذف شده است.',
-                        'time': c_iso or '',
+                        'time': u_iso or c_iso or '',
                         'tools': []
                     }],
                     'first_prompt': del_title,
@@ -1483,6 +1493,224 @@ def generate_dashboard_html(conversations):
             border-bottom-color: var(--accent-primary);
         }
 
+        /* In-Chat Sticky Search Toolbar */
+        .modal-in-chat-search {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.75rem 2rem;
+            background: rgba(26, 31, 46, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .in-chat-search-input-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .in-chat-search-icon {
+            position: absolute;
+            right: 0.85rem;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            pointer-events: none;
+        }
+
+        .in-chat-search-input-wrapper input {
+            width: 100%;
+            padding: 0.55rem 2.4rem 0.55rem 2.2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .in-chat-search-input-wrapper input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            background: var(--bg-card-hover);
+        }
+
+        .in-chat-clear-btn {
+            position: absolute;
+            left: 0.75rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: none;
+            padding: 0.2rem;
+            border-radius: 4px;
+        }
+
+        .in-chat-clear-btn:hover {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .in-chat-search-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-shrink: 0;
+        }
+
+        .in-chat-match-counter {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            background: var(--bg-card);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .in-chat-nav-btn {
+            padding: 0.4rem 0.65rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .in-chat-nav-btn:hover:not(:disabled) {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+
+        .in-chat-nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Search highlights in chat */
+        mark.chat-search-highlight {
+            background: rgba(245, 158, 11, 0.35);
+            color: #fbbf24;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        mark.chat-search-highlight.active {
+            background: #f59e0b;
+            color: #000;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.8);
+            transform: scale(1.05);
+            display: inline-block;
+        }
+
+        /* Message header badges & link button */
+        .msg-num-badge {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            background: rgba(255, 255, 255, 0.08);
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .copy-msg-link-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .copy-msg-link-btn:hover {
+            color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.15);
+        }
+
+        /* Message target pulse when jumped to */
+        .message-bubble.target-pulse {
+            animation: messagePulse 2.5s ease-out;
+        }
+
+        @keyframes messagePulse {
+            0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.8); border-color: var(--accent-primary); }
+            30% { box-shadow: 0 0 25px 6px rgba(99, 102, 241, 0.6); border-color: var(--accent-primary); }
+            100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        }
+
+        /* Card snippet preview */
+        .card-search-snippet {
+            margin-top: 0.85rem;
+            padding: 0.75rem 1rem;
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px dashed rgba(99, 102, 241, 0.3);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .card-search-snippet .snippet-text {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .card-search-snippet mark.snippet-highlight {
+            background: rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            padding: 0 0.2rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .btn-jump-msg {
+            align-self: flex-start;
+            padding: 0.35rem 0.8rem;
+            background: var(--accent-primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-jump-msg:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.5);
+        }
+
         .modal-body {
             padding: 2rem;
             overflow-y: auto;
@@ -2005,6 +2233,20 @@ def generate_dashboard_html(conversations):
                 </button>
             </div>
 
+            <!-- In-Chat Sticky Search Toolbar -->
+            <div class="modal-in-chat-search" id="inChatSearchToolbar">
+                <div class="in-chat-search-input-wrapper">
+                    <span class="in-chat-search-icon">🔍</span>
+                    <input type="text" id="inChatSearchInput" placeholder="جستجو در این چت (پیام‌ها، ابزارها و گزارش‌ها)... [Ctrl+F]" oninput="handleInChatSearchInput()" onkeydown="handleInChatSearchKeydown(event)">
+                    <button class="in-chat-clear-btn" id="inChatClearBtn" onclick="clearInChatSearch()" title="پاک کردن جستجو">✕</button>
+                </div>
+                <div class="in-chat-search-controls">
+                    <span class="in-chat-match-counter" id="inChatMatchCounter">۰ از ۰</span>
+                    <button class="in-chat-nav-btn" onclick="navInChatMatch(-1)" title="یافته قبلی (Shift+Enter)">🔼</button>
+                    <button class="in-chat-nav-btn" onclick="navInChatMatch(1)" title="یافته بعدی (Enter)">🔽</button>
+                </div>
+            </div>
+
             <!-- Modal Content Body -->
             <div class="modal-body" id="modalBody">
                 <!-- Injected by JS -->
@@ -2114,8 +2356,51 @@ def generate_dashboard_html(conversations):
         function renderCardHtml(c) {
             const isExpanded = expandedCardId === c.id;
             const chatTitle = c.title || c.title_en;
-            const dateStr = c.created_at.jalali ? c.created_at.jalali.split('(')[0].trim() : c.created_at.gregorian;
+            const createdAt = c.created_at || c.updated_at || {};
+            const dateStr = createdAt.jalali ? createdAt.jalali.split('(')[0].trim() : (createdAt.gregorian || 'نامشخص');
             const isDeleted = c.is_deleted === true;
+
+            // Search Snippet & Direct Jump Button
+            let searchSnippetHtml = '';
+            const searchInput = document.getElementById('searchInput');
+            const activeQuery = searchInput ? searchInput.value.trim() : '';
+            if (activeQuery && activeQuery.length >= 2) {
+                const qLower = activeQuery.toLowerCase();
+                let matchIdx = -1;
+                let matchSnippet = '';
+                let totalMatches = 0;
+                if (c.messages && c.messages.length > 0) {
+                    for (let mi = 0; mi < c.messages.length; mi++) {
+                        const mText = c.messages[mi].text || '';
+                        const pos = mText.toLowerCase().indexOf(qLower);
+                        if (pos !== -1) {
+                            totalMatches++;
+                            if (matchIdx === -1) {
+                                matchIdx = mi;
+                                const start = Math.max(0, pos - 40);
+                                const end = Math.min(mText.length, pos + qLower.length + 60);
+                                const rawSnippet = (start > 0 ? '...' : '') + mText.substring(start, end) + (end < mText.length ? '...' : '');
+                                const safeSnip = escapeHtml(rawSnippet);
+                                const safeQuery = escapeHtml(activeQuery);
+                                const re = new RegExp(`(${safeQuery.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')})`, 'gi');
+                                matchSnippet = safeSnip.replace(re, '<mark class="snippet-highlight">$1</mark>');
+                            }
+                        }
+                    }
+                }
+                if (matchIdx !== -1) {
+                    searchSnippetHtml = `
+                        <div class="card-search-snippet" onclick="event.stopPropagation()">
+                            <div class="snippet-text">💬 ${matchSnippet}</div>
+                            <button class="btn-jump-msg" onclick="jumpToChatMessage(event, '${c.id}', ${matchIdx}, '${escapeAttr(activeQuery)}')">
+                                <span>🎯</span>
+                                <span>پرش به پیام #${matchIdx + 1} (${totalMatches} مورد در این چت)</span>
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
             return `
                 <div class="chat-card ${isExpanded ? 'expanded' : ''} ${isDeleted ? 'deleted-card' : ''}" 
                      data-cid="${c.id}" 
@@ -2138,6 +2423,8 @@ def generate_dashboard_html(conversations):
 
                     <!-- Compact 1-line Summary -->
                     <p class="card-compact-summary">${escapeHtml(c.summary_fa)}</p>
+
+                    ${searchSnippetHtml}
 
                     <!-- Expanded Body (Accordion) -->
                     <div class="card-expanded-body">
@@ -2192,8 +2479,12 @@ def generate_dashboard_html(conversations):
                 list.forEach(c => {
                     // Use created_at timestamp if sorted by created, else updated_at
                     const useCreated = sortBy.includes('created');
-                    const ts = (useCreated ? (c.created_at.timestamp || c.updated_at.timestamp) : (c.updated_at.timestamp || c.created_at.timestamp) || 0) * 1000;
-                    if (ts >= todayMidnight) {
+                    const cTs = (c.created_at && c.created_at.timestamp) ? c.created_at.timestamp : 0;
+                    const uTs = (c.updated_at && c.updated_at.timestamp) ? c.updated_at.timestamp : 0;
+                    const ts = (useCreated ? (cTs || uTs) : (uTs || cTs) || 0) * 1000;
+                    if (ts <= 0) {
+                        groups[4].items.push(c);
+                    } else if (ts >= todayMidnight) {
                         groups[0].items.push(c);
                     } else if (ts >= yesterdayStart) {
                         groups[1].items.push(c);
@@ -2210,7 +2501,11 @@ def generate_dashboard_html(conversations):
             } else if (mode === 'jalali_month') {
                 const monthMap = new Map();
                 list.forEach(c => {
-                    const mName = c.created_at.jalali_month_year || 'سایر تاریخ‌ها';
+                    const cCreated = c.created_at || c.updated_at || {};
+                    const cUpdated = c.updated_at || c.created_at || {};
+                    const useCreated = sortBy.includes('created');
+                    const targetDate = useCreated ? cCreated : cUpdated;
+                    const mName = targetDate.jalali_month_year || cCreated.jalali_month_year || cUpdated.jalali_month_year || 'سایر تاریخ‌ها';
                     if (!monthMap.has(mName)) {
                         monthMap.set(mName, []);
                     }
@@ -2285,10 +2580,10 @@ def generate_dashboard_html(conversations):
                     c.title_en || '',
                     c.summary_fa || '',
                     c.id,
-                    c.tags.join(' '),
+                    (c.tags || []).join(' '),
                     c.first_prompt || '',
-                    c.created_at.jalali || '',
-                    c.created_at.gregorian || ''
+                    (c.created_at && c.created_at.jalali) || (c.updated_at && c.updated_at.jalali) || '',
+                    (c.created_at && c.created_at.gregorian) || (c.updated_at && c.updated_at.gregorian) || ''
                 ].join(' ');
 
                 if (isDeep) {
@@ -2301,10 +2596,15 @@ def generate_dashboard_html(conversations):
 
             // Sorting
             filtered.sort((a, b) => {
-                if (sortBy === 'newest_activity') return (b.updated_at.timestamp || 0) - (a.updated_at.timestamp || 0);
-                if (sortBy === 'newest_created') return (b.created_at.timestamp || 0) - (a.created_at.timestamp || 0);
-                if (sortBy === 'oldest_created') return (a.created_at.timestamp || 0) - (b.created_at.timestamp || 0);
-                if (sortBy === 'messages') return b.messages_count - a.messages_count;
+                const aUp = (a.updated_at && a.updated_at.timestamp) || (a.created_at && a.created_at.timestamp) || 0;
+                const bUp = (b.updated_at && b.updated_at.timestamp) || (b.created_at && b.created_at.timestamp) || 0;
+                const aCr = (a.created_at && a.created_at.timestamp) || (a.updated_at && a.updated_at.timestamp) || 0;
+                const bCr = (b.created_at && b.created_at.timestamp) || (b.updated_at && b.updated_at.timestamp) || 0;
+
+                if (sortBy === 'newest_activity') return bUp - aUp;
+                if (sortBy === 'newest_created') return bCr - aCr;
+                if (sortBy === 'oldest_created') return aCr - bCr;
+                if (sortBy === 'messages') return (b.messages_count || 0) - (a.messages_count || 0);
                 if (sortBy === 'title') return (a.title || a.title_en || '').localeCompare(b.title || b.title_en || '', 'fa');
                 return 0;
             });
@@ -2346,31 +2646,67 @@ def generate_dashboard_html(conversations):
             }
         }
 
-        function openChatModal(cid) {
+        function openChatModal(cid, targetMsgIndex = null, initialSearch = '') {
             const chat = RAW_CONVERSATIONS.find(c => c.id === cid);
             if (!chat) return;
             currentOpenChat = chat;
 
+            const modalCreated = chat.created_at || chat.updated_at || {};
             document.getElementById('modalTitleEn').innerText = chat.title || chat.title_en;
-            document.getElementById('modalDateJalali').innerText = '📅 ' + (chat.created_at.jalali || '');
-            document.getElementById('modalDateGregorian').innerText = chat.created_at.gregorian || '';
+            document.getElementById('modalDateJalali').innerText = modalCreated.jalali ? ('📅 ' + modalCreated.jalali) : '';
+            document.getElementById('modalDateGregorian').innerText = modalCreated.gregorian || '';
             document.getElementById('modalCid').innerText = chat.id;
 
             // Plan / Walkthrough tab visibility
             document.getElementById('tabPlanBtn').style.display = chat.has_plan ? 'inline-flex' : 'none';
             document.getElementById('tabWalkthroughBtn').style.display = chat.has_walkthrough ? 'inline-flex' : 'none';
 
+            // Reset in-chat search state
+            clearInChatHighlights();
+            const inChatInput = document.getElementById('inChatSearchInput');
+            if (inChatInput) {
+                inChatInput.value = initialSearch || '';
+            }
+
             // Default to messages tab
             switchModalTab('messages', document.querySelector('.modal-tab-btn'));
 
             document.getElementById('chatModal').classList.add('active');
             document.body.style.overflow = 'hidden';
+
+            // Update URL hash without reload
+            let newHash = `chat=${encodeURIComponent(cid)}`;
+            if (targetMsgIndex !== null) newHash += `&msg=${targetMsgIndex}`;
+            if (initialSearch) newHash += `&q=${encodeURIComponent(initialSearch)}`;
+            history.replaceState(null, '', `#${newHash}`);
+
+            // Scroll to target message or perform search after DOM render
+            setTimeout(() => {
+                if (targetMsgIndex !== null) {
+                    const targetEl = document.getElementById(`msg-${targetMsgIndex}`);
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        targetEl.classList.remove('target-pulse');
+                        void targetEl.offsetWidth;
+                        targetEl.classList.add('target-pulse');
+                    }
+                }
+                if (initialSearch) {
+                    performInChatSearch(initialSearch, targetMsgIndex);
+                }
+            }, 120);
         }
 
         function closeModal() {
             document.getElementById('chatModal').classList.remove('active');
             document.body.style.overflow = 'auto';
             currentOpenChat = null;
+            clearInChatHighlights();
+            const inChatInput = document.getElementById('inChatSearchInput');
+            if (inChatInput) inChatInput.value = '';
+            if (location.hash && location.hash.includes('chat=')) {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
         }
 
         function handleBackdropClick(e) {
@@ -2398,12 +2734,16 @@ def generate_dashboard_html(conversations):
                 }
 
                 body.innerHTML = `
-                    <div class="messages-container">
-                        ${currentOpenChat.messages.map(m => `
-                            <div class="message-bubble ${m.sender === 'user' ? 'user-message' : 'assistant-message'}">
+                    <div class="messages-container" id="messagesContainer">
+                        ${currentOpenChat.messages.map((m, mIdx) => `
+                            <div class="message-bubble ${m.sender === 'user' ? 'user-message' : 'assistant-message'}" id="msg-${mIdx}" data-msg-idx="${mIdx}">
                                 <div class="message-header ${m.sender === 'user' ? 'user-header' : 'assistant-header'}">
                                     <span>${m.sender === 'user' ? '👤 درخواست شما (User)' : '🤖 پاسخ دستیار هوشمند (Assistant)'}</span>
-                                    ${m.time ? `<span style="font-size:0.7rem; font-weight:normal; opacity:0.7;">${m.time.substring(11, 16)}</span>` : ''}
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <span class="msg-num-badge">#${mIdx + 1}</span>
+                                        ${m.time ? `<span style="font-size:0.7rem; font-weight:normal; opacity:0.7;">${m.time.substring(11, 16)}</span>` : ''}
+                                        <button class="copy-msg-link-btn" onclick="copyMessageLink('${currentOpenChat.id}', ${mIdx}, this)" title="کپی لینک مستقیم به این پیام">🔗</button>
+                                    </div>
                                 </div>
                                 <div class="markdown-body">${formatAdvancedMarkdown(m.text)}</div>
                                 ${m.tools && m.tools.length > 0 ? `
@@ -2429,6 +2769,206 @@ def generate_dashboard_html(conversations):
                     </div>
                 `;
             }
+
+            // Sync tab in URL hash
+            if (location.hash && location.hash.includes('chat=')) {
+                const params = new URLSearchParams(location.hash.substring(1));
+                if (tab !== 'messages') params.set('tab', tab);
+                else params.delete('tab');
+                history.replaceState(null, '', `#${params.toString()}`);
+            }
+
+            // Re-apply in-chat search if active
+            const inChatInput = document.getElementById('inChatSearchInput');
+            if (inChatInput && inChatInput.value.trim().length >= 2) {
+                performInChatSearch(inChatInput.value.trim());
+            }
+        }
+
+        // --- In-Chat Search Logic ---
+        let inChatMatches = [];
+        let currentInChatMatchIndex = -1;
+
+        function clearInChatHighlights() {
+            const marks = document.querySelectorAll('#modalBody mark.chat-search-highlight');
+            marks.forEach(m => {
+                const parent = m.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(m.textContent), m);
+                    parent.normalize();
+                }
+            });
+            inChatMatches = [];
+            currentInChatMatchIndex = -1;
+            const counter = document.getElementById('inChatMatchCounter');
+            if (counter) counter.innerText = '۰ از ۰';
+            const clearBtn = document.getElementById('inChatClearBtn');
+            if (clearBtn) clearBtn.style.display = 'none';
+        }
+
+        function handleInChatSearchInput(focusMatchIdx = null) {
+            const input = document.getElementById('inChatSearchInput');
+            const q = input ? input.value.trim() : '';
+            const clearBtn = document.getElementById('inChatClearBtn');
+            if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+
+            if (!q || q.length < 2) {
+                clearInChatHighlights();
+                return;
+            }
+            performInChatSearch(q, focusMatchIdx);
+        }
+
+        function clearInChatSearch() {
+            const input = document.getElementById('inChatSearchInput');
+            if (input) input.value = '';
+            clearInChatHighlights();
+        }
+
+        function performInChatSearch(query, focusMsgIndex = null) {
+            clearInChatHighlights();
+            if (!query || query.length < 2) return;
+
+            const modalBody = document.getElementById('modalBody');
+            if (!modalBody) return;
+
+            const clearBtn = document.getElementById('inChatClearBtn');
+            if (clearBtn) clearBtn.style.display = 'block';
+
+            highlightTextInElement(modalBody, query);
+
+            inChatMatches = Array.from(modalBody.querySelectorAll('mark.chat-search-highlight'));
+            const counter = document.getElementById('inChatMatchCounter');
+
+            if (inChatMatches.length === 0) {
+                if (counter) counter.innerText = '۰ از ۰';
+                return;
+            }
+
+            let startIdx = 0;
+            if (focusMsgIndex !== null) {
+                const targetBubble = document.getElementById(`msg-${focusMsgIndex}`);
+                if (targetBubble) {
+                    const firstInBubble = targetBubble.querySelector('mark.chat-search-highlight');
+                    if (firstInBubble) {
+                        const foundIdx = inChatMatches.indexOf(firstInBubble);
+                        if (foundIdx !== -1) startIdx = foundIdx;
+                    }
+                }
+            }
+
+            currentInChatMatchIndex = startIdx;
+            inChatMatches[currentInChatMatchIndex].classList.add('active');
+            if (focusMsgIndex === null) {
+                inChatMatches[currentInChatMatchIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            if (counter) {
+                counter.innerText = `${currentInChatMatchIndex + 1} از ${inChatMatches.length}`;
+            }
+        }
+
+        function highlightTextInElement(rootElement, query) {
+            if (!query) return;
+            const qLower = query.toLowerCase();
+            const walker = document.createTreeWalker(rootElement, NodeFilter.SHOW_TEXT, {
+                acceptNode: function(node) {
+                    if (!node.textContent || !node.textContent.toLowerCase().includes(qLower)) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    const parent = node.parentElement;
+                    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE' || parent.classList.contains('chat-search-highlight') || parent.classList.contains('copy-code-btn') || parent.classList.contains('in-chat-clear-btn') || parent.classList.contains('copy-msg-link-btn') || parent.classList.contains('msg-num-badge'))) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+
+            const nodesToReplace = [];
+            while (walker.nextNode()) {
+                nodesToReplace.push(walker.currentNode);
+            }
+
+            nodesToReplace.forEach(textNode => {
+                const text = textNode.textContent;
+                const parent = textNode.parentNode;
+                if (!parent) return;
+
+                const escapedQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedQ})`, 'gi');
+                const fragment = document.createDocumentFragment();
+                let lastIdx = 0;
+                let match;
+
+                while ((match = regex.exec(text)) !== null) {
+                    if (match.index > lastIdx) {
+                        fragment.appendChild(document.createTextNode(text.substring(lastIdx, match.index)));
+                    }
+                    const mark = document.createElement('mark');
+                    mark.className = 'chat-search-highlight';
+                    mark.textContent = match[0];
+                    fragment.appendChild(mark);
+                    lastIdx = regex.lastIndex;
+                }
+
+                if (lastIdx < text.length) {
+                    fragment.appendChild(document.createTextNode(text.substring(lastIdx)));
+                }
+
+                parent.replaceChild(fragment, textNode);
+            });
+        }
+
+        function navInChatMatch(dir) {
+            if (inChatMatches.length === 0) return;
+            if (currentInChatMatchIndex >= 0 && currentInChatMatchIndex < inChatMatches.length) {
+                inChatMatches[currentInChatMatchIndex].classList.remove('active');
+            }
+
+            currentInChatMatchIndex += dir;
+            if (currentInChatMatchIndex >= inChatMatches.length) {
+                currentInChatMatchIndex = 0;
+            } else if (currentInChatMatchIndex < 0) {
+                currentInChatMatchIndex = inChatMatches.length - 1;
+            }
+
+            const activeMark = inChatMatches[currentInChatMatchIndex];
+            if (activeMark) {
+                activeMark.classList.add('active');
+                activeMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            const counter = document.getElementById('inChatMatchCounter');
+            if (counter) {
+                counter.innerText = `${currentInChatMatchIndex + 1} از ${inChatMatches.length}`;
+            }
+        }
+
+        function handleInChatSearchKeydown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                navInChatMatch(e.shiftKey ? -1 : 1);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                clearInChatSearch();
+            }
+        }
+
+        function jumpToChatMessage(event, cid, msgIndex, query) {
+            if (event) event.stopPropagation();
+            openChatModal(cid, msgIndex, query);
+        }
+
+        function copyMessageLink(cid, msgIdx, btn) {
+            const url = new URL(window.location.href);
+            url.hash = `chat=${encodeURIComponent(cid)}&msg=${msgIdx}`;
+            navigator.clipboard.writeText(url.href).then(() => {
+                showToast(`لینک مستقیم به پیام #${msgIdx + 1} کپی شد!`);
+                if (btn) {
+                    const orig = btn.innerText;
+                    btn.innerText = '✅';
+                    setTimeout(() => { btn.innerText = orig; }, 1500);
+                }
+            });
         }
 
         // Advanced Markdown Renderer for clean tables, code blocks, alerts, checkboxes, and lists
@@ -2551,6 +3091,11 @@ def generate_dashboard_html(conversations):
             return div.innerHTML;
         }
 
+        function escapeAttr(str) {
+            if (!str) return '';
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
         function copyCid() {
             if (currentOpenChat) {
                 navigator.clipboard.writeText(currentOpenChat.id);
@@ -2640,12 +3185,49 @@ def generate_dashboard_html(conversations):
             btn.disabled = false;
         }
 
-        // Keyboard navigation
+        // Keyboard navigation (Escape & Ctrl+F / Cmd+F)
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                closeModal();
+            const modal = document.getElementById('chatModal');
+            const isModalOpen = modal && modal.classList.contains('active');
+
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+                if (isModalOpen) {
+                    e.preventDefault();
+                    const inChatInput = document.getElementById('inChatSearchInput');
+                    if (inChatInput) {
+                        inChatInput.focus();
+                        inChatInput.select();
+                    }
+                }
+            } else if (e.key === 'Escape') {
+                if (isModalOpen) {
+                    const inChatInput = document.getElementById('inChatSearchInput');
+                    if (inChatInput && inChatInput.value) {
+                        clearInChatSearch();
+                    } else {
+                        closeModal();
+                    }
+                }
             }
         });
+
+        function handleUrlHash() {
+            const hash = location.hash.substring(1);
+            if (!hash) return;
+            const params = new URLSearchParams(hash);
+            const cid = params.get('chat');
+            if (!cid) return;
+            const msgIdx = params.has('msg') ? parseInt(params.get('msg'), 10) : null;
+            const query = params.get('q') || '';
+            const tab = params.get('tab') || 'messages';
+            openChatModal(cid, msgIdx, query);
+            if (tab && tab !== 'messages') {
+                const tabBtn = document.getElementById(tab === 'plan' ? 'tabPlanBtn' : 'tabWalkthroughBtn');
+                if (tabBtn) switchModalTab(tab, tabBtn);
+            }
+        }
+
+        window.addEventListener('hashchange', handleUrlHash);
 
         // Init
         document.addEventListener('DOMContentLoaded', () => {
@@ -2656,6 +3238,7 @@ def generate_dashboard_html(conversations):
                 document.documentElement.classList.add('light');
                 document.getElementById('themeIcon').innerText = '🌙';
                 document.getElementById('themeText').innerText = 'تاریک';
+                localStorage.setItem('theme', 'light');
             }
 
             // Restore Sort selection
@@ -2679,6 +3262,9 @@ def generate_dashboard_html(conversations):
             initTags();
             updateGroupButtons();
             filterChats();
+
+            // Handle direct deep link if present in URL hash
+            handleUrlHash();
         });
     </script>
 </body>

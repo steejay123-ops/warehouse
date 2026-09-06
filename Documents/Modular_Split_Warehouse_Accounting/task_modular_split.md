@@ -9,17 +9,17 @@
   - [x] <!-- id: 4 --> پیاده‌سازی ایجنت نگهبان ۲۹ (`scripts/e2e/guardian_modularization.py`) با تحمیل کاهش یکنوای نقض‌ها
   - [x] <!-- id: 5 --> تایید عدم رگرسیون: هیچ تست موجودی سرخ نشده و نگهبان‌های ۱ تا ۲۸ سبزند
 
-- [ ] <!-- id: 6 --> **فاز ۱: آزادسازی هستهٔ تنظیمات و کانفیگ بوت از اپ انبار**
-  - [ ] <!-- id: 7 --> ایجاد اپلیکیشن پلتفرمی `settings_core`
-  - [ ] <!-- id: 8 --> انتقال مدل `SystemSetting` با `SeparateDatabaseAndState` و تثبیت `db_table='warehouses_systemsetting'` (صفر مهاجرت داده)
-  - [ ] <!-- id: 9 --> تبدیل `SystemSetting.warehouse` به `warehouse_id = IntegerField(null=True, db_index=True, db_column='warehouse_id')`
-  - [ ] <!-- id: 10 --> بازسازی رفتار CASCADE با سیگنال `post_delete` که از سمت `wh-warehouse` ثبت می‌شود
-  - [ ] <!-- id: 11 --> انتقال `get_setting`، `get_all_settings`، `clear_setting_cache`، `compute_settings_etag`، `validate_settings_payload` و `DEFAULT_SETTINGS` به `settings_core.services`
-  - [ ] <!-- id: 12 --> ایجاد لایهٔ shim در `warehouses.services` با re-export همان نام‌ها (حفظ هر ۳ فراخوان `communications` و فراخوان‌های `inventory`/`reports`)
-  - [ ] <!-- id: 13 --> انتقال `SettingsViewSet` و `PublicConfigViewSet` به `settings_core.views` با حفظ عین مسیرهای `/api/settings/global/` و `/api/public/config/`
-  - [ ] <!-- id: 14 --> تفکیک کلیدهای پیش‌فرض: کلیدهای پلتفرمی در هسته، کلیدهای انباری ثبت‌شده از `wh-warehouse`
-  - [ ] <!-- id: 15 --> افزودن کلید `installed_modules` به پاسخ `/api/public/config/` به‌عنوان manifest ماژول برای فرانت‌اند
-  - [ ] <!-- id: 16 --> اجرای نگهبان ۳۰: با حذف `warehouses` از `INSTALLED_APPS` هر دو اندپوینت تنظیمات پاسخ می‌دهند
+- [x] <!-- id: 6 --> **فاز ۱: آزادسازی هستهٔ تنظیمات و کانفیگ بوت از اپ انبار**
+  - [x] <!-- id: 7 --> ایجاد اپلیکیشن پلتفرمی `settings_core`
+  - [x] <!-- id: 8 --> انتقال مدل `SystemSetting` با `SeparateDatabaseAndState` و تثبیت `db_table='warehouses_systemsetting'` (صفر مهاجرت داده)
+  - [x] <!-- id: 9 --> تبدیل `SystemSetting.warehouse` به `warehouse_id = IntegerField(null=True, db_index=True, db_column='warehouse_id')`
+  - [x] <!-- id: 10 --> بازسازی رفتار CASCADE با سیگنال `post_delete` که از سمت `wh-warehouse` ثبت می‌شود
+  - [x] <!-- id: 11 --> انتقال `get_setting`، `get_all_settings`، `clear_setting_cache`، `compute_settings_etag`، `validate_settings_payload` و `DEFAULT_SETTINGS` به `settings_core.services`
+  - [x] <!-- id: 12 --> ایجاد لایهٔ shim در `warehouses.services` با re-export همان نام‌ها (حفظ هر ۳ فراخوان `communications` و فراخوان‌های `inventory`/`reports`)
+  - [x] <!-- id: 13 --> انتقال `SettingsViewSet` و `PublicConfigViewSet` به `settings_core.views` با حفظ عین مسیرهای `/api/settings/global/` و `/api/public/config/`
+  - [x] <!-- id: 14 --> تفکیک کلیدهای پیش‌فرض: کلیدهای پلتفرمی در هسته، کلیدهای انباری ثبت‌شده از `wh-warehouse`
+  - [x] <!-- id: 15 --> افزودن کلید `installed_modules` به پاسخ `/api/public/config/` به‌عنوان manifest ماژول برای فرانت‌اند
+  - [x] <!-- id: 16 --> اجرای نگهبان ۳۰: با حذف `warehouses` از `INSTALLED_APPS` هر دو اندپوینت تنظیمات پاسخ می‌دهند
 
 - [ ] <!-- id: 17 --> **فاز ۲: بریدن یال‌های FK هسته → انبار (expand-contract، صفر مهاجرت داده)**
   - [ ] <!-- id: 18 --> اعلام M2M در اپ `warehouses` روی `Warehouse` با `related_name='assigned_warehouses'` و `db_table='accounts_customuser_assigned_warehouses'`

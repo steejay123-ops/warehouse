@@ -21,16 +21,16 @@
   - [x] <!-- id: 15 --> افزودن کلید `installed_modules` به پاسخ `/api/public/config/` به‌عنوان manifest ماژول برای فرانت‌اند
   - [x] <!-- id: 16 --> اجرای نگهبان ۳۰: با حذف `warehouses` از `INSTALLED_APPS` هر دو اندپوینت تنظیمات پاسخ می‌دهند
 
-- [ ] <!-- id: 17 --> **فاز ۲: بریدن یال‌های FK هسته → انبار (expand-contract، صفر مهاجرت داده)**
-  - [ ] <!-- id: 18 --> اعلام M2M در اپ `warehouses` روی `Warehouse` با `related_name='assigned_warehouses'` و `db_table='accounts_customuser_assigned_warehouses'`
-  - [ ] <!-- id: 19 --> حذف `assigned_warehouses` از `accounts/models.py:20` و ثبت هر دو طرف با `SeparateDatabaseAndState`
-  - [ ] <!-- id: 20 --> راستی‌آزمایی سالم بودن اکسسور `user.assigned_warehouses` در همهٔ فراخوان‌های تولیدی (`accounts/admin.py`، `excel_utils.py`، `serializers.py`، `views.py`، `common/warehouse_scope.py`)
-  - [ ] <!-- id: 21 --> تبدیل ایمپورت ماژول‌سطح `Warehouse` در `accounts/serializers.py:5` و `accounts/excel_utils.py:16` به resolve اختیاری با `apps.is_installed('warehouses')` و حذف فیلد در نصب بدون انبار
-  - [ ] <!-- id: 22 --> انتقال `accounts/management/commands/setup_project.py` به `warehouses/management/commands/`
-  - [ ] <!-- id: 23 --> افزودن گارد `apps.is_installed` به ایمپورت‌های تنبل موجود در `accounts/audit_utils.py:115,121` و `accounts/rollback_service.py:151-160`
-  - [ ] <!-- id: 24 --> تبدیل `AuditLog.warehouse` به `warehouse_id = IntegerField(null=True, db_index=True, db_column='warehouse_id')` روی همان ستون و همان ایندکس
-  - [ ] <!-- id: 25 --> تبدیل `AuditLog.MODULE_CHOICES` به رجیستری و افزودن ماژول‌های حسابداری (`attendance`، `fleet`، `payroll`، `treasury`، `projects`، `invoices`) که امروز کلاً غایب‌اند
-  - [ ] <!-- id: 26 --> اجرای نگهبان ۳۲: `sqlmigrate` هیچ `ALTER`/`COPY` روی سه جدول حساس نشان ندهد و شمار ردیف‌ها قبل و بعد یکسان باشد
+- [x] <!-- id: 17 --> **فاز ۲: بریدن یال‌های FK هسته → انبار (expand-contract، صفر مهاجرت داده)**
+  - [x] <!-- id: 18 --> اعلام M2M در اپ `warehouses` روی `Warehouse` با `related_name='assigned_warehouses'` و `db_table='accounts_customuser_assigned_warehouses'`
+  - [x] <!-- id: 19 --> حذف `assigned_warehouses` از `accounts/models.py:20` و ثبت هر دو طرف با `SeparateDatabaseAndState`
+  - [x] <!-- id: 20 --> راستی‌آزمایی سالم بودن اکسسور `user.assigned_warehouses` در همهٔ فراخوان‌های تولیدی (`accounts/admin.py`، `excel_utils.py`، `serializers.py`، `views.py`، `common/warehouse_scope.py`)
+  - [x] <!-- id: 21 --> تبدیل ایمپورت ماژول‌سطح `Warehouse` در `accounts/serializers.py:5` و `accounts/excel_utils.py:16` به resolve اختیاری با `apps.is_installed('warehouses')` و حذف فیلد در نصب بدون انبار
+  - [x] <!-- id: 22 --> انتقال `accounts/management/commands/setup_project.py` به `warehouses/management/commands/`
+  - [x] <!-- id: 23 --> افزودن گارد `apps.is_installed` به ایمپورت‌های تنبل موجود در `accounts/audit_utils.py:115,121` و `accounts/rollback_service.py:151-160`
+  - [x] <!-- id: 24 --> تبدیل `AuditLog.warehouse` به `warehouse_id = IntegerField(null=True, db_index=True, db_column='warehouse_id')` روی همان ستون و همان ایندکس
+  - [x] <!-- id: 25 --> تبدیل `AuditLog.MODULE_CHOICES` به رجیستری و افزودن ماژول‌های حسابداری (`attendance`، `fleet`، `payroll`، `treasury`، `projects`، `invoices`) که امروز کلاً غایب‌اند
+  - [x] <!-- id: 26 --> اجرای نگهبان ۳۲: `sqlmigrate` هیچ `ALTER`/`COPY` روی سه جدول حساس نشان ندهد و شمار ردیف‌ها قبل و بعد یکسان باشد
 
 - [ ] <!-- id: 27 --> **فاز ۳: رجیستری قابلیت‌ها در بک‌اند**
   - [ ] <!-- id: 28 --> ساخت `platform_core/registry.py` با dataclass `ModuleSpec` و توابع `register_module()`، `installed_modules()` و `module_for_path()`

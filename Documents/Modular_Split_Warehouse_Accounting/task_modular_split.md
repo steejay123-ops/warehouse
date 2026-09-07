@@ -32,15 +32,15 @@
   - [x] <!-- id: 25 --> تبدیل `AuditLog.MODULE_CHOICES` به رجیستری و افزودن ماژول‌های حسابداری (`attendance`، `fleet`، `payroll`، `treasury`، `projects`، `invoices`) که امروز کلاً غایب‌اند
   - [x] <!-- id: 26 --> اجرای نگهبان ۳۲: `sqlmigrate` هیچ `ALTER`/`COPY` روی سه جدول حساس نشان ندهد و شمار ردیف‌ها قبل و بعد یکسان باشد
 
-- [ ] <!-- id: 27 --> **فاز ۳: رجیستری قابلیت‌ها در بک‌اند**
-  - [ ] <!-- id: 28 --> ساخت `platform_core/registry.py` با dataclass `ModuleSpec` و توابع `register_module()`، `installed_modules()` و `module_for_path()`
-  - [ ] <!-- id: 29 --> ثبت خودکار ماژول‌ها در `AppConfig.ready()` و کشف از entry point گروه `wh.module`
-  - [ ] <!-- id: 30 --> بازنویسی `enforce_token_app_scope` در `accounts/authentication.py:55-73` به حلقهٔ `module_for_path(path)` با حفظ ثبت `AuditLog` و `details.event='CROSS_APP_DENIED'`
-  - [ ] <!-- id: 31 --> تحمیل پاسخ **۴۰۴ (نه ۴۰۳)** برای پیشوند API ماژول نصب‌نشده
-  - [ ] <!-- id: 32 --> بازنویسی `get_user_allowed_apps` (`middleware.py:80-101`) بر پایهٔ `spec.permission_markers` و `get_user_valid_roles_for_app` (`108-147`) بر پایهٔ `spec.roles`
-  - [ ] <!-- id: 33 --> رفع دوحالتگی `middleware.py:221` به `code if code in installed_modules() else default_module()`
-  - [ ] <!-- id: 34 --> پویاسازی `SoDPolicyRule.APP_MODULE_CHOICES` از رجیستری با حفظ عین کد `'personnel'` و افزودن `'accounting'` تنها به‌عنوان alias
-  - [ ] <!-- id: 35 --> ساخت `INSTALLED_APPS` (با override محیطی `WH_MODULES`)، `config/urls.py` و `config/asgi.py` از رجیستری
+- [x] <!-- id: 27 --> **فاز ۳: رجیستری قابلیت‌ها در بک‌اند**
+  - [x] <!-- id: 28 --> ساخت `platform_core/registry.py` با dataclass `ModuleSpec` و توابع `register_module()`، `installed_modules()` و `module_for_path()`
+  - [x] <!-- id: 29 --> ثبت خودکار ماژول‌ها در `AppConfig.ready()` و کشف از entry point گروه `wh.module`
+  - [x] <!-- id: 30 --> بازنویسی `enforce_token_app_scope` در `accounts/authentication.py:55-73` به حلقهٔ `module_for_path(path)` با حفظ ثبت `AuditLog` و `details.event='CROSS_APP_DENIED'`
+  - [x] <!-- id: 31 --> تحمیل پاسخ **۴۰۴ (نه ۴۰۳)** برای پیشوند API ماژول نصب‌نشده
+  - [x] <!-- id: 32 --> بازنویسی `get_user_allowed_apps` (`middleware.py:80-101`) بر پایهٔ `spec.permission_markers` و `get_user_valid_roles_for_app` (`108-147`) بر پایهٔ `spec.roles`
+  - [x] <!-- id: 33 --> رفع دوحالتگی `middleware.py:221` به `code if code in installed_modules() else default_module()`
+  - [x] <!-- id: 34 --> پویاسازی `SoDPolicyRule.APP_MODULE_CHOICES` از رجیستری با حفظ عین کد `'personnel'` و افزودن `'accounting'` تنها به‌عنوان alias
+  - [x] <!-- id: 35 --> ساخت `INSTALLED_APPS` (با override محیطی `WH_MODULES`)، `config/urls.py` و `config/asgi.py` از رجیستری
 
 - [ ] <!-- id: 36 --> **فاز ۴: جدا کردن چت از دامنهٔ انبار (پرریسک‌ترین تغییر دیتابیسی)**
   - [ ] <!-- id: 37 --> نرم کردن دو FK در `communications/models.py:24` و `:207` به `warehouse_id` عددی nullable با همان `db_column` و `SeparateDatabaseAndState`

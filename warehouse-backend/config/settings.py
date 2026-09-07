@@ -32,6 +32,41 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '*').
 
 # Application definition
 
+# ─────────────────────────────────────────────────────────────────────
+# فاز ۳ §۳.۷ — ساخت INSTALLED_APPS از رجیستری قابلیت‌ها.
+#   - ماژول‌های نصب‌شده: پیش‌فرض همه. با متغیر محیطی `WH_MODULES` می‌توان
+#     پروفایل‌های تک‌ماژولی ساخت (مثلاً `WH_MODULES=accounting`).
+#   - اپ‌های پلتفرم (هسته) همیشه نصب‌اند؛ اپ‌های هر ماژول فقط اگر ماژولش نصب باشد.
+#   - ترتیبِ اپ‌ها عیناً ترتیب پیشین حفظ شده است تا رفتارِ مونولیتِ امروز
+#     بی‌کم‌و‌کاست بماند.
+# ─────────────────────────────────────────────────────────────────────
+from platform_core.module_catalog import MODULE_CATALOG
+
+_WH_MODULES = os.environ.get('WH_MODULES', '').strip()
+if _WH_MODULES:
+    _INSTALLED_MODULE_CODES = [m.strip() for m in _WH_MODULES.split(',') if m.strip()]
+else:
+    _INSTALLED_MODULE_CODES = list(MODULE_CATALOG.keys())
+
+# اپ‌های پایهٔ پلتفرم (هسته) — بدون نام ماژول.
+PLATFORM_APPS = [
+    'accounts.apps.AccountsConfig',
+    'settings_core.apps.SettingsCoreConfig',
+    'platform_core.apps.PlatformCoreConfig',
+    'notifications.apps.NotificationsConfig',
+    'communications.apps.CommunicationsConfig',
+]
+
+# اپ‌های ماژول‌های نصب‌شده از کاتالوگ؛ نام اپ‌ها در `module_catalog.py` نگه‌داری
+# می‌شود تا ریشهٔ ترکیب (settings) نام هیچ ماژولی را سخت‌کد نکند.
+MODULE_APPS = []
+for _code in _INSTALLED_MODULE_CODES:
+    _spec = MODULE_CATALOG.get(_code)
+    if _spec:
+        MODULE_APPS.extend(_spec.django_apps)
+
+LOCAL_APPS = PLATFORM_APPS + MODULE_APPS
+
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -52,14 +87,7 @@ INSTALLED_APPS = [
     'axes',
 
     # Local apps
-    'accounts.apps.AccountsConfig',
-    'settings_core.apps.SettingsCoreConfig',
-    'warehouses.apps.WarehousesConfig',
-    'inventory.apps.InventoryConfig',
-    'notifications.apps.NotificationsConfig',
-    'reports.apps.ReportsConfig',
-    'personnel.apps.PersonnelConfig',
-    'communications.apps.CommunicationsConfig',
+    *LOCAL_APPS,
 ]
 
 MIDDLEWARE = [

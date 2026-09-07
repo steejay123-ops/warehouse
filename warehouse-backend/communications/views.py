@@ -50,11 +50,12 @@ def record_audit_log(user, warehouse, module, action, severity, target_model, ta
     try:
         actor_name = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip() if user else 'سیستم'
         actor_username = getattr(user, 'username', '') if user else 'system'
+        wh_id = getattr(warehouse, 'id', warehouse) if warehouse is not None else None
         AuditLog.objects.create(
             user=user if getattr(user, 'is_authenticated', False) else None,
             actor_username=actor_username,
             actor_name=actor_name,
-            warehouse=warehouse,
+            warehouse_id=wh_id,
             module=module,
             action=action,
             severity=severity,

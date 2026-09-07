@@ -127,7 +127,7 @@ class EngineSecurityTests(BaseReportTest):
 
     def test_sensitive_field_hidden_without_bypass(self):
         SystemSetting.objects.create(
-            key='SENSITIVE_EXCEL_FIELDS', value=['inventory'], warehouse=None,
+            key='SENSITIVE_EXCEL_FIELDS', value=['inventory'], warehouse_id=None,
         )
         eng = ReportEngine(self.viewer, {'entity': 'items', 'fields': ['inventory']})
         with self.assertRaises(ReportError):

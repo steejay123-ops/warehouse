@@ -7,15 +7,8 @@ class PersonnelConfig(AppConfig):
     verbose_name = 'مدیریت پرسنل، کارکرد و ناوگان'
 
     def ready(self):
-        # فاز ۲ §۲.۷ — ثبت ماژول‌های ممیزی حسابداری در رجیستری هسته.
-        # این ماژول‌ها امروز در `MODULE_CHOICES` کلاً غایب‌اند و در نصب حسابداری
-        # از سمت همین اپ ثبت می‌شوند.
-        from accounts.models import register_audit_modules
-        register_audit_modules({
-            'attendance': 'کارکرد پرسنل',
-            'fleet': 'کارکرد ناوگان و ماشین‌آلات',
-            'payroll': 'محاسبات حقوق و دستمزد پرسنل',
-            'treasury': 'کارتابل خزانه‌داری و پرداخت',
-            'projects': 'پروژه‌ها و بخش‌ها',
-            'invoices': 'فاکتورهای هزینه',
-        })
+        # فاز ۳ §۳.۱ — ثبت ماژول حسابداری در رجیستری قابلیت‌ها. این خودِ رجیستری،
+        # ماژول‌های ممیزیِ حسابداری (audit_modules) را هم در هسته ثبت می‌کند.
+        from platform_core.registry import register_module
+        from platform_core.module_catalog import ACCOUNTING_SPEC
+        register_module(ACCOUNTING_SPEC)

@@ -8,7 +8,8 @@ _current_ip_var = contextvars.ContextVar('current_ip', default=None)
 _current_user_agent_var = contextvars.ContextVar('current_user_agent', default=None)
 _current_warehouse_var = contextvars.ContextVar('current_warehouse', default=None)
 _current_active_role_var = contextvars.ContextVar('current_active_role', default=None)
-_current_active_app_var = contextvars.ContextVar('current_active_app', default='personnel')
+# فاز ۳ §۳.۵ — مقدار پیش‌فرضِ `active_app` اکنون کدِ ماژول است (نه 'personnel').
+_current_active_app_var = contextvars.ContextVar('current_active_app', default='accounting')
 _current_client_tab_id_var = contextvars.ContextVar('current_client_tab_id', default=None)
 
 def get_client_ip(request):
@@ -66,59 +67,56 @@ def set_current_client_tab_id(tab_id):
 
 def get_user_allowed_apps(user) -> list[str]:
     """
-    محاسبه دامنه‌ها/برنامه‌های مجاز کاربر (warehouse و finance) بر اساس مجوزها یا وضعیت سوپریوزر
+    محاسبه دامنه‌ها/برنامه‌های مجاز کاربر (warehouse و finance) بر اساس مجوزها یا وضعیت سوپریوزر.
+
+    فاز ۳ §۳.۴ — این تابع به‌جای آرایه‌های سخت‌کد، از `spec.permission_markers` هر ماژولِ
+    نصب‌شده در رجیستری استفاده می‌کند و کدِ `allowed_apps` را از
+    `module_allowed_app_code` می‌گیرد (همان کدهای قدیمی 'warehouse'/'finance').
     """
+    from platform_core.registry import installed_modules, get_module, module_allowed_app_code
+
     if not user or not user.is_authenticated:
         return []
-    if user.is_superuser:
-        return ['warehouse', 'finance']
 
-    allowed = set()
     user_perms = user.get_all_permissions()
+    is_super = user.is_superuser
 
-    # بررسی دسترسی به انبارداری
-    warehouse_perm_markers = [
-        'accounts.view_sys_counter', 'accounts.view_sys_supervisor',
-        'accounts.view_sys_manager_review', 'accounts.view_sys_reports',
-        'accounts.view_wh_dispatch', 'accounts.view_wh_docs',
-        'accounts.view_wh_doc_approvals', 'accounts.perm_inventory_finalize',
-        'accounts.perm_doc_approve_action', 'inventory.view_item',
-        'warehouses.view_warehouse', 'inventory.add_item', 'inventory.change_item'
-    ]
-    if any(p in user_perms for p in warehouse_perm_markers):
-        allowed.add('warehouse')
-
-    # بررسی دسترسی به مالی و پرسنلی
-    finance_perm_markers = [
-        'accounts.view_sys_personnel', 'accounts.view_sys_personnel_attendance',
-        'accounts.view_sys_payroll', 'accounts.view_sys_treasury',
-        'accounts.view_sys_fleet_attendance', 'accounts.view_sys_fleet_settlement',
-        'accounts.perm_approve_personnel_supervisor', 'accounts.perm_approve_fleet_supervisor',
-        'accounts.perm_approve_personnel_finance', 'accounts.perm_approve_fleet_finance',
-        'accounts.perm_approve_personnel_manager', 'accounts.perm_approve_fleet_manager',
-        'accounts.perm_manager_payment_authorize', 'accounts.perm_treasury_disburse_action',
-        'accounts.perm_manage_projects_sections'
-    ]
-    if any(p in user_perms for p in finance_perm_markers):
-        allowed.add('finance')
-
-    return sorted(list(allowed))
+    result = []
+    for code in installed_modules():
+        spec = get_module(code)
+        if spec is None:
+            continue
+        if is_super or any(p in user_perms for p in spec.permission_markers):
+            result.append(module_allowed_app_code(code))
+    return result
 
 
 def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[str]:
     """
-    محاسبه لیست نقش‌های معتبر و مجاز کاربر در ماژول انتخاب‌شده جهت جلوگیری از جعل نقش (Anti Role-Spoofing)
+    محاسبه لیست نقش‌های معتبر و مجاز کاربر در ماژول انتخاب‌شده جهت جلوگیری از جعل نقش (Anti Role-Spoofing).
+
+    فاز ۳ §۳.۴ — `app_module` هم کد ماژول ('warehouse'/'accounting') و هم کد قدیمی
+    ('personnel'/'finance') را می‌پذیرد؛ با `app_code_to_module` به ماژولِ رجیستری
+    نرمال می‌شود و نقش‌های مجاز از `spec.roles` برای سوپریوزر برگرفته می‌شود.
     """
+    from platform_core.registry import app_code_to_module, get_module, installed_modules
+
     if not user or not user.is_authenticated:
         return []
 
+    module_code = app_code_to_module(app_module)
+    if module_code not in installed_modules():
+        module_code = 'accounting' if 'accounting' in installed_modules() else (
+            'warehouse' if 'warehouse' in installed_modules() else '')
+    spec = get_module(module_code)
+
     if user.is_superuser:
-        if app_module == 'personnel':
-            return ['operator', 'supervisor', 'accountant', 'manager', 'treasury', 'superuser']
-        return ['counter', 'warehouse_supervisor', 'docs_specialist', 'manager_review', 'superuser']
+        if spec and spec.roles:
+            return list(spec.roles)
+        return ['superuser']
 
     roles = []
-    if app_module == 'personnel':
+    if module_code == 'accounting':
         if user.has_perm('accounts.view_sys_personnel_attendance') or user.has_perm('accounts.view_sys_personnel'):
             roles.append('operator')
         if user.has_perm('accounts.perm_approve_personnel_supervisor') or user.has_perm('accounts.perm_approve_fleet_supervisor'):
@@ -163,6 +161,18 @@ def resolve_effective_role(user, requested_role: str, app_module: str = 'personn
 
     # اگر نقشی فرستاده نشده یا نامعتبر بود، آخرین (بالاترین) نقش معتبر را برمی‌گردانیم
     return valid_roles[-1] if valid_roles else 'operator'
+
+
+def _resolve_active_app(raw_app: str) -> str:
+    """
+    فاز ۳ §۳.۵ — نگاشت کدِ ورودی هدر X-Active-App به کدِ ماژولِ نصب‌شده.
+    اگر کد نامعتبر/غیرماژول بود، ماژولِ پیش‌فرضِ رجیستری برگردانده می‌شود.
+    """
+    from platform_core.registry import app_code_to_module, installed_modules, default_module
+    candidate = app_code_to_module(raw_app) if raw_app else None
+    if candidate and candidate in installed_modules():
+        return candidate
+    return default_module()
 
 
 class AuditContextMiddleware:
@@ -216,9 +226,10 @@ class ActiveRoleMiddleware:
         if user and not user.is_authenticated:
             user = None
 
-        # استخراج ماژول کلان از هدر X-Active-App (پیش‌فرض: personnel)
+        # فاز ۳ §۳.۵ — رفع دوحالتگی: کد ورودی هدر (warehouse/personnel/finance/...)
+        # را به کدِ ماژولِ نصب‌شده نگاشت کن؛ اگر معتبر نبود، ماژولِ پیش‌فرض.
         raw_app = request.META.get('HTTP_X_ACTIVE_APP', '').strip().lower()
-        active_app = 'warehouse' if raw_app == 'warehouse' else 'personnel'
+        active_app = _resolve_active_app(raw_app)
 
         # استخراج نقش درخواستی از هدر X-Active-Role
         raw_role = request.META.get('HTTP_X_ACTIVE_ROLE', '').strip().lower()

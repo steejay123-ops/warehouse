@@ -305,7 +305,7 @@ class InventoryDispatchAndRoutingTests(BaseInventoryTestCase):
         }, format='json')
         self.assertEqual(warn_resp.status_code, status.HTTP_200_OK)
         self.assertTrue(warn_resp.data.get('warning'))
-        self.assertIn('قبلاً به فرآیند شمارش رفته‌اند', warn_resp.data.get('message', ''))
+        self.assertIn('دارای فرآیند شمارش فعال هستند', warn_resp.data.get('message', ''))
 
         # ج) ارجاع مجدد با force=True -> باید با موفقیت تسک جدید بسازد
         force_resp = self.client.post('/api/inventory/items/bulk_assign/', {
@@ -1406,6 +1406,7 @@ class ExcelImportAndAuditLoggingTestCase(TransactionTestCase):
         )
         self.assertIsNotNone(entry1)
         self.assertEqual(entry1.warehouse, self.warehouse)
+        self.assertEqual(entry1.warehouse_id, self.warehouse.id)
 
         # تست با warehouse_id عددی (که قبلاً خطا می‌داد)
         entry2 = log_audit_event(
@@ -1417,6 +1418,7 @@ class ExcelImportAndAuditLoggingTestCase(TransactionTestCase):
         )
         self.assertIsNotNone(entry2)
         self.assertEqual(entry2.warehouse, self.warehouse)
+        self.assertEqual(entry2.warehouse_id, self.warehouse.id)
 
     def test_excel_import_endpoint_success(self):
         import io

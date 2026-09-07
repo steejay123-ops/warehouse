@@ -51,7 +51,7 @@ class SettingsAndPurgeTestCase(BaseCommsTestCase):
         # تنظیم اختصاصی انبار ۱: chat_enabled = False
         SystemSetting.objects.update_or_create(
             key='chat_enabled',
-            warehouse=self.wh1,
+            warehouse_id=self.wh1.id,
             defaults={'value': False}
         )
         clear_setting_cache('chat_enabled', self.wh1.id)

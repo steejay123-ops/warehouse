@@ -17,10 +17,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
     path('api/accounts/', include('accounts.urls')),
-    path('api/warehouses/', include('warehouses.urls')),
-    path('api/inventory/', include('inventory.urls')),
-    path('api/reports/', include('reports.urls')),
-    path('api/personnel/', include('personnel.urls')),
     path('api/communications/', include('communications.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/settings/global/', SettingsViewSet.as_view({'get': 'global_settings', 'post': 'global_settings'})),
@@ -35,4 +31,14 @@ urlpatterns = [
     # پیشین حذف شد چون در حالت DEBUG یک مسیر سروِ بی‌امضا اضافه می‌کرد.
     re_path(r'^media/(?P<path>.*)$', serve_media),
 ]
+
+# فاز ۳ §۳.۷ — مسیرهای ماژول‌ها از رجیستری قابلیت‌ها ساخته می‌شوند: در نصبِ بدون
+# یک ماژول، پیشوند URL آن روت نمی‌شود (تا وجود اندپوینت‌هایش لو نرود و ۴۰۴ بدهد).
+from platform_core.registry import installed_modules, get_module
+
+for _code in installed_modules():
+    _spec = get_module(_code)
+    if _spec:
+        for _prefix, _urlconf in _spec.url_includes:
+            urlpatterns.append(path(_prefix, include(_urlconf)))
 

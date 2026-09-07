@@ -1,0 +1,97 @@
+"""
+کاتالوگ استاتیک ماژول‌های نصب‌شدنی — فاز ۳.
+
+این فایل در زمان بارگذاری settings ایمپورت می‌شود (پیش از آماده‌شدن Django apps)
+تا `INSTALLED_APPS` بتواند از آن ساخته شود (تسک ۳۵). همین مشخصات در `ready()`
+هر ماژول به رجیستریِ زمان اجرا (`platform_core.registry.register_module`) نیز
+ثبت می‌شود تا `module_for_path`/`installed_modules` کار کنند.
+
+منبع permission_markers و roles: `accounts/middleware.py` (get_user_allowed_apps و
+get_user_valid_roles_for_app) — عیناً، تا رفتار امروز حفظ شود.
+"""
+
+from platform_core.registry import ModuleSpec
+
+
+WAREHOUSE_SPEC = ModuleSpec(
+    code='warehouse',
+    title_fa='سامانه انبارداری و انبارگردانی',
+    django_apps=('warehouses.apps.WarehousesConfig', 'inventory.apps.InventoryConfig', 'reports.apps.ReportsConfig'),
+    api_prefixes=('api/warehouses/', 'api/inventory/', 'api/reports/'),
+    permission_markers=(
+        'accounts.view_sys_counter',
+        'accounts.view_sys_supervisor',
+        'accounts.view_sys_manager_review',
+        'accounts.view_sys_reports',
+        'accounts.view_wh_dispatch',
+        'accounts.view_wh_docs',
+        'accounts.view_wh_doc_approvals',
+        'accounts.perm_inventory_finalize',
+        'accounts.perm_doc_approve_action',
+        'inventory.view_item',
+        'warehouses.view_warehouse',
+        'inventory.add_item',
+        'inventory.change_item',
+    ),
+    roles=('counter', 'warehouse_supervisor', 'docs_specialist', 'manager_review', 'superuser'),
+    url_includes=(
+        ('api/warehouses/', 'warehouses.urls'),
+        ('api/inventory/', 'inventory.urls'),
+        ('api/reports/', 'reports.urls'),
+    ),
+    audit_modules=(
+        ('docs', 'مدیریت کالا (انبار)'),
+        ('dispatch', 'تخصیص کالا (انبار)'),
+        ('customs', 'فیلدهای مالی/گمرکی (انبار)'),
+        ('feeding', 'تغذیه سامانه‌های MT (انبار)'),
+        ('labels', 'لیبلینگ و بارکد (انبار)'),
+        ('counter', 'میزکار شمارش کور'),
+        ('supervisor', 'کارتابل سرپرست شمارش'),
+        ('manager', 'بررسی نهایی مدیر'),
+    ),
+    sod_app_module='warehouse',
+)
+
+
+ACCOUNTING_SPEC = ModuleSpec(
+    code='accounting',
+    title_fa='سامانه کارکرد، مالی و خزانه‌داری',
+    django_apps=('personnel.apps.PersonnelConfig',),
+    api_prefixes=('api/personnel/',),
+    permission_markers=(
+        'accounts.view_sys_personnel',
+        'accounts.view_sys_personnel_attendance',
+        'accounts.view_sys_payroll',
+        'accounts.view_sys_treasury',
+        'accounts.view_sys_fleet_attendance',
+        'accounts.view_sys_fleet_settlement',
+        'accounts.perm_approve_personnel_supervisor',
+        'accounts.perm_approve_fleet_supervisor',
+        'accounts.perm_approve_personnel_finance',
+        'accounts.perm_approve_fleet_finance',
+        'accounts.perm_approve_personnel_manager',
+        'accounts.perm_approve_fleet_manager',
+        'accounts.perm_manager_payment_authorize',
+        'accounts.perm_treasury_disburse_action',
+        'accounts.perm_manage_projects_sections',
+    ),
+    roles=('operator', 'supervisor', 'accountant', 'manager', 'treasury', 'superuser'),
+    url_includes=(
+        ('api/personnel/', 'personnel.urls'),
+    ),
+    audit_modules=(
+        ('attendance', 'کارکرد پرسنل'),
+        ('fleet', 'کارکرد ناوگان و ماشین‌آلات'),
+        ('payroll', 'محاسبات حقوق و دستمزد پرسنل'),
+        ('treasury', 'کارتابل خزانه‌داری و پرداخت'),
+        ('projects', 'پروژه‌ها و بخش‌ها'),
+        ('invoices', 'فاکتورهای هزینه'),
+    ),
+    sod_app_module='personnel',
+)
+
+
+MODULE_CATALOG = {
+    'warehouse': WAREHOUSE_SPEC,
+    'accounting': ACCOUNTING_SPEC,
+}

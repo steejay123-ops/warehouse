@@ -47,16 +47,8 @@ class WarehousesConfig(AppConfig):
         # فاز ۱ §۱.۳ — بازسازی رفتار CASCADE (به `warehouses/signals` مراجعه کنید).
         import warehouses.signals  # noqa: F401
 
-        # فاز ۲ §۲.۷ — ثبت ماژول‌های ممیزی انباری در رجیستری هسته.
-        # پایهٔ پلتفرم (users/warehouses/settings/system) را دارد؛ این‌ها را اضافه می‌کند.
-        from accounts.models import register_audit_modules
-        register_audit_modules({
-            'docs': 'مدیریت کالا (انبار)',
-            'dispatch': 'تخصیص کالا (انبار)',
-            'customs': 'فیلدهای مالی/گمرکی (انبار)',
-            'feeding': 'تغذیه سامانه‌های MT (انبار)',
-            'labels': 'لیبلینگ و بارکد (انبار)',
-            'counter': 'میزکار شمارش کور',
-            'supervisor': 'کارتابل سرپرست شمارش',
-            'manager': 'بررسی نهایی مدیر',
-        })
+        # فاز ۳ §۳.۱ — ثبت ماژول انبار در رجیستری قابلیت‌ها. این خودِ رجیستری،
+        # ماژول‌های ممیزیِ انباری (audit_modules) را هم در هسته ثبت می‌کند.
+        from platform_core.registry import register_module
+        from platform_core.module_catalog import WAREHOUSE_SPEC
+        register_module(WAREHOUSE_SPEC)

@@ -409,7 +409,9 @@ class UserLoginLogSerializer(serializers.ModelSerializer):
 class AuditLogListSerializer(serializers.ModelSerializer):
     user_display = serializers.SerializerMethodField()
     user_role = serializers.SerializerMethodField()
-    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True, default=None)
+    warehouse = serializers.IntegerField(source='warehouse_id', read_only=True, allow_null=True)
+    warehouse_id = serializers.IntegerField(read_only=True, allow_null=True)
+    warehouse_name = serializers.SerializerMethodField()
     module_display = serializers.CharField(source='get_module_display', read_only=True)
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
@@ -418,12 +420,19 @@ class AuditLogListSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuditLog
         fields = [
-            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role', 'warehouse', 'warehouse_name',
+            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role',
+            'warehouse', 'warehouse_id', 'warehouse_name',
             'module', 'module_display', 'action', 'action_display',
             'severity', 'severity_display', 'target_model', 'target_object_id',
             'target_repr', 'has_diff', 'details', 'ip_address', 'created_at'
         ]
         read_only_fields = fields
+
+    def get_warehouse_name(self, obj):
+        if not obj.warehouse_id:
+            return "عمومی / سیستم"
+        wh = getattr(obj, 'warehouse', None)
+        return wh.name if wh else "عمومی / سیستم"
 
     def get_has_diff(self, obj):
         return bool(obj.before_state or obj.after_state)
@@ -456,7 +465,8 @@ class AuditLogListSerializer(serializers.ModelSerializer):
 class AuditLogSerializer(AuditLogListSerializer):
     class Meta(AuditLogListSerializer.Meta):
         fields = [
-            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role', 'warehouse', 'warehouse_name',
+            'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role',
+            'warehouse', 'warehouse_id', 'warehouse_name',
             'module', 'module_display', 'action', 'action_display',
             'severity', 'severity_display', 'target_model', 'target_object_id',
             'target_repr', 'before_state', 'after_state', 'details',

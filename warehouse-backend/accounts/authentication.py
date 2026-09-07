@@ -1,6 +1,6 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 from datetime import datetime
 
 class CustomJWTAuthentication(JWTAuthentication):
@@ -51,26 +51,39 @@ class CustomJWTAuthentication(JWTAuthentication):
             except Exception:
                 pass
 
-        # 1. درخواست‌های مربوط به سامانه مالی و پرسنلی:
-        if path.startswith('/api/personnel/'):
-            if 'finance' not in allowed_apps and 'personnel' not in allowed_apps:
-                msg = 'این توکن فاقد قلمرو مجاز (App-Scoped Claim: finance) برای دسترسی به سامانه مالی و پرسنلی است.'
-                _log_boundary_violation('finance', msg)
-                raise PermissionDenied(msg, code='app_scope_denied')
+        # فاز ۳ §۳.۲ — به‌جای زنجیرهٔ if path.startswith(...)، مسیر از رجیستری
+        # قابلیت‌ها حل می‌شود. اگر مسیر به ماژولِ شناخته‌شدهٔ نصب‌نشده تعلق دارد،
+        # ۴۰۴ برمی‌گردانیم (قانون ۵ — افشا نکردن ماژول نصب‌نشده)؛ اگر به ماژولِ
+        # نصب‌شده تعلق دارد و قلمرو کاربر کافی نیست، ۴۰۳.
+        from platform_core.registry import (
+            module_for_path,
+            known_module_for_path,
+            module_scope_codes,
+        )
 
-        # 2. درخواست‌های مربوط به انبارداری و کالاها و گزارش‌ساز انبار:
-        elif path.startswith('/api/inventory/') or path.startswith('/api/reports/'):
-            if 'warehouse' not in allowed_apps:
-                msg = 'این توکن فاقد قلمرو مجاز (App-Scoped Claim: warehouse) برای دسترسی به سامانه انبارداری است.'
-                _log_boundary_violation('warehouse', msg)
-                raise PermissionDenied(msg, code='app_scope_denied')
+        module = module_for_path(path)
+        if module is None:
+            # مسیر به یک ماژولِ کاتالوگ تعلق دارد ولی نصب نیست → ۴۰۴.
+            known = known_module_for_path(path)
+            if known is not None:
+                msg = f'این مسیر متعلق به ماژول «{known.title_fa}» است که در این نصب فعال نیست.'
+                _log_boundary_violation(known.code, msg)
+                raise NotFound(msg, code='cross_app_not_found')
+            return  # مسیرِ غیرماژول؛ هیچ محدودیت قلمرویی اعمال نمی‌شود.
 
-        # 3. تغییرات و مدیریت انبارها:
-        elif path.startswith('/api/warehouses/') and getattr(request, 'method', 'GET') not in ('GET', 'HEAD', 'OPTIONS'):
-            if 'warehouse' not in allowed_apps:
-                msg = 'این توکن فاقد قلمرو مجاز (App-Scoped Claim: warehouse) برای ویرایش مشخصات انبار است.'
-                _log_boundary_violation('warehouses', msg)
-                raise PermissionDenied(msg, code='app_scope_denied')
+        # GET/HEAD/OPTIONS روی پیشوند /api/warehouses/ عمداً بدون محدودیت قلمرو
+        # (رفتار پیشین؛ خواندن فهرست انبارها برای همگانِ دارای توکن مجاز است).
+        if (module.code == 'warehouse'
+                and path.startswith('/api/warehouses/')
+                and getattr(request, 'method', 'GET') in ('GET', 'HEAD', 'OPTIONS')):
+            return
+
+        scope_codes = module_scope_codes(module.code)
+        if not any(c in allowed_apps for c in scope_codes):
+            msg = (f'این توکن فاقد قلمرو مجاز (App-Scoped Claim: {"/".join(scope_codes)}) '
+                   f'برای دسترسی به «{module.title_fa}» است.')
+            _log_boundary_violation(module.code, msg)
+            raise PermissionDenied(msg, code='app_scope_denied')
 
     def get_user(self, validated_token):
         user = super().get_user(validated_token)

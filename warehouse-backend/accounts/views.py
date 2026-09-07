@@ -1458,7 +1458,7 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = AuditLog.objects.all().select_related('user', 'warehouse').prefetch_related('user__groups__customrole').order_by('-created_at')
+    queryset = AuditLog.objects.all().select_related('user').prefetch_related('user__groups__customrole').order_by('-created_at')
     serializer_class = AuditLogSerializer
     pagination_class = StandardLogPagination
 
@@ -1511,7 +1511,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             if app_scope == 'warehouse':
                 qs = qs.filter(
                     Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
-                    Q(warehouse__isnull=False)
+                    Q(warehouse_id__isnull=False)
                 ).exclude(
                     Q(details__event='CROSS_APP_DENIED') |
                     Q(details__event='APP_SCOPE_SWITCH') |
@@ -1595,7 +1595,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         warehouse_logs_count = base_qs.filter(
             Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
-            Q(warehouse__isnull=False)
+            Q(warehouse_id__isnull=False)
         ).exclude(
             Q(details__event='CROSS_APP_DENIED') |
             Q(details__event='APP_SCOPE_SWITCH') |
@@ -1682,7 +1682,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 if app_scope == 'warehouse':
                     qs = qs.filter(
                         Q(module__in=['docs', 'dispatch', 'customs', 'feeding', 'labels', 'counter', 'supervisor', 'manager', 'warehouses']) |
-                        Q(warehouse__isnull=False)
+                        Q(warehouse_id__isnull=False)
                     ).exclude(
                         Q(details__event='CROSS_APP_DENIED') |
                         Q(details__event='APP_SCOPE_SWITCH') |
@@ -1727,7 +1727,14 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 qs = qs.filter(created_at__lte=to_date)
 
         export_limit = 10000
-        qs = qs[:export_limit]
+        qs = list(qs[:export_limit])
+        wh_ids = {item.warehouse_id for item in qs if getattr(item, 'warehouse_id', None)}
+        wh_map = {}
+        if wh_ids:
+            from django.apps import apps
+            if apps.is_installed('warehouses'):
+                Warehouse = apps.get_model('warehouses', 'Warehouse')
+                wh_map = dict(Warehouse.objects.filter(id__in=wh_ids).values_list('id', 'name'))
 
         all_cols_def = [
             ('index', 'ردیف', 8),
@@ -1812,7 +1819,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 else:
                     user_display = "سیستم"
 
-                wh_name = item.warehouse.name if item.warehouse else "عمومی / سیستم"
+                wh_name = wh_map.get(item.warehouse_id) or (item.warehouse.name if getattr(item, 'warehouse', None) else "عمومی / سیستم")
                 row_vals = []
                 for col_key, _, _ in selected_cols:
                     if col_key == 'index':
@@ -1903,7 +1910,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
             else:
                 user_display = "سیستم"
 
-            wh_name = item.warehouse.name if item.warehouse else "عمومی / سیستم"
+            wh_name = wh_map.get(item.warehouse_id) or (item.warehouse.name if getattr(item, 'warehouse', None) else "عمومی / سیستم")
             row_vals = []
             for col_key, _, _ in selected_cols:
                 if col_key == 'index':

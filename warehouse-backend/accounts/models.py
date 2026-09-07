@@ -292,8 +292,48 @@ class AuditLog(models.Model):
             models.Index(fields=['user', 'created_at']),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if 'warehouse' in kwargs:
+            wh = kwargs.pop('warehouse')
+            if 'warehouse_id' not in kwargs and wh is not None:
+                kwargs['warehouse_id'] = getattr(wh, 'id', wh)
+        super().__init__(*args, **kwargs)
+
+    @property
+    def warehouse(self):
+        """
+        سازگاری رو به عقب برای کدهایی که obj.warehouse را می‌خوانند.
+        """
+        if not self.warehouse_id:
+            return None
+        from django.apps import apps
+        if apps.is_installed('warehouses'):
+            Warehouse = apps.get_model('warehouses', 'Warehouse')
+            return Warehouse.objects.filter(id=self.warehouse_id).first()
+        return None
+
     def __str__(self):
         return f"[{self.get_module_display()}] {self.get_action_display()} - {self.target_repr or self.target_object_id} ({self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''})"
+
+
+def get_app_module_choices():
+    """
+    فهرست پویا از رجیستری قابلیت‌ها (فاز ۳ §۳.۶). کد 'personnel' عیناً حفظ می‌شود
+    و ماژول‌های رجیستری مثل 'accounting' به‌عنوان alias اضافه می‌شوند تا دادهٔ قدیمی
+    SoD (با 'personnel') سازگار بماند.
+    """
+    from platform_core.registry import installed_modules, get_module
+    base = [
+        ('warehouse', 'سامانه انبارداری و انبارگردانی'),
+        ('personnel', 'سامانه کارکرد، مالی و خزانه‌داری'),
+    ]
+    seen = {'warehouse', 'personnel'}
+    for code in installed_modules():
+        spec = get_module(code)
+        if spec and code not in seen:
+            base.append((code, spec.title_fa))
+            seen.add(code)
+    return base
 
 
 class SoDPolicyRule(models.Model):
@@ -301,12 +341,7 @@ class SoDPolicyRule(models.Model):
     مدل ماتریس تفکیک وظایف و خطوط قرمز (Separation of Duties Policy Matrix)
     این جدول جهت ماندگاری و انطباق حاکمیتی در دیتابیس ذخیره شده و در زمان استارت‌آپ در کش Redis لود می‌شود.
     """
-    APP_MODULE_CHOICES = [
-        ('warehouse', 'سامانه انبارداری و انبارگردانی'),
-        ('personnel', 'سامانه کارکرد، مالی و خزانه‌داری'),
-    ]
-
-    app_module = models.CharField(max_length=50, choices=APP_MODULE_CHOICES, default='personnel', db_index=True, verbose_name="ماژول کلان")
+    app_module = models.CharField(max_length=50, choices=get_app_module_choices, default='personnel', db_index=True, verbose_name="ماژول کلان")
     role_code = models.CharField(max_length=60, db_index=True, verbose_name="کد نقش سازمانی")
     role_title_fa = models.CharField(max_length=150, blank=True, verbose_name="عنوان فارسی نقش")
     page_route = models.CharField(max_length=150, db_index=True, verbose_name="مسیر صفحه فرانت‌اند")

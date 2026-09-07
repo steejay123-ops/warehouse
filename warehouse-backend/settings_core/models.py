@@ -39,6 +39,24 @@ class SystemSetting(models.Model):
         from .services import clear_setting_cache
         clear_setting_cache(key, wh_id)
 
+    def __init__(self, *args, **kwargs):
+        if 'warehouse' in kwargs:
+            wh = kwargs.pop('warehouse')
+            if 'warehouse_id' not in kwargs and wh is not None:
+                kwargs['warehouse_id'] = getattr(wh, 'id', wh)
+        super().__init__(*args, **kwargs)
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب برای کدهایی که obj.warehouse را می‌خوانند."""
+        if not self.warehouse_id:
+            return None
+        from django.apps import apps
+        if apps.is_installed('warehouses'):
+            Warehouse = apps.get_model('warehouses', 'Warehouse')
+            return Warehouse.objects.filter(id=self.warehouse_id).first()
+        return None
+
     def __str__(self):
         if self.warehouse_id:
             return f"{self.key} - WH#{self.warehouse_id}"

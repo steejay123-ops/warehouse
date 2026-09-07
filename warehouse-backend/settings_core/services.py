@@ -1,7 +1,6 @@
 import hashlib
 import json
 
-from django.apps import apps
 from django.core.cache import cache
 
 # ---------------------------------------------------------------------------
@@ -24,20 +23,6 @@ BOOLEAN_SETTINGS_KEYS = {
     'chat_file_sharing',
 }
 
-# نگاشت اپ نصب‌شده → کد ماژول، برای محاسبهٔ `installed_modules` (فاز ۱ §۱.۸).
-# این نگاشت در فاز ۳ با رجیستری قابلیت‌ها جایگزین می‌شود.
-_MODULE_BY_APP = {
-    'accounts': 'platform',
-    'common': 'platform',
-    'communications': 'platform',
-    'notifications': 'platform',
-    'settings_core': 'platform',
-    'warehouses': 'warehouse',
-    'inventory': 'warehouse',
-    'reports': 'warehouse',
-    'personnel': 'accounting',
-}
-_MODULE_ORDER = ('platform', 'warehouse', 'accounting')
 
 
 def register_settings_defaults(defaults, boolean_keys=()):
@@ -54,11 +39,10 @@ def register_settings_defaults(defaults, boolean_keys=()):
 def get_installed_modules():
     """
     فهرست کدهای ماژولِ نصب‌شده (manifest برای فرانت‌اند).
-    در فاز ۳ این تابع از رجیستری قابلیت‌ها ساخته می‌شود؛ امروز از اپ‌های
-    نصب‌شده مشتق می‌شود.
+    فاز ۳ §۳.۷ — از رجیستری قابلیت‌ها خوانده می‌شود؛ 'platform' همیشه حاضر است.
     """
-    installed = {cfg.name for cfg in apps.get_app_configs()}
-    return [code for code in _MODULE_ORDER if any(app in installed for app, c in _MODULE_BY_APP.items() if c == code)]
+    from platform_core.registry import installed_modules
+    return ['platform'] + list(installed_modules())
 
 
 def is_strict_int(val):

@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from warehouses.models import Warehouse
 from .models import (
+    FinancialProject,
     PersonnelProfile,
     VehicleDriverProfile,
     MonthlyWorkPeriod,
@@ -35,13 +36,20 @@ class PersonnelAppTests(TestCase):
             code='WH-PARS-01'
         )
         
+        self.project = FinancialProject.objects.create(
+            name='پروژه پارس',
+            code='PRJ-PARS',
+            is_active=True
+        )
+
         self.personnel1 = PersonnelProfile.objects.create(
             first_name='حسین',
             last_name='اکبری',
             national_code='2452304301',
             job_title='مدیر پروژه',
             daily_base_wage=6572696,
-            assigned_warehouse=self.warehouse
+            assigned_warehouse=self.warehouse,
+            project=self.project
         )
         
         self.personnel2 = PersonnelProfile.objects.create(
@@ -50,7 +58,8 @@ class PersonnelAppTests(TestCase):
             national_code='4260006134',
             job_title='کمک انباردار',
             daily_base_wage=6044057,
-            assigned_warehouse=self.warehouse
+            assigned_warehouse=self.warehouse,
+            project=self.project
         )
         
         self.vehicle1 = VehicleDriverProfile.objects.create(
@@ -228,7 +237,7 @@ class PersonnelAppTests(TestCase):
         period_id = res_calc.data['period_id']
 
         # 2. تست صدور دیسکت‌های بیمه (ZIP حاوی DSKWOR00.DBF و DSKKAR00.DBF)
-        res_dsk = self.client.get(f'/api/personnel/monthly-payroll/export-dsk-zip/?period_id={period_id}')
+        res_dsk = self.client.get(f'/api/personnel/monthly-payroll/export-dsk-zip/?period_id={period_id}&project_id={self.project.id}')
         self.assertEqual(res_dsk.status_code, 200)
         self.assertEqual(res_dsk['Content-Type'], 'application/zip')
         self.assertGreater(len(res_dsk.content), 1000)
@@ -243,7 +252,7 @@ class PersonnelAppTests(TestCase):
         self.assertTrue(res_wp.content.startswith(b'\xef\xbb\xbf')) # UTF-8 BOM
 
         # 4. تست صدور فایل اکسل پرداخت بانک ملی
-        res_bank = self.client.get(f'/api/personnel/monthly-payroll/export-bank-excel/?period_id={period_id}')
+        res_bank = self.client.get(f'/api/personnel/monthly-payroll/export-bank-excel/?period_id={period_id}&project_id={self.project.id}')
         self.assertEqual(res_bank.status_code, 200)
         self.assertEqual(res_bank['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 

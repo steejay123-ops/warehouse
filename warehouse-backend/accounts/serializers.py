@@ -1,8 +1,17 @@
+from django.apps import apps
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.models import Group, Permission
 from .models import CustomUser, CustomRole
-from warehouses.models import Warehouse
+
+
+# فاز ۲ §۲.۳ — حل اختیاری اپ انبار. در نصب بدون انبار فیلدهای مرتبط حذف می‌شوند.
+def _warehouse_model():
+    """اگر اپ `warehouses` نصب است مدل `Warehouse` را برمی‌گرداند، وگرنه None."""
+    if not apps.is_installed('warehouses'):
+        return None
+    from warehouses.models import Warehouse
+    return Warehouse
 
 class PermissionSerializer(serializers.ModelSerializer):
     is_sensitive = serializers.SerializerMethodField()
@@ -25,7 +34,6 @@ class CustomRoleSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
     user_permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
-    assigned_warehouses = serializers.PrimaryKeyRelatedField(many=True, queryset=Warehouse.objects.all(), required=False)
     roles = serializers.ListField(
         child=serializers.CharField(),
         write_only=True,
@@ -36,8 +44,8 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = [
-            'id', 'username', 'first_name', 'last_name', 'email', 
-            'national_code', 'phone_number', 'operational_zone', 
+            'id', 'username', 'first_name', 'last_name', 'email',
+            'national_code', 'phone_number', 'operational_zone',
             'supervisor', 'company', 'address', 'avatar', 'blood_type', 'emergency_contact', 'is_active', 'date_joined', 'last_login',
             'updated_at', 'created_by', 'modified_by',
             'groups', 'user_permissions', 'assigned_warehouses', 'is_superuser',
@@ -47,6 +55,19 @@ class UserSerializer(serializers.ModelSerializer):
             'email': {'required': False, 'allow_blank': True, 'allow_null': True},
             'phone_number': {'required': False, 'allow_blank': True, 'allow_null': True},
         }
+
+    def get_fields(self):
+        # فاز ۲ §۲.۳ — فیلد `assigned_warehouses` فقط در نصب‌های دارای اپ انبار
+        # معنی دارد. در نصب حسابداری‌تنها این فیلد حذف می‌شود.
+        fields = super().get_fields()
+        Warehouse = _warehouse_model()
+        if Warehouse is not None:
+            fields['assigned_warehouses'] = serializers.PrimaryKeyRelatedField(
+                many=True, queryset=Warehouse.objects.all(), required=False,
+            )
+        else:
+            fields.pop('assigned_warehouses', None)
+        return fields
 
     def validate_email(self, value):
         if value is None:
@@ -101,8 +122,9 @@ class UserSerializer(serializers.ModelSerializer):
                 })
         ret['roles'] = [r['name'] for r in role_data]
         ret['role_objects'] = role_data
-        # Admin/superuser gets all warehouses
-        if instance.is_superuser:
+        # Admin/superuser gets all warehouses (فقط در نصب‌های دارای اپ انبار).
+        Warehouse = _warehouse_model()
+        if instance.is_superuser and Warehouse is not None and 'assigned_warehouses' in ret:
             ret['assigned_warehouses'] = list(Warehouse.objects.values_list('id', flat=True))
         return ret
 
@@ -112,16 +134,17 @@ class UserSerializer(serializers.ModelSerializer):
             is_req_admin = request.user.is_superuser
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
-                
+
         groups = validated_data.pop('groups', [])
         roles = validated_data.pop('roles', None)
         user_permissions = validated_data.pop('user_permissions', [])
-        assigned_warehouses = validated_data.pop('assigned_warehouses', [])
+        # فاز ۲ §۲.۳ — در نصب بدون انبار این کلید وجود ندارد.
+        assigned_warehouses = validated_data.pop('assigned_warehouses', []) if _warehouse_model() is not None else []
         password = validated_data.pop('password', None)
-        
+
         if not validated_data.get('email'):
             validated_data['email'] = ''
-            
+
         user = CustomUser(**validated_data)
         if password:
             user.set_password(password)
@@ -129,16 +152,17 @@ class UserSerializer(serializers.ModelSerializer):
             user.set_password('123456')
             user.requires_password_change = True
         user.save()
-        
+
         if roles is not None:
             group_objs = Group.objects.filter(name__in=roles)
             user.groups.set(group_objs)
         else:
             user.groups.set(groups)
-            
+
         user.user_permissions.set(user_permissions)
-        user.assigned_warehouses.set(assigned_warehouses)
-        
+        if assigned_warehouses:
+            user.assigned_warehouses.set(assigned_warehouses)
+
         return user
 
     def update(self, instance, validated_data):

@@ -147,16 +147,24 @@ def get_model_class(model_name):
         return None
         
     # نگاشت اختصاصی برای مدل‌های متداول پروژه
+    # فاز ۲ §۲.۵ — گارد `apps.is_installed` برای مدل‌هایِ ماژولِ انبار: در نصب
+    # حسابداری‌تنها این اپ‌ها وجود ندارند و نباید ایمپورت شوند.
     if model_name == 'Item':
+        if not apps.is_installed('inventory'):
+            return None
         from inventory.models import Item
         return Item
     elif model_name == 'CountTask':
+        if not apps.is_installed('inventory'):
+            return None
         from inventory.models import CountTask
         return CountTask
     elif model_name in ('CustomUser', 'User'):
         from accounts.models import CustomUser
         return CustomUser
     elif model_name == 'Warehouse':
+        if not apps.is_installed('warehouses'):
+            return None
         from warehouses.models import Warehouse
         return Warehouse
     elif model_name == 'CustomRole':

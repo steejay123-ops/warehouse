@@ -106,20 +106,22 @@ def log_audit_event(
     try:
         actor_user = user or get_current_user()
         client_ip = ip_address or get_current_ip()
-        
-        target_wh = warehouse
-        if target_wh is None and warehouse_id is not None:
-            target_wh = warehouse_id
 
-        if isinstance(target_wh, (int, str)) and str(target_wh).isdigit():
-            from warehouses.models import Warehouse
-            target_wh = Warehouse.objects.filter(id=int(target_wh)).first()
-        
-        if target_wh is None:
-            wh_id = get_current_warehouse()
-            if wh_id:
-                from warehouses.models import Warehouse
-                target_wh = Warehouse.objects.filter(id=wh_id).first()
+        # فاز ۲ §۲.۶ — ستون `warehouse_id` در `AuditLog` عددی ساده است (نه FK).
+        # پس دیگر نیازی به resolve به شیئ `Warehouse` نیست؛ هسته هیچ ایمپورتی
+        # به اپ انبار ندارد. پارامتر `warehouse` همچنان شیئ یا id می‌پذیرد.
+        target_wh_id = None
+        if warehouse is not None:
+            target_wh_id = getattr(warehouse, 'id', warehouse)
+        elif warehouse_id is not None:
+            target_wh_id = warehouse_id
+        if isinstance(target_wh_id, str) and str(target_wh_id).isdigit():
+            target_wh_id = int(target_wh_id)
+        if target_wh_id is None:
+            target_wh_id = get_current_warehouse()
+        # نرمال‌سازی نهایی: اگر باز هم شیئ بود، id می‌گیریم
+        if target_wh_id is not None:
+            target_wh_id = getattr(target_wh_id, 'id', target_wh_id)
 
         clean_before = sanitize_sensitive_data(before_state) if before_state else None
         clean_after = sanitize_sensitive_data(after_state) if after_state else None
@@ -138,7 +140,7 @@ def log_audit_event(
             user=actor_user,
             actor_username=actor_username,
             actor_name=actor_name,
-            warehouse=target_wh,
+            warehouse_id=target_wh_id,
             module=module,
             action=action,
             severity=severity,

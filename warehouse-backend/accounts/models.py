@@ -17,7 +17,9 @@ class CustomUser(AbstractUser):
     blood_type = models.CharField(max_length=10, null=True, blank=True, verbose_name="گروه خونی")
     emergency_contact = models.CharField(max_length=50, null=True, blank=True, verbose_name="شماره تماس اضطراری")
     
-    assigned_warehouses = models.ManyToManyField('warehouses.Warehouse', related_name='assigned_users', blank=True)
+    # فاز ۲ §۲.۱ — M2M به اپ انبار منتقل شد (همان جدول، همان اکسسور).
+    # برای حفظ `user.assigned_warehouses` و `warehouse.assigned_users`، M2M اکنون
+    # روی `Warehouse` در اپ `warehouses` اعلام می‌شود (به `warehouses/models.py` مراجعه کنید).
     ui_preferences = models.JSONField(default=dict, blank=True)
     
     updated_at = models.DateTimeField(auto_now=True)
@@ -202,25 +204,34 @@ class UserLoginLog(models.Model):
         return f"{self.username_attempted} - {self.get_status_display()} ({self.created_at.strftime('%Y-%m-%d %H:%M') if self.created_at else ''})"
 
 
+# ─────────────────────────────────────────────────────────────────────
+# فاز ۲ §۲.۷ — رجیستری ماژول‌های ممیزی (Audit Modules Registry)
+# ─────────────────────────────────────────────────────────────────────
+# پایهٔ پلتفرم: کاربران، انبارها، تنظیمات، رویداد سیستمی. ماژول‌های انباری و
+# حسابداری در `AppConfig.ready()` از طریق `register_audit_modules` ثبت می‌شوند
+# تا هسته نام هیچ ماژولی را سخت‌کد نکند.
+AUDIT_MODULES = {
+    'users': 'کاربران و نقش‌ها',
+    'warehouses': 'مدیریت انبارها',
+    'settings': 'تنظیمات سیستم و انبار',
+    'system': 'رویدادهای سیستمی',
+}
+
+
+def register_audit_modules(modules):
+    """ثبت ماژول‌های ممیزیِ متعلق به یک ماژول (درجای همان دیکشنری سراسری)."""
+    AUDIT_MODULES.update(dict(modules))
+
+
+def get_audit_module_choices():
+    """فهرست زندهٔ ماژول‌های ممیزی (برای `choices` فیلد `module`)."""
+    return list(AUDIT_MODULES.items())
+
+
 class AuditLog(models.Model):
     """
     ثبت ممیزی عملیات و تغییرات داده‌های سیستم (Audit Trail)
     """
-    MODULE_CHOICES = [
-        ('docs', 'مدیریت کالا (انبار)'),
-        ('dispatch', 'تخصیص کالا (انبار)'),
-        ('customs', 'فیلدهای مالی/گمرکی (انبار)'),
-        ('feeding', 'تغذیه سامانه‌های MT (انبار)'),
-        ('labels', 'لیبلینگ و بارکد (انبار)'),
-        ('counter', 'میزکار شمارش کور'),
-        ('supervisor', 'کارتابل سرپرست شمارش'),
-        ('manager', 'بررسی نهایی مدیر'),
-        ('users', 'کاربران و نقش‌ها'),
-        ('warehouses', 'مدیریت انبارها'),
-        ('settings', 'تنظیمات سیستم و انبار'),
-        ('system', 'رویدادهای سیستمی'),
-    ]
-
     ACTION_CHOICES = [
         ('CREATE', 'ایجاد رکورد'),
         ('UPDATE', 'ویرایش رکورد'),
@@ -247,11 +258,14 @@ class AuditLog(models.Model):
     )
     actor_username = models.CharField(max_length=150, null=True, blank=True, verbose_name="نام کاربری اقدام‌کننده در زمان رویداد")
     actor_name = models.CharField(max_length=255, null=True, blank=True, verbose_name="نام و نام خانوادگی اقدام‌کننده در زمان رویداد")
-    warehouse = models.ForeignKey(
-        'warehouses.Warehouse', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='audit_logs', verbose_name="انبار مرتبط"
+    # فاز ۲ §۲.۶ — نرم‌کردن ارجاع انبار: به‌جای FK به `warehouses.Warehouse`، یک
+    # ستون عددی ساده با همان `db_column` نگه می‌داریم (همان ستون، همان ایندکس،
+    # صفر مهاجرت داده) تا هسته به ماژول انبار وابسته نماند.
+    warehouse_id = models.IntegerField(
+        null=True, blank=True, db_index=True, db_column='warehouse_id',
+        verbose_name="شناسهٔ انبار مرتبط",
     )
-    module = models.CharField(max_length=50, choices=MODULE_CHOICES, default='system', verbose_name="ماژول", db_index=True)
+    module = models.CharField(max_length=50, choices=get_audit_module_choices, default='system', verbose_name="ماژول", db_index=True)
     action = models.CharField(max_length=50, choices=ACTION_CHOICES, default='UPDATE', verbose_name="نوع عملیات", db_index=True)
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='info', verbose_name="سطح اهمیت", db_index=True)
     
@@ -274,7 +288,7 @@ class AuditLog(models.Model):
             models.Index(fields=['module', 'created_at']),
             models.Index(fields=['action', 'created_at']),
             models.Index(fields=['severity', 'created_at']),
-            models.Index(fields=['warehouse', 'created_at']),
+            models.Index(fields=['warehouse_id', 'created_at']),
             models.Index(fields=['user', 'created_at']),
         ]
 

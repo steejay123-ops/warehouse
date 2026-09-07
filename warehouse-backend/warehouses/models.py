@@ -27,6 +27,19 @@ class Warehouse(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_warehouses')
     modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_warehouses')
 
+    # فاز ۲ §۲.۱ — جابه‌جایی مالکیت M2M از هسته به اپ انبار.
+    # پیش‌تر این M2M روی `CustomUser` در اپ `accounts` بود (وابستگی سطح مایگریشن
+    # هسته → انبار). حالا روی `Warehouse` اعلام می‌شود با همان جدول
+    # `accounts_customuser_assigned_warehouses` (expand-contract، صفر مهاجرت داده)،
+    # تا `user.assigned_warehouses` و `warehouse.assigned_users` عیناً حفظ شوند.
+    assigned_users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='assigned_warehouses',
+        blank=True,
+        db_table='accounts_customuser_assigned_warehouses',
+        verbose_name="کاربران تخصیص‌یافته",
+    )
+
     def save(self, *args, **kwargs):
         # ۱. نرمال‌سازی کد: تبدیل رشته خالی یا فاصله‌ای به None جهت ثبت NULL در پایگاه داده
         if self.code is not None:

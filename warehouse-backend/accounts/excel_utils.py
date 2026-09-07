@@ -13,7 +13,16 @@ from django.http import HttpResponse
 from django.contrib.auth.models import Group
 
 from .models import CustomUser, CustomRole
-from warehouses.models import Warehouse
+
+
+# فاز ۲ §۲.۳ — حل اختیاری اپ انبار.
+def _warehouse_model():
+    """اگر اپ `warehouses` نصب است مدل `Warehouse` را برمی‌گرداند، وگرنه None."""
+    from django.apps import apps
+    if not apps.is_installed('warehouses'):
+        return None
+    from warehouses.models import Warehouse
+    return Warehouse
 
 
 # ── Column Definitions ──────────────────────────────────────────────
@@ -129,8 +138,11 @@ def generate_users_excel(queryset):
         roles_str = '، '.join(role_names)
 
         wh_items = []
-        for w in user.assigned_warehouses.all():
-            wh_items.append(f"{w.name} ({w.code})" if w.code else w.name)
+        # فاز ۲ §۲.۳ — اکسسور `user.assigned_warehouses` فقط در نصب دارای اپ
+        # انبار وجود دارد؛ در حسابداری‌تنها این ستون خالی می‌ماند.
+        if _warehouse_model() is not None:
+            for w in user.assigned_warehouses.all():
+                wh_items.append(f"{w.name} ({w.code})" if w.code else w.name)
         wh_str = '، '.join(wh_items)
 
         row_data = [
@@ -246,14 +258,16 @@ def parse_users_excel(file, update_existing=False):
 
     # نقشه انبارها: هم بر اساس code و هم بر اساس name
     warehouses_lookup = {}
-    for wh in Warehouse.objects.all():
-        if wh.code:
-            warehouses_lookup[wh.code.lower().strip()] = wh
-        if wh.name:
-            warehouses_lookup[wh.name.lower().strip()] = wh
-            # حالت ترکیبی نام و کد مثل "انبار مرکزی (WH-1)"
+    WhModel = _warehouse_model()
+    if WhModel is not None:
+        for wh in WhModel.objects.all():
             if wh.code:
-                warehouses_lookup[f"{wh.name.lower().strip()} ({wh.code.lower().strip()})"] = wh
+                warehouses_lookup[wh.code.lower().strip()] = wh
+            if wh.name:
+                warehouses_lookup[wh.name.lower().strip()] = wh
+                # حالت ترکیبی نام و کد مثل "انبار مرکزی (WH-1)"
+                if wh.code:
+                    warehouses_lookup[f"{wh.name.lower().strip()} ({wh.code.lower().strip()})"] = wh
 
     valid_rows = []
     errors = []

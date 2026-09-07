@@ -174,7 +174,17 @@
       "Bash(rm -f \"E:/warehouse project/.claude/tmp/scan_perms.py\" && echo \"cleaned\")",
       "Read(//c/Users/Payandeh/.claude/**)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); p=d.get\\('permissions',{}\\); print\\('defaultMode =', p.get\\('defaultMode'\\)\\); print\\('deny =', p.get\\('deny'\\)\\); print\\('allow count =', len\\(p.get\\('allow',[]\\)\\)\\)\")",
-      "Bash(python -c \"import json; d=json.load\\(open\\('E:/warehouse project/.claude/settings.local.json',encoding='utf-8-sig'\\)\\); p=d['permissions']; print\\({k:v for k,v in p.items\\(\\) if k not in \\('allow',\\)}\\)\")"
+      "Bash(python -c \"import json; d=json.load\\(open\\('E:/warehouse project/.claude/settings.local.json',encoding='utf-8-sig'\\)\\); p=d['permissions']; print\\({k:v for k,v in p.items\\(\\) if k not in \\('allow',\\)}\\)\")",
+      "Bash(ls platform_core/)",
+      "Bash(sed -n '50,75p' config/settings.py)",
+      "Bash(\"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" manage.py makemigrations accounts)",
+      "Bash(\"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" manage.py sqlmigrate accounts 0036)",
+      "Bash(node -e 'console.log\\(123\\)')",
+      "Bash(python manage.py test accounts personnel warehouses -v 2)",
+      "Bash(./venv/Scripts/python.exe manage.py test accounts.tests personnel.tests warehouses.tests -v 1)",
+      "Bash(./venv/Scripts/python.exe manage.py test accounts.tests personnel.tests warehouses.tests --noinput)",
+      "Bash(./venv/Scripts/python.exe manage.py test personnel.tests.PersonnelAppTests.test_monthly_payroll_calculation_and_exports_flow -v 2)",
+      "Bash(WH_MODULES=accounting \"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" manage.py check)"
     ],
     "defaultMode": "bypassPermissions"
   }

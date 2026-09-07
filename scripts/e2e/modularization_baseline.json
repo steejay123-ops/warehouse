@@ -1,76 +1,50 @@
 {
   "_readme": "snapshot مبنای نقض‌های مرزبندی ماژولی (نگهبان ۲۹، فاز ۰). هیچ شمارنده‌ای مجاز به افزایش نیست. برای ثبت پیشرفت: python scripts/e2e/guardian_modularization.py --update-baseline",
   "counters": {
-    "unique_direct_violations": 33,
-    "production_violations": 13,
-    "non_production_violations": 20,
-    "composition_root_hardcoded_lines": 9,
-    "contract:c1-layering": 28,
+    "unique_direct_violations": 28,
+    "production_violations": 10,
+    "non_production_violations": 18,
+    "composition_root_hardcoded_lines": 0,
+    "contract:c1-layering": 23,
     "contract:c2-accounting-independent-of-warehouse": 5,
     "contract:c2-warehouse-independent-of-accounting": 0,
-    "contract:c3-core-purity": 23
+    "contract:c3-core-purity": 18
   },
   "lint_imports": {
     "kept": 1,
     "broken": 3
   },
   "composition_root": {
-    "config/settings.py": [
-      56,
-      57,
-      59,
-      60
-    ],
-    "config/urls.py": [
-      3,
-      20,
-      21,
-      22,
-      23
-    ],
+    "config/settings.py": [],
+    "config/urls.py": [],
     "config/asgi.py": []
   },
   "violations": {
     "production": [
       [
-        "accounts.audit_utils",
-        "warehouses.models",
-        115
-      ],
-      [
-        "accounts.audit_utils",
-        "warehouses.models",
-        121
-      ],
-      [
         "accounts.excel_utils",
         "warehouses.models",
-        16
-      ],
-      [
-        "accounts.management.commands.setup_project",
-        "warehouses.models",
-        5
+        24
       ],
       [
         "accounts.rollback_service",
         "inventory.models",
-        151
+        155
       ],
       [
         "accounts.rollback_service",
         "inventory.models",
-        154
-      ],
-      [
-        "accounts.rollback_service",
-        "warehouses.models",
         160
+      ],
+      [
+        "accounts.rollback_service",
+        "warehouses.models",
+        168
       ],
       [
         "accounts.serializers",
         "warehouses.models",
-        5
+        13
       ],
       [
         "communications.consumers",
@@ -90,7 +64,7 @@
       [
         "communications.views",
         "warehouses.models",
-        528
+        529
       ],
       [
         "communications.views",
@@ -116,11 +90,6 @@
       ],
       [
         "communications.tests.test_settings_and_purge",
-        "warehouses.models",
-        16
-      ],
-      [
-        "communications.tests.test_settings_and_purge",
         "warehouses.services",
         17
       ],
@@ -138,11 +107,6 @@
         "communications.tests.test_ws_access",
         "warehouses.models",
         11
-      ],
-      [
-        "communications.tests.test_ws_access",
-        "warehouses.models",
-        290
       ],
       [
         "communications.tests.test_ws_access",

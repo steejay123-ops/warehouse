@@ -98,12 +98,12 @@ class SupervisorCartableAPIView(APIView):
         # رکوردهای پرسنل نیازمند بررسی سرپرست
         personnel_qs = PersonnelProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.DRAFT, WorkflowStatuses.PENDING_SUPERVISOR, WorkflowStatuses.REVISION_REQUIRED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         # رکوردهای ناوگان نیازمند بررسی سرپرست
         vehicles_qs = VehicleDriverProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.DRAFT, WorkflowStatuses.PENDING_SUPERVISOR, WorkflowStatuses.REVISION_REQUIRED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         # درخواست‌های تغییرات پرسنل
         p_changes = PersonnelChangeRequest.objects.filter(
@@ -182,11 +182,11 @@ class AccountantCartableAPIView(APIView):
 
         personnel_qs = PersonnelProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'manager_approved', WorkflowStatuses.SUPERVISOR_APPROVED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         vehicles_qs = VehicleDriverProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'manager_approved', WorkflowStatuses.SUPERVISOR_APPROVED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         p_changes = PersonnelChangeRequest.objects.filter(
             status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_finance']
@@ -261,11 +261,11 @@ class ManagerCartableAPIView(APIView):
 
         personnel_qs = PersonnelProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.PENDING_MANAGER, WorkflowStatuses.ACCOUNTANT_APPROVED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         vehicles_qs = VehicleDriverProfile.objects.filter(
             approval_status__in=[WorkflowStatuses.PENDING_MANAGER, WorkflowStatuses.ACCOUNTANT_APPROVED]
-        ).select_related('assigned_warehouse', 'user')
+        ).select_related('user')
 
         p_changes = PersonnelChangeRequest.objects.filter(
             status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager']

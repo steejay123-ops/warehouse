@@ -35,19 +35,66 @@ class ModuleSpec:
     requires_platform: str = '>=1.0,<2.0'
 
 
+PLATFORM_VERSION = '1.0.0'
+
 _REGISTRY: dict[str, ModuleSpec] = {}
+
+
+def _verify_platform_compatibility(spec: ModuleSpec) -> None:
+    """
+    بررسی بازه نسخه پلتفرم مورد نیاز ماژول — فاز ۷ (تسک ۶۶).
+    در صورت ناسازگاری، استارت‌آپ با پیام فارسی روشن متوقف می‌شود.
+    """
+    req = getattr(spec, 'requires_platform', None)
+    if not req:
+        return
+    try:
+        from packaging.specifiers import SpecifierSet
+        from packaging.version import Version
+        specifiers = SpecifierSet(req)
+        if Version(PLATFORM_VERSION) not in specifiers:
+            raise RuntimeError(
+                f"خطای ناسازگاری نسخه ماژول «{spec.title_fa}» ({spec.code}): "
+                f"این ماژول نیازمند نسخه پلتفرم {req} است، در حالی که نسخه پلتفرم فعال {PLATFORM_VERSION} می‌باشد."
+            )
+    except ImportError:
+        pass
 
 
 def register_module(spec):
     """
-    ثبت ماژول در رجیستری. اگر ماژول `audit_modules` اعلام کرده باشد، آن‌ها را
-    همین‌جا در رجیستری ممیزیِ هسته (`accounts.models.AUDIT_MODULES`) نیز ثبت می‌کند
-    تا رفتار فاز ۲ حفظ شود.
+    ثبت ماژول در رجیستری. ابتدا نسخه سازگاری پلتفرم بررسی شده (تسک ۶۶) و سپس
+    اگر ماژول `audit_modules` اعلام کرده باشد، آن‌ها را در رجیستری ممیزیِ هسته
+    (`accounts.models.AUDIT_MODULES`) نیز ثبت می‌کند.
     """
+    _verify_platform_compatibility(spec)
     _REGISTRY[spec.code] = spec
     if spec.audit_modules:
         from accounts.models import register_audit_modules
         register_audit_modules(spec.audit_modules)
+
+
+def discover_entry_point_modules():
+    """
+    کشف خودکار ماژول‌ها از طریق گروه entry-point به نام 'wh.module' — فاز ۷ (تسک ۶۵).
+    """
+    import importlib.metadata
+    try:
+        eps = importlib.metadata.entry_points(group='wh.module')
+    except TypeError:
+        eps = importlib.metadata.entry_points().get('wh.module', [])
+
+    for ep in eps:
+        try:
+            spec = ep.load()
+            if callable(spec):
+                spec = spec()
+            register_module(spec)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[ModuleRegistry] خطا در بارگذاری ماژول از entry-point «{ep.name}»: {e}"
+            )
 
 
 def get_module(code):

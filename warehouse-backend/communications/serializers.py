@@ -78,6 +78,9 @@ class ConversationSerializer(serializers.ModelSerializer):
     participants = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     participants_details = UserShortSerializer(source='participants', many=True, read_only=True)
     target_user_id = serializers.IntegerField(write_only=True, required=False)
+    # پس از فاز ۴، `warehouse` دیگر FK نیست؛ فیلد API را به `warehouse_id` ساده مپ می‌کنیم
+    # تا عین قراردادِ قبلی (عدد شناسهٔ انبار، قابل خواندن و نوشتن) حفظ شود.
+    warehouse = serializers.IntegerField(source='warehouse_id', required=False, allow_null=True)
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
 
@@ -165,6 +168,8 @@ class GenericCommentSerializer(serializers.ModelSerializer):
     replies_count = serializers.SerializerMethodField()
     content_type_str = serializers.CharField(write_only=True, required=False)
     attachment_url = serializers.SerializerMethodField()
+    # پس از فاز ۴، `warehouse` دیگر FK نیست؛ فیلد API را به `warehouse_id` ساده مپ می‌کنیم.
+    warehouse = serializers.IntegerField(source='warehouse_id', required=False, allow_null=True)
 
     class Meta:
         model = GenericComment
@@ -219,7 +224,7 @@ class GenericCommentSerializer(serializers.ModelSerializer):
         # فیلدهای ساختاری کامنت نباید در ویرایش تغییر کنند
         validated_data.pop('content_type', None)
         validated_data.pop('object_id', None)
-        validated_data.pop('warehouse', None)
+        validated_data.pop('warehouse_id', None)
         validated_data.pop('author', None)
         validated_data.pop('client_temp_id', None)
         return super().update(instance, validated_data)

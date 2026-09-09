@@ -80,7 +80,7 @@ from .fleet_settlement_engine import calculate_monthly_fleet_settlement, generat
 
 
 class PersonnelProfileViewSet(viewsets.ModelViewSet):
-    queryset = PersonnelProfile.objects.all().select_related('assigned_warehouse', 'user')
+    queryset = PersonnelProfile.objects.all().select_related('user')
     serializer_class = PersonnelProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -89,7 +89,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
-            qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True))
+            qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
         
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -442,7 +442,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
 
 
 class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
-    queryset = VehicleDriverProfile.objects.all().select_related('assigned_warehouse', 'user')
+    queryset = VehicleDriverProfile.objects.all().select_related('user')
     serializer_class = VehicleDriverProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -451,7 +451,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
-            qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True))
+            qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
             
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -915,7 +915,7 @@ def broadcast_attendance_updated(warehouse_id=None, date_shamsi=None, year_month
 
 
 class DailyAttendanceViewSet(viewsets.ModelViewSet):
-    queryset = DailyAttendance.objects.filter(is_deleted=False).select_related('personnel', 'warehouse', 'period')
+    queryset = DailyAttendance.objects.filter(is_deleted=False).select_related('personnel', 'period')
     serializer_class = DailyAttendanceSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -960,14 +960,14 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         # لیست پرسنل تاییدشده یا پرسنلی که در این تاریخ کارکرد دارند (مستقل از انبار یا فیلتر انبار خاص)
         if warehouse_id:
             personnel_list = PersonnelProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi=date_shamsi, daily_attendances__is_deleted=False)
-            ).distinct().select_related('assigned_warehouse').order_by('last_name', 'first_name')
+            ).distinct().order_by('last_name', 'first_name')
             attendances_qs = DailyAttendance.objects.filter(
                 Q(warehouse_id=warehouse_id) | Q(personnel__in=personnel_list),
                 date_shamsi=date_shamsi,
                 is_deleted=False
-            ).select_related('personnel', 'warehouse').order_by('id')
+            ).select_related('personnel').order_by('id')
             # اولویت با رکوردهایی است که اختصاصاً برای همین انبار ثبت شده‌اند
             existing_attendances = {}
             for att in attendances_qs:
@@ -976,11 +976,11 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         else:
             personnel_list = PersonnelProfile.objects.filter(
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi=date_shamsi, daily_attendances__is_deleted=False)
-            ).distinct().select_related('assigned_warehouse').order_by('last_name', 'first_name')
+            ).distinct().order_by('last_name', 'first_name')
             attendances_qs = DailyAttendance.objects.filter(
                 date_shamsi=date_shamsi,
                 is_deleted=False
-            ).select_related('personnel', 'warehouse').order_by('id')
+            ).select_related('personnel').order_by('id')
             existing_attendances = {att.personnel_id: att for att in attendances_qs}
 
         is_today_friday = is_date_shamsi_friday(date_shamsi)
@@ -1393,7 +1393,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         # پرسنل تاییدشده یا پرسنل غیرفعالی که در این ماه کارکرد دارند (مستقل از انبار یا فیلتر انبار خاص)
         if warehouse_id:
             personnel_list = PersonnelProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi__startswith=year_month, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
             attendances = DailyAttendance.objects.filter(
@@ -1852,16 +1852,16 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         if warehouse_id:
             personnel_list = PersonnelProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 is_active=True
-            ).select_related('assigned_warehouse').order_by('last_name', 'first_name')
+            ).order_by('last_name', 'first_name')
             attendances = DailyAttendance.objects.filter(
                 warehouse_id=warehouse_id,
                 date_shamsi__startswith=year_month,
                 is_deleted=False
             )
         else:
-            personnel_list = PersonnelProfile.objects.filter(is_active=True).select_related('assigned_warehouse').order_by('last_name', 'first_name')
+            personnel_list = PersonnelProfile.objects.filter(is_active=True).order_by('last_name', 'first_name')
             attendances = DailyAttendance.objects.filter(
                 date_shamsi__startswith=year_month,
                 is_deleted=False
@@ -2299,7 +2299,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         if warehouse_id:
             personnel_list = PersonnelProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 is_active=True
             ).order_by('last_name', 'first_name')
 
@@ -2373,7 +2373,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
 
 class VehicleTripViewSet(viewsets.ModelViewSet):
-    queryset = VehicleTripLog.objects.filter(is_deleted=False).select_related('vehicle', 'warehouse', 'period')
+    queryset = VehicleTripLog.objects.filter(is_deleted=False).select_related('vehicle', 'period')
     serializer_class = VehicleTripLogSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -2412,7 +2412,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
 
         if warehouse_id:
             vehicles = VehicleDriverProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 active_filter_q
             ).order_by('driver_name')
             trip_qs = VehicleTripLog.objects.filter(
@@ -2619,7 +2619,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
 
         if warehouse_id:
             vehicles = VehicleDriverProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 is_active=True
             ).order_by('driver_name')
             trips = VehicleTripLog.objects.filter(
@@ -2735,7 +2735,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
 
         if warehouse_id:
             vehicles = VehicleDriverProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 active_filter_q
             ).order_by('driver_name')
         else:
@@ -3153,7 +3153,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
 
 
 class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
-    queryset = MonthlyWorkPeriod.objects.all().select_related('warehouse', 'locked_by')
+    queryset = MonthlyWorkPeriod.objects.all().select_related('locked_by')
     serializer_class = MonthlyWorkPeriodSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -3568,7 +3568,7 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class MonthlyPayrollViewSet(viewsets.ModelViewSet):
-    queryset = MonthlyPayrollRecord.objects.all().select_related('period', 'personnel', 'period__warehouse')
+    queryset = MonthlyPayrollRecord.objects.all().select_related('period', 'personnel')
     serializer_class = MonthlyPayrollRecordSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None

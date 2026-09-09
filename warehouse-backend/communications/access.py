@@ -28,12 +28,12 @@ def visible_conversations(user):
             q |= Q(conv_type=ConversationType.ANNOUNCEMENT)
             q |= Q(conv_type=ConversationType.WAREHOUSE_GROUP)
         elif allowed_whs:
-            q |= Q(conv_type=ConversationType.ANNOUNCEMENT, warehouse__isnull=True)
+            q |= Q(conv_type=ConversationType.ANNOUNCEMENT, warehouse_id__isnull=True)
             q |= Q(conv_type=ConversationType.ANNOUNCEMENT, warehouse_id__in=allowed_whs)
             q |= Q(conv_type=ConversationType.WAREHOUSE_GROUP, warehouse_id__in=allowed_whs)
         else:
             # کاربری بدون دسترسی به هیچ انباری
-            q |= Q(conv_type=ConversationType.ANNOUNCEMENT, warehouse__isnull=True)
+            q |= Q(conv_type=ConversationType.ANNOUNCEMENT, warehouse_id__isnull=True)
 
     return Conversation.objects.filter(q).distinct()
 

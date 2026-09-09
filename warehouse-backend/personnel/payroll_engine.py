@@ -369,7 +369,7 @@ class PayrollCalculationEngine:
         ).distinct().order_by('last_name', 'first_name')
         if period.warehouse:
             wh_personnel = personnel_qs.filter(
-                Q(assigned_warehouse=period.warehouse) | Q(daily_attendances__warehouse=period.warehouse, daily_attendances__date_shamsi__startswith=period.year_month)
+                Q(assigned_warehouse_id=period.warehouse_id) | Q(daily_attendances__warehouse_id=period.warehouse_id, daily_attendances__date_shamsi__startswith=period.year_month)
             ).distinct()
             if wh_personnel.exists():
                 personnel_qs = wh_personnel

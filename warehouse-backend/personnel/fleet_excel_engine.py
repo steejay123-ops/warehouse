@@ -124,7 +124,7 @@ def export_fleet_monthly_excel(warehouse_id=None, year_month=None):
 
     # واکشی اطلاعات خودروها و ترددها
     vehicles = VehicleDriverProfile.objects.filter(
-        Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse__isnull=True),
+        Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
         is_active=True
     ).order_by('driver_name')
 

@@ -96,7 +96,7 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     effective_daily_rate = serializers.FloatField(read_only=True)
     hourly_rate = serializers.FloatField(read_only=True)
-    assigned_warehouse_name = serializers.CharField(source='assigned_warehouse.name', read_only=True)
+    assigned_warehouse_name = serializers.SerializerMethodField()
     user_username = serializers.CharField(source='user.username', read_only=True)
     supervisor_approved_by_name = serializers.SerializerMethodField()
     accountant_approved_by_name = serializers.SerializerMethodField()
@@ -118,6 +118,10 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
             'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
             'revision_requested_by', 'revision_requested_at'
         ]
+
+    def get_assigned_warehouse_name(self, obj):
+        aw = obj.assigned_warehouse
+        return aw.name if aw else None
 
     def get_supervisor_approved_by_name(self, obj):
         if obj.supervisor_approved_by:
@@ -175,7 +179,7 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
 class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     vehicle_type_display = serializers.CharField(source='get_vehicle_type_display', read_only=True)
     ownership_type_display = serializers.CharField(source='get_ownership_type_display', read_only=True)
-    assigned_warehouse_name = serializers.CharField(source='assigned_warehouse.name', read_only=True)
+    assigned_warehouse_name = serializers.SerializerMethodField()
     user_username = serializers.CharField(source='user.username', read_only=True)
     supervisor_approved_by_name = serializers.SerializerMethodField()
     accountant_approved_by_name = serializers.SerializerMethodField()
@@ -197,6 +201,10 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
             'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
             'revision_requested_by', 'revision_requested_at'
         ]
+
+    def get_assigned_warehouse_name(self, obj):
+        aw = obj.assigned_warehouse
+        return aw.name if aw else None
 
     def get_supervisor_approved_by_name(self, obj):
         if obj.supervisor_approved_by:

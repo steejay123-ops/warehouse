@@ -2,6 +2,83 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 
+
+class _WarehouseCompatQuerySet(models.QuerySet):
+    def _remap_wh_filter(self, k):
+        if k == 'warehouse':
+            return 'warehouse_id'
+        if k.startswith('warehouse__'):
+            return 'warehouse_id' + k[len('warehouse'):]
+        if k == 'assigned_warehouse':
+            return 'assigned_warehouse_id'
+        if k.startswith('assigned_warehouse__'):
+            return 'assigned_warehouse_id' + k[len('assigned_warehouse'):]
+        return k
+
+    def filter(self, *args, **kwargs):
+        new_kwargs = {}
+        for k, v in kwargs.items():
+            new_k = self._remap_wh_filter(k)
+            new_v = getattr(v, 'id', v) if (new_k.endswith('_id') and hasattr(v, 'id')) else v
+            new_kwargs[new_k] = new_v
+        return super().filter(*args, **new_kwargs)
+
+    def get_or_create(self, defaults=None, **kwargs):
+        new_kwargs = {}
+        for k, v in kwargs.items():
+            new_k = self._remap_wh_filter(k)
+            new_v = getattr(v, 'id', v) if (new_k.endswith('_id') and hasattr(v, 'id')) else v
+            new_kwargs[new_k] = new_v
+        return super().get_or_create(defaults=defaults, **new_kwargs)
+
+
+class _WarehouseCompatManager(models.Manager.from_queryset(_WarehouseCompatQuerySet)):
+    pass
+
+
+class _WarehouseCompatMixin(models.Model):
+    """
+    فاز ۴ — سازگاری رو به عقب برای FK→عدد (جدا کردن حسابداری از اپ انبار).
+
+    نامِ فیلد قدیمیِ `assigned_warehouse`/`warehouse` به‌عنوان kwarg مدل پذیرفته و
+    به ستون عددیِ `_id` مپ می‌شود تا کدهای موجود (شامل تست‌ها) بدون تغییر کار کنند.
+    هر مدل، `_warehouse_field` و `_warehouse_id_field` را تعیین و پراپرتیِ هم‌نامِ
+    فیلد قدیمی را ارائه می‌دهد.
+    """
+    _warehouse_field = ''      # نام فیلد قدیمی (مثلاً 'assigned_warehouse' یا 'warehouse')
+    _warehouse_id_field = ''   # نام ستون عددی (مثلاً 'assigned_warehouse_id' یا 'warehouse_id')
+
+    objects = _WarehouseCompatManager()
+
+    class Meta:
+        abstract = True
+
+    def __init__(self, *args, **kwargs):
+        src = self._warehouse_field
+        if src and src in kwargs:
+            val = kwargs.pop(src)
+            id_field = self._warehouse_id_field
+            if id_field not in kwargs and val is not None:
+                kwargs[id_field] = getattr(val, 'id', val)
+        super().__init__(*args, **kwargs)
+
+    def _wh_obj(self):
+        """خواندن انبار مرتبط در صورت نصب بودن اپ انبار (با کشِ per-instance)."""
+        id_field = self._warehouse_id_field
+        wh_id = getattr(self, id_field, None)
+        if not wh_id:
+            return None
+        if hasattr(self, '_wh_cached'):
+            return self._wh_cached
+        from django.apps import apps
+        if apps.is_installed('warehouses'):
+            Warehouse = apps.get_model('warehouses', 'Warehouse')
+            obj = Warehouse.objects.filter(id=wh_id).first()
+        else:
+            obj = None
+        self._wh_cached = obj
+        return obj
+
 # ==============================================================================
 # 0. مدل‌های ساختار سازمانی، پروژه، بخش و فاکتور هزینه‌ای (مستقل از انبارگردانی)
 # ==============================================================================
@@ -117,6 +194,10 @@ class Counterparty(models.Model):
     bank_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام بانک")
     account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
     sheba_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="شماره شبا")
+    account_code = models.CharField(
+        max_length=50, blank=True, null=True, db_index=True,
+        verbose_name="کد حساب تفصیلی (رزرو دفتر کل)"
+    )
     section = models.ForeignKey(
         ProjectSection,
         on_delete=models.SET_NULL,
@@ -192,11 +273,62 @@ class ExpenseInvoice(models.Model):
     def __str__(self):
         return f"فاکتور {self.invoice_number} - {self.counterparty.name} ({self.amount:,.0f} ریال)"
 
+    def to_journal_lines(self):
+        """پیاده‌سازی پروتکل AccountingDocumentSource — فاز ۸ (تسک ۷۲ و ۷۳)."""
+        from decimal import Decimal
+        from platform_core.accounting_protocol import JournalLine
+        amt = Decimal(str(self.amount or 0))
 
-class PersonnelProfile(models.Model):
+        sec = None
+        try:
+            sec = self.section
+        except Exception:
+            pass
+        cost_center = f"{sec.project.code}-{sec.code}" if (sec and getattr(sec, 'project', None)) else None
+
+        cp = None
+        try:
+            cp = self.counterparty
+        except Exception:
+            pass
+        detail = getattr(cp, 'account_code', None) or (f"CP-{cp.id}" if cp else None)
+        desc = f"فاکتور هزینه {self.invoice_number} - {self.description or ''}".strip()
+        return [
+            JournalLine(
+                account_code="6102",  # حساب معین هزینه عمومی/عملیاتی
+                side="debit",
+                amount=amt,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=desc,
+            ),
+            JournalLine(
+                account_code="4101",  # حساب معین بستانکاران تجاری / طرف‌حساب‌ها
+                side="credit",
+                amount=amt,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=desc,
+            ),
+        ]
+
+
+class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     """
     پرونده کارگزینی و اطلاعات استخدامی پرسنل (منطبق بر شیت Emp_info اکسل مرجع شرکت)
     """
+    _warehouse_field = 'assigned_warehouse'
+    _warehouse_id_field = 'assigned_warehouse_id'
+
+    @property
+    def assigned_warehouse(self):
+        """سازگاری رو به عقب — انبار تخصیص‌یافته، بدون وابستگی به اپ انبار."""
+        return self._wh_obj()
+
+    @assigned_warehouse.setter
+    def assigned_warehouse(self, val):
+        self.assigned_warehouse_id = getattr(val, 'id', val) if val is not None else None
+        self._wh_cached = val if (val is None or hasattr(val, 'id')) else None
     MARITAL_STATUS_CHOICES = (
         ('single', 'مجرد'),
         ('married', 'متاهل'),
@@ -294,12 +426,11 @@ class PersonnelProfile(models.Model):
     postal_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="کد پستی")
     address = models.TextField(blank=True, null=True, verbose_name="آدرس محل سکونت")
     
-    assigned_warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
-        on_delete=models.SET_NULL,
+    assigned_warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='personnel_members',
+        db_index=True,
+        db_column='assigned_warehouse_id',
         verbose_name="انبار تخصیص‌یافته"
     )
     project = models.ForeignKey(
@@ -493,10 +624,22 @@ class PersonnelProfile(models.Model):
         return f"{self.full_name} ({self.national_code}) - {self.job_title}"
 
 
-class VehicleDriverProfile(models.Model):
+class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     """
     پرونده راننده و ناوگان خودرویی شرکت
     """
+    _warehouse_field = 'assigned_warehouse'
+    _warehouse_id_field = 'assigned_warehouse_id'
+
+    @property
+    def assigned_warehouse(self):
+        """سازگاری رو به عقب — انبار تخصیص‌یافته، بدون وابستگی به اپ انبار."""
+        return self._wh_obj()
+
+    @assigned_warehouse.setter
+    def assigned_warehouse(self, val):
+        self.assigned_warehouse_id = getattr(val, 'id', val) if val is not None else None
+        self._wh_cached = val if (val is None or hasattr(val, 'id')) else None
     VEHICLE_TYPE_CHOICES = (
         ('pickup', 'وانت'),
         ('nissan', 'نیسان'),
@@ -534,12 +677,11 @@ class VehicleDriverProfile(models.Model):
     account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
     sheba_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="شماره شبا")
     
-    assigned_warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
-        on_delete=models.SET_NULL,
+    assigned_warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='assigned_vehicles',
+        db_index=True,
+        db_column='assigned_warehouse_id',
         verbose_name="انبار تخصیص‌یافته"
     )
     project = models.ForeignKey(
@@ -969,10 +1111,22 @@ class VehicleChangeRequest(models.Model):
         return f"درخواست تغییرات {self.vehicle.driver_name} - {self.vehicle.plate_number} ({self.get_status_display()})"
 
 
-class MonthlyWorkPeriod(models.Model):
+class MonthlyWorkPeriod(_WarehouseCompatMixin, models.Model):
     """
     دوره ماهانه کارکرد (جهت قفل کردن سوابق پس از محاسبه حقوق و گزارش‌ها)
     """
+    _warehouse_field = 'warehouse'
+    _warehouse_id_field = 'warehouse_id'
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب — انبار مربوطه، بدون وابستگی به اپ انبار."""
+        return self._wh_obj()
+
+    @warehouse.setter
+    def warehouse(self, val):
+        self.warehouse_id = getattr(val, 'id', val) if val is not None else None
+        self._wh_cached = val if (val is None or hasattr(val, 'id')) else None
     PERIOD_STATUS_CHOICES = (
         ('OPEN', 'باز (امکان ثبت و ویرایش)'),
         ('SUBMITTED_SUPERVISOR', 'تایید و ارسال سرپرست انبار'),
@@ -986,12 +1140,11 @@ class MonthlyWorkPeriod(models.Model):
         ('REJECTED', 'رد شده و نیازمند بازبینی'),
     )
 
-    warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
-        on_delete=models.SET_NULL,
+    warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='work_periods',
+        db_index=True,
+        db_column='warehouse_id',
         verbose_name="انبار مربوطه"
     )
     year_month = models.CharField(max_length=7, db_index=True, verbose_name="سال و ماه (مثال ۱۴۰۴/۰۵)")
@@ -1076,18 +1229,56 @@ class MonthlyWorkPeriod(models.Model):
         verbose_name = "دوره کارکرد ماهانه"
         verbose_name_plural = "دوره‌های کارکرد ماهانه"
         constraints = [
-            models.UniqueConstraint(fields=['warehouse', 'year_month'], name='unique_warehouse_year_month_period')
+            models.UniqueConstraint(fields=['warehouse_id', 'year_month'], name='unique_warehouse_year_month_period')
         ]
         ordering = ['-year_month']
 
     def __str__(self):
-        return f"دوره {self.year_month} - انبار {self.warehouse.name} ({self.get_status_display()})"
+        wh = self.warehouse
+        wh_name = wh.name if wh else '—'
+        return f"دوره {self.year_month} - انبار {wh_name} ({self.get_status_display()})"
+
+    def to_journal_lines(self):
+        """پیاده‌سازی پروتکل AccountingDocumentSource برای تسویه و پرداخت خزانه‌داری (تسک ۷۳)."""
+        from decimal import Decimal
+        from platform_core.accounting_protocol import JournalLine
+        total_net = sum(Decimal(str(r.payable_amount or 0)) for r in self.payroll_records.all())
+        cost_center = f"WH-{self.warehouse_id}" if self.warehouse_id else None
+        desc = f"سند پرداخت خزانه‌داری دوره حقوق {self.year_month}"
+        return [
+            JournalLine(
+                account_code="4102",  # بدهکار کردن حساب حقوق پرداختنی کارکنان (تسویه تعهد)
+                side="debit",
+                amount=total_net,
+                cost_center_code=cost_center,
+                description=desc,
+            ),
+            JournalLine(
+                account_code="1101",  # بستانکار کردن موجودی نقد و بانک خزانه‌داری (خروج وجه)
+                side="credit",
+                amount=total_net,
+                cost_center_code=cost_center,
+                description=desc,
+            ),
+        ]
 
 
-class DailyAttendance(models.Model):
+class DailyAttendance(_WarehouseCompatMixin, models.Model):
     """
     کارکرد روزانه پرسنل (ثبت ماتریسی و سریع)
     """
+    _warehouse_field = 'warehouse'
+    _warehouse_id_field = 'warehouse_id'
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب — انبار، بدون وابستگی به اپ انبار."""
+        return self._wh_obj()
+
+    @warehouse.setter
+    def warehouse(self, val):
+        self.warehouse_id = getattr(val, 'id', val) if val is not None else None
+        self._wh_cached = val if (val is None or hasattr(val, 'id')) else None
     STATUS_CHOICES = (
         ('PRESENT_10H', 'حاضر کامل (۱۰ ساعت)'),
         ('HALF_5H', 'نیمه‌وقت (۵ ساعت)'),
@@ -1104,12 +1295,11 @@ class DailyAttendance(models.Model):
         related_name='daily_attendances',
         verbose_name="پرسنل"
     )
-    warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
-        on_delete=models.SET_NULL,
+    warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='daily_attendances',
+        db_index=True,
+        db_column='warehouse_id',
         verbose_name="انبار"
     )
     project = models.ForeignKey(
@@ -1171,7 +1361,7 @@ class DailyAttendance(models.Model):
         verbose_name = "کارکرد روزانه پرسنل"
         verbose_name_plural = "کارکردهای روزانه پرسنل"
         indexes = [
-            models.Index(fields=['warehouse', 'date_shamsi']),
+            models.Index(fields=['warehouse_id', 'date_shamsi']),
             models.Index(fields=['personnel', 'date_shamsi']),
             models.Index(fields=['section', 'date_shamsi']),
         ]
@@ -1215,22 +1405,33 @@ class AttendanceAuditLog(models.Model):
         return f"تغییر {self.field_name} برای {self.personnel_name} در {self.date_shamsi}"
 
 
-class VehicleTripLog(models.Model):
+class VehicleTripLog(_WarehouseCompatMixin, models.Model):
     """
     لاگ سرویس‌های انجام‌شده توسط خودروها
     """
+    _warehouse_field = 'warehouse'
+    _warehouse_id_field = 'warehouse_id'
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب — انبار، بدون وابستگی به اپ انبار."""
+        return self._wh_obj()
+
+    @warehouse.setter
+    def warehouse(self, val):
+        self.warehouse_id = getattr(val, 'id', val) if val is not None else None
+        self._wh_cached = val if (val is None or hasattr(val, 'id')) else None
     vehicle = models.ForeignKey(
         VehicleDriverProfile,
         on_delete=models.CASCADE,
         related_name='trip_logs',
         verbose_name="خودرو و راننده"
     )
-    warehouse = models.ForeignKey(
-        'warehouses.Warehouse',
-        on_delete=models.SET_NULL,
+    warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='vehicle_trip_logs',
+        db_index=True,
+        db_column='warehouse_id',
         verbose_name="انبار"
     )
     project = models.ForeignKey(
@@ -1295,7 +1496,7 @@ class VehicleTripLog(models.Model):
         verbose_name = "سرویس خودرو"
         verbose_name_plural = "سرویس‌های خودروها"
         indexes = [
-            models.Index(fields=['warehouse', 'date_shamsi']),
+            models.Index(fields=['warehouse_id', 'date_shamsi']),
             models.Index(fields=['vehicle', 'date_shamsi']),
             models.Index(fields=['section', 'date_shamsi']),
         ]
@@ -1308,6 +1509,48 @@ class VehicleTripLog(models.Model):
 
     def __str__(self):
         return f"{self.vehicle.driver_name} | {self.date_shamsi} | {self.trip_count} سرویس ({self.total_amount:,} ریال)"
+
+    def to_journal_lines(self):
+        """پیاده‌سازی پروتکل AccountingDocumentSource برای تسویه سرویس ناوگان (تسک ۷۳)."""
+        from decimal import Decimal
+        from platform_core.accounting_protocol import JournalLine
+        amt = Decimal(str(self.total_amount or 0))
+
+        cost_center = None
+        try:
+            if self.project and self.section:
+                cost_center = f"{self.project.code}-{self.section.code}"
+        except Exception:
+            pass
+
+        driver_name = "نامشخص"
+        detail = None
+        try:
+            if self.vehicle:
+                driver_name = self.vehicle.driver_name
+                detail = getattr(self.vehicle, 'driver_national_code', None) or f"DRV-{self.vehicle.id}"
+        except Exception:
+            pass
+
+        desc = f"کرایه سرویس خودرو {driver_name} - تاریخ {self.date_shamsi}"
+        return [
+            JournalLine(
+                account_code="6103",  # هزینه حمل و نقل و ناوگان
+                side="debit",
+                amount=amt,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=desc,
+            ),
+            JournalLine(
+                account_code="4105",  # حساب بستانکاران ناوگان و رانندگان
+                side="credit",
+                amount=amt,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=desc,
+            ),
+        ]
 
 
 class VehicleTripAuditLog(models.Model):
@@ -1673,4 +1916,136 @@ class MonthlyPayrollRecord(models.Model):
 
     def __str__(self):
         return f"{self.full_name} | دوره {self.period.year_month} | خالص: {self.payable_amount:,} ریال"
+
+    def to_journal_lines(self):
+        """پیاده‌سازی پروتکل AccountingDocumentSource برای محاسبه و پرداخت حقوق (تسک ۷۳)."""
+        from decimal import Decimal
+        from platform_core.accounting_protocol import JournalLine
+
+        gross = Decimal(str(self.total_gross_salary or 0))
+        payable = Decimal(str(self.payable_amount or 0))
+        tax = Decimal(str(self.tax_amount or 0))
+        insurance = Decimal(str(self.employee_insurance_share or 0))
+
+        cost_center = None
+        if self.personnel and self.personnel.section:
+            sec = self.personnel.section
+            proj_code = sec.project.code if sec.project else "PRJ"
+            cost_center = f"{proj_code}-{sec.code}"
+
+        detail = self.national_code or f"EMP-{self.personnel_id}"
+        desc = f"حقوق و دستمزد {self.full_name} - دوره {self.period.year_month}"
+
+        lines = [
+            JournalLine(
+                account_code="6101",  # حساب معین هزینه حقوق و دستمزد ناخالص
+                side="debit",
+                amount=gross,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=desc,
+            ),
+            JournalLine(
+                account_code="4102",  # حساب معین بستانکاران / حقوق پرداختنی
+                side="credit",
+                amount=payable,
+                cost_center_code=cost_center,
+                detail_code=detail,
+                description=f"خالص پرداختی {desc}",
+            ),
+        ]
+        if tax > 0:
+            lines.append(
+                JournalLine(
+                    account_code="4103",  # مالیات تکلیفی حقوق پرداختنی
+                    side="credit",
+                    amount=tax,
+                    cost_center_code=cost_center,
+                    detail_code=detail,
+                    description=f"مالیات تکلیفی {desc}",
+                )
+            )
+        if insurance > 0:
+            lines.append(
+                JournalLine(
+                    account_code="4104",  # بیمه سهم کارمند پرداختنی
+                    side="credit",
+                    amount=insurance,
+                    cost_center_code=cost_center,
+                    detail_code=detail,
+                    description=f"بیمه سهم کارمند {desc}",
+                )
+            )
+        return lines
+
+
+# ==============================================================================
+# ── ۷. جدول رویدادهای مالی (Transactional Outbox Pattern) — فاز ۸ (تسک ۷۴) ────
+# ==============================================================================
+
+class AccountingEvent(models.Model):
+    """
+    جدول رویدادهای مالی و اسناد بالقوه دفتر کل (Outbox Pattern).
+    برای هر تایید یا گذار مالی، یک رکورد تراکنشی در این جدول ثبت می‌شود
+    تا توزیع مستقل آینده (wh-accounting-gl) بتواند بدون نیاز به کدهای این اپ،
+    اسناد رسمی حسابداری دوطرفه را تولید، قطعی و ثبت کند.
+    """
+    source_model = models.CharField(max_length=100, db_index=True, verbose_name="مدل مبدا")
+    source_id = models.CharField(max_length=100, db_index=True, verbose_name="شناسه رکورد مبدا")
+    event_type = models.CharField(max_length=50, db_index=True, verbose_name="نوع رویداد مالی")
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True, verbose_name="زمان وقوع")
+    payload = models.JSONField(default=dict, verbose_name="داده‌های رویداد و آرتیکل‌های سند")
+    posted_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name="زمان ثبت قطعی در دفتر کل")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "رویداد مالی (Outbox)"
+        verbose_name_plural = "رویدادهای مالی (Outbox)"
+        ordering = ['-occurred_at']
+        indexes = [
+            models.Index(fields=['source_model', 'source_id']),
+            models.Index(fields=['event_type', 'occurred_at']),
+        ]
+
+    def __str__(self):
+        status_label = "ثبت‌شده در GL" if self.posted_at else "در صف صدور سند"
+        return f"رویداد {self.event_type} | {self.source_model}#{self.source_id} ({status_label})"
+
+
+def emit_accounting_event(source_instance, event_type: str, occurred_at=None, payload=None):
+    """
+    ثبت تراکنشی رویداد مالی در جدول Outbox برای تغذیه دفتر کل آینده — فاز ۸ (تسک ۷۴).
+    """
+    source_model = source_instance.__class__.__name__
+    source_id = str(source_instance.pk)
+    journal_lines = []
+    if hasattr(source_instance, 'to_journal_lines'):
+        try:
+            lines = source_instance.to_journal_lines()
+            journal_lines = [
+                {
+                    'account_code': l.account_code,
+                    'side': l.side,
+                    'amount': str(l.amount),
+                    'cost_center_code': l.cost_center_code,
+                    'detail_code': l.detail_code,
+                    'description': l.description,
+                }
+                for l in lines
+            ]
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[AccountingOutbox] Error generating journal lines: {e}")
+
+    final_payload = {
+        **(payload or {}),
+        'journal_lines': journal_lines,
+    }
+    return AccountingEvent.objects.create(
+        source_model=source_model,
+        source_id=source_id,
+        event_type=event_type,
+        occurred_at=occurred_at or timezone.now(),
+        payload=final_payload,
+    )
 

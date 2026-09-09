@@ -30,7 +30,7 @@ class IsChatEnabled(permissions.BasePermission):
         except (ValueError, TypeError):
             wh_id_int = None
 
-        from warehouses.services import get_setting
+        from settings_core.services import get_setting
         return bool(get_setting('chat_enabled', warehouse_id=wh_id_int))
 
 

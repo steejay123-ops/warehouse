@@ -3,7 +3,6 @@ from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from common.sync_models import SyncModelMixin
-from warehouses.models import Warehouse
 
 
 class ConversationType(models.TextChoices):
@@ -20,13 +19,12 @@ class Conversation(SyncModelMixin):
         default=ConversationType.DIRECT,
         verbose_name="نوع گفتگو"
     )
-    warehouse = models.ForeignKey(
-        Warehouse,
-        on_delete=models.CASCADE,
+    warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='chat_conversations',
-        verbose_name="انبار"
+        db_index=True,
+        db_column='warehouse_id',
+        verbose_name="شناسهٔ انبار"
     )
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
@@ -46,13 +44,35 @@ class Conversation(SyncModelMixin):
         verbose_name="ایجادکننده"
     )
 
+    def __init__(self, *args, **kwargs):
+        if 'warehouse' in kwargs:
+            wh = kwargs.pop('warehouse')
+            if 'warehouse_id' not in kwargs:
+                kwargs['warehouse_id'] = getattr(wh, 'id', wh) if wh is not None else None
+        super().__init__(*args, **kwargs)
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب — خواندن انبار مرتبط بدون وابستگی به اپ انبار."""
+        if not self.warehouse_id:
+            return None
+        from django.apps import apps
+        if apps.is_installed('warehouses'):
+            Warehouse = apps.get_model('warehouses', 'Warehouse')
+            return Warehouse.objects.filter(id=self.warehouse_id).first()
+        return None
+
+    @warehouse.setter
+    def warehouse(self, val):
+        self.warehouse_id = getattr(val, 'id', val) if val is not None else None
+
     class Meta:
         ordering = ['-updated_at']
         base_manager_name = 'all_objects'
         verbose_name = "گفتگو / اتاق چت"
         verbose_name_plural = "گفتگوها / اتاق‌های چت"
         indexes = [
-            models.Index(fields=['warehouse', 'conv_type', 'updated_at']),
+            models.Index(fields=['warehouse_id', 'conv_type', 'updated_at']),
         ]
 
     def __str__(self):
@@ -203,13 +223,12 @@ class GenericComment(SyncModelMixin):
     object_id = models.CharField(max_length=100, verbose_name="شناسه موجودیت")
     target_object = GenericForeignKey('content_type', 'object_id')
     
-    warehouse = models.ForeignKey(
-        Warehouse,
-        on_delete=models.CASCADE,
+    warehouse_id = models.IntegerField(
         null=True,
         blank=True,
-        related_name='comments',
-        verbose_name="انبار"
+        db_index=True,
+        db_column='warehouse_id',
+        verbose_name="شناسهٔ انبار"
     )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -236,6 +255,28 @@ class GenericComment(SyncModelMixin):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="تاریخ ثبت")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ بروزرسانی")
 
+    def __init__(self, *args, **kwargs):
+        if 'warehouse' in kwargs:
+            wh = kwargs.pop('warehouse')
+            if 'warehouse_id' not in kwargs:
+                kwargs['warehouse_id'] = getattr(wh, 'id', wh) if wh is not None else None
+        super().__init__(*args, **kwargs)
+
+    @property
+    def warehouse(self):
+        """سازگاری رو به عقب — خواندن انبار مرتبط بدون وابستگی به اپ انبار."""
+        if not self.warehouse_id:
+            return None
+        from django.apps import apps
+        if apps.is_installed('warehouses'):
+            Warehouse = apps.get_model('warehouses', 'Warehouse')
+            return Warehouse.objects.filter(id=self.warehouse_id).first()
+        return None
+
+    @warehouse.setter
+    def warehouse(self, val):
+        self.warehouse_id = getattr(val, 'id', val) if val is not None else None
+
     class Meta:
         ordering = ['created_at']
         base_manager_name = 'all_objects'
@@ -243,7 +284,7 @@ class GenericComment(SyncModelMixin):
         verbose_name_plural = "یادداشت‌ها و نظرات تعاملی"
         indexes = [
             models.Index(fields=['content_type', 'object_id', 'created_at']),
-            models.Index(fields=['warehouse', 'created_at']),
+            models.Index(fields=['warehouse_id', 'created_at']),
         ]
         constraints = [
             models.UniqueConstraint(

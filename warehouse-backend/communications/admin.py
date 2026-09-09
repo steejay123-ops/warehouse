@@ -10,8 +10,8 @@ from .access import visible_conversations
 
 @admin.register(Conversation)
 class ConversationAdmin(admin.ModelAdmin):
-    list_display = ['id', 'title', 'conv_type', 'warehouse', 'is_active', 'created_by', 'created_at', 'updated_at']
-    list_filter = ['conv_type', 'is_active', 'warehouse', 'created_at']
+    list_display = ['id', 'title', 'conv_type', 'warehouse_id', 'is_active', 'created_by', 'created_at', 'updated_at']
+    list_filter = ['conv_type', 'is_active', 'warehouse_id', 'created_at']
     search_fields = ['title', 'id', 'created_by__username']
     readonly_fields = ['created_at', 'updated_at', 'sync_id']
 
@@ -24,7 +24,7 @@ class ConversationAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         ro = list(self.readonly_fields)
         if not request.user.is_superuser and obj:
-            ro.extend(['conv_type', 'warehouse', 'created_by'])
+            ro.extend(['conv_type', 'warehouse_id', 'created_by'])
         return ro
 
     def has_add_permission(self, request):
@@ -42,7 +42,7 @@ class ConversationAdmin(admin.ModelAdmin):
 @admin.register(ConversationParticipant)
 class ConversationParticipantAdmin(admin.ModelAdmin):
     list_display = ['id', 'conversation', 'user', 'last_read_message', 'last_read_at', 'is_muted', 'created_at']
-    list_filter = ['is_muted', 'conversation__warehouse', 'created_at']
+    list_filter = ['is_muted', 'conversation__warehouse_id', 'created_at']
     search_fields = ['user__username', 'user__first_name', 'user__last_name', 'conversation__title']
     readonly_fields = ['created_at', 'updated_at', 'sync_id']
 
@@ -65,7 +65,7 @@ class ConversationParticipantAdmin(admin.ModelAdmin):
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
     list_display = ['id', 'conversation', 'sender', 'short_text', 'is_system', 'created_at']
-    list_filter = ['is_system', 'conversation__warehouse', 'created_at']
+    list_filter = ['is_system', 'conversation__warehouse_id', 'created_at']
     search_fields = ['text', 'sender__username', 'client_temp_id']
     readonly_fields = ['created_at', 'updated_at', 'sync_id', 'client_temp_id']
 
@@ -101,7 +101,7 @@ class MessageAdmin(admin.ModelAdmin):
 @admin.register(MessageAttachment)
 class MessageAttachmentAdmin(admin.ModelAdmin):
     list_display = ['id', 'message', 'file_name', 'file_size', 'content_type', 'created_at']
-    list_filter = ['content_type', 'message__conversation__warehouse', 'created_at']
+    list_filter = ['content_type', 'message__conversation__warehouse_id', 'created_at']
     search_fields = ['file_name', 'message__id']
     readonly_fields = ['created_at', 'updated_at', 'sync_id', 'file_size', 'content_type']
 
@@ -124,8 +124,8 @@ class MessageAttachmentAdmin(admin.ModelAdmin):
 
 @admin.register(GenericComment)
 class GenericCommentAdmin(admin.ModelAdmin):
-    list_display = ['id', 'content_type', 'object_id', 'author', 'warehouse', 'short_text', 'created_at']
-    list_filter = ['content_type', 'warehouse', 'created_at']
+    list_display = ['id', 'content_type', 'object_id', 'author', 'warehouse_id', 'short_text', 'created_at']
+    list_filter = ['content_type', 'warehouse_id', 'created_at']
     search_fields = ['text', 'author__username', 'object_id', 'client_temp_id']
     readonly_fields = ['created_at', 'updated_at', 'sync_id', 'client_temp_id']
 
@@ -136,12 +136,12 @@ class GenericCommentAdmin(admin.ModelAdmin):
         allowed_whs = user_warehouse_ids(request.user)
         if allowed_whs is None:
             return qs
-        return qs.filter(Q(warehouse_id__in=allowed_whs) | Q(warehouse__isnull=True))
+        return qs.filter(Q(warehouse_id__in=allowed_whs) | Q(warehouse_id__isnull=True))
 
     def get_readonly_fields(self, request, obj=None):
         ro = list(self.readonly_fields)
         if obj:
-            ro.extend(['author', 'content_type', 'object_id', 'warehouse', 'text'])
+            ro.extend(['author', 'content_type', 'object_id', 'warehouse_id', 'text'])
         return ro
 
     def has_add_permission(self, request):

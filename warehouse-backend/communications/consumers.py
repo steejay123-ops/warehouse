@@ -76,7 +76,7 @@ def check_is_chat_enabled(wh_id=None):
         wh_id_int = int(wh_id) if wh_id else None
     except (ValueError, TypeError):
         wh_id_int = None
-    from warehouses.services import get_setting
+    from settings_core.services import get_setting
     return bool(get_setting('chat_enabled', warehouse_id=wh_id_int))
 
 

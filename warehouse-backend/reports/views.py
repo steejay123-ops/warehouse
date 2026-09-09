@@ -164,7 +164,7 @@ class ExportJobListView(APIView):
 
     def get(self, request):
         cleanup_old_jobs()
-        jobs = ReportExportJob.objects.filter(owner=request.user).order_by('-created_at')[:20]
+        jobs = ReportExportJob.objects.filter(owner=request.user).order_by('-created_at', '-id')[:20]
         return Response(ReportExportJobSerializer(jobs, many=True).data)
 
 

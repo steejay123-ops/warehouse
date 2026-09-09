@@ -39,7 +39,8 @@ from .broadcast import (
     broadcast_message_updated_ws, broadcast_read_receipt_ws
 )
 from common.warehouse_scope import can_access_warehouse
-from warehouses.services import get_setting
+from django.apps import apps
+from settings_core.services import get_setting
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -119,7 +120,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
-            return Conversation.objects.all().select_related('warehouse', 'created_by').prefetch_related('participants')
+            return Conversation.objects.all().select_related('created_by').prefetch_related('participants')
 
         user = self.request.user
         wh_id = self.request.query_params.get('warehouse_id')
@@ -151,7 +152,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         )
 
         qs = visible_conversations(user).select_related(
-            'warehouse', 'created_by'
+            'created_by'
         ).prefetch_related(
             'participants',
             last_msg_prefetch
@@ -162,7 +163,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         if wh_id:
             try:
                 wh_id_int = int(wh_id)
-                qs = qs.filter(Q(warehouse_id=wh_id_int) | Q(warehouse__isnull=True))
+                qs = qs.filter(Q(warehouse_id=wh_id_int) | Q(warehouse_id__isnull=True))
             except ValueError:
                 pass
 
@@ -206,8 +207,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
             is_manager = getattr(user, 'is_staff', False) or user.has_perm('warehouses.can_act_as_manager')
             if not is_manager and not user.is_superuser:
                 raise PermissionDenied('شما مجاز به ایجاد گروه کاری یا کانال اطلاعیه نیستید')
-            warehouse = serializer.validated_data.get('warehouse')
-            if warehouse and not can_access_warehouse(user, warehouse.id):
+            warehouse_id = serializer.validated_data.get('warehouse_id')
+            if warehouse_id and not can_access_warehouse(user, warehouse_id):
                 raise PermissionDenied('شما مجاز به ایجاد گفتگو برای این انبار نیستید')
 
         conv = serializer.save(created_by=user)
@@ -467,7 +468,7 @@ class GenericCommentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         if self.action in ['retrieve', 'update', 'partial_update', 'destroy']:
-            return GenericComment.objects.all().select_related('author', 'warehouse')
+            return GenericComment.objects.all().select_related('author')
 
         model_name = self.request.query_params.get('model_name')
         object_id = self.request.query_params.get('object_id')
@@ -516,20 +517,21 @@ class GenericCommentViewSet(viewsets.ModelViewSet):
         if not can_access_comment_target(user, ct, object_id):
             raise PermissionDenied('شما به موجودیت هدف این کامنت دسترسی ندارید')
 
-        # استخراج انبار مرتبط در صورت وجود
+        # استخراج انبار مرتبط در صورت وجود — فقط اگر اپ انبار نصب باشد.
+        # در نصب حسابداری‌تنها این بلوک بی‌صدا رد می‌شود تا چت خنثی بماند.
         wh = None
-        model_cls = ct.model_class()
-        if model_cls:
-            target = model_cls.objects.filter(id=object_id).first()
-            if target:
-                if hasattr(target, 'warehouse') and target.warehouse:
-                    wh = target.warehouse
-                elif hasattr(target, 'warehouse_id') and target.warehouse_id:
-                    wh_id = target.warehouse_id
-                    from warehouses.models import Warehouse
-                    wh = Warehouse.objects.filter(id=wh_id).first()
+        if apps.is_installed('warehouses'):
+            model_cls = ct.model_class()
+            if model_cls:
+                target = model_cls.objects.filter(id=object_id).first()
+                if target:
+                    if hasattr(target, 'warehouse') and target.warehouse:
+                        wh = target.warehouse
+                    elif hasattr(target, 'warehouse_id') and target.warehouse_id:
+                        Warehouse = apps.get_model('warehouses', 'Warehouse')
+                        wh = Warehouse.objects.filter(id=target.warehouse_id).first()
 
-        comment = serializer.save(author=user, warehouse=wh)
+        comment = serializer.save(author=user, warehouse_id=getattr(wh, 'id', wh) if wh else None)
 
         # مدیریت منشن‌ها با استخراج توکن‌های استاندارد @[id:username] و @username
         mentioned_ids = set()

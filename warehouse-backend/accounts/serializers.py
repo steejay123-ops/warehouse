@@ -32,6 +32,12 @@ class CustomRoleSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'title', 'color', 'parent', 'permissions']
 
 class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=False,
+        help_text="Password for initial creation or update"
+    )
     groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
     user_permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
     roles = serializers.ListField(
@@ -46,7 +52,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = [
-            'id', 'username', 'first_name', 'last_name', 'email',
+            'id', 'username', 'first_name', 'last_name', 'email', 'password',
             'national_code', 'phone_number', 'operational_zone',
             'supervisor', 'company', 'address', 'avatar', 'blood_type', 'emergency_contact', 'is_active', 'date_joined', 'last_login',
             'updated_at', 'created_by', 'modified_by',
@@ -101,6 +107,29 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "شماره تلفن همراه نامعتبر است. شماره معتبر باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789)."
             )
+        return digits
+
+    def validate_national_code(self, value):
+        if not value:
+            return None
+        from .excel_utils import normalize_digits
+        import re
+        raw = normalize_digits(str(value).strip())
+        digits = re.sub(r'\D', '', raw)
+        if not digits:
+            return None
+        if len(digits) < 10:
+            digits = digits.zfill(10)
+        if len(digits) != 10:
+            raise serializers.ValidationError("کد ملی باید ۱۰ رقم باشد.")
+        if len(set(digits)) == 1:
+            raise serializers.ValidationError("کد ملی نامعتبر است (ارقام تکراری).")
+
+        s = sum(int(digits[i]) * (10 - i) for i in range(9))
+        r = s % 11
+        check = int(digits[9])
+        if not ((r < 2 and check == r) or (r >= 2 and check == 11 - r)):
+            raise serializers.ValidationError("کد ملی وارد شده با الگوریتم اعتبارسنجی همخوانی ندارد و نامعتبر است.")
         return digits
 
     def validate(self, attrs):
@@ -184,8 +213,11 @@ class UserSerializer(serializers.ModelSerializer):
             is_req_admin = request.user.is_superuser
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
-                
+
         roles = validated_data.pop('roles', None)
+        password = validated_data.pop('password', None)
+        if password:
+            instance.set_password(password)
         
         # Check if the user is currently an admin (superuser only)
         was_admin = instance.is_superuser

@@ -32,14 +32,21 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        qs = CustomUser.objects.all()
+        from django.apps import apps
+        from django.db.models import Q
+
+        qs = CustomUser.objects.all().select_related('supervisor')
+        prefetch_items = ['groups__customrole', 'user_permissions']
+        if apps.is_installed('warehouses'):
+            prefetch_items.append('assigned_warehouses')
+        qs = qs.prefetch_related(*prefetch_items)
+
         user = self.request.user
-        
+
         has_perm = self.request.query_params.get('has_perm')
         if has_perm:
-            from django.db.models import Q
             qs = qs.filter(
-                Q(user_permissions__codename=has_perm) | 
+                Q(user_permissions__codename=has_perm) |
                 Q(groups__permissions__codename=has_perm)
             ).distinct()
 

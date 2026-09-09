@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wh-warehouse"
+version = "1.0.0"
+description = "ماژول انبارداری، انبارگردانی، شمارش کور، تخصیص کالا، لیبلینگ و گزارش‌ساز انبار"
+requires-python = ">=3.12"
+dependencies = [
+    "wh-platform>=1.0,<2.0",
+    "reportlab==4.2.0",
+    "qrcode==7.4.2",
+    "arabic-reshaper==3.0.0",
+    "python-bidi==0.6.3",
+]
+classifiers = [
+    "Private :: Do Not Upload",
+]
+
+[project.entry-points."wh.module"]
+warehouse = "warehouses.module_spec:SPEC"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "warehouses*",
+    "inventory*",
+    "reports*",
+]

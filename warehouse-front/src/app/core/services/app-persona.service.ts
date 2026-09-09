@@ -3,9 +3,10 @@ import { AuthService } from '../auth/auth.service';
 import { Router, NavigationEnd } from '@angular/router';
 import { WebSocketService } from '../http/websocket.service';
 import { SessionTabService } from './session-tab.service';
+import { ModuleRegistryService } from '../modules/module-registry.service';
 import { filter } from 'rxjs';
 
-export type AppModuleType = 'warehouse' | 'personnel' | 'operations';
+export type AppModuleType = 'warehouse' | 'personnel' | 'operations' | string;
 
 export interface RolePersona {
   code: string;
@@ -156,6 +157,7 @@ export class AppPersonaService {
   private router = inject(Router);
   private ws = inject(WebSocketService);
   private sessionTab = inject(SessionTabService);
+  public moduleRegistry = inject(ModuleRegistryService);
 
   // سیگنال ماژول فعال (انبارداری یا مالی)
   public activeApp = signal<AppModuleType>(
@@ -178,66 +180,43 @@ export class AppPersonaService {
     );
   }
 
-  // بررسی دسترسی کاربر به سامانه انبارداری
+  // بررسی دسترسی کاربر به سامانه انبارداری (وارونه‌سازی — فاز ۶، تسک ۵۴)
   public hasWarehouseAccess = computed<boolean>(() => {
-    if (this.isSuperuser()) return true;
-    const u = this.auth.user();
-    if (u?.allowed_apps && Array.isArray(u.allowed_apps)) {
-      return u.allowed_apps.includes('warehouse');
-    }
-    const perms = this.auth.userPermissions() || [];
-    const warehousePerms = [
-      'view_sys_dashboard', 'view_wh_dashboard', 'view_sys_counter',
-      'view_sys_supervisor', 'view_sys_manager_review', 'view_wh_docs',
-      'view_wh_dispatch', 'view_wh_customs', 'view_wh_doc_approvals',
-      'view_wh_feeding', 'view_wh_feed_approvals', 'view_wh_labels',
-      'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
-      'view_sys_recounts', 'view_sys_export', 'view_sys_reports',
-      'perm_doc_approve_action', 'perm_feed_approve_action', 'perm_inventory_finalize',
-      'perm_rec_import', 'perm_rec_recount', 'perm_rec_dispatch',
-      'perm_wh_create', 'perm_wh_edit', 'perm_wh_freeze'
-    ];
-    return warehousePerms.some(p => perms.includes(p));
+    return this.canAccessApp('warehouse');
   });
 
   // بررسی دسترسی کاربر به سامانه مالی و کارکرد پرسنل
   public hasPersonnelAccess = computed<boolean>(() => {
-    if (this.isSuperuser()) return true;
-    const u = this.auth.user();
-    if (u?.allowed_apps && Array.isArray(u.allowed_apps)) {
-      return u.allowed_apps.includes('finance') || u.allowed_apps.includes('personnel');
-    }
-    const perms = this.auth.userPermissions() || [];
-    const personnelPerms = [
-      'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
-      'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
-      'perm_lock_work_period', 'perm_approve_personnel_supervisor', 'perm_approve_personnel_manager',
-      'perm_approve_personnel_finance', 'perm_approve_fleet_supervisor', 'perm_approve_fleet_manager',
-      'perm_approve_fleet_finance', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action',
-      'can_act_as_accountant', 'can_act_as_operator'
-    ];
-    return personnelPerms.some(p => perms.includes(p));
+    return this.canAccessApp('accounting');
   });
 
   // بررسی دسترسی کاربر به مرکز عملیات و زیرساخت سازمان (ویژه سوپریوزر)
   public hasOperationsAccess = computed<boolean>(() => {
-    return this.isSuperuser();
+    return this.canAccessApp('operations');
   });
 
   public canAccessApp(app: AppModuleType): boolean {
-    if (this.isSuperuser()) return true;
-    if (app === 'warehouse') return this.hasWarehouseAccess();
-    if (app === 'personnel') return this.hasPersonnelAccess();
-    if (app === 'operations') return this.hasOperationsAccess();
-    return false;
+    const spec = this.moduleRegistry.getSpec(app);
+    if (!spec) return false;
+    return this.moduleRegistry.userHasAccessToModule(
+      spec.code,
+      this.auth.userPermissions() || [],
+      this.auth.user()?.allowed_apps,
+      this.isSuperuser()
+    );
   }
 
-  // فهرست سامانه‌های مجاز در دسترس کاربر
+  // فهرست سامانه‌های مجاز در دسترس کاربر بر پایه رجیستری پویا
   public accessibleApps = computed<AppModuleType[]>(() => {
+    const specs = this.moduleRegistry.getInstalledSpecs();
     const apps: AppModuleType[] = [];
-    if (this.hasWarehouseAccess()) apps.push('warehouse');
-    if (this.hasPersonnelAccess()) apps.push('personnel');
-    if (this.hasOperationsAccess()) apps.push('operations');
+    for (const spec of specs) {
+      if (this.canAccessApp(spec.code)) {
+        // برای سازگاری عقبگرد با کدهای موجود که 'personnel' را چک می‌کنند
+        const code = spec.code === 'accounting' ? 'personnel' : spec.code;
+        if (!apps.includes(code)) apps.push(code);
+      }
+    }
     return apps;
   });
 

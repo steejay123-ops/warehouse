@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wh-accounting"
+version = "1.0.0"
+description = "ماژول حسابداری، کارکرد پرسنل، رانندگان و ناوگان، محاسبات حقوق، خزانه‌داری و طرف‌حساب‌ها"
+requires-python = ">=3.12"
+dependencies = [
+    "wh-platform>=1.0,<2.0",
+    "jdatetime==5.0.0",
+]
+classifiers = [
+    "Private :: Do Not Upload",
+]
+
+[project.entry-points."wh.module"]
+accounting = "personnel.module_spec:SPEC"
+
+[tool.setuptools]
+package-dir = { "" = "." }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "personnel*",
+]

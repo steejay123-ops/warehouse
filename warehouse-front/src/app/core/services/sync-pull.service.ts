@@ -21,13 +21,46 @@ import { environment } from '../../../environments/environment';
 const SINCE_OVERLAP_MS = 30_000;
 const PAGE_LIMIT = 500;
 
-/** نگاشت کلید مدل سرور → جدول Dexie */
-const MODEL_TABLES: Record<string, 'countTasks' | 'items' | 'dynamicFields' | 'docTasks'> = {
+/**
+ * رجیستری مدل‌های مجاز برای همگام‌سازی و نگاشت به جداول محلی — فاز ۶ (تسک ۵۸)
+ * به صورت پویا قابل ثبت توسط هر ماژول
+ */
+export const PULL_ENTITIES: Record<string, 'countTasks' | 'items' | 'dynamicFields' | 'docTasks' | string> = {
   count_tasks: 'countTasks',
   items: 'items',
   dynamic_fields: 'dynamicFields',
   doc_tasks: 'docTasks',
 };
+
+export function registerPullEntity(modelKey: string, tableName: string): void {
+  PULL_ENTITIES[modelKey] = tableName;
+}
+
+const MODEL_TABLES = PULL_ENTITIES;
+
+/**
+ * فاز ۶ (تسک ۵۹) — ساخت کلید کرسر با استاندارد توسعه‌یافته userId:scopeKind:scopeId
+ */
+export function buildCursorKey(userId: number, scopeId: number, scopeKind: string = 'warehouse'): string {
+  return `${userId}:${scopeKind}:${scopeId}`;
+}
+
+/**
+ * دریافت وضعیت کرسر به روش expand-contract (ابتدا کلید جدید، سپس fallback به کلید قدیمی)
+ */
+async function getCursorState(userId: number, scopeId: number, scopeKind: string = 'warehouse'): Promise<any> {
+  const newKey = buildCursorKey(userId, scopeId, scopeKind);
+  let state = await offlineDb.syncCursors.get(newKey);
+  if (!state && scopeKind === 'warehouse') {
+    // خواندن کلید قدیمی جهت تداوم نشست کاربر بدون نیاز به full resync
+    const legacyKey = `${userId}:${scopeId}`;
+    state = await offlineDb.syncCursors.get(legacyKey);
+    if (state) {
+      state.key = newKey; // ارتقای کلید در حافظه
+    }
+  }
+  return state;
+}
 
 export type PullOutcome =
   | { status: 'completed'; upserted: number; deleted: number; bytes: number }
@@ -88,8 +121,8 @@ export class SyncPullService {
     this._pullProgress$.next({ current: 0, total: null, bytes: 0 });
 
     try {
-      const cursorKey = `${userId}:${warehouseId}`;
-      let state = await offlineDb.syncCursors.get(cursorKey);
+      const cursorKey = buildCursorKey(userId, warehouseId, 'warehouse');
+      let state = await getCursorState(userId, warehouseId, 'warehouse');
       if (!state) {
         state = {
           key: cursorKey, userId, warehouseId,
@@ -134,6 +167,7 @@ export class SyncPullService {
             // کلاینت قدیمی‌تر از عمر tombstoneها → Full Resync (فقط یک بار)
             console.warn('[SyncPull] ⏳ 410 — Full Resync انبار', warehouseId);
             await offlineDb.syncCursors.delete(cursorKey);
+            await offlineDb.syncCursors.delete(`${userId}:${warehouseId}`);
             this.inFlight = false;
             this._isPulling$.next(false);
             if (isRetryAfter410) return { status: 'error', message: 'full_resync_loop' };
@@ -228,7 +262,7 @@ export class SyncPullService {
     for (const [modelKey, rows] of Object.entries(results)) {
       const tableName = MODEL_TABLES[modelKey];
       if (!tableName || !Array.isArray(rows) || rows.length === 0) continue;
-      const table = offlineDb[tableName];
+      const table = (offlineDb as any)[tableName];
 
       const toPut: any[] = [];
       const toDelete: string[] = [];
@@ -287,10 +321,10 @@ export class SyncPullService {
   }
 
   /** زمان آخرین Pull موفق (server_time) برای نمایش در UI */
-  async getLastServerTime(warehouseId: number): Promise<string | null> {
+  async getLastServerTime(warehouseId: number, scopeKind: string = 'warehouse'): Promise<string | null> {
     const userId = this.getCurrentUserId();
     if (userId === null) return null;
-    const state = await offlineDb.syncCursors.get(`${userId}:${warehouseId}`);
+    const state = await getCursorState(userId, warehouseId, scopeKind);
     return state?.lastServerTime ?? null;
   }
 }

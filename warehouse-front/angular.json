@@ -66,6 +66,31 @@
                   "with": "src/environments/environment.development.ts"
                 }
               ]
+            },
+            "accounting-only": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "3.5mb",
+                  "maximumError": "4.5mb"
+                }
+              ],
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": true
+                },
+                "fonts": false
+              },
+              "fileReplacements": [
+                {
+                  "replace": "src/app/modules/warehouse/warehouse.routes.ts",
+                  "with": "src/app/modules/warehouse/warehouse.routes.stub.ts"
+                }
+              ],
+              "serviceWorker": "ngsw-config.json"
             }
           },
           "defaultConfiguration": "production"

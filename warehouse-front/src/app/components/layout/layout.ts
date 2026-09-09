@@ -27,6 +27,9 @@ import { AppPersonaService } from '../../core/services/app-persona.service';
 import { AppRoleSwitcherComponent } from '../../shared/components/app-role-switcher/app-role-switcher.component';
 import { environment } from '../../../environments/environment';
 
+import { WAREHOUSE_SYSTEM_NAV_ITEMS, WAREHOUSE_CONTEXT_NAV_ITEMS } from '../../modules/warehouse/nav-items';
+import { ACCOUNTING_NAV_ITEMS } from '../../modules/accounting/nav-items';
+
 @Component({
   selector: 'app-layout',
   imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent, ChatDrawerComponent, AppRoleSwitcherComponent],
@@ -500,45 +503,12 @@ export class Layout implements OnInit, OnDestroy {
   }
 
   private SYSTEM_NAV_ITEMS: any[] = [
-    {id:'dashboard', label:'داشبورد مانیتورینگ کلی', icon:'grid', permission: 'view_sys_dashboard'},
-    {id:'users', label:'کاربران و نقش ها', icon:'users', permission: 'view_sys_users'},
-    {id:'projects', label:'انبارها', icon:'archive', permission: 'view_sys_projects'},
-    {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
-    {id:'customs', label:'کارتابل مالی', icon:'folder', permission: 'view_wh_customs'},
-    {id:'supervisor', label:'کارتابل سرپرست', icon:'check-square', permission: 'view_sys_supervisor'},
-    {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
-    {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
-    {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
-    {id:'health', label:'پایش سلامت سامانه', icon:'activity', permission: 'view_sys_settings'},
-    {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
-    {id:'settings', label:'تنظیمات سیستم', icon:'settings', permission: 'view_sys_settings'},
-    // بخش کارکرد و حسابداری (پورتال‌های ماژولار سامانه مالی و حسابداری)
-    {id:'projects-and-sections', label:'🏢 پروژه‌ها و بخش‌ها', icon:'briefcase', permission: 'view_sys_projects', isAccounting: true},
-    {id:'attendance', label:'📋 ثبت کارکرد پرسنل و ناوگان', icon:'check-square', permission: 'view_sys_personnel_attendance', isAccounting: true},
-    {id:'manager-approvals', label:'👑 کارتابل تاییدات مدیر', icon:'check-circle', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'finance-cartable', label:'💳 کارتابل مالی و حقوق', icon:'dollar-sign', permission: 'view_sys_payroll', isAccounting: true},
-    {id:'treasury-cartable', label:'🏦 کارتابل خزانه‌داری و پرداخت', icon:'dollar-sign', permission: 'view_sys_treasury', isAccounting: true},
-    {id:'profiles', label:'👥 بانک پرونده‌های پرسنل و ناوگان', icon:'users', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'base-settings', label:'⚙️ تنظیمات پایه حقوق و سیستم', icon:'settings', permission: 'view_sys_personnel', isAccounting: true},
-    {id:'finance-audit', label:'🔍 رهگیری و ممیزی مالی', icon:'file-text', permission: 'view_sys_payroll', isAccounting: true},
-    {id:'finance-health', label:'🩺 سلامت و تاب‌آوری سامانه', icon:'activity', permission: 'view_sys_payroll', isAccounting: true}
+    ...WAREHOUSE_SYSTEM_NAV_ITEMS,
+    ...ACCOUNTING_NAV_ITEMS
   ];
 
   private WAREHOUSE_NAV_ITEMS: any[] = [
-    {id:'dashboard', label:'داشبورد انبار', icon:'grid', permission: 'view_wh_dashboard'},
-    {id:'docs', label:'مدیریت کالا', icon:'upload-cloud', permission: 'view_wh_docs'},
-    {id:'dispatch', label:'تخصیص کالا', icon:'clipboard', permission: 'view_wh_dispatch'},
-    {id:'counter', label:'کارتابل انبارگردان', icon:'clipboard', permission: 'view_sys_counter'},
-    {id:'customs', label:'کارتابل مالی', icon:'folder', permission: 'view_wh_customs'},
-    {id:'supervisor', label:'کارتابل سرپرست', icon:'check-square', permission: 'view_sys_supervisor'},
-    {id:'manager-review', label:'بررسی نهایی مدیر', icon:'check-circle', permission: 'view_sys_manager_review'},
-    {id:'count-tracking', label:'پیگیری وضعیت شمارش', icon:'activity', permission: 'view_sys_manager_review'},
-
-    {id:'feeding', label:'مدیریت و تغذیه MT26/49 (به‌زودی)', icon:'database', permission: 'view_wh_feeding'},
-    {id:'audit', label:'رهگیری تغییرات', icon:'file-text', permission: 'view_wh_audit'},
-    {id:'health', label:'پایش سلامت سامانه', icon:'activity', permission: 'view_wh_settings'},
-    {id:'reports', label:'گزارش‌ساز', icon:'bar-chart-2', permission: 'view_sys_reports'},
-    {id:'wh-settings', label:'تنظیمات انبار', icon:'settings', permission: 'view_wh_settings'}
+    ...WAREHOUSE_CONTEXT_NAV_ITEMS
   ];
 
   constructor(
@@ -1039,7 +1009,7 @@ export class Layout implements OnInit, OnDestroy {
     let items = this.store.isWarehouseContext() ? this.WAREHOUSE_NAV_ITEMS : this.SYSTEM_NAV_ITEMS;
     
     return items.filter(item => {
-      if (item.isAccounting) return false;
+      if (item.isAccounting || item.module === 'accounting') return false;
       if (isAdmin) return true;
       if (item.id === 'audit') {
         return userPerms.includes('view_wh_audit') || userPerms.includes('perm_sys_logs');
@@ -1068,7 +1038,7 @@ export class Layout implements OnInit, OnDestroy {
     const activeRole = this.personaService.activeRole();
     
     return this.SYSTEM_NAV_ITEMS.filter(item => {
-      if (!item.isAccounting) return false;
+      if (!item.isAccounting && item.module !== 'accounting') return false;
       if (isAdmin) return true;
 
       // فیلتر هوشمند بر اساس نقش فعال SoD

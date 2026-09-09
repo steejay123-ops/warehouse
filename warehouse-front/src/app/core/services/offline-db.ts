@@ -149,10 +149,24 @@ export interface SyncCursorEntry {
 
 export type AppScope = 'warehouse' | 'finance';
 
-export const SCOPED_DB_NAMES: Record<AppScope, string> = {
+/**
+ * فاز ۶ §۶.۹ (تسک ۶۰) — قفل مطلق نام دو دیتابیس فعلی IndexedDB
+ * هرگز rename انجام نمی‌شود تا کش و صف کاربران به هیچ وجه از دست نرود.
+ */
+export const SCOPED_DB_NAMES: Record<string, string> = {
   warehouse: 'WarehouseOfflineDB_warehouse',
   finance: 'WarehouseOfflineDB_finance',
+  accounting: 'WarehouseOfflineDB_finance',
+  personnel: 'WarehouseOfflineDB_finance',
 };
+
+/**
+ * دریافت نام قطعی دیتابیس بر اساس کد ماژول (با قفل نام دو دیتابیس فعلی)
+ */
+export function getScopedDbName(scope?: string | null): string {
+  const norm = normalizeScope(scope);
+  return SCOPED_DB_NAMES[norm] || `WarehouseOfflineDB_${norm}`;
+}
 
 /**
  * نرمال‌سازی نام قلمرو به یکی از دو قلمرو استاندارد: warehouse یا finance
@@ -160,7 +174,7 @@ export const SCOPED_DB_NAMES: Record<AppScope, string> = {
 export function normalizeScope(scope?: string | null): AppScope {
   if (!scope) return 'warehouse';
   const s = scope.toLowerCase();
-  if (s === 'finance' || s === 'personnel') return 'finance';
+  if (s === 'finance' || s === 'personnel' || s === 'accounting') return 'finance';
   return 'warehouse';
 }
 
@@ -199,7 +213,8 @@ export function getCurrentActiveAppScope(): AppScope {
 }
 
 /**
- * تشخیص هوشمند قلمرو از روی URL مسیر اندپوینت سرور
+ * تشخیص هوشمند قلمرو از روی URL مسیر اندپوینت سرور — فاز ۶ (تسک ۶۱)
+ * موجودیت‌های doc-tasks متعلق به انبار هستند و نباید به finance مپ شوند.
  */
 export function resolveScopeFromUrl(url?: string | null): AppScope {
   if (!url) return getCurrentActiveAppScope();
@@ -209,8 +224,6 @@ export function resolveScopeFromUrl(url?: string | null): AppScope {
     u.includes('/payroll') ||
     u.includes('/finance') ||
     u.includes('/treasury') ||
-    u.includes('/doc-tasks') ||
-    u.includes('/doc_tasks') ||
     u.includes('/attendance') ||
     u.includes('/paya') ||
     u.includes('/slips') ||

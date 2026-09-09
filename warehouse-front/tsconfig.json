@@ -3,6 +3,11 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    "paths": {
+      "platform-shell": ["./src/app/modules/platform-shell/index.ts"],
+      "warehouse-ui": ["./src/app/modules/warehouse/index.ts"],
+      "accounting-ui": ["./src/app/modules/accounting/index.ts"]
+    },
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "noImplicitReturns": true,

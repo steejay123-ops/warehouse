@@ -5,59 +5,19 @@ import { AuthService } from './core/auth/auth.service';
 import { Login } from './components/login/login';
 import { Layout } from './components/layout/layout';
 import { AppLauncherComponent } from './components/app-launcher/app-launcher';
-import { Dashboard } from './components/dashboard/dashboard';
-import { Projects } from './components/projects/projects';
-import { Dispatch } from './components/dispatch/dispatch';
-import { Docs } from './components/docs/docs';
-import { Users } from './components/users/users';
-import { Settings } from './components/settings/settings';
-import { Audit } from './components/audit/audit';
-import { HealthDashboardComponent } from './components/health-dashboard/health-dashboard';
-import { Feeding } from './components/feeding/feeding';
-import { Placeholders } from './components/placeholders/placeholders';
-import { Customs } from './components/customs/customs';
 import { ChangePassword } from './components/change-password/change-password';
-import { WhSettings } from './components/wh-settings/wh-settings';
-import { CounterDashboard } from './components/counter/counter-dashboard/counter-dashboard';
-import { SupervisorDashboard } from './components/supervisor/supervisor-dashboard/supervisor-dashboard';
-import { ManagerReview } from './components/manager-review/manager-review';
-import { CountTracking } from './components/count-tracking/count-tracking';
-import { Reports } from './components/reports/reports';
 import { VerifyCard } from './components/verify-card/verify-card';
-import { WarehouseAttendance } from './components/personnel/warehouse-attendance/warehouse-attendance';
-import { ManagerApprovals } from './components/personnel/manager-approvals/manager-approvals';
-import { FinanceCartable } from './components/personnel/finance-cartable/finance-cartable';
-import { BaseSettings } from './components/personnel/base-settings/base-settings';
-import { PersonnelProfilesHub } from './components/personnel/personnel-profiles/personnel-profiles';
-import { TreasuryCartable } from './components/personnel/treasury-cartable/treasury-cartable';
-import { ProjectsAndSectionsComponent } from './components/organization/projects-and-sections/projects-and-sections';
 import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
-import { importLeaveGuard } from './core/guards/import-leave.guard';
-import { settingsLeaveGuard } from './core/guards/settings-leave.guard';
 import { OperationsGuard, OperationsGuardChild } from './core/guards/operations.guard';
 import { OperationsLayoutComponent } from './components/operations/operations-layout/operations-layout';
 import { OperationsCockpitComponent } from './components/operations/operations-cockpit/operations-cockpit';
 import { SettingsBackupTabComponent } from './components/settings/tabs/settings-backup-tab/settings-backup-tab';
 import { OperationsSyncMonitorComponent } from './components/operations/operations-sync-monitor/operations-sync-monitor';
 import { OperationsRbacGovernanceComponent } from './components/operations/operations-rbac-governance/operations-rbac-governance';
-
-const WAREHOUSE_CHECK_PERMS = [
-  'view_sys_dashboard', 'view_wh_dashboard', 'view_sys_counter',
-  'view_sys_supervisor', 'view_sys_manager_review', 'view_wh_docs',
-  'view_wh_dispatch', 'view_wh_customs', 'view_wh_doc_approvals',
-  'view_wh_feeding', 'view_wh_feed_approvals', 'view_wh_labels',
-  'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
-  'view_sys_recounts', 'view_sys_export', 'view_sys_reports'
-];
-
-const PERSONNEL_CHECK_PERMS = [
-  'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
-  'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
-  'perm_lock_work_period', 'perm_approve_personnel_supervisor', 'perm_approve_personnel_manager',
-  'perm_approve_personnel_finance', 'perm_approve_fleet_supervisor', 'perm_approve_fleet_manager',
-  'perm_approve_fleet_finance', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action',
-  'can_act_as_accountant', 'can_act_as_operator'
-];
+import { Users } from './components/users/users';
+import { Audit } from './components/audit/audit';
+import { HealthDashboardComponent } from './components/health-dashboard/health-dashboard';
+import { ModuleRegistryService } from './core/modules/module-registry.service';
 
 export const routes: Routes = [
   // ─── احراز هویت و صفحات عمومی ─────────────────────────
@@ -69,96 +29,22 @@ export const routes: Routes = [
   // ─── پورتال لانچر برنامه‌ها (App Launcher) ──────────────
   { path: 'app/launcher', component: AppLauncherComponent, canActivate: [AuthGuard] },
 
-  // ─── ماژول ۱: سامانه انبارگردانی (/app/warehouse/...) ──
+  // ─── ماژول ۱: سامانه انبارگردانی (/app/warehouse/...) با بارگذاری تنبل (Lazy Loading) ──
   {
     path: 'app/warehouse',
     component: Layout,
     canActivate: [AuthGuard],
     canActivateChild: [AuthGuardChild],
-    children: [
-      { path: 'dashboard', component: Dashboard },
-      { path: 'projects', component: Projects },
-      { 
-        path: 'dispatch', 
-        component: Dispatch,
-        canDeactivate: [importLeaveGuard],
-        data: { reuse: true }
-      },
-      { 
-        path: 'docs', 
-        component: Docs,
-        canDeactivate: [importLeaveGuard]
-      },
-      { path: 'users', component: Users },
-      { 
-        path: 'settings', 
-        component: Settings,
-        canDeactivate: [settingsLeaveGuard]
-      },
-      { path: 'wh-settings', component: WhSettings },
-      { path: 'audit', component: Audit, data: { appScope: 'warehouse' } },
-      { path: 'health', component: HealthDashboardComponent, data: { appScope: 'warehouse', reuse: false } },
-      { path: 'feeding', component: Feeding },
-      { path: 'field', redirectTo: 'counter', pathMatch: 'full' },
-      { path: 'placeholders', component: Placeholders },
-      { path: 'counter', component: CounterDashboard, data: { reuse: true } },
-      { path: 'supervisor', component: SupervisorDashboard, data: { reuse: true } },
-      { path: 'manager-review', component: ManagerReview, data: { reuse: true } },
-      { path: 'count-tracking', component: CountTracking, data: { reuse: true } },
-      { path: 'reports', component: Reports },
-      { path: 'customs', component: Customs },
-      { path: 'tasks', component: Placeholders },
-      { path: 'labels', component: Placeholders },
-      { path: 'approvals', component: Placeholders },
-      { path: 'doc_approvals', component: Placeholders },
-      { path: 'feed_approvals', component: Placeholders },
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
-    ]
+    loadChildren: () => import('./modules/warehouse/warehouse.routes').then(m => m.WAREHOUSE_ROUTES)
   },
 
-  // ─── ماژول ۲: سامانه مالی و پرسنلی (/app/finance/...) ───
+  // ─── ماژول ۲: سامانه مالی و پرسنلی (/app/finance/...) با بارگذاری تنبل (Lazy Loading) ───
   {
     path: 'app/finance',
     component: Layout,
     canActivate: [AuthGuard],
     canActivateChild: [AuthGuardChild],
-    children: [
-      { path: 'finance-cartable', component: FinanceCartable, data: { reuse: true } },
-      { path: 'attendance', component: WarehouseAttendance, data: { defaultTab: 'personnel' } },
-      { path: 'fleet', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
-      { path: 'fleet-attendance', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
-      { path: 'manager-approvals', component: ManagerApprovals, data: { reuse: true } },
-      { path: 'treasury-cartable', component: TreasuryCartable, data: { reuse: true } },
-      { path: 'treasury', component: TreasuryCartable, data: { reuse: true } },
-      { path: 'profiles', component: PersonnelProfilesHub, data: { reuse: true } },
-      { path: 'personnel-profiles', component: PersonnelProfilesHub, data: { reuse: true } },
-      { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
-      { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
-      { path: 'audit', component: Audit, data: { appScope: 'finance', reuse: true } },
-      { path: 'health', component: HealthDashboardComponent, data: { appScope: 'finance', reuse: false } },
-      { path: 'finance-audit', redirectTo: 'audit', pathMatch: 'full' },
-      { path: 'personnel', redirectTo: 'finance-cartable', pathMatch: 'full' },
-      { path: 'payroll', redirectTo: 'finance-cartable', pathMatch: 'full' },
-      { path: 'fleet-settlement', redirectTo: 'treasury-cartable', pathMatch: 'full' },
-      { 
-        path: '', 
-        redirectTo: () => {
-          const auth = inject(AuthService);
-          const perms = auth.userPermissions() || [];
-          if (perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
-            return 'finance-cartable';
-          }
-          if (perms.includes('view_sys_treasury') || perms.includes('perm_treasury_disburse_action')) {
-            return 'treasury-cartable';
-          }
-          if (perms.includes('perm_approve_personnel_manager')) {
-            return 'manager-approvals';
-          }
-          return 'attendance';
-        }, 
-        pathMatch: 'full' 
-      }
-    ]
+    loadChildren: () => import('./modules/accounting/accounting.routes').then(m => m.ACCOUNTING_ROUTES)
   },
 
   // ─── ماژول ۳: مرکز عملیات و زیرساخت سازمان (/app/operations/...) ───
@@ -180,12 +66,13 @@ export const routes: Routes = [
     ]
   },
 
-  // ─── هدایت هوشمند ریشه ماژولار (/app) ───────────────────
+  // ─── هدایت هوشمند ریشه ماژولار (/app) — فاز ۶ (تسک ۵۳) ───────────────────
   {
     path: 'app',
     redirectTo: () => {
       inject(AuthStore).setWarehouseContext(false);
       const auth = inject(AuthService);
+      const registry = inject(ModuleRegistryService);
       const perms = auth.userPermissions() || [];
       const isSuper = perms.includes('admin_all') || auth.user()?.is_superuser;
 
@@ -193,8 +80,11 @@ export const routes: Routes = [
         return 'app/launcher';
       }
 
-      const hasWh = WAREHOUSE_CHECK_PERMS.some(p => perms.includes(p));
-      const hasFin = PERSONNEL_CHECK_PERMS.some(p => perms.includes(p));
+      const whMarkers = registry.permissionMarkers('warehouse');
+      const acctMarkers = registry.permissionMarkers('accounting');
+
+      const hasWh = registry.isModuleInstalled('warehouse') && whMarkers.some(p => perms.includes(p));
+      const hasFin = registry.isModuleInstalled('accounting') && acctMarkers.some(p => perms.includes(p));
 
       if (hasWh && hasFin) {
         return 'app/launcher';
@@ -253,12 +143,13 @@ export const routes: Routes = [
   { path: 'operations', redirectTo: 'app/operations/cockpit', pathMatch: 'full' },
   { path: 'cockpit', redirectTo: 'app/operations/cockpit', pathMatch: 'full' },
 
-  // ─── هدایت ریشه اصلی به پورتال هوشمند ─────────────────
-  { 
-    path: '', 
+  // ─── هدایت ریشه اصلی به پورتال هوشمند — فاز ۶ (تسک ۵۳) ─────────────────
+  {
+    path: '',
     redirectTo: () => {
       inject(AuthStore).setWarehouseContext(false);
       const auth = inject(AuthService);
+      const registry = inject(ModuleRegistryService);
       const perms = auth.userPermissions() || [];
       const isSuper = perms.includes('admin_all') || auth.user()?.is_superuser;
 
@@ -266,8 +157,11 @@ export const routes: Routes = [
         return 'app/launcher';
       }
 
-      const hasWh = WAREHOUSE_CHECK_PERMS.some(p => perms.includes(p));
-      const hasFin = PERSONNEL_CHECK_PERMS.some(p => perms.includes(p));
+      const whMarkers = registry.permissionMarkers('warehouse');
+      const acctMarkers = registry.permissionMarkers('accounting');
+
+      const hasWh = registry.isModuleInstalled('warehouse') && whMarkers.some(p => perms.includes(p));
+      const hasFin = registry.isModuleInstalled('accounting') && acctMarkers.some(p => perms.includes(p));
 
       if (hasWh && hasFin) {
         return 'app/launcher';
@@ -282,8 +176,8 @@ export const routes: Routes = [
         return 'app/finance/attendance';
       }
       return 'app/launcher';
-    }, 
-    pathMatch: 'full' 
+    },
+    pathMatch: 'full'
   },
   { path: '**', redirectTo: 'login' }
 ];

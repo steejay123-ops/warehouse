@@ -61,6 +61,33 @@ class CustomJWTAuthentication(JWTAuthentication):
             module_scope_codes,
         )
 
+        # فاز ۵ §۵.۴ (تسک ۴۶) — قلمرو اندپوینت /api/reports/:
+        # موتور گزارش‌ساز پلتفرمی است و برای هر ماژول نصب‌شده‌ای که ثبت گزارش یا JOIN
+        # کرده باشد، در دسترس کاربرانِ دارای قلمرو همان ماژول قرار می‌گیرد.
+        rel_path = path.lstrip('/')
+        if rel_path.startswith('api/reports/'):
+            from platform_core.query_engine import get_reporting_modules
+            from platform_core.registry import installed_modules, module_scope_codes
+            active_reporting_modules = [m for m in get_reporting_modules() if m in installed_modules()]
+            if not active_reporting_modules and 'warehouse' in installed_modules():
+                active_reporting_modules = ['warehouse']
+
+            if not active_reporting_modules:
+                msg = 'سامانه گزارش‌ساز در این نصب فعال نیست.'
+                _log_boundary_violation('reports', msg)
+                raise NotFound(msg, code='cross_app_not_found')
+
+            allowed_scope_codes = set()
+            for m in active_reporting_modules:
+                allowed_scope_codes.update(module_scope_codes(m))
+
+            if not any(c in allowed_apps for c in allowed_scope_codes):
+                msg = (f'این توکن فاقد قلمرو مجاز (App-Scoped Claim: {"/".join(sorted(allowed_scope_codes))}) '
+                       f'برای دسترسی به گزارش‌ساز است.')
+                _log_boundary_violation('reports', msg)
+                raise PermissionDenied(msg, code='app_scope_denied')
+            return
+
         module = module_for_path(path)
         if module is None:
             # مسیر به یک ماژولِ کاتالوگ تعلق دارد ولی نصب نیست → ۴۰۴.

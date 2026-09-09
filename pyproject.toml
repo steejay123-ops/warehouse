@@ -36,6 +36,10 @@ dev = [
     "import-linter==2.3",
 ]
 
+[project.entry-points."wh.module"]
+warehouse = "warehouses.module_spec:SPEC"
+accounting = "personnel.module_spec:SPEC"
+
 [tool.setuptools.dynamic]
 # فهرست وابستگی‌ها تکرار نمی‌شود تا از واگرایی با requirements.txt جلوگیری شود.
 dependencies = { file = ["warehouse-backend/requirements.txt"] }
@@ -120,6 +124,18 @@ api_prefixes = ["api/personnel/"]
 requires = ["wh-platform>=1.0,<2.0"]
 entry_point = "accounting = personnel.module_spec:SPEC"
 
+[tool.wh.distributions.wh-accounting-gl]
+version = "1.0.0"
+title_fa = "دفتر کل دوطرفه و اسناد رسمی حسابداری (رزرو شده برای آینده — فاز ۸)"
+layer = "accounting-gl"
+mandatory = false
+packages = []
+future_packages = ["accounting_gl"]
+django_apps = []
+api_prefixes = ["api/gl/"]
+requires = ["wh-platform>=1.0,<2.0", "wh-accounting>=1.0,<2.0"]
+entry_point = ""
+
 [tool.wh.notes]
 # `reports` امروز کامل انباری است. فاز ۵ موتور کوئری عام آن را به
 # `platform_core/query_engine` می‌برد و فقط JOINS انباری در wh-warehouse می‌ماند.
@@ -128,3 +144,4 @@ reports_split_phase = 5
 settings_core_phase = 1
 registry_phase = 3
 packaging_phase = 7
+gl_readiness_phase = 8

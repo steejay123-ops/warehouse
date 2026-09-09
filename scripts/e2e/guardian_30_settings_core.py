@@ -166,14 +166,6 @@ def _main():
     setup_test_environment()
     try:
         call_command("migrate", interactive=False, verbosity=0)
-        # `settings_core.0001_initial` با SeparateDatabaseAndState فقط state را
-        # ثبت می‌کند و هیچ `CREATE TABLE` ای اجرا نمی‌کند (جدولِ real در اصل در
-        # دیتابیس انبار موجود است). در این دیتابیس موقتِ خالی، جدول را برای پشتیبانی
-        # از درخواست‌ها به‌صورت صریح می‌سازیم.
-        from django.db import connection
-        from settings_core.models import SystemSetting
-        with connection.schema_editor() as se:
-            se.create_model(SystemSetting)
         client = Client()
 
         r_config = client.get("/api/public/config/")

@@ -1,8 +1,15 @@
 # گزارش ممیزی فنی و طرح جامع اصلاح صفحه مدیریت کاربران و نقش‌ها (مرکز عملیات)
 **آدرس هدف:** `https://app.farsalish.ir/app/operations/users`  
 **تاریخ ارزیابی:** ۱۹ شهریور ۱۴۰۵ (2026-09-09)  
-**نسخه سند:** ۲.۰.۰ (بازبینی کامل پس از نقد نسخه ۱)  
+**نسخه سند:** ۲.۱.۰ (اصلاحات ناشی از بازبینی نقادانه‌ٔ نسخه ۲.۰.۰)  
 **وضعیت:** مصوب (تایید اولیه — در انتظار دستور اجرا)  
+**خلاصهٔ اصلاحات نسبت به ۲.۰.۰:**  
+(۱) پسوند نگهبان‌ها به `.py` اصلاح شد؛  
+(۲) Virtual Scroll با رندر تدریجی (Chunking) جایگزین و نصب `@angular/cdk` حذف شد؛  
+(۳) فیلد `password` به `fields`/`UserSerializer` بک‌اند اضافه شد؛  
+(۴) `getRoleScope` نقش‌های ترکیبی (انبار+مالی) را `global` می‌کند؛  
+(۵) تکلیف فیلد انقضا تعیین شد: حذف از فرم (نه افزودن به مدل) — نگهبان ۵۱؛  
+(۶) محدودیت ایستای نگهبان‌ها و پیشنهاد توسعهٔ عملکردی (Playwright) ثبت شد.  
 
 ---
 
@@ -40,8 +47,10 @@
 
 5. **باگ انقضای حساب کاربری (فیلد ساختگی و فاقد کارکرد - Critical):**  
    چک‌باکس «انقضای پیش‌فرض (۳ ماهه)» و اینپوت «اعتبار به روز» در فرم کاربر وجود دارند اما در متد `saveUser()` هیچ محاسبه‌ای انجام نمی‌شود و در مدل دیتابیس `CustomUser` جنگو اصلاً فیلد `expiry_date` وجود ندارد.
+
+   **تصمیم نهایی (که در نسخه ۲.۰.۰ جا افتاده بود):** این فیلدها **از فرم حذف می‌شوند** (نه اینکه به مدل اضافه شوند) تا زمانی که نیاز واقعیِ انقضای حساب در کسب‌وکار تأیید شود. دلیل: افزودن `expiry_date` مستلزم مایگریشن، منطق لاگین/بازرسی و تعامل با کارت پرسنلی است و خارج از دامنه این اصلاح است. حذف UI بدون تغییر مدل، کم‌ریسک و بدون داده‌ازدست‌دادن است. اجرا با نگهبان ۵۱ (`guardian_51_users_expiry_cleanup.py`) پایش می‌شود.
 6. **فقدان امکان تعیین یا اطلاع‌رسانی کلمه عبور در ساخت کاربر جدید:**  
-   هیچ فیلدی برای کلمه عبور یا راهنمای ورود برای مدیر وجود ندارد؛ بک‌اند رمز پیش‌فرض `123456` قرار می‌دهد اما مدیر مطلع نمی‌شود.
+   هیچ فیلدی برای کلمه عبور یا راهنمای ورود برای مدیر وجود ندارد؛ بک‌اند رمز پیش‌فرض `123456` قرار می‌دهد اما مدیر مطلع نمی‌شود. همچنین فیلد `password` در `fields` یِ `UserSerializer` درج نشده (بخش ۴-۶ را ببینید) و ارسال آن را سرور drop می‌کند.
 7. **جهش و تخریب آنی تصویر آواتار قبل از ذخیره فرم (Premature Mutation):**  
    در مودال ویرایش کاربر، تغییر یا حذف عکس فوراً API سرور را صدا زده و تصویر کاربر را در دیتابیس عوض می‌کند؛ اگر مدیر دکمه «انصراف» فرم را بزند، تصویر تغییریافته روی سرور غیرقابل بازگشت است.
 8. **فقدان اعتبارسنجی الگوریتمی کد ملی (Missing National Code Checksum):**  
@@ -72,8 +81,8 @@
 
 16. **بحران N+1 کوئری در بارگذاری کاربران دیتابیس (Severe N+1 Query):**  
     در `UserViewSet` هیچ `select_related` یا `prefetch_related` برای گروه‌ها، نقش‌ها و انبارها تنظیم نشده است؛ با ۱۰۰ کاربر، بیش از ۴۰۰ کوئری مجزا به دیتابیس ارسال می‌شود که روی Cloudflare Tunnel ایجاد تاخیر چندثانیه‌ای می‌کند.
-17. **رندر صدها کارت کاربر در DOM بدون مجازی‌سازی (Virtual Scroll Missing):**  
-    `UserViewSet` عمداً `pagination_class = None` دارد (برای جستجوی کامل سمت کلاینت). مشکل اصلی فقدان صفحه‌بندی در API نیست؛ رندر هم‌زمان صدها کارت در DOM است که موجب افت شدید فریم‌ریت می‌شود. راه‌حل: مجازی‌سازی لیست در کلاینت (`CdkVirtualScrollViewport`).
+17. **رندر صدها کارت کاربر در DOM (Chunking Missing):**  
+    `UserViewSet` عمداً `pagination_class = None` دارد (برای جستجوی کامل سمت کلاینت). مشکل اصلی فقدان صفحه‌بندی در API نیست؛ رندر هم‌زمان صدها کارت در DOM است که موجب افت شدید فریم‌ریت می‌شود. راه‌حل نهایی: رندر تدریجی سمت کلاینت (Chunking) با `visibleCount` و `IntersectionObserver` — بدون نصب `@angular/cdk` (بخش ۴-۴).
 18. **اجرای متدهای سنگین در چرخه Change Detection انگولار:**  
     صدا زدن مکرر `getRoleChildren()`, `getUsersInRoleCount()`, `getPrimaryRole()`, `getUserRoles()` و `getAvailableSupervisors()` در تمپلیت، با هر رویداد کیبورد صدها هزار بار آرایه‌ها را فیلتر می‌کند.
 19. **فراخوانی مجدد و زائد APIها در تب کارت پرسنلی (`Redundant Duplicate Requests`):**  
@@ -108,8 +117,8 @@
    نسخهٔ ۱ آن را «کد مرده» خواند. اشتباه: مکانیسم حفظ وضعیت تب نقش‌ها ناقص است، نه مرده؛ باید مصرف‌کنندهٔ تمپلیت پیدا کند یا با سیگنال محلی جایگزین شود.
 3. **`getRoleAppScope` با رشته جایگزین نشود — با Permission نگاشت شود.**  
    نسخهٔ ۱ بهبود تطبیق رشته‌ای را پیشنهاد داد. اشتباه: راه‌حل اصولی، نگاشت قلمرو بر اساس `permissionMarkers()` سرویس `ModuleRegistryService` است.
-4. **صفحه‌بندی API راه‌حل نبود — Virtual Scroll راه‌حل است.**  
-   نسخهٔ ۱ فقدان صفحه‌بندی را بحران خواند. اشتباه: `pagination_class = None` عمدی است؛ مشکل رندر DOM است و با `CdkVirtualScrollViewport` حل می‌شود.
+4. **صفحه‌بندی API راه‌حل نبود — رندر تدریجی (Chunking) راه‌حل است.**  
+   نسخهٔ ۱ فقدان صفحه‌بندی را بحران خواند. اشتباه: `pagination_class = None` عمدی است؛ مشکل رندر DOM است. نسخهٔ ۲.۰.۰ به Virtual Scroll (با `@angular/cdk`) اشاره کرد که با چیدمان Grid چندستونه ناسازگار و نیازمند پکیج جدیd است؛ راه‌حل نهایی «۲.۱.۰» رندر تدریجی با `visibleCount`/`IntersectionObserver` است (بخش ۴-۴).
 5. **کلید کش مسیر باید مسیر کامل باشد، نه تنها `path`.**  
    نسخهٔ ۱ مشکل را درست یافت اما راه‌حل را کامل نکرد؛ کلید باید از مجموع `path` والدها ساخته شود (تا `operations/users` از `warehouse/users` جدا بماند).
 6. **پروندهٔ پشتیبان (`implementation_plan`) باید نسخهٔ کاملی از اصلاحات و لیست تسک داشته باشد.**  
@@ -145,23 +154,38 @@ public isOperationsMode = computed(() => this.currentPersona() === 'operations')
 
 و در `users.html` متون هدر و راهنما بر اساس `isOperationsMode` شرطی می‌شوند (مثلاً «مدیریت کاربران و نقش‌ها در مرکز عملیات» در برابر «تخصیص سطح دسترسی به انبارها»).
 
-### ۴-۳. نگاشت قلمرو نقش‌ها بر اساس Permission
-به جای تطبیق رشته‌ای، از مارکرهای قلمروی سرویس رجیستری ماژول استفاده می‌شود:
+> **توجه به ساختار موجود:** ابتدا بررسی کنید `AppPersonaService` چه متد/سیگنالی برای قلمرو فعلی دارد (شبیه الگوی استفاده در `OperationsLayoutComponent`) و از همان API استفاده کنید، نه فرض متد `currentPersona()` که در بالا نمونه است.
+
+### ۴-۳. نگاشت قلمرو نقش‌ها بر اساس Permission (با تشخیص نقش‌های ترکیبی)
+
+به جای تطبیق رشته‌ای، از مارکرهای قلمروی سرویس رجیستری ماژول استفاده می‌شود. **نکتهٔ حیاتی:** نقش‌هایی که هم دسترسی انبار دارند و هم مالی (مدیر ارشد، حسابرس کل و...) باید به‌عنوان `global` شناخته شوند، نه اینکه شرط اول آن‌ها را تک‌بعدی کند:
 
 ```typescript
 private getRoleScope(role: any): 'warehouse' | 'finance' | 'global' {
   const permCodenames = role.permissions?.map((p: any) => p.codename) || [];
   const whMarkers = this.registry.permissionMarkers('warehouse');
   const finMarkers = this.registry.permissionMarkers('accounting');
-  if (permCodenames.some(p => whMarkers.includes(p))) return 'warehouse';
-  if (permCodenames.some(p => finMarkers.includes(p))) return 'finance';
-  return 'global';
+
+  const hasWh = permCodenames.some(p => whMarkers.includes(p));
+  const hasFin = permCodenames.some(p => finMarkers.includes(p));
+
+  if (hasWh && hasFin) return 'global';   // نقش ترکیبی → سراسری
+  if (hasWh) return 'warehouse';
+  if (hasFin) return 'finance';
+  return 'global';                          // نقش بدون دسترسی ماژولی → سراسری (پیش‌فرض امن)
 }
 ```
 
-### ۴-۴. Virtual Scroll برای لیست کاربران
-- افزودن وابستگی `@angular/cdk/scrolling` (یا استفاده از پیاده‌سازی موجود در پروژه اگر هست).
-- جایگزینی `*ngFor` روی کاربران با `*cdkVirtualFor` داخل `CdkVirtualScrollViewport` با `itemSize` ثابت.
+نکته: اگر API نقش‌ها فقط شناسهٔ Permission می‌دهد (نه codename)، نگاشت `permission id → codename` از روی `this.systemPermissions` ساخته شود. همچنین رفتار فعلیِ پیش‌فرض «نقش ناشناخته → warehouse» باید به `global` تغییر کند تا نقش‌های ناشناخته در تب انبار جا نگیرند.
+
+### ۴-۴. رندر تدریجی لیست کاربران (Chunked Rendering) — جایگزین Virtual Scroll
+
+> **تصحیح نسخه ۲.۰.۰:** راه‌حل اولیه `CdkVirtualScrollViewport` ناسازگار بود: کارت‌ها در یک شبکهٔ چندستونه (`grid-cols-1 md:grid-cols-2 xl:grid-cols-3`) چیده شده‌اند که اسکرول مجازی CDK پشتیبانی نمی‌کند، و `@angular/cdk` در `package.json` نصب نیست. راه‌حل امن و بدون وابستگی جدید:
+
+- افزودن state کلاینت: `visibleCount` (شروع از ۲۰) و تابع `loadMore()` که هنگام نزدیک شدن به انتهای اسکرول (یا با دکمهٔ «نمایش بیشتر») ۲۰ کاربر بعدی را به DOM اضافه می‌کند.
+- حفظ کامل چیدمان Grid موجود و فیلتر `filteredUsers` پیش از برش (فقط نتایج فیلترشده به‌صورت تکه‌تکه رندر شوند).
+- اعمال مجدد تکه‌ها پس از تغییر جستجو/فیلتر (بازنشانی `visibleCount` به ۲۰).
+- تشخیص رسیدن به انتهای لیست با `IntersectionObserver` روی یک عنصر Sentinel در انتهای شبکه — بدون نیاز به پکیج جدید.
 
 ### ۴-۵. مکانیزم تراکنشی آواتار
 - نگهداری موقت تصویر انتخابی در `userForm._pendingAvatarBlob` و نمایش Preview محلی.
@@ -169,8 +193,12 @@ private getRoleScope(role: any): 'warehouse' | 'finance' | 'global' {
 - نمایش خطای آپلود در صورت شکست، بدون گم کردن داده‌های فرم.
 
 ### ۴-۶. فیلد کلمه عبور در فرم کاربر جدید
-- در حالت «ایجاد کاربر جدید»، فیلد `password` با گزینهٔ «تولید خودکار» و نمایش موقت رمز پیش‌فرض `123456` با هشدار «بعد از اولین ورود تغییر داده شود».
-- در حالت ویرایش، فیلد مخفی است.
+
+> **تصحیح نسخه ۲.۰.۰:** طرح فقط فرانت را پوشش داده بود اما بک‌اند را جا انداخته بود. در «نسخه ۲.۱.۰» بند بک‌اند رسماً اضافه می‌شود:
+
+- **بک‌اند (`warehouse-backend/accounts/serializers.py`):** فیلد `password = serializers.CharField(write_only=True, required=False, allow_blank=False)` باید به `UserSerializer` اضافه و در `fields` درج شود (خودِ متد `create` در `UserSerializer` از قبل `validated_data.pop('password', None)` را دارد و در نبود رمز، مقدار پیش‌فرض `123456` می‌گذارد؛ اما چون فیلد در `fields` نیست، جنگو می‌تواند آن را drop کند — پس حتماً باید به `fields` افزوده شود).
+- **فرانت (`users.ts` و `users.html`):** در حالت «ایجاد کاربر جدید»، فیلد `password` با گزینهٔ «تولید خودکار» و نمایش موقت رمز پیش‌فرض `123456` همراه با هشدار «کاربر باید بعد از اولین ورود آن را تغییر دهد». در حالت ویرایش، فیلد مخفی و ارسال نمی‌شود.
+- پایش: نگهبان ۴۳.
 
 ### ۴-۷. اعتبارسنجی کد ملی (الگوریتم چک‌سام ۱۰ رقمی)
 تابع استاندارد در فرانت (`users.ts`) و هم‌سو با آن در بک‌اند (`UserSerializer`):
@@ -202,42 +230,46 @@ validateNationalCode(code: string): boolean {
 
 | # | نام فایل | هدف | معیارهای سخت‌گیرانه |
 |---|----------|------|---------------------|
-| ۳۷ | `guardian_37_route_reuse_keys.ts` | رفع تداخل کش مسیرهای `users` | کلید `getRouteKey` از مسیر کامل (مجموع والدها) ساخته شود؛ `warehouse/users` ≠ `operations/users` |
-| ۳۸ | `guardian_38_users_persona_texts.ts` | متون پویای کامپوننت بر اساس قلمرو | وجود `AppPersonaService` در `users.ts`؛ تغییر متون هدر در `users.html` بر اساس `isOperationsMode` |
-| ۳۹ | `guardian_39_users_virtual_scroll.ts` | مجازی‌سازی لیست کاربران | وجود `CdkVirtualScrollViewport` و `*cdkVirtualFor` در `users.html`؛ حذف `*ngFor` صدها کارت |
-| ۴۰ | `guardian_40_users_avatar_transactional.ts` | تراکنشی‌سازی تغییر آواتار | عدم تماس با API آواتار در `openAvatarModalForUser`/`onRemoveUserAvatar`؛ آپلود فقط در `saveUser()` |
-| ۴۱ | `guardian_41_users_national_code_checksum.ts` | اعتبارسنجی چک‌سام کد ملی | وجود `validateNationalCode` در فرانت و معادل آن در `UserSerializer` بک‌اند |
-| ۴۲ | `guardian_42_users_role_scope_permissions.ts` | نگاشت قلمرو نقش بر اساس Permission | استفاده از `ModuleRegistryService.permissionMarkers()`؛ عدم وجود `includes('انبار')` و تطبیق رشته‌ای در `getRoleAppScope` |
-| ۴۳ | `guardian_43_users_password_initial.ts` | فیلد کلمه عبور اولیه در ساخت کاربر | وجود `password` در `userForm` و نمایش فیلد/راهنما در حالت ایجاد |
-| ۴۴ | `guardian_44_users_query_params_clean.ts` | پاک‌سازی تاریخچه مرورگر | عدم پوش `permTab` به `queryParams`؛ وضعیت تب مودال در حافظهٔ محلی (signal) |
-| ۴۵ | `guardian_45_users_mobile_actions.ts` | دسترس‌پذیری لمسی اکشن‌ها | دکمه‌های ویرایش/حذف نقش بدون وابستگی Hover؛ منوی اکشن کاربر با منطق Dropup در ردیف‌های انتهایی |
-| ۴۶ | `guardian_46_users_avatar_contrast.ts` | کنتراست متن آواتار (WCAG) | تابع سنجش روشنایی رنگ؛ متن تیره روی رنگ‌های روشن و برعکس |
-| ۴۷ | `guardian_47_users_status_filters.ts` | فیلترهای سریع وضعیت سازمانی | وجود فیلترهای «فعال/معلق/بدون انبار/ادمین» با شمارش |
-| ۴۸ | `guardian_48_users_emergency_normalize.ts` | نرمال‌سازی ارقام فارسی | تبدیل ارقام فارسی/عربی فیلد `emergency_contact` (و کد ملی) قبل از ارسال |
-| ۴۹ | `guardian_49_users_backend_n1.ts` | رفع N+1 در `UserViewSet` | وجود `select_related('supervisor')` و `prefetch_related('groups__customrole', 'assigned_warehouses', 'user_permissions')` |
-| ۵۰ | `guardian_50_users_sensitive_sync.ts` | هم‌سو کردن کدهای حساس با گاوصندوق | یکسان‌سازی کدهای حساس `OperationsRbacGovernance` با `SENSITIVE_PERMISSION_CODENAMES` مدل |
+| ۳۷ | `guardian_37_route_reuse_keys.py` | رفع تداخل کش مسیرهای `users` | کلید `getRouteKey` از مسیر کامل (مجموع والدها) ساخته شود؛ `warehouse/users` ≠ `operations/users` |
+| ۳۸ | `guardian_38_users_persona_texts.py` | متون پویای کامپوننت بر اساس قلمرو | وجود `AppPersonaService` در `users.ts`؛ تغییر متون هدر در `users.html` بر اساس `isOperationsMode` |
+| ۳۹ | `guardian_39_users_chunked_list.py` | رندر تدریجی (Chunking) لیست کاربران | وجود مکانیزم بارگذاری تکه‌تکه (مثلاً ۲۰تایی) در `users.ts`؛ حفظ چیدمان Grid و بدون وابستگی به `@angular/cdk` |
+| ۴۰ | `guardian_40_users_avatar_transactional.py` | تراکنشی‌سازی تغییر آواتار | عدم تماس با API آواتار در `openAvatarModalForUser`/`onRemoveUserAvatar`؛ آپلود فقط در `saveUser()` |
+| ۴۱ | `guardian_41_users_national_code_checksum.py` | اعتبارسنجی چک‌سام کد ملی | وجود `validateNationalCode` در فرانت و معادل آن در `UserSerializer` بک‌اند |
+| ۴۲ | `guardian_42_users_role_scope_permissions.py` | نگاشت قلمرو نقش بر اساس Permission | استفاده از `ModuleRegistryService.permissionMarkers()`؛ تشخیص نقش‌های ترکیبی (انبار+مالی) به‌عنوان `global`؛ عدم تطبیق رشته‌ای در `getRoleAppScope` |
+| ۴۳ | `guardian_43_users_password_initial.py` | کلمه عبور اولیه در ساخت کاربر | وجود `password` در `userForm` و نمایش فیلد/راهنما در حالت ایجاد؛ وجود `password` (write_only) در `fields` و `create` در `UserSerializer` بک‌اند |
+| ۴۴ | `guardian_44_users_query_params_clean.py` | پاک‌سازی تاریخچه مرورگر | عدم پوش `permTab` به `queryParams`؛ وضعیت تب مودال در حافظهٔ محلی (signal) |
+| ۴۵ | `guardian_45_users_mobile_actions.py` | دسترس‌پذیری لمسی اکشن‌ها | دکمه‌های ویرایش/حذف نقش بدون وابستگی Hover؛ منوی اکشن کاربر با منطق Dropup در ردیف‌های انتهایی |
+| ۴۶ | `guardian_46_users_avatar_contrast.py` | کنتراست متن آواتار (WCAG) | تابع سنجش روشنایی رنگ؛ متن تیره روی رنگ‌های روشن و برعکس |
+| ۴۷ | `guardian_47_users_status_filters.py` | فیلترهای سریع وضعیت سازمانی | وجود فیلترهای «فعال/معلق/بدون انبار/ادمین» با شمارش |
+| ۴۸ | `guardian_48_users_emergency_normalize.py` | نرمال‌سازی ارقام فارسی | تبدیل ارقام فارسی/عربی فیلد `emergency_contact` (و کد ملی) قبل از ارسال |
+| ۴۹ | `guardian_49_users_backend_n1.py` | رفع N+1 در `UserViewSet` | وجود `select_related('supervisor')` و `prefetch_related('groups__customrole', 'assigned_warehouses', 'user_permissions')` |
+| ۵۰ | `guardian_50_users_sensitive_sync.py` | هم‌سو کردن کدهای حساس با گاوصندوق | یکسان‌سازی کدهای حساس `OperationsRbacGovernance` با `SENSITIVE_PERMISSION_CODENAMES` مدل |
+| ۵۱ | `guardian_51_users_expiry_cleanup.py` | حذف فیلدهای موهومی انقضا از فرم | نبود چک‌باکس «انقضای پیش‌فرض» و اینپوت `expiryDays`/`isDefaultExpiry` در `users.html` و `users.ts` |
 
 **نکته اجرایی:** هر نگهبان به صورت یک اسکریپت پایتون مستقل با header توضیحی (مطابق الگوی `guardian_36_gl_readiness.py`) پیاده می‌شود، `sys.stdout.reconfigure(encoding='utf-8')` دارد و در `scripts/e2e/guardian_all.py` ثبت می‌گردد. اجرای دسته‌ای با `python scripts/e2e/guardian_all.py`.
+
+> **محدودیت نگهبان‌ها و راه تکمیلی (پاسخ به بازبینی ۲.۰.۰):** تمام نگهبان‌های پروژه (ازجمله این موارد) **ایستا** هستند و صرفاً متن/ساختار کد را چک می‌کنند؛ باگ‌های اجراییِ مرورگر (مثلاً تداخل چیدمان Grid، رفتار Dropup، خطای رندر) را نمی‌گیرند. این محدودیت ذاتی الگوی فعلی است، نه نقصِ این طرح. در صورت درخواست، می‌توان نگهبان‌های **عملکردی** (End-to-End) با ابزاری چون Playwright/تست مرورگر اضافه کرد (مستقل از نگهبان‌های ایستا و در دامنهٔ جداگانه). این مورد در حال حاضر **در دامنهٔ این طرح نیست** و به‌عنوان توسعهٔ آینده ثبت می‌شود.
 
 ---
 
 ## ۶. نقشه راه و فازبندی پیاده‌سازی اصلاحات (Action Plan)
 
-### فاز ۱: بهینه‌سازی دیتابیس و امنیت بک‌اند (`warehouse-backend/accounts/`)
-- [ ] افزودن `select_related('supervisor')` و `prefetch_related('groups__customrole', 'assigned_warehouses', 'user_permissions')` در `UserViewSet` (نگهبان ۴۹).
-- [ ] پیاده‌سازی اعتبارسنجی فرمت و چک‌سام استاندارد کد ملی در `UserSerializer` (نگهبان ۴۱).
-- [ ] یکنواخت‌سازی کدهای دسترسی حساس و رفع تناقض با `OperationsRbacGovernanceComponent` (نگهبان ۵۰).
-- [ ] پشتیبانی از انتساب اختیاری رمز عبور در هنگام ثبت کاربر از پنل مدیریت (نگهبان ۴۳).
+### فاز ۱: بهینه‌سازی دیتابیس و امنیت بک‌اند (`warehouse-backend/accounts/`) — تکمیل‌شده ✅
+- [x] افزودن `select_related('supervisor')` و `prefetch_related('groups__customrole', 'assigned_warehouses', 'user_permissions')` در `UserViewSet` (نگهبان ۴۹ تایید شد ✅).
+- [x] پیاده‌سازی اعتبارسنجی فرمت و چک‌سام استاندارد کد ملی در `UserSerializer` (نگهبان ۴۱ تایید شد ✅).
+- [x] یکنواخت‌سازی کدهای دسترسی حساس و رفع تناقض با `OperationsRbacGovernanceComponent` (نگهبان ۵۰ تایید شد ✅).
+- [x] افزودن فیلد `password = serializers.CharField(write_only=True, required=False)` به `UserSerializer` و درج آن در `fields` (در `create()` و `update()` متد موجود `password` پردازش می‌شود) (نگهبان ۴۳ تایید شد ✅).
 
-### فاز ۲: معماری فرانت و بهینه‌سازی مسیرها (`warehouse-front/src/app/`)
-- [ ] اصلاح تابع `getRouteKey` در `CustomRouteReuseStrategy` با مسیر کامل والدها (نگهبان ۳۷).
-- [ ] استفاده از `AppPersonaService` برای متون پویا (نگهبان ۳۸).
-- [ ] کامل کردن مکانیسم تب نقش‌ها و حذف آلودگی `permTab` از URL (نگهبان ۴۴).
-- [ ] تصحیح آدرس `deleteImpactUrl` برای استفاده از `environment.apiUrl`.
+### فاز ۲: معماری فرانت و بهینه‌سازی مسیرها (`warehouse-front/src/app/`) — تکمیل‌شده ✅
+- [x] اصلاح تابع `getRouteKey` در `CustomRouteReuseStrategy` با مسیر کامل والدها (نگهبان ۳۷ تایید شد ✅).
+- [x] استفاده از `AppPersonaService` برای متون پویا و شرطی‌سازی هدر با `isOperationsMode()` (نگهبان ۳۸ تایید شد ✅).
+- [x] کامل کردن مکانیسم تب نقش‌ها و حذف آلودگی `permTab` از URL و تاریخچه مرورگر (نگهبان ۴۴ تایید شد ✅).
+- [x] تصحیح آدرس `deleteImpactUrl` در حذف نقش و کاربر برای استفاده از `environment.apiUrl` (نگهبان ۴۴ تایید شد ✅).
 
 ### فاز ۳: فرم‌ها، کارایی کلاینت و تجربه کاربری (`users.ts` و `users.html`)
 - [ ] اصلاح مدیریت آواتار به صورت تراکنشی (نگهبان ۴۰).
-- [ ] مجازی‌سازی لیست کاربران (نگهبان ۳۹).
+- [ ] رندر تدریجی (Chunking) لیست کاربران با `visibleCount`/`IntersectionObserver` — بدون نصب `@angular/cdk` (نگهبان ۳۹).
+- [ ] حذف فیلدهای موهومی انقضا (`isDefaultExpiry`, `expiryDays`, `expiry_date`) از `users.ts` و `users.html` (نگهبان ۵۱).
 - [ ] مموایز کردن محاسبات درختی و شمارش نقش‌ها (سیگنال‌ها).
 - [ ] نگاشت قلمرو نقش‌ها بر اساس Permission (نگهبان ۴۲).
 - [ ] اصلاح چک‌باکس‌های انبارها با تبدیل صریح به عدد صحیح (`Number(id)`).

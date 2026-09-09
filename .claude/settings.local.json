@@ -184,7 +184,9 @@
       "Bash(./venv/Scripts/python.exe manage.py test accounts.tests personnel.tests warehouses.tests -v 1)",
       "Bash(./venv/Scripts/python.exe manage.py test accounts.tests personnel.tests warehouses.tests --noinput)",
       "Bash(./venv/Scripts/python.exe manage.py test personnel.tests.PersonnelAppTests.test_monthly_payroll_calculation_and_exports_flow -v 2)",
-      "Bash(WH_MODULES=accounting \"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" manage.py check)"
+      "Bash(WH_MODULES=accounting \"E:/warehouse project/warehouse-backend/venv/Scripts/python.exe\" manage.py check)",
+      "Bash(./venv/Scripts/python.exe manage.py showmigrations)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ],
     "defaultMode": "bypassPermissions"
   }

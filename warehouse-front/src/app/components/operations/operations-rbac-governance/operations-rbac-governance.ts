@@ -5,6 +5,7 @@ import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/auth/auth.service';
 import { AppPersonaService } from '../../../core/services/app-persona.service';
 import { ToastService } from '../../../services/toast.service';
+import { AccountsHttpService } from '../../../core/http/accounts-http.service';
 import { finalize } from 'rxjs/operators';
 
 export interface SensitivePermissionItem {
@@ -39,6 +40,7 @@ export class OperationsRbacGovernanceComponent implements OnInit {
   private auth = inject(AuthService);
   private persona = inject(AppPersonaService);
   private toast = inject(ToastService);
+  private accountsService = inject(AccountsHttpService);
   private cdr = inject(ChangeDetectorRef);
 
   public isLoading = signal<boolean>(false);
@@ -51,48 +53,48 @@ export class OperationsRbacGovernanceComponent implements OnInit {
   // ماتریس ۶ گانه مجوزهای حساس (6 Sensitive Permissions Vault)
   public sensitivePermissions: SensitivePermissionItem[] = [
     {
-      code: 'perm_rollback_database',
-      title: 'بازگردانی اضطراری پایگاه‌داده (Rollback)',
+      code: 'perm_rollback_data',
+      title: 'بازگردانی اضطراری پایگاه‌داده و داده‌ها (Rollback)',
       description: 'امکان بازگردانی وضعیت کل سرور به اسنپ‌شات‌های گذشته (مستلزم تاییدیه متنی ROLLBACK_CONFIRM)',
       riskLevel: 'critical',
       isSuperuserOnly: true,
       assignedCount: 0
     },
     {
-      code: 'perm_backup_database',
-      title: 'تهیه پشتیبان پایگاه‌داده (Backup)',
+      code: 'perm_sys_backup_manage',
+      title: 'تهیه و مدیریت فایل‌های پشتیبان (Backup)',
       description: 'استخراج اسنپ‌شات کامل اطلاعات حساس و دیتابیس به فایل رمزشده',
       riskLevel: 'high',
       isSuperuserOnly: true,
       assignedCount: 0
     },
     {
-      code: 'perm_hard_delete_records',
-      title: 'حذف دائم رکوردها (Hard Delete)',
+      code: 'perm_sys_hard_delete',
+      title: 'حذف فیزیکی و دائم رکوردها (Hard Delete)',
       description: 'حذف فیزیکی و غیرقابل بازگشت اقلام و رکوردهای مالی بدون امکان Rollback نرم‌افزاری',
       riskLevel: 'critical',
       isSuperuserOnly: true,
       assignedCount: 0
     },
     {
-      code: 'perm_purge_audit_logs',
-      title: 'تخلیه لاگ‌های ممیزی (Purge Logs)',
+      code: 'perm_sys_purge_logs',
+      title: 'تخلیه و پاکسازی لاگ‌های ممیزی (Purge Logs)',
       description: 'حذف تاریخچه ردپای امنیتی ممیزی (Audit Trail) که نقض جدی استاندارد ردپاست',
       riskLevel: 'critical',
       isSuperuserOnly: true,
       assignedCount: 0
     },
     {
-      code: 'perm_freeze_system',
-      title: 'انجماد و قفل سراسری سامانه (System Freeze)',
+      code: 'perm_sys_emergency_freeze',
+      title: 'فریز اضطراری و انجماد سراسری سامانه (System Freeze)',
       description: 'قفل کردن کلیه ثبت‌های انبار و مالی در بازه‌های معین بدون امکان ویرایش',
       riskLevel: 'high',
       isSuperuserOnly: true,
       assignedCount: 0
     },
     {
-      code: 'perm_factory_reset',
-      title: 'بازنشانی کارخانه‌ای سامانه (Factory Reset)',
+      code: 'perm_sys_factory_reset',
+      title: 'بازنشانی کارخانه‌ای و ریست سیستم (Factory Reset)',
       description: 'ریست کامل داده‌های جاری و استقرار تنظیمات پایه کارخانه',
       riskLevel: 'critical',
       isSuperuserOnly: true,
@@ -106,13 +108,13 @@ export class OperationsRbacGovernanceComponent implements OnInit {
 
   loadGovernanceData(): void {
     this.isLoading.set(true);
-    this.http.get<any[]>('/api/users/')
+    this.accountsService.getUsers()
       .pipe(finalize(() => {
         this.isLoading.set(false);
         this.cdr.detectChanges();
       }))
       .subscribe({
-        next: (res) => {
+        next: (res: any[]) => {
           const list: GovernanceUserItem[] = (res || []).map(u => ({
             id: u.id,
             username: u.username,

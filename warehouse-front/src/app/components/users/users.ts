@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { AppPersonaService } from '../../core/services/app-persona.service';
 import { AccountsHttpService, User, Role, Permission, ImportResult } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
@@ -12,6 +13,7 @@ import { ConfirmDialogService } from '../../shared/components/confirm-dialog/con
 import { ExcelImportModal } from '../../shared/components/excel-import-modal/excel-import-modal';
 import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
+import { environment } from '../../../environments/environment';
 import { Observable, Subject, Subscription } from 'rxjs';
 import { debounceTime } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -160,6 +162,9 @@ export class Users implements OnInit, OnDestroy {
   pendingSensitivePerm: Permission | null = null;
   isSensitiveWarningModalOpen = false;
   isSuperuser = computed(() => !!(this.auth.user()?.is_superuser || this.auth.user()?.roles?.includes('admin') || this.auth.user()?.department === 'admin'));
+  public isOperationsMode = computed(() => {
+    return this.persona.activeApp() === 'operations' || this.router.url.includes('/operations/');
+  });
 
   // Excel Import/Export
   isExcelModalOpen = false;
@@ -170,8 +175,9 @@ export class Users implements OnInit, OnDestroy {
   constructor(
     public state: StateService,
     public auth: AuthService,
-    private toast: ToastService, 
-    private accountsService: AccountsHttpService, 
+    public persona: AppPersonaService,
+    private toast: ToastService,
+    private accountsService: AccountsHttpService,
     private whService: WarehouseHttpService,
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService,
@@ -183,7 +189,6 @@ export class Users implements OnInit, OnDestroy {
     this.route.queryParams.subscribe((params: any) => {
       this.activeTab = params['tab'] || 'users';
       this.activeRoleTab = params['roleTab'] || 'custom';
-      this.activePermTab = params['permTab'] || 'PERSONNEL_FINANCE';
       const q = params['q'] || '';
       if (q !== this.searchQuery) {
         this.searchQuery = q;
@@ -446,7 +451,6 @@ export class Users implements OnInit, OnDestroy {
 
   switchPermTab(tab: string) {
     this.activePermTab = tab;
-    this.router.navigate([], { queryParams: { permTab: tab }, queryParamsHandling: 'merge' });
     this.cdr.detectChanges();
   }
 
@@ -912,7 +916,7 @@ export class Users implements OnInit, OnDestroy {
 
     this.entityToDelete = role;
     this.deleteType = 'role';
-    this.deleteImpactUrl = `/api/auth/roles/${id}/delete_impact/`;
+    this.deleteImpactUrl = `${environment.apiUrl}/auth/roles/${id}/delete_impact/`;
     this.isDeleteModalOpen = true;
     this.isDeleting = false;
     this.deleteErrorMessage = '';
@@ -922,10 +926,10 @@ export class Users implements OnInit, OnDestroy {
   deleteUser(id: number) {
     const user = this.state.appState.users.find((u: any) => u.id === id);
     if (!user) return;
-    
+
     this.entityToDelete = user;
     this.deleteType = 'user';
-    this.deleteImpactUrl = `/api/auth/users/${id}/delete_impact/`;
+    this.deleteImpactUrl = `${environment.apiUrl}/auth/users/${id}/delete_impact/`;
     this.isDeleteModalOpen = true;
     this.isDeleting = false;
     this.deleteErrorMessage = '';

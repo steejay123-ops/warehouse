@@ -24,11 +24,20 @@ export class CustomRouteReuseStrategy implements RouteReuseStrategy {
   }
 
   shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
-    return future.routeConfig === curr.routeConfig;
+    return future.routeConfig === curr.routeConfig && this.getRouteKey(future) === this.getRouteKey(curr);
   }
 
   private getRouteKey(route: ActivatedRouteSnapshot): string {
-    return route.routeConfig?.path || '';
+    const segments: string[] = [];
+    let current: ActivatedRouteSnapshot | null = route;
+    while (current) {
+      const path = current.routeConfig?.path;
+      if (path) {
+        segments.unshift(path);
+      }
+      current = current.parent;
+    }
+    return segments.join('/') || '';
   }
 
   public clear(): void {

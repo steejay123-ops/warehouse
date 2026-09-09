@@ -91,19 +91,50 @@
                 }
               ],
               "serviceWorker": "ngsw-config.json"
+            },
+            "warehouse-only": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "3.5mb",
+                  "maximumError": "4.5mb"
+                }
+              ],
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": true
+                },
+                "fonts": false
+              },
+              "fileReplacements": [
+                {
+                  "replace": "src/app/modules/accounting/accounting.routes.ts",
+                  "with": "src/app/modules/accounting/accounting.routes.stub.ts"
+                }
+              ],
+              "serviceWorker": "ngsw-config.json"
             }
           },
           "defaultConfiguration": "production"
         },
         "serve": {
           "builder": "@angular/build:dev-server",
-          
+
           "configurations": {
             "production": {
               "buildTarget": "warehouse-app:build:production"
             },
             "development": {
               "buildTarget": "warehouse-app:build:development"
+            },
+            "accounting-only": {
+              "buildTarget": "warehouse-app:build:accounting-only"
+            },
+            "warehouse-only": {
+              "buildTarget": "warehouse-app:build:warehouse-only"
             }
           },
           "defaultConfiguration": "development"

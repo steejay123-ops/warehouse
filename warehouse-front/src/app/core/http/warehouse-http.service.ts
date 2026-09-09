@@ -1,9 +1,10 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { Observable, of, tap, EMPTY } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ImportResult } from './accounts-http.service';
 import { OfflineSyncService } from '../services/offline-sync.service';
+import { ModuleRegistryService } from '../modules/module-registry.service';
 
 export interface Warehouse {
   id: number;
@@ -35,36 +36,55 @@ export interface Warehouse {
 })
 export class WarehouseHttpService {
   private baseUrl = `${environment.apiUrl}/warehouses/`;
+  private moduleRegistry = inject(ModuleRegistryService);
 
   constructor(private http: HttpClient) {}
 
   getAll(): Observable<Warehouse[]> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return of([]);
+    }
     return this.http.get<Warehouse[]>(this.baseUrl);
   }
 
   getById(id: number): Observable<Warehouse> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.get<Warehouse>(`${this.baseUrl}${id}/`);
   }
 
   create(data: Partial<Warehouse>): Observable<Warehouse> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.post<Warehouse>(this.baseUrl, data).pipe(
       tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
     );
   }
 
   update(id: number, data: Partial<Warehouse>): Observable<Warehouse> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.patch<Warehouse>(`${this.baseUrl}${id}/`, data).pipe(
       tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
     );
   }
 
   delete(id: number): Observable<void> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.delete<void>(`${this.baseUrl}${id}/`).pipe(
       tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
     );
   }
 
   toggleArchive(id: number): Observable<Warehouse> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.patch<Warehouse>(`${this.baseUrl}${id}/toggle_archive/`, {}).pipe(
       tap(() => OfflineSyncService.getInstance().invalidateCache(this.baseUrl))
     );
@@ -72,16 +92,25 @@ export class WarehouseHttpService {
 
   // ── Excel Import/Export ────────────────────────────────────────────
   exportExcel(): Observable<Blob> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.get(`${this.baseUrl}export_excel/`, { responseType: 'blob' });
   }
 
   importExcel(file: File): Observable<ImportResult> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<ImportResult>(`${this.baseUrl}import_excel/`, formData);
   }
 
   downloadTemplate(): Observable<Blob> {
+    if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
+      return EMPTY;
+    }
     return this.http.get(`${this.baseUrl}download_template/`, { responseType: 'blob' });
   }
 }

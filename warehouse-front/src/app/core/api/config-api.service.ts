@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Injectable, inject } from '@angular/core';
+import { Observable, tap } from 'rxjs';
 import { ApiService } from './api.service';
+import { ModuleRegistryService } from '../modules/module-registry.service';
 
 export interface PublicConfig {
   system_version: string;
@@ -14,9 +15,16 @@ export interface PublicConfig {
 
 @Injectable({ providedIn: 'root' })
 export class ConfigApiService {
-  constructor(private apiService: ApiService) {}
+  private apiService = inject(ApiService);
+  private moduleRegistry = inject(ModuleRegistryService);
 
   getPublicConfig(): Observable<PublicConfig> {
-    return this.apiService.get<PublicConfig>('public/config');
+    return this.apiService.get<PublicConfig>('public/config').pipe(
+      tap((config) => {
+        if (config?.installed_modules && Array.isArray(config.installed_modules)) {
+          this.moduleRegistry.setInstalledModules(config.installed_modules);
+        }
+      })
+    );
   }
 }

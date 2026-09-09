@@ -541,6 +541,10 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       next: (assignments) => {
         this.userAssignments = assignments;
         this.cdr.detectChanges();
+      },
+      error: () => {
+        this.userAssignments = [];
+        this.cdr.detectChanges();
       }
     });
   }
@@ -550,6 +554,10 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       next: (cp) => {
         this.counterparties = cp;
         this.cdr.detectChanges();
+      },
+      error: () => {
+        this.counterparties = [];
+        this.cdr.detectChanges();
       }
     });
   }
@@ -558,6 +566,10 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.accountsHttp.getUsers().subscribe({
       next: (users) => {
         this.systemUsers = users;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.systemUsers = [];
         this.cdr.detectChanges();
       }
     });

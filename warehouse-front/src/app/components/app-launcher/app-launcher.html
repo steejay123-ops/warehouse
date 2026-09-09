@@ -45,22 +45,25 @@
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
           <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
         </span>
-        <span>معماری ماژولار و تفکیک‌شده</span>
+        <span>{{ isSingleAppMode ? 'حالت اختصاصی تک‌ماژول' : 'معماری ماژولار و تفکیک‌شده' }}</span>
       </div>
-      <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight">سامانه کاری مورد نظر خود را انتخاب کنید</h2>
+      <h2 class="text-2xl sm:text-3xl font-black text-white tracking-tight">
+        {{ isSingleAppMode ? 'سامانه کاری فعال سازمانی' : 'سامانه کاری مورد نظر خود را انتخاب کنید' }}
+      </h2>
       <p class="text-xs sm:text-sm text-slate-400 mt-2 leading-relaxed">
-        شما بر اساس نقش‌ها و مجوزهای تعریف‌شده در سیستم به ماژول‌های زیر دسترسی دارید:
+        {{ isSingleAppMode ? 'سیستم با توزیع ماژولار متناسب با این محیط آماده دسترسی است:' : 'شما بر اساس نقش‌ها و مجوزهای تعریف‌شده در سیستم به ماژول‌های زیر دسترسی دارید:' }}
       </p>
     </div>
 
     <!-- گرید کارت‌های سامانه -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full" [ngClass]="hasOperations ? 'lg:grid-cols-3 max-w-6xl' : 'max-w-4xl'">
-      
-      <!-- ۱. کارت سامانه انبارگردانی -->
-      <div 
+    <div class="grid grid-cols-1 gap-6 w-full" [ngClass]="gridContainerClass">
+
+      <!-- ۱. کارت سامانه انبارگردانی (فقط در صورت نصب و فعال بودن ماژول انبارداری) -->
+      <div
+        *ngIf="isWarehouseInstalled"
         class="relative rounded-3xl p-6 sm:p-8 border transition-all duration-300 flex flex-col justify-between group overflow-hidden"
-        [ngClass]="hasWarehouse 
-          ? 'bg-slate-900/80 hover:bg-slate-900 border-indigo-500/30 hover:border-indigo-500/70 hover:shadow-2xl hover:shadow-indigo-500/10 cursor-pointer' 
+        [ngClass]="hasWarehouse
+          ? 'bg-slate-900/80 hover:bg-slate-900 border-indigo-500/30 hover:border-indigo-500/70 hover:shadow-2xl hover:shadow-indigo-500/10 cursor-pointer'
           : 'bg-slate-900/40 border-slate-800/80 opacity-60 cursor-not-allowed'"
         (click)="enterWarehouse()"
       >
@@ -102,13 +105,13 @@
             <span>مدیریت کالا</span>
           </div>
 
-          <button 
+          <button
             type="button"
             [disabled]="!hasWarehouse"
             (click)="$event.stopPropagation(); enterWarehouse()"
             class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
-            [ngClass]="hasWarehouse 
-              ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/25 cursor-pointer' 
+            [ngClass]="hasWarehouse
+              ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/25 cursor-pointer'
               : 'bg-slate-800 text-slate-500 cursor-not-allowed'"
           >
             <span>ورود به انبارگردانی</span>
@@ -120,11 +123,12 @@
         </div>
       </div>
 
-      <!-- ۲. کارت سامانه مالی و پرسنلی -->
-      <div 
+      <!-- ۲. کارت سامانه مالی و پرسنلی (فقط در صورت نصب و فعال بودن ماژول مالی) -->
+      <div
+        *ngIf="isFinanceInstalled"
         class="relative rounded-3xl p-6 sm:p-8 border transition-all duration-300 flex flex-col justify-between group overflow-hidden"
-        [ngClass]="hasFinance 
-          ? 'bg-slate-900/80 hover:bg-slate-900 border-emerald-500/30 hover:border-emerald-500/70 hover:shadow-2xl hover:shadow-emerald-500/10 cursor-pointer' 
+        [ngClass]="hasFinance
+          ? 'bg-slate-900/80 hover:bg-slate-900 border-emerald-500/30 hover:border-emerald-500/70 hover:shadow-2xl hover:shadow-emerald-500/10 cursor-pointer'
           : 'bg-slate-900/40 border-slate-800/80 opacity-60 cursor-not-allowed'"
         (click)="enterFinance()"
       >
@@ -168,13 +172,13 @@
             <span>خزانه‌داری</span>
           </div>
 
-          <button 
+          <button
             type="button"
             [disabled]="!hasFinance"
             (click)="$event.stopPropagation(); enterFinance()"
             class="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-md active:scale-95"
-            [ngClass]="hasFinance 
-              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 cursor-pointer' 
+            [ngClass]="hasFinance
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25 cursor-pointer'
               : 'bg-slate-800 text-slate-500 cursor-not-allowed'"
           >
             <span>ورود به سامانه مالی</span>

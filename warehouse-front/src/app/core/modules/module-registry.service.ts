@@ -77,8 +77,23 @@ export const KNOWN_MODULE_CATALOG: FrontendModuleSpec[] = [
 
 @Injectable({ providedIn: 'root' })
 export class ModuleRegistryService {
-  /** ماژول‌های نصب‌شده اعلام‌شده توسط سرور در public config (پیش‌فرض: همه ماژول‌ها) */
-  private installedModuleCodes = signal<string[]>(['warehouse', 'accounting', 'operations']);
+  private static readonly STORAGE_KEY = 'wh_installed_modules';
+
+  /** ماژول‌های نصب‌شده اعلام‌شده توسط سرور در public config (پیش‌فرض: خواندن از کش یا همه) */
+  private installedModuleCodes = signal<string[]>(this.getInitialModuleCodes());
+
+  private getInitialModuleCodes(): string[] {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(ModuleRegistryService.STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return ['warehouse', 'accounting', 'operations'];
+  }
 
   /**
    * تنظیم ماژول‌های نصب‌شده از روی پاسخ سرور
@@ -89,6 +104,11 @@ export class ModuleRegistryService {
     // اگر پلتفرم یا حسابداری اعلام شده، به رسمیت بشناس
     if (!normalized.includes('operations')) normalized.push('operations');
     this.installedModuleCodes.set(normalized);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(ModuleRegistryService.STORAGE_KEY, JSON.stringify(normalized));
+      } catch {}
+    }
   }
 
   /**
@@ -142,8 +162,9 @@ export class ModuleRegistryService {
     allowedApps?: string[],
     isSuperuser = false
   ): boolean {
-    if (isSuperuser) return true;
+    // قانون ۵: ماژول نصب‌نشده در این توزیع وجود ندارد و به هیچ کاربری (حتی مدیر ارشد) دسترسی داده نمی‌شود
     if (!this.isModuleInstalled(moduleCode)) return false;
+    if (isSuperuser) return true;
 
     const spec = this.getSpec(moduleCode);
     if (!spec) return false;

@@ -41,6 +41,16 @@ export class Layout implements OnInit, OnDestroy {
   public wsService = inject(WebSocketService);
   public personaService = inject(AppPersonaService);
 
+  get appTitle(): string {
+    if (this.personaService.activeApp() === 'personnel') {
+      return 'سامانه مالی و پرسنلی';
+    }
+    if (this.personaService.activeApp() === 'operations') {
+      return 'مرکز عملیات و پدافند';
+    }
+    return 'اتوماسیون انبارداری';
+  }
+
   currentTitle = 'داشبورد مانیتورینگ';
   isUserMenuOpen = false;
   isShortcutsHelpOpen = false;

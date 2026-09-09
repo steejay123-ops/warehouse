@@ -222,6 +222,20 @@ export class IdCards implements OnInit {
   }
 
   loadData() {
+    // بازاستفاده از کش محلی در صورت لود قبلی توسط کامپوننت مادر Users جهت حذف تکرار درخواست شبکه
+    if (this.state.appState.users && this.state.appState.users.length > 0) {
+      this.usersList = this.state.appState.users;
+      this.rolesList = this.state.appState.roles || [];
+      this.warehousesList = this.state.appState.projects || [];
+      if (this.usersList.length > 0 && !this.selectedUserId) {
+        this.selectedUserId = this.usersList[0].id;
+        this.selectedUserIds.add(this.usersList[0].id);
+      }
+      this.isLoading = false;
+      this.cdr.markForCheck();
+      return;
+    }
+
     this.isLoading = true;
 
     // Load Roles

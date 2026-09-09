@@ -5,6 +5,7 @@ import { StateService } from '../../services/state.service';
 import { ToastService } from '../../services/toast.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { AppPersonaService } from '../../core/services/app-persona.service';
+import { ModuleRegistryService } from '../../core/modules/module-registry.service';
 import { AccountsHttpService, User, Role, Permission, ImportResult } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
@@ -32,9 +33,22 @@ export class Users implements OnInit, OnDestroy {
   searchQuery = '';
   searchSubject = new Subject<string>();
   private searchSub?: Subscription;
-  
+
+  // Pagination / Chunking
+  pageSize = 24;
+  visibleCount = 24;
+  userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
+
+  // Memoization Caches (O(1) lookups during change detection)
+  roleChildrenMap = new Map<number, any[]>();
+  roleUsersCountMap = new Map<number, number>();
+  userRolesMap = new Map<number, { name: string, color: string }[]>();
+  primaryRoleMap = new Map<number, { name: string, color: string }>();
+  permIdToCodenameMap = new Map<number, string>();
+  cachedRootRoles: any[] = [];
+
   openMenuId: string | null = null;
-  
+
   isUserModalOpen = false;
   isRoleModalOpen = false;
   isDeleteModalOpen = false;
@@ -53,13 +67,13 @@ export class Users implements OnInit, OnDestroy {
     id: null as number | null, name: '', title: '', parent: null as number | null, color: '#94a3b8', permissions: [] as number[]
   };
 
-  // User Form
+  // User Form (با حذف فیلدهای موهومی انقضا و افزودن کلمه عبور و آواتار تراکنشی)
   editingUser: any = null;
-  isDefaultExpiry = true;
   userForm = {
-    id: null as number | null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', 
-    operational_zone: '', supervisor: null as number | null, address: '', company: '', email: '', avatar: null as string | null, _pendingAvatarBlob: null as Blob | null, blood_type: '', emergency_contact: '', groups: [] as number[], assigned_warehouses: [] as string[], expiry_date: '',
-    date_joined: '', last_login: '', is_active: true, is_superuser: false, expiryDays: 90
+    id: null as number | null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
+    operational_zone: '', supervisor: null as number | null, address: '', company: '', email: '', avatar: null as string | null,
+    _pendingAvatarBlob: null as Blob | null, _pendingAvatarDelete: false, blood_type: '', emergency_contact: '', groups: [] as number[],
+    assigned_warehouses: [] as number[], date_joined: '', last_login: '', is_active: true, is_superuser: false
   };
 
   // Quick Role Presets / Templates for One-Click Permission Granting
@@ -176,6 +190,7 @@ export class Users implements OnInit, OnDestroy {
     public state: StateService,
     public auth: AuthService,
     public persona: AppPersonaService,
+    public registry: ModuleRegistryService,
     private toast: ToastService,
     private accountsService: AccountsHttpService,
     private whService: WarehouseHttpService,
@@ -290,6 +305,7 @@ export class Users implements OnInit, OnDestroy {
       ];
 
       this.systemPermissionGroups = groups.filter(g => g.items.length > 0);
+      this.rebuildMemoizedData();
     }, error => {
       console.warn('[Users] خطا در دریافت مجوزهای سیستم:', error);
     });
@@ -307,6 +323,7 @@ export class Users implements OnInit, OnDestroy {
         };
         flattenRoles(rolesList);
         this.state.appState.rolesMap = map;
+        this.rebuildMemoizedData();
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -318,19 +335,20 @@ export class Users implements OnInit, OnDestroy {
     this.accountsService.getUsers().subscribe({
       next: (res) => {
         this.state.appState.users = Array.isArray(res) ? res : [];
+        this.rebuildMemoizedData();
         setTimeout(() => {
           this.isLoading = false;
           this.cdr.detectChanges();
-        }, 400);
+        }, 300);
       },
       error: (err) => {
         setTimeout(() => {
           this.isLoading = false;
           this.cdr.detectChanges();
-        }, 400);
+        }, 300);
       }
     });
-    
+
     this.whService.getAll().subscribe({
       next: (res: any) => {
         this.state.appState.projects = Array.isArray(res) ? res : [];
@@ -340,9 +358,73 @@ export class Users implements OnInit, OnDestroy {
     });
   }
 
+  rebuildMemoizedData(): void {
+    const roles: any[] = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
+    const users: any[] = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+
+    // 1. Permissions id -> codename map
+    if (this.systemPermissions && this.systemPermissions.length > 0) {
+      this.permIdToCodenameMap.clear();
+      for (const p of this.systemPermissions) {
+        this.permIdToCodenameMap.set(p.id, p.codename);
+      }
+    }
+
+    // 2. Root roles and children map
+    this.roleChildrenMap.clear();
+    const allRoleIds = new Set<number>(roles.map((r: any) => r.id));
+    this.cachedRootRoles = roles.filter((r: any) => !r.parent || !allRoleIds.has(r.parent));
+
+    for (const r of roles) {
+      if (r.parent) {
+        const list = this.roleChildrenMap.get(r.parent) || [];
+        list.push(r);
+        this.roleChildrenMap.set(r.parent, list);
+      }
+    }
+
+    // 3. Count of users per role
+    this.roleUsersCountMap.clear();
+    for (const u of users) {
+      if (Array.isArray(u.groups)) {
+        for (const gId of u.groups) {
+          this.roleUsersCountMap.set(gId, (this.roleUsersCountMap.get(gId) || 0) + 1);
+        }
+      }
+    }
+
+    // 4. Map user to roles list & primary role
+    this.userRolesMap.clear();
+    this.primaryRoleMap.clear();
+    const rolesById = new Map<number, any>(roles.map((r: any) => [r.id, r]));
+
+    for (const u of users) {
+      const uGroups = u.groups || [];
+      const userRoles = uGroups.map((rId: any) => {
+        const r = rolesById.get(rId);
+        if (!r) return { name: 'نامشخص', color: '#94a3b8' };
+        return { name: r.title || r.name, color: r.color || '#94a3b8' };
+      });
+      this.userRolesMap.set(u.id, userRoles);
+      this.primaryRoleMap.set(u.id, userRoles[0] || { name: 'نامشخص', color: '#94a3b8' });
+    }
+  }
+
   get filteredUsers() {
     const q = this.searchQuery.trim().toLowerCase();
-    const users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+    let users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+
+    // فیلتر سریع بر اساس وضعیت سازمانی
+    if (this.userStatusFilter === 'active') {
+      users = users.filter((u: any) => u.is_active);
+    } else if (this.userStatusFilter === 'inactive') {
+      users = users.filter((u: any) => !u.is_active);
+    } else if (this.userStatusFilter === 'no_warehouse') {
+      users = users.filter((u: any) => !u.assigned_warehouses || u.assigned_warehouses.length === 0);
+    } else if (this.userStatusFilter === 'superuser') {
+      users = users.filter((u: any) => u.is_superuser);
+    }
+
     if (!q) return users;
 
     return users.filter((u: any) => {
@@ -354,8 +436,8 @@ export class Users implements OnInit, OnDestroy {
       const opZone = (u.operational_zone || '').toLowerCase();
       const roleTitles = this.getUserRoles(u).map((r: any) => r.name.toLowerCase()).join(' ');
 
-      return fullName.includes(q) || 
-             username.includes(q) || 
+      return fullName.includes(q) ||
+             username.includes(q) ||
              nid.includes(q) ||
              phone.includes(q) ||
              comp.includes(q) ||
@@ -364,24 +446,49 @@ export class Users implements OnInit, OnDestroy {
     });
   }
 
+  get displayedUsers(): any[] {
+    return this.filteredUsers.slice(0, this.visibleCount);
+  }
+
+  loadMoreUsers(): void {
+    if (this.visibleCount < this.filteredUsers.length) {
+      this.visibleCount += this.pageSize;
+      this.cdr.detectChanges();
+    }
+  }
+
+  setStatusFilter(filter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser') {
+    this.userStatusFilter = filter;
+    this.visibleCount = this.pageSize;
+    this.cdr.detectChanges();
+  }
+
+  get userCounts() {
+    const users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
+    return {
+      all: users.length,
+      active: users.filter((u: any) => u.is_active).length,
+      inactive: users.filter((u: any) => !u.is_active).length,
+      noWarehouse: users.filter((u: any) => !u.assigned_warehouses || u.assigned_warehouses.length === 0).length,
+      superuser: users.filter((u: any) => u.is_superuser).length
+    };
+  }
+
   get rootRoles() {
-    const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
-    const allIds = new Set(roles.map((r: any) => r.id));
-    return roles.filter((r: any) => !r.parent || !allIds.has(r.parent));
+    return this.cachedRootRoles.length > 0 ? this.cachedRootRoles : (this.state.appState.roles || []);
   }
 
   getRoleChildren(parentId: number) {
-    const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
-    return roles.filter((r: any) => r.parent === parentId);
+    return this.roleChildrenMap.get(parentId) || [];
   }
 
   getSelectableParents() {
     const roles = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
     if (!this.roleForm || !this.roleForm.id) return roles;
-    
+
     const invalidIds = new Set<number>();
     invalidIds.add(this.roleForm.id);
-    
+
     const addDescendants = (parentId: number) => {
       const children = this.getRoleChildren(parentId);
       children.forEach((c: any) => {
@@ -390,7 +497,7 @@ export class Users implements OnInit, OnDestroy {
       });
     };
     addDescendants(this.roleForm.id);
-    
+
     return roles.filter((r: any) => !invalidIds.has(r.id));
   }
 
@@ -415,24 +522,15 @@ export class Users implements OnInit, OnDestroy {
   }
 
   getUsersInRoleCount(roleId: number): number {
-    const users = Array.isArray(this.state.appState.users) ? this.state.appState.users : [];
-    return users.filter((u: any) => Array.isArray(u.groups) && u.groups.includes(roleId)).length;
+    return this.roleUsersCountMap.get(roleId) || 0;
   }
 
   getPrimaryRole(u: any) {
-    const userRolesArr = u.groups || [];
-    const r = this.state.appState.roles?.find((r: any) => r.id === userRolesArr[0]);
-    if (!r) return {name: 'نامشخص', color: '#94a3b8'};
-    return { name: r.title || r.name, color: r.color || '#94a3b8' };
+    return this.primaryRoleMap.get(u.id) || { name: 'نامشخص', color: '#94a3b8' };
   }
 
   getUserRoles(u: any) {
-    const userRolesArr = u.groups || [];
-    return userRolesArr.map((rId: any) => {
-      const r = this.state.appState.roles?.find((r: any) => r.id === rId);
-      if (!r) return {name: 'نامشخص', color: '#94a3b8'};
-      return { name: r.title || r.name, color: r.color || '#94a3b8' };
-    });
+    return this.userRolesMap.get(u.id) || [];
   }
 
   getProjectName(id: any) {
@@ -527,7 +625,15 @@ export class Users implements OnInit, OnDestroy {
   }
 
   onSaveUserAvatar(blob: Blob) {
-    if (this.targetUserForAvatar && this.targetUserForAvatar.id) {
+    if (this.isUserModalOpen) {
+      // در حالت باز بودن فرم: تغییرات به صورت تراکنشی ذخیره می‌شود و تا قبل از ذخیره نهایی به سرور ارسال نمی‌شود
+      this.userForm._pendingAvatarBlob = blob;
+      this.userForm._pendingAvatarDelete = false;
+      this.userForm.avatar = URL.createObjectURL(blob);
+      this.isAvatarCropperOpen = false;
+      this.toast.show('info', 'تصویر انتخاب شد و پس از ذخیره فرم اعمال خواهد شد.');
+      this.cdr.detectChanges();
+    } else if (this.targetUserForAvatar && this.targetUserForAvatar.id) {
       this.isSavingUserAvatar = true;
       this.accountsService.updateUserAvatar(this.targetUserForAvatar.id, blob).subscribe({
         next: (res) => {
@@ -551,18 +657,19 @@ export class Users implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         }
       });
-    } else {
-      this.userForm._pendingAvatarBlob = blob;
-      const previewUrl = URL.createObjectURL(blob);
-      this.userForm.avatar = previewUrl;
-      this.isAvatarCropperOpen = false;
-      this.toast.show('success', 'تصویر انتخاب شد و پس از ذخیره فرم اعمال می‌گردد.');
-      this.cdr.detectChanges();
     }
   }
 
   onRemoveUserAvatar() {
-    if (this.targetUserForAvatar && this.targetUserForAvatar.id) {
+    if (this.isUserModalOpen) {
+      // در حالت باز بودن فرم: علامت‌گذاری برای حذف در زمان ذخیره نهایی فرم
+      this.userForm._pendingAvatarBlob = null;
+      this.userForm._pendingAvatarDelete = true;
+      this.userForm.avatar = null;
+      this.isAvatarCropperOpen = false;
+      this.toast.show('info', 'تصویر حذف شد و پس از ذخیره فرم اعمال خواهد شد.');
+      this.cdr.detectChanges();
+    } else if (this.targetUserForAvatar && this.targetUserForAvatar.id) {
       this.isSavingUserAvatar = true;
       this.accountsService.deleteUserAvatar(this.targetUserForAvatar.id).subscribe({
         next: () => {
@@ -584,12 +691,6 @@ export class Users implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         }
       });
-    } else {
-      this.userForm._pendingAvatarBlob = null;
-      this.userForm.avatar = null;
-      this.isAvatarCropperOpen = false;
-      this.toast.show('success', 'تصویر حذف شد.');
-      this.cdr.detectChanges();
     }
   }
 
@@ -598,29 +699,29 @@ export class Users implements OnInit, OnDestroy {
     if (id) {
       const u = this.state.appState.users.find((x: any) => x.id === id);
       this.editingUser = u;
-      this.userForm = { 
+      this.userForm = {
         ...u,
         company: u.company || '',
         address: u.address || '',
         email: u.email || '',
         avatar: u.avatar || null,
+        password: '',
         _pendingAvatarBlob: null,
+        _pendingAvatarDelete: false,
         blood_type: u.blood_type || '',
         emergency_contact: u.emergency_contact || '',
         operational_zone: u.operational_zone || '',
-        supervisor: u.supervisor || null,
-        expiryDays: 90
+        supervisor: u.supervisor || null
       };
       if (!this.userForm.groups) this.userForm.groups = [];
-      if (!this.userForm.assigned_warehouses) this.userForm.assigned_warehouses = [];
-      this.isDefaultExpiry = true;
+      this.userForm.assigned_warehouses = (this.userForm.assigned_warehouses || []).map(Number);
     } else {
       this.editingUser = null;
-      this.isDefaultExpiry = true;
       this.userForm = {
-        id: null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', 
-        operational_zone: '', supervisor: null, address: '', company: '', email: '', avatar: null, _pendingAvatarBlob: null, blood_type: '', emergency_contact: '', groups: [], assigned_warehouses: [], expiry_date: '',
-        date_joined: '', last_login: '', is_active: true, is_superuser: false, expiryDays: 90
+        id: null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
+        operational_zone: '', supervisor: null, address: '', company: '', email: '', avatar: null, _pendingAvatarBlob: null,
+        _pendingAvatarDelete: false, blood_type: '', emergency_contact: '', groups: [], assigned_warehouses: [],
+        date_joined: '', last_login: '', is_active: true, is_superuser: false
       };
     }
     this.isUserModalOpen = true;
@@ -636,13 +737,51 @@ export class Users implements OnInit, OnDestroy {
     }
   }
 
-  toggleUserProjCheckbox(projId: string, event: Event) {
+  isWarehouseAssigned(projId: any): boolean {
+    const numId = Number(projId);
+    return (this.userForm.assigned_warehouses || []).some((id: any) => Number(id) === numId);
+  }
+
+  toggleUserProjCheckbox(projId: any, event: Event) {
+    const numId = Number(projId);
     const checked = (event.target as HTMLInputElement).checked;
+    let list = (this.userForm.assigned_warehouses || []).map(Number);
     if (checked) {
-      if (!this.userForm.assigned_warehouses.includes(projId)) this.userForm.assigned_warehouses.push(projId);
+      if (!list.includes(numId)) list.push(numId);
     } else {
-      this.userForm.assigned_warehouses = this.userForm.assigned_warehouses.filter((id: string) => id !== projId);
+      list = list.filter(id => id !== numId);
     }
+    this.userForm.assigned_warehouses = list;
+  }
+
+  getRoleDepthMargin(depth: number): string {
+    if (depth === 0) return '0rem';
+    return `clamp(0.75rem, ${depth * 1.5}vw, ${(depth * 2.2)}rem)`;
+  }
+
+  getContrastTextColor(hexColor: string): string {
+    if (!hexColor) return '#ffffff';
+    let c = hexColor.replace('#', '');
+    if (c.length === 3) c = c.split('').map(x => x + x).join('');
+    if (c.length !== 6) return '#ffffff';
+    const r = parseInt(c.substr(0, 2), 16);
+    const g = parseInt(c.substr(2, 2), 16);
+    const b = parseInt(c.substr(4, 2), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 165 ? '#0f172a' : '#ffffff';
+  }
+
+  validateNationalCode(code: string): boolean {
+    if (!code) return true;
+    const clean = code.replace(/\D/g, '');
+    if (clean.length !== 10) return false;
+    if (/^(\d)\1{9}$/.test(clean)) return false;
+    const digits = clean.split('').map(Number);
+    const checksum = digits[9];
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += digits[i] * (10 - i);
+    const remainder = sum % 11;
+    return (remainder < 2 && checksum === remainder) || (remainder >= 2 && checksum === 11 - remainder);
   }
 
   saveUser() {
@@ -659,6 +798,13 @@ export class Users implements OnInit, OnDestroy {
     };
 
     let phone = normalizeDigits(this.userForm.phone_number);
+    let nid = normalizeDigits(this.userForm.national_code);
+    let emergency = normalizeDigits(this.userForm.emergency_contact);
+
+    if (nid && !this.validateNationalCode(nid)) {
+      return this.toast.show('error', 'کد ملی وارد شده با الگوریتم استاندارد ۱۰ رقمی همخوانی ندارد.');
+    }
+
     if (phone) {
       if (phone.startsWith('+98')) phone = '0' + phone.substring(3);
       else if (phone.startsWith('0098')) phone = '0' + phone.substring(4);
@@ -675,10 +821,14 @@ export class Users implements OnInit, OnDestroy {
     }
 
     const pendingBlob = this.userForm._pendingAvatarBlob;
+    const pendingDelete = this.userForm._pendingAvatarDelete;
     const payload: any = { ...this.userForm };
     delete payload._pendingAvatarBlob;
+    delete payload._pendingAvatarDelete;
     delete payload.avatar; // Avatar is uploaded via dedicated endpoint
-    if (!payload.national_code) payload.national_code = null;
+    if (!payload.password) delete payload.password;
+    payload.national_code = nid || null;
+    payload.emergency_contact = emergency || null;
     if (!payload.supervisor) payload.supervisor = null;
     payload.phone_number = phone || null;
     payload.email = payload.email ? payload.email.trim() : '';
@@ -690,6 +840,28 @@ export class Users implements OnInit, OnDestroy {
       this.accountsService.updateUser(this.editingUser.id, payload).subscribe({
         next: (res) => {
           Object.assign(this.editingUser, res);
+          if (pendingBlob) {
+            this.accountsService.updateUserAvatar(this.editingUser.id, pendingBlob).subscribe({
+              next: (avatarRes) => {
+                this.editingUser.avatar = avatarRes.avatar;
+                if (this.auth.user()?.id === this.editingUser.id) {
+                  this.auth.updateUserAvatar(avatarRes.avatar);
+                }
+                this.cdr.detectChanges();
+              }
+            });
+          } else if (pendingDelete) {
+            this.accountsService.deleteUserAvatar(this.editingUser.id).subscribe({
+              next: () => {
+                this.editingUser.avatar = null;
+                if (this.auth.user()?.id === this.editingUser.id) {
+                  this.auth.updateUserAvatar(null);
+                }
+                this.cdr.detectChanges();
+              }
+            });
+          }
+          this.rebuildMemoizedData();
           this.toast.show('success', 'اطلاعات کاربر با موفقیت بروزرسانی شد.');
           this.isUserModalOpen = false;
           this.cdr.detectChanges();
@@ -711,6 +883,7 @@ export class Users implements OnInit, OnDestroy {
               }
             });
           }
+          this.rebuildMemoizedData();
           this.toast.show('success', 'کاربر جدید با موفقیت ایجاد شد.');
           this.isUserModalOpen = false;
           this.cdr.detectChanges();
@@ -994,33 +1167,34 @@ export class Users implements OnInit, OnDestroy {
   }
 
   getRoleAppScope(r: any): 'warehouse' | 'finance' | 'global' {
+    const permIds: number[] = Array.isArray(r.permissions) ? r.permissions : [];
+    const permCodenames: string[] = permIds
+      .map(id => this.permIdToCodenameMap.get(id))
+      .filter((c): c is string => typeof c === 'string');
+
+    const whMarkers = this.registry.permissionMarkers('warehouse');
+    const finMarkers = this.registry.permissionMarkers('accounting');
+
+    const hasWh = permCodenames.some(p => whMarkers.includes(p));
+    const hasFin = permCodenames.some(p => finMarkers.includes(p));
+
+    if (hasWh && hasFin) return 'global';
+    if (hasWh) return 'warehouse';
+    if (hasFin) return 'finance';
+
+    // fallback به عناوین قدیمی برای نقش‌های بدون پرمیشن ست‌شده
     const name = (r.name || '').toLowerCase();
     const title = (r.title || '').toLowerCase();
-    
     if (name === 'admin' || name === 'superuser' || title.includes('مدیر کل') || title.includes('مدیر ارشد') || title.includes('ادمین')) {
       return 'global';
     }
-    
-    // قلمرو مالی و پرسنلی (Finance & Personnel)
-    if (
-      name === 'hesabdar' || name === 'accountant' || name === 'treasury' || name === 'operator' ||
-      name.includes('personnel') || name.includes('payroll') || name.includes('finance') ||
-      title.includes('حسابدار') || title.includes('مالی') || title.includes('حقوق') ||
-      title.includes('خزانه') || title.includes('پرسنل') || title.includes('کارکرد')
-    ) {
-      return 'finance';
-    }
-    
-    // قلمرو انبارداری و شمارش (Warehouse & Inventory)
-    if (
-      name === 'counter' || name.startsWith('doc_') || name.includes('warehouse') ||
-      name.includes('supervisor') || title.includes('انبار') || title.includes('شمارش') ||
-      title.includes('اسناد') || title.includes('تطبیق')
-    ) {
+    if (name.includes('warehouse') || title.includes('انبار') || title.includes('شمارش')) {
       return 'warehouse';
     }
-
-    return 'warehouse';
+    if (name.includes('finance') || name.includes('payroll') || title.includes('مالی') || title.includes('حقوق')) {
+      return 'finance';
+    }
+    return 'global';
   }
 
   getFilteredRolesForModal(tab: 'all' | 'warehouse' | 'finance' | 'global'): any[] {

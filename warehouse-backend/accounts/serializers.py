@@ -40,6 +40,8 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of group names to assign to the user"
     )
+    # اعلام صریح فیلد تا در صورت عدم نصب اپ warehouses، خطای فیلد نامعتبر مدل در ساخت سوپر رخ ندهد
+    assigned_warehouses = serializers.SerializerMethodField(required=False)
 
     class Meta:
         model = CustomUser
@@ -68,6 +70,11 @@ class UserSerializer(serializers.ModelSerializer):
         else:
             fields.pop('assigned_warehouses', None)
         return fields
+
+    def get_assigned_warehouses(self, obj):
+        if hasattr(obj, 'assigned_warehouses'):
+            return list(obj.assigned_warehouses.values_list('id', flat=True))
+        return []
 
     def validate_email(self, value):
         if value is None:

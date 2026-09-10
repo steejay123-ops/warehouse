@@ -38,6 +38,15 @@ export class Users implements OnInit, OnDestroy {
   pageSize = 24;
   visibleCount = 24;
   userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
+  userViewMode: 'grid' | 'table' = 'grid';
+
+  setViewMode(mode: 'grid' | 'table') {
+    this.userViewMode = mode;
+    try {
+      localStorage.setItem('users_view_mode', mode);
+    } catch (e) {}
+    this.cdr.detectChanges();
+  }
 
   // Memoization Caches (O(1) lookups during change detection)
   roleChildrenMap = new Map<number, any[]>();
@@ -204,6 +213,13 @@ export class Users implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    try {
+      const savedMode = localStorage.getItem('users_view_mode');
+      if (savedMode === 'grid' || savedMode === 'table') {
+        this.userViewMode = savedMode;
+      }
+    } catch (e) {}
+
     this.route.queryParams.subscribe((params: any) => {
       this.activeTab = params['tab'] || 'users';
       this.activeRoleTab = params['roleTab'] || 'custom';

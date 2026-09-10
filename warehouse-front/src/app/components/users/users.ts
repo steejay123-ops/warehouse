@@ -795,33 +795,85 @@ export class Users implements OnInit, OnDestroy {
     }
   }
 
-  generateUsernameFromNames() {
-    if (this.editingUser) return;
-    const f = (this.userForm.first_name || '').trim();
-    const l = (this.userForm.last_name || '').trim();
-    if (!f && !l) return;
-    const transliterate = (text: string) => {
-      const map: { [key: string]: string } = {
-        'ا': 'a', 'آ': 'a', 'ب': 'b', 'پ': 'p', 'ت': 't', 'ث': 's', 'ج': 'j', 'چ': 'ch',
-        'ح': 'h', 'خ': 'kh', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'ژ': 'zh', 'س': 's',
-        'ش': 'sh', 'ص': 's', 'ض': 'z', 'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh', 'ف': 'f',
-        'ق': 'gh', 'ک': 'k', 'گ': 'g', 'ل': 'l', 'م': 'm', 'ن': 'n', 'و': 'v', 'ه': 'h',
-        'ی': 'y', 'ي': 'y', 'ئ': 'y', 'ة': 'h', 'ؤ': 'o', ' ': '.'
-      };
-      return text.toLowerCase().split('').map(c => map[c] !== undefined ? map[c] : c).join('').replace(/[^a-z0-9._-]/g, '');
-    };
-    const engF = transliterate(f);
-    const engL = transliterate(l);
-    let generated = '';
-    if (engF && engL) {
-      generated = `${engF.charAt(0)}.${engL}`;
-    } else if (engL) {
-      generated = engL;
-    } else {
-      generated = engF;
+  toEnglishDigits(str: string): string {
+    if (!str) return '';
+    return str
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧۸۹'.indexOf(d).toString());
+  }
+
+  isFieldValid(field: string): boolean {
+    if (this.userFormErrors && this.userFormErrors[field]) return false;
+
+    switch (field) {
+      case 'first_name':
+        return (this.userForm.first_name || '').trim().length >= 2;
+
+      case 'last_name':
+        return (this.userForm.last_name || '').trim().length >= 2;
+
+      case 'username': {
+        const u = (this.userForm.username || '').trim();
+        return u.length >= 3 && /^[a-zA-Z0-9._-]+$/.test(u);
+      }
+
+      case 'national_code': {
+        const val = this.toEnglishDigits(this.userForm.national_code || '').replace(/\D/g, '');
+        return val.length === 10 && this.validateNationalCode(val);
+      }
+
+      case 'phone_number': {
+        let p = this.toEnglishDigits(this.userForm.phone_number || '').replace(/[\s\-_]/g, '');
+        if (p.startsWith('+98')) p = '0' + p.substring(3);
+        else if (p.startsWith('0098')) p = '0' + p.substring(4);
+        else if (p.startsWith('98') && p.length === 12) p = '0' + p.substring(2);
+        else if (p.startsWith('9') && p.length === 10) p = '0' + p;
+        return /^09\d{9}$/.test(p);
+      }
+
+      case 'emergency_contact': {
+        const em = this.toEnglishDigits(this.userForm.emergency_contact || '').replace(/\D/g, '');
+        return em.length >= 8 && em.length <= 11;
+      }
+
+      case 'email': {
+        const email = (this.userForm.email || '').trim();
+        return email.length > 0 && /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
+      }
+
+      case 'password': {
+        const pwd = this.userForm.password || '';
+        return pwd.length >= 6;
+      }
+
+      case 'company':
+        return (this.userForm.company || '').trim().length >= 2;
+
+      case 'operational_zone':
+        return (this.userForm.operational_zone || '').trim().length >= 2;
+
+      case 'address':
+        return (this.userForm.address || '').trim().length >= 5;
+
+      case 'blood_type':
+        return !!this.userForm.blood_type;
+
+      case 'supervisor':
+        return this.userForm.supervisor !== null;
+
+      default:
+        return false;
     }
-    this.userForm.username = generated;
-    this.clearUserFormError('username');
+  }
+
+  getFieldClass(field: string): string {
+    if (this.userFormErrors && this.userFormErrors[field]) {
+      return 'border-rose-400 bg-rose-50/50 text-rose-900 ring-2 ring-rose-200/80 focus:border-rose-500 focus:ring-rose-300';
+    }
+    if (this.isFieldValid(field)) {
+      return 'border-emerald-500 bg-emerald-50/20 text-slate-800 ring-1.5 ring-emerald-400/80 focus:border-emerald-500 focus:ring-emerald-300';
+    }
+    return 'border-slate-200 bg-slate-50/60 text-slate-800 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-100';
   }
 
   generateRandomPassword() {
@@ -831,6 +883,7 @@ export class Users implements OnInit, OnDestroy {
       pwd += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     this.userForm.password = pwd;
+    this.clearUserFormError('password');
   }
 
   saveUser() {

@@ -108,67 +108,77 @@
             </div>
             <div *ngIf="!isLoading && filteredUsers.length === 0" class="text-center py-10 text-slate-400 text-xs font-bold">کاربری با این مشخصات یافت نشد.</div>
             <div *ngIf="!isLoading && filteredUsers.length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                <div *ngFor="let u of displayedUsers; trackBy: trackById" class="bg-white rounded-2xl border shadow-sm p-4 relative group transition-all hover:shadow-md" [ngClass]="!u.is_active ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200'" [style.zIndex]="openMenuId === 'usr-' + u.id ? 50 : 1">
-                    <div class="flex items-start justify-between mb-3">
-                        <div class="flex items-center gap-3" [ngClass]="!u.is_active ? 'opacity-60 grayscale-[50%]' : ''">
-                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-sm shrink-0 transition-transform group-hover:scale-105 overflow-hidden" [style.background]="getPrimaryRole(u).color">
-                                <img *ngIf="u.avatar" [src]="u.avatar" loading="lazy" class="w-full h-full object-cover" alt="{{u.first_name}}" />
-                                <span *ngIf="!u.avatar" [style.color]="getContrastTextColor(getPrimaryRole(u).color)">{{getUserAvatarLetter(u)}}</span>
+                <div *ngFor="let u of displayedUsers; trackBy: trackById" class="bg-white rounded-2xl border shadow-xs p-4.5 relative group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200 flex flex-col justify-between" [ngClass]="!u.is_active ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'" [style.zIndex]="openMenuId === 'usr-' + u.id ? 50 : 1">
+                    <div>
+                        <div class="flex items-start justify-between mb-3.5">
+                            <div class="flex items-center gap-3" [ngClass]="!u.is_active ? 'opacity-60 grayscale-[40%]' : ''">
+                                <div class="relative">
+                                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-sm shrink-0 overflow-hidden" [style.background]="getPrimaryRole(u).color">
+                                        <img *ngIf="u.avatar" [src]="u.avatar" loading="lazy" class="w-full h-full object-cover" alt="{{u.first_name}}" />
+                                        <span *ngIf="!u.avatar" [style.color]="getContrastTextColor(getPrimaryRole(u).color)">{{getUserAvatarLetter(u)}}</span>
+                                    </div>
+                                    <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white" [ngClass]="u.is_active ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-rose-500 ring-2 ring-rose-100'" [title]="u.is_active ? 'کاربر فعال' : 'حساب معلق'"></span>
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-slate-800 text-sm flex items-center gap-1.5" [ngClass]="!u.is_active ? 'line-through text-slate-500' : ''">
+                                      <span>{{u.first_name}} {{u.last_name}}</span>
+                                      <span *ngIf="u.is_superuser" class="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-purple-50 text-purple-700 border border-purple-200">ادمین</span>
+                                    </h4>
+                                    <p class="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-1">
+                                      <span>@{{u.username}}</span>
+                                      <span *ngIf="u.phone_number" class="text-slate-300">|</span>
+                                      <span *ngIf="u.phone_number" class="text-slate-500 font-mono">{{u.phone_number}}</span>
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <h4 class="font-black text-slate-800 text-sm" [ngClass]="!u.is_active ? 'line-through' : ''">{{u.first_name}} {{u.last_name}}</h4>
-                                <p class="text-[10px] font-mono text-slate-400 mt-0.5">کاربری: <span class="font-bold text-slate-600">{{u.username}}</span></p>
+                            
+                            <div class="relative action-dropdown" appClickOutside (clickedOutside)="openMenuId === 'usr-' + u.id ? closeMenus() : null">
+                                <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors relative z-[100] cursor-pointer" title="عملیات کاربر">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                                </button>
+                                
+                                <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-52 bg-white rounded-2xl shadow-xl border border-slate-200 z-[100] py-1.5 text-right fade-in">
+                                    <button (click)="openUserModal(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>✏️</span> ویرایش پرونده پرسنلی</button>
+                                    <button (click)="openAvatarModalForUser(u)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>📷</span> تغییر تصویر پرسنلی</button>
+                                    <button (click)="resetPassword(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>🔑</span> ریست رمز عبور</button>
+                                    <div class="border-t border-slate-100 my-1"></div>
+                                    <button (click)="deleteUser(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-bold transition-colors cursor-pointer"><span>🗑️</span> حذف یا تعلیق کاربر</button>
+                                    <div class="border-t border-slate-100 my-1"></div>
+                                    <ng-container *ngIf="!u.is_active">
+                                        <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-emerald-600 hover:bg-emerald-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>✅</span> خروج از تعلیق (فعال‌سازی)</button>
+                                    </ng-container>
+                                    <ng-container *ngIf="u.is_active">
+                                        <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>⛔</span> تعلیق / مسدودسازی حساب</button>
+                                    </ng-container>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="relative action-dropdown" appClickOutside (clickedOutside)="openMenuId === 'usr-' + u.id ? closeMenus() : null">
-                            <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative z-[100]">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-                            </button>
-                            
-                            <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-[100] py-1 text-right fade-in">
-                                <button (click)="openUserModal(u.id)" class="w-full text-right px-3 py-2 text-xs text-slate-800 hover:bg-slate-50 flex items-center gap-2"><span>✏️</span> ویرایش پرونده پرسنلی</button>
-                                <button (click)="openAvatarModalForUser(u)" class="w-full text-right px-3 py-2 text-xs text-slate-800 hover:bg-slate-50 flex items-center gap-2"><span>📷</span> تغییر تصویر پرسنلی</button>
-                                <button (click)="resetPassword(u.id)" class="w-full text-right px-3 py-2 text-xs text-slate-800 hover:bg-slate-50 flex items-center gap-2"><span>🔑</span> ریست رمز عبور</button>
-                                <div class="border-t border-slate-200 my-1"></div>
-                                <button (click)="deleteUser(u.id)" class="w-full text-right px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-bold"><span>🗑️</span> حذف یا تعلیق کاربر</button>
-                                <div class="border-t border-slate-200 my-1"></div>
-                                <ng-container *ngIf="!u.is_active">
-                                    <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3 py-2 text-xs text-emerald-600 hover:bg-emerald-50 font-bold flex items-center gap-2"><span>✅</span> خروج از تعلیق (فعال‌سازی)</button>
-                                </ng-container>
-                                <ng-container *ngIf="u.is_active">
-                                    <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2"><span>⛔</span> تعلیق / مسدودسازی حساب</button>
-                                </ng-container>
+                        <div class="space-y-2 mt-3" [ngClass]="!u.is_active ? 'opacity-70' : ''">
+                            <div class="flex items-start justify-between text-xs">
+                                <span class="text-slate-400 text-[10px] mt-1 shrink-0 font-medium">نقش‌های سازمانی:</span>
+                                <div class="flex flex-wrap gap-1 justify-end max-w-[68%]">
+                                    <span *ngFor="let role of getUserRoles(u)" class="px-2 py-0.5 rounded-lg font-bold text-[10px] border border-transparent shadow-2xs" [style.background]="role.color + '18'" [style.color]="role.color" [style.borderColor]="role.color + '30'">{{role.name}}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs pt-1">
+                                <span class="text-slate-400 text-[10px] font-medium">دسترسی انبارها:</span>
+                                <div class="flex gap-1 flex-wrap justify-end">
+                                    <ng-container *ngIf="!u.assigned_warehouses || u.assigned_warehouses.length === 0">
+                                        <span class="text-[9.5px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200">بدون دسترسی</span>
+                                    </ng-container>
+                                    <ng-container *ngIf="u.assigned_warehouses && u.assigned_warehouses.length > 0">
+                                        <span *ngFor="let pid of u.assigned_warehouses | slice:0:2" class="bg-slate-50 text-slate-600 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold border border-slate-200">{{getProjectName(pid)}}</span>
+                                        <span *ngIf="u.assigned_warehouses.length > 2" class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md text-[9.5px] font-black border border-indigo-200">+{{u.assigned_warehouses.length - 2}}</span>
+                                    </ng-container>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                                <span class="text-slate-400 text-[10px] font-medium">شرکت / سازمان:</span>
+                                <span class="font-bold text-[10.5px] text-slate-700">{{u.company || 'فارس عالیش / پیمانکار'}}</span>
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="space-y-2 mt-4" [ngClass]="!u.is_active ? 'opacity-70' : ''">
-                        <div class="flex items-start justify-between text-xs">
-                            <span class="text-slate-400 text-[10px] mt-1 shrink-0">نقش‌های سازمانی:</span>
-                            <div class="flex flex-wrap gap-1 justify-end max-w-[65%]">
-                                <span *ngFor="let role of getUserRoles(u)" class="px-2 py-0.5 rounded-md font-bold text-[10px]" [style.background]="role.color + '15'" [style.color]="role.color">{{role.name}}</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between text-xs pt-1">
-                            <span class="text-slate-400 text-[10px]">دسترسی انبارها:</span>
-                            <div class="flex gap-1 flex-wrap justify-end">
-                                <ng-container *ngIf="!u.assigned_warehouses || u.assigned_warehouses.length === 0">
-                                    <span class="text-[9px] text-rose-400 font-bold">بدون دسترسی</span>
-                                </ng-container>
-                                <ng-container *ngIf="u.assigned_warehouses && u.assigned_warehouses.length > 0">
-                                    <span *ngFor="let pid of u.assigned_warehouses | slice:0:2" class="bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded text-[9px] font-bold border border-slate-200">{{getProjectName(pid)}}</span>
-                                    <span *ngIf="u.assigned_warehouses.length > 2" class="bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded text-[9px] font-bold border border-slate-200">+{{u.assigned_warehouses.length - 2}}</span>
-                                </ng-container>
-                            </div>
-                        </div>
-                        <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-200">
-                            <span class="text-slate-400 text-[10px]">شرکت متبوع:</span>
-                            <span class="font-bold text-[10px] text-slate-600">{{u.company || 'پیمانکار'}}</span>
-                        </div>
-                    </div>
-                    
-                    <div *ngIf="!u.is_active" class="absolute inset-0 border-2 border-rose-400 rounded-2xl pointer-events-none opacity-20"></div>
                 </div>
             </div>
 
@@ -435,257 +445,499 @@
 ></app-smart-delete-modal>
 
 <!-- User Modal -->
-<div *ngIf="isUserModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4" dir="rtl">
+<div *ngIf="isUserModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4" dir="rtl">
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="isUserModalOpen = false"></div>
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden relative modal-enter">
-    <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden relative modal-enter flex flex-col max-h-[92vh] border border-slate-100">
+    
+    <!-- Modal Header -->
+    <div class="px-6 py-4.5 border-b border-slate-200/80 bg-slate-50/90 backdrop-blur-md flex justify-between items-center shrink-0">
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-white flex items-center justify-center font-black shadow-md shadow-indigo-200 shrink-0">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
         <div>
-          <h2 class="text-base font-bold text-slate-800 tracking-tight flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full" [ngClass]="editingUser ? 'bg-amber-400' : 'bg-indigo-500'"></span>
-            {{editingUser ? 'ویرایش پرونده پرسنلی: ' + userForm.first_name + ' ' + userForm.last_name : 'ثبت مشخصات و دسترسی‌های کاربر جدید'}}
-          </h2>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-black text-slate-800 tracking-tight">
+              {{ editingUser ? 'ویرایش پرونده پرسنلی: ' + userForm.first_name + ' ' + userForm.last_name : 'ثبت مشخصات و دسترسی‌های کاربر جدید' }}
+            </h2>
+            <span *ngIf="!editingUser" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">حساب جدید</span>
+            <span *ngIf="editingUser" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-200">ویرایش پرونده</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">
+            {{ editingUser ? 'بروزرسانی مشخصات هویتی، سطوح دسترسی RBAC، کلمه عبور و پروژه‌ها' : 'تکمیل هویت فردی، شناسه ورود یکتا، نقش‌های سازمانی و انبارهای مجاز' }}
+          </p>
         </div>
       </div>
-      <button (click)="isUserModalOpen = false" class="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-200">
+      <button (click)="isUserModalOpen = false" class="text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-all p-2 rounded-xl cursor-pointer" title="بستن پنجره">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
     
-    <div class="p-6 max-h-[85vh] overflow-y-auto">
-      <form class="mt-2 text-right" autocomplete="off" (submit)="$event.preventDefault()">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="md:col-span-2 grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
-                نام (First Name)
-                <span class="text-rose-500 font-black text-xs">*</span>
-              </label>
-              <input type="text" [(ngModel)]="userForm.first_name" (input)="clearUserFormError('first_name')" (blur)="generateUsernameFromNames()" name="first_name" placeholder="مثال: حبیب" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none transition-all" [ngClass]="userFormErrors['first_name'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
+    <!-- Modal Body -->
+    <div class="p-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+      <form class="space-y-4 text-right" autocomplete="off" (submit)="$event.preventDefault()">
+        
+        <!-- بخش اول: اطلاعات هویتی و پرسنلی -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">👤</span>
+              <div>
+                <h3 class="text-xs font-black text-slate-800">اطلاعات هویتی و پرسنلی</h3>
+                <p class="text-[10px] text-slate-400">مشخصات شناسنامه‌ای، تصویر رسمی و سازمانی</p>
+              </div>
             </div>
-            <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
-                نام خانوادگی (Last Name)
-                <span class="text-rose-500 font-black text-xs">*</span>
-              </label>
-              <input type="text" [(ngModel)]="userForm.last_name" (input)="clearUserFormError('last_name')" (blur)="generateUsernameFromNames()" name="last_name" placeholder="مثال: عالیشوندی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none transition-all" [ngClass]="userFormErrors['last_name'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
-            </div>
-            <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد ملی (National ID)</label>
-              <input type="text" [(ngModel)]="userForm.national_code" (input)="clearUserFormError('national_code')" name="national_code" placeholder="۱۰ رقمی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono transition-all" dir="ltr" [ngClass]="userFormErrors['national_code'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
-            </div>
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label class="block text-[11px] font-bold text-slate-600">
-                  کد/نام کاربری (Personnel ID)
-                  <span class="text-rose-500 font-black text-xs">*</span>
-                </label>
-                <button *ngIf="!editingUser" type="button" (click)="generateUsernameFromNames()" class="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 cursor-pointer hover:underline" title="تولید نام کاربری انگلیسی از روی نام و نام خانوادگی">
-                  <span>⚡ تولید خودکار</span>
+            <span class="text-[10px] font-bold text-slate-400">بخش ۱ از ۵</span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            <!-- آواتار و تصویر پرسنل -->
+            <div class="lg:col-span-3 flex flex-col items-center justify-center p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80 gap-2.5 text-center">
+              <div class="relative group">
+                <div class="w-20 h-20 rounded-2xl overflow-hidden border-2 border-white shadow-md flex items-center justify-center text-3xl font-black text-white" [style.background]="'linear-gradient(135deg,#4f46e5,#7c3aed)'">
+                  <img *ngIf="userForm.avatar" [src]="userForm.avatar" class="w-full h-full object-cover" alt="avatar" />
+                  <span *ngIf="!userForm.avatar">{{getUserAvatarLetter(userForm)}}</span>
+                </div>
+                <button type="button" (click)="openAvatarModalForUser(editingUser || userForm)" class="absolute inset-0 bg-slate-900/40 backdrop-blur-xs rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold cursor-pointer gap-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                  تغییر
                 </button>
               </div>
-              <input type="text" [(ngModel)]="userForm.username" (input)="clearUserFormError('username')" name="username" placeholder="شناسه ورود (مثال: h.alishavandi)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono font-bold text-indigo-700 transition-all" dir="ltr" [readonly]="editingUser != null" [ngClass]="userFormErrors['username'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
-            </div>
-          </div>
-
-          <div class="md:col-span-1 flex flex-col gap-3">
-            <div class="flex-1 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col items-center justify-center p-3.5 transition-all hover:border-indigo-200">
-               <div class="w-16 h-16 rounded-2xl overflow-hidden border-2 border-white shadow-md flex items-center justify-center text-2xl font-black text-white mb-2" [style.background]="'#4f46e5'">
-                 <img *ngIf="userForm.avatar" [src]="userForm.avatar" class="w-full h-full object-cover" alt="avatar" />
-                 <span *ngIf="!userForm.avatar">{{getUserAvatarLetter(userForm)}}</span>
-               </div>
-               <button type="button" (click)="openAvatarModalForUser(editingUser || userForm)" class="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 shadow-sm">
-                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                 <span>مدیریت تصویر</span>
-               </button>
-            </div>
-            
-            <div class="bg-indigo-50/50 rounded-xl border border-indigo-100 p-3 flex justify-between items-center">
-              <span class="text-[10px] font-bold text-slate-800">وضعیت فعالیت (Active)</span>
-              <label class="toggle-switch shrink-0">
-                <input type="checkbox" [(ngModel)]="userForm.is_active" name="is_active">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            
-            <div *ngIf="auth.user()?.is_superuser" class="bg-rose-50/50 rounded-xl border border-rose-100 p-3 flex justify-between items-center">
-              <span class="text-[10px] font-bold text-rose-700">مدیر ارشد (Superuser)</span>
-              <label class="toggle-switch shrink-0">
-                <input type="checkbox" [(ngModel)]="userForm.is_superuser" name="is_superuser">
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="col-span-1 md:col-span-3 border-t border-slate-200 my-1"></div>
-
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
-              تلفن همراه
-              <span class="text-rose-500 font-black text-xs">*</span>
-            </label>
-            <input type="tel" [(ngModel)]="userForm.phone_number" (input)="clearUserFormError('phone_number')" name="phone_number" placeholder="09123456789" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono transition-all" dir="ltr" [ngClass]="userFormErrors['phone_number'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">تماس اضطراری (Emergency Contact)</label>
-            <input type="tel" [(ngModel)]="userForm.emergency_contact" name="emergency_contact" placeholder="09... / 021..." class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono" dir="ltr">
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">گروه خونی (Blood Type)</label>
-            <select [(ngModel)]="userForm.blood_type" name="blood_type" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none cursor-pointer">
-              <option value="">--- نامشخص ---</option>
-              <option value="O+">O+ (مثبت)</option>
-              <option value="O-">O- (منفی)</option>
-              <option value="A+">A+ (مثبت)</option>
-              <option value="A-">A- (منفی)</option>
-              <option value="B+">B+ (مثبت)</option>
-              <option value="B-">B- (منفی)</option>
-              <option value="AB+">AB+ (مثبت)</option>
-              <option value="AB-">AB- (منفی)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
-              پست الکترونیک (Email)
-              <span class="text-slate-400 font-normal text-[10px]">(اختیاری)</span>
-            </label>
-            <input type="email" [(ngModel)]="userForm.email" name="email" placeholder="user@company.com" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono" dir="ltr">
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متبوع (Company)</label>
-            <input type="text" [(ngModel)]="userForm.company" name="company" placeholder="مثال: شرکت نفت و گاز / فارس عالیش" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
-          </div>
-
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">منطقه / زون عملیاتی</label>
-            <input type="text" [(ngModel)]="userForm.operational_zone" name="operational_zone" placeholder="مثال: منطقه ۱ - اهواز" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">سرپرست مستقیم (Supervisor)</label>
-            <select [(ngModel)]="userForm.supervisor" name="supervisor" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none cursor-pointer">
-              <option [ngValue]="null">--- بدون سرپرست مستقیم ---</option>
-              <option *ngFor="let s of getAvailableSupervisors()" [ngValue]="s.id">{{s.first_name}} {{s.last_name}} ({{s.username}})</option>
-            </select>
-          </div>
-
-          <!-- فیلد کلمه عبور در ساخت و ویرایش کاربر -->
-          <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-col justify-center">
-            <div class="flex items-center justify-between mb-1">
-              <label class="block text-[11px] font-bold text-indigo-950">
-                {{ editingUser ? 'تغییر کلمه عبور (Password)' : 'کلمه عبور اولیه (Password)' }}
-              </label>
-              <button type="button" (click)="generateRandomPassword()" class="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 cursor-pointer hover:underline" title="تولید رمز تصادفی و ایمن">
-                <span>🎲 رمز تصادفی</span>
+              <button type="button" (click)="openAvatarModalForUser(editingUser || userForm)" class="w-full py-1.5 px-2 text-[10px] font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-xl transition-all flex items-center justify-center gap-1 shadow-2xs cursor-pointer">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>مدیریت تصویر</span>
               </button>
-            </div>
-            <input type="text" [(ngModel)]="userForm.password" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-xs font-mono outline-none text-left" dir="ltr">
-            <span class="text-[9px] text-indigo-600 mt-1 font-medium leading-normal">
-              {{ editingUser ? 'در صورت خالی ماندن، رمز عبور قبلی کاربر حفظ می‌شود.' : 'در صورت خالی ماندن، رمز پیش‌فرض 123456 ثبت می‌گردد.' }}
-            </span>
-          </div>
-
-          <div class="col-span-1 md:col-span-3">
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">آدرس محل سکونت یا کارگاه</label>
-            <textarea [(ngModel)]="userForm.address" name="address" rows="2" placeholder="آدرس دقیق پرسنل..." class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none"></textarea>
-          </div>
-
-          <div class="col-span-1 md:col-span-3">
-            <div class="flex items-center justify-between mb-2">
-              <label class="block text-[11px] font-bold text-slate-700">تخصیص نقش‌های سازمانی (Roles) بر اساس سامانه</label>
-              <span class="text-[10px] text-slate-500 font-medium">مجموع نقش‌های انتخابی: <strong class="text-indigo-600 font-black">{{userForm.groups.length}}</strong></span>
+              <span class="text-[9px] text-slate-400">فرمت PNG یا JPG</span>
             </div>
 
-            <!-- تب‌های تفکیک‌شده قلمرو نقش‌ها -->
-            <div class="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200 mb-2.5">
-              <button type="button" (click)="userRoleModalTab = 'warehouse'"
-                [ngClass]="userRoleModalTab === 'warehouse' ? 'bg-white text-sky-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
-                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
-                <span>📦 سامانه انبارداری</span>
-                <span *ngIf="getSelectedRolesCountForScope('warehouse') > 0" class="px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-700 text-[9px] font-black border border-sky-200">
-                  {{getSelectedRolesCountForScope('warehouse')}}
-                </span>
-              </button>
-
-              <button type="button" (click)="userRoleModalTab = 'finance'"
-                [ngClass]="userRoleModalTab === 'finance' ? 'bg-white text-emerald-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
-                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
-                <span>💳 سامانه مالی و پرسنلی</span>
-                <span *ngIf="getSelectedRolesCountForScope('finance') > 0" class="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black border border-emerald-200">
-                  {{getSelectedRolesCountForScope('finance')}}
-                </span>
-              </button>
-
-              <button type="button" (click)="userRoleModalTab = 'global'"
-                [ngClass]="userRoleModalTab === 'global' ? 'bg-white text-purple-700 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
-                class="flex-1 py-1.5 px-2 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
-                <span>⚡ سراسری / ادمین</span>
-                <span *ngIf="getSelectedRolesCountForScope('global') > 0" class="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 text-[9px] font-black border border-purple-200">
-                  {{getSelectedRolesCountForScope('global')}}
-                </span>
-              </button>
-
-              <button type="button" (click)="userRoleModalTab = 'all'"
-                [ngClass]="userRoleModalTab === 'all' ? 'bg-white text-slate-800 shadow-sm font-black' : 'text-slate-500 hover:text-slate-800'"
-                class="py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center transition-all cursor-pointer">
-                <span>همه</span>
-              </button>
-            </div>
-
-            <!-- لیست نقش‌ها متناسب با تب فعال -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 bg-slate-50/60 p-3 rounded-xl border border-slate-200 max-h-40 overflow-y-auto">
-              <label *ngFor="let r of getFilteredRolesForModal(userRoleModalTab)"
-                class="flex items-center justify-between p-2 rounded-xl transition-colors border cursor-pointer group select-none"
-                [ngClass]="userForm.groups.includes(r.id) ? 'bg-indigo-50/80 border-indigo-300 shadow-xs' : 'bg-white border-slate-200 hover:border-indigo-100 hover:bg-slate-50'">
-                <div class="flex items-center gap-2 overflow-hidden">
-                  <input type="checkbox" [checked]="userForm.groups.includes(r.id)" (change)="toggleUserRoleCheckbox(r.id, $event)" class="rounded text-indigo-600 focus:ring-0">
-                  <span class="text-[11px] text-slate-800 font-bold truncate" [title]="r.title || r.name">{{getRoleTitleForForm(r)}}</span>
+            <!-- فیلدهای نام، نام خانوادگی، کد ملی، شرکت و زون -->
+            <div class="lg:col-span-9 grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <!-- نام -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-[11px] font-black text-slate-700">
+                    نام (First Name)
+                    <span class="text-rose-500 text-xs font-black">*</span>
+                  </label>
+                  <span *ngIf="isFieldValid('first_name')" class="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    معتبر
+                  </span>
                 </div>
-                <span class="text-[9px] px-1.5 py-0.5 rounded-md shrink-0 font-medium"
-                  [ngClass]="getRoleAppScope(r) === 'finance' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (getRoleAppScope(r) === 'warehouse' ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-purple-50 text-purple-700 border border-purple-200')">
-                  {{ getRoleAppScope(r) === 'finance' ? 'مالی' : (getRoleAppScope(r) === 'warehouse' ? 'انبار' : 'سراسری') }}
-                </span>
-              </label>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.first_name" (input)="clearUserFormError('first_name')" name="first_name" placeholder="مثال: حبیب" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('first_name')">
+                  <div *ngIf="isFieldValid('first_name')" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div *ngIf="userFormErrors['first_name']" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                </div>
+              </div>
 
-              <div *ngIf="getFilteredRolesForModal(userRoleModalTab).length === 0" class="col-span-full py-4 text-center text-slate-400 text-xs font-bold">
-                نقشی در این قلمرو سازمانی تعریف نشده است.
+              <!-- نام خانوادگی -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-[11px] font-black text-slate-700">
+                    نام خانوادگی (Last Name)
+                    <span class="text-rose-500 text-xs font-black">*</span>
+                  </label>
+                  <span *ngIf="isFieldValid('last_name')" class="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    معتبر
+                  </span>
+                </div>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.last_name" (input)="clearUserFormError('last_name')" name="last_name" placeholder="مثال: عالیشوندی" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('last_name')">
+                  <div *ngIf="isFieldValid('last_name')" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div *ngIf="userFormErrors['last_name']" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- کد ملی -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-[11px] font-bold text-slate-600">کد ملی (National ID)</label>
+                  <span *ngIf="isFieldValid('national_code')" class="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    تایید الگوریتم ۱۰ رقمی
+                  </span>
+                </div>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.national_code" (input)="clearUserFormError('national_code')" name="national_code" placeholder="۱۰ رقم (مانند 2280000000)" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono transition-all" dir="ltr" [class]="getFieldClass('national_code')">
+                  <div *ngIf="isFieldValid('national_code')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div *ngIf="userFormErrors['national_code']" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- شرکت متبوع -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متبوع / پیمانکار (Company)</label>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.company" name="company" placeholder="مثال: شرکت نفت و گاز / فارس عالیش" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('company')">
+                  <div *ngIf="isFieldValid('company')" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- زون عملیاتی -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1.5">منطقه / زون عملیاتی</label>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.operational_zone" name="operational_zone" placeholder="مثال: منطقه ۱ - اهواز" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('operational_zone')">
+                  <div *ngIf="isFieldValid('operational_zone')" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- سرپرست مستقیم -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1.5">سرپرست مستقیم (Supervisor)</label>
+                <select [(ngModel)]="userForm.supervisor" name="supervisor" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none cursor-pointer transition-all" [class]="getFieldClass('supervisor')">
+                  <option [ngValue]="null">--- بدون سرپرست مستقیم ---</option>
+                  <option *ngFor="let s of getAvailableSupervisors()" [ngValue]="s.id">{{s.first_name}} {{s.last_name}} ({{s.username}})</option>
+                </select>
               </div>
             </div>
           </div>
-          
-          <div class="col-span-1 md:col-span-3">
-            <label class="block text-[11px] font-bold text-slate-600 mb-2">محدوده عملیاتی مجاز (زون‌ها و انبارها)</label>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 max-h-32 overflow-y-auto">
-                <label *ngFor="let p of state.appState.projects" class="flex items-center gap-2 cursor-pointer hover:bg-indigo-50 p-2 rounded-lg transition-colors border border-transparent hover:border-indigo-100">
-                    <input type="checkbox" [checked]="isWarehouseAssigned(p.id)" (change)="toggleUserProjCheckbox(p.id, $event)" class="rounded text-indigo-600 focus:ring-0">
-                    <span class="text-[11px] text-slate-800 font-bold truncate" [title]="p.name">{{p.name}}</span>
+        </div>
+
+        <!-- بخش دوم: حساب کاربری و اطلاعات ورود -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold text-sm">🔐</span>
+              <div>
+                <h3 class="text-xs font-black text-slate-800">حساب کاربری و اطلاعات ورود</h3>
+                <p class="text-[10px] text-slate-400">شناسه ورود، کلمه عبور و کنترل دسترسی فعال</p>
+              </div>
+            </div>
+            <span class="text-[10px] font-bold text-slate-400">بخش ۲ از ۵</span>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            <!-- ستون چپ: شناسه ورود و کلمه عبور -->
+            <div class="lg:col-span-7 space-y-3.5">
+              <!-- شناسه ورود (کاملاً دستی - بدون تولید خودکار) -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-[11px] font-black text-slate-700">
+                    کد / نام کاربری (Personnel ID)
+                    <span class="text-rose-500 text-xs font-black">*</span>
+                  </label>
+                  <span *ngIf="isFieldValid('username')" class="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    شناسه معتبر
+                  </span>
+                  <span *ngIf="editingUser" class="text-[9px] text-slate-400 font-medium">غیرقابل تغییر در ویرایش</span>
+                </div>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.username" (input)="clearUserFormError('username')" name="username" placeholder="مثال: h.alishavandi یا 10054" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono font-bold text-indigo-800 transition-all" dir="ltr" [readonly]="editingUser != null" [class]="getFieldClass('username')">
+                  <div *ngIf="isFieldValid('username')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                  <div *ngIf="userFormErrors['username']" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  </div>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1 leading-normal">
+                  شناسه ورود یکتای پرسنل به سامانه (حداقل ۳ کاراکتر انگلیسی، اعداد، نقطه یا خط تیره).
+                </p>
+              </div>
+
+              <!-- کلمه عبور -->
+              <div class="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-100/90 space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="block text-[11px] font-black text-indigo-950">
+                    {{ editingUser ? 'تغییر کلمه عبور (Password)' : 'کلمه عبور اولیه (Password)' }}
+                  </label>
+                  <button type="button" (click)="generateRandomPassword()" class="text-[10px] text-indigo-600 hover:text-indigo-800 font-black flex items-center gap-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-indigo-200/80 shadow-2xs hover:shadow-xs transition-all" title="تولید رمز تصادفی و ایمن">
+                    <span>🎲 رمز تصادفی</span>
+                  </button>
+                </div>
+                <div class="relative">
+                  <input type="text" [(ngModel)]="userForm.password" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full px-3 py-2 rounded-xl bg-white border border-indigo-200 text-xs font-mono outline-none text-left transition-all" dir="ltr" [class]="getFieldClass('password')">
+                  <div *ngIf="isFieldValid('password')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                </div>
+                <p class="text-[9.5px] text-indigo-700/80 font-medium leading-normal">
+                  {{ editingUser ? 'در صورت خالی ماندن، کلمه عبور قبلی کاربر حفظ می‌گردد.' : 'در صورت خالی ماندن، رمز عبور اولیه به صورت خودکار 123456 تنظیم خواهد شد.' }}
+                </p>
+              </div>
+            </div>
+
+            <!-- ستون راست: سوئیچ‌های وضعیت حساب و دسترسی مدیر ارشد -->
+            <div class="lg:col-span-5 flex flex-col gap-3">
+              <!-- وضعیت فعالیت -->
+              <div class="p-3.5 rounded-2xl border transition-all flex items-center justify-between" [ngClass]="userForm.is_active ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200'">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full" [ngClass]="userForm.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                    <span class="text-xs font-black text-slate-800">وضعیت فعالیت (Active)</span>
+                  </div>
+                  <p class="text-[10px] text-slate-500">
+                    {{ userForm.is_active ? 'حساب فعال است و پرسنل امکان لاگین دارد' : 'حساب معلق است و ورود مسدود می‌باشد' }}
+                  </p>
+                </div>
+                <label class="toggle-switch shrink-0 mr-2">
+                  <input type="checkbox" [(ngModel)]="userForm.is_active" name="is_active">
+                  <span class="toggle-slider"></span>
                 </label>
+              </div>
+
+              <!-- دسترسی مدیر ارشد (برای سوپریوزرها) -->
+              <div *ngIf="auth.user()?.is_superuser" class="p-3.5 rounded-2xl border transition-all flex items-center justify-between" [ngClass]="userForm.is_superuser ? 'bg-purple-50/60 border-purple-200 shadow-2xs' : 'bg-slate-50 border-slate-200'">
+                <div class="space-y-0.5">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-sm">🛡️</span>
+                    <span class="text-xs font-black text-purple-900">مدیر ارشد (Superuser)</span>
+                  </div>
+                  <p class="text-[10px] text-purple-700/80">
+                    {{ userForm.is_superuser ? 'دسترسی ۱۰۰٪ به تمام تنظیمات و ماژول‌ها' : 'دسترسی محدود به نقش‌ها و انبارهای تخصیصی' }}
+                  </p>
+                </div>
+                <label class="toggle-switch shrink-0 mr-2">
+                  <input type="checkbox" [(ngModel)]="userForm.is_superuser" name="is_superuser">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- بخش سوم: اطلاعات تماس و نشانی -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">📱</span>
+              <div>
+                <h3 class="text-xs font-black text-slate-800">اطلاعات تماس و نشانی</h3>
+                <p class="text-[10px] text-slate-400">شماره‌های همراه، تماس اضطراری، گروه خونی و آدرس محل خدمت</p>
+              </div>
+            </div>
+            <span class="text-[10px] font-bold text-slate-400">بخش ۳ از ۵</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3.5">
+            <!-- تلفن همراه -->
+            <div class="md:col-span-1">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-[11px] font-black text-slate-700">
+                  تلفن همراه
+                  <span class="text-rose-500 text-xs font-black">*</span>
+                </label>
+                <span *ngIf="isFieldValid('phone_number')" class="text-[9px] text-emerald-600 font-bold flex items-center gap-0.5">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                  معتبر
+                </span>
+              </div>
+              <div class="relative">
+                <input type="tel" [(ngModel)]="userForm.phone_number" (input)="clearUserFormError('phone_number')" name="phone_number" placeholder="09123456789" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono transition-all" dir="ltr" [class]="getFieldClass('phone_number')">
+                <div *ngIf="isFieldValid('phone_number')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div *ngIf="userFormErrors['phone_number']" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- تماس اضطراری -->
+            <div class="md:col-span-1">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">تماس اضطراری (Emergency)</label>
+              <div class="relative">
+                <input type="tel" [(ngModel)]="userForm.emergency_contact" name="emergency_contact" placeholder="09... / 021..." class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono transition-all" dir="ltr" [class]="getFieldClass('emergency_contact')">
+                <div *ngIf="isFieldValid('emergency_contact')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- گروه خونی -->
+            <div class="md:col-span-1">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">گروه خونی (Blood Type)</label>
+              <select [(ngModel)]="userForm.blood_type" name="blood_type" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none cursor-pointer transition-all" [class]="getFieldClass('blood_type')">
+                <option value="">--- نامشخص ---</option>
+                <option value="O+">O+ (مثبت)</option>
+                <option value="O-">O- (منفی)</option>
+                <option value="A+">A+ (مثبت)</option>
+                <option value="A-">A- (منفی)</option>
+                <option value="B+">B+ (مثبت)</option>
+                <option value="B-">B- (منفی)</option>
+                <option value="AB+">AB+ (مثبت)</option>
+                <option value="AB-">AB- (منفی)</option>
+              </select>
+            </div>
+
+            <!-- ایمیل -->
+            <div class="md:col-span-1">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
+                پست الکترونیک (Email)
+                <span class="text-slate-400 font-normal text-[10px]">(اختیاری)</span>
+              </label>
+              <div class="relative">
+                <input type="email" [(ngModel)]="userForm.email" name="email" placeholder="user@company.com" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono transition-all" dir="ltr" [class]="getFieldClass('email')">
+                <div *ngIf="isFieldValid('email')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- نشانی محل سکونت یا کارگاه -->
+            <div class="md:col-span-4">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">آدرس محل سکونت یا کارگاه / محل اسکان</label>
+              <div class="relative">
+                <textarea [(ngModel)]="userForm.address" name="address" rows="2" placeholder="آدرس دقیق و شماره پلاک محل خدمت یا سکونت پرسنل..." class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('address')"></textarea>
+                <div *ngIf="isFieldValid('address')" class="absolute left-3 bottom-3 pointer-events-none text-emerald-600 flex items-center">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- بخش چهارم: تخصیص نقش‌های سازمانی -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-3.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">🛡️</span>
+              <div>
+                <h3 class="text-xs font-black text-slate-800">تخصیص نقش‌های سازمانی (Roles)</h3>
+                <p class="text-[10px] text-slate-400">سطوح دسترسی، گروه‌های RBAC و اختیارات کاری پرسنل</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-slate-500 font-medium">مجموع نقش‌های انتخابی:</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200">{{userForm.groups.length}}</span>
             </div>
           </div>
 
-          <div class="col-span-1 md:col-span-3 bg-slate-50/50 border border-slate-200 rounded-xl p-3 flex justify-between items-center mt-2">
-             <div>
-               <p class="text-[9px] text-slate-400 font-bold mb-0.5">تاریخ ثبت در سیستم (Joined)</p>
-               <p class="text-[10px] font-mono text-slate-600">{{formatDate(userForm.date_joined)}}</p>
-             </div>
-             <div class="text-left">
-               <p class="text-[9px] text-slate-400 font-bold mb-0.5">آخرین ورود (Last Login)</p>
-               <p class="text-[10px] font-mono text-slate-600">{{userForm.last_login ? formatDate(userForm.last_login) : '---'}}</p>
-             </div>
+          <!-- تب‌های تفکیک‌شده قلمرو نقش‌ها -->
+          <div class="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200">
+            <button type="button" (click)="userRoleModalTab = 'warehouse'"
+              [ngClass]="userRoleModalTab === 'warehouse' ? 'bg-white text-sky-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'"
+              class="flex-1 py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+              <span>📦 سامانه انبارداری</span>
+              <span *ngIf="getSelectedRolesCountForScope('warehouse') > 0" class="px-1.5 py-0.2 rounded-full bg-sky-100 text-sky-700 text-[9px] font-black border border-sky-200">
+                {{getSelectedRolesCountForScope('warehouse')}}
+              </span>
+            </button>
+
+            <button type="button" (click)="userRoleModalTab = 'finance'"
+              [ngClass]="userRoleModalTab === 'finance' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'"
+              class="flex-1 py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+              <span>💳 سامانه مالی و پرسنلی</span>
+              <span *ngIf="getSelectedRolesCountForScope('finance') > 0" class="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black border border-emerald-200">
+                {{getSelectedRolesCountForScope('finance')}}
+              </span>
+            </button>
+
+            <button type="button" (click)="userRoleModalTab = 'global'"
+              [ngClass]="userRoleModalTab === 'global' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'"
+              class="flex-1 py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+              <span>⚡ سراسری / ادمین</span>
+              <span *ngIf="getSelectedRolesCountForScope('global') > 0" class="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-700 text-[9px] font-black border border-purple-200">
+                {{getSelectedRolesCountForScope('global')}}
+              </span>
+            </button>
+
+            <button type="button" (click)="userRoleModalTab = 'all'"
+              [ngClass]="userRoleModalTab === 'all' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'"
+              class="py-1.5 px-3 rounded-lg text-[11px] flex items-center justify-center transition-all cursor-pointer">
+              <span>همه</span>
+            </button>
+          </div>
+
+          <!-- لیست نقش‌ها متناسب با تب فعال -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 max-h-48 overflow-y-auto custom-scrollbar">
+            <label *ngFor="let r of getFilteredRolesForModal(userRoleModalTab)"
+              class="flex items-center justify-between p-2.5 rounded-xl transition-all border cursor-pointer select-none group"
+              [ngClass]="userForm.groups.includes(r.id) ? 'bg-indigo-50/90 border-indigo-400 shadow-2xs' : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50/80'">
+              <div class="flex items-center gap-2.5 overflow-hidden">
+                <input type="checkbox" [checked]="userForm.groups.includes(r.id)" (change)="toggleUserRoleCheckbox(r.id, $event)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+                <span class="text-xs text-slate-800 font-bold truncate" [title]="r.title || r.name">{{getRoleTitleForForm(r)}}</span>
+              </div>
+              <span class="text-[9px] px-2 py-0.5 rounded-md shrink-0 font-bold"
+                [ngClass]="getRoleAppScope(r) === 'finance' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : (getRoleAppScope(r) === 'warehouse' ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-purple-50 text-purple-700 border border-purple-200')">
+                {{ getRoleAppScope(r) === 'finance' ? 'مالی' : (getRoleAppScope(r) === 'warehouse' ? 'انبار' : 'سراسری') }}
+              </span>
+            </label>
+
+            <div *ngIf="getFilteredRolesForModal(userRoleModalTab).length === 0" class="col-span-full py-6 text-center text-slate-400 text-xs font-bold">
+              نقشی در این قلمرو سازمانی تعریف نشده است.
+            </div>
           </div>
         </div>
+
+        <!-- بخش پنجم: انبارها و پروژه‌های مجاز -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-3.5">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">🏬</span>
+              <div>
+                <h3 class="text-xs font-black text-slate-800">محدوده عملیاتی مجاز (انبارها و پروژه‌ها)</h3>
+                <p class="text-[10px] text-slate-400">انبارها یا پروژه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد</p>
+              </div>
+            </div>
+            <span class="text-[10px] font-bold text-slate-400">بخش ۵ از ۵</span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 max-h-36 overflow-y-auto custom-scrollbar">
+            <label *ngFor="let p of state.appState.projects" 
+              class="flex items-center gap-2.5 p-2 rounded-xl transition-all border cursor-pointer select-none"
+              [ngClass]="isWarehouseAssigned(p.id) ? 'bg-indigo-50/90 border-indigo-400 shadow-2xs' : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50'">
+              <input type="checkbox" [checked]="isWarehouseAssigned(p.id)" (change)="toggleUserProjCheckbox(p.id, $event)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+              <span class="text-xs text-slate-800 font-bold truncate" [title]="p.name">{{p.name}}</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- بخش ششم: تاریخچه و فراداده سیستمی -->
+        <div *ngIf="userForm.date_joined || userForm.last_login" class="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 flex justify-between items-center text-xs">
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400 font-bold">تاریخ ثبت در سامانه:</span>
+            <span class="font-mono font-bold text-slate-700">{{formatDate(userForm.date_joined)}}</span>
+          </div>
+          <div class="flex items-center gap-2 text-left" dir="ltr">
+            <span class="text-slate-400 font-bold">:آخرین لاگین</span>
+            <span class="font-mono font-bold text-slate-700">{{userForm.last_login ? formatDate(userForm.last_login) : '---'}}</span>
+          </div>
+        </div>
+
       </form>
     </div>
 
-    <div class="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 rounded-b-3xl">
-      <button (click)="isUserModalOpen = false" [disabled]="isSavingUser" class="px-5 py-2.5 bg-slate-50 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50">انصراف</button>
-      <button (click)="saveUser()" [disabled]="isSavingUser" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:pointer-events-none" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-          <span *ngIf="isSavingUser" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full"></span>
-          <svg *ngIf="!isSavingUser" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    <!-- Modal Sticky Footer -->
+    <div class="px-6 py-4 bg-slate-50/95 backdrop-blur-md border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 rounded-b-3xl">
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span class="text-[11px] text-slate-500 font-medium">فیلدهای الزامی:</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all" [ngClass]="isFieldValid('first_name') ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'">نام</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all" [ngClass]="isFieldValid('last_name') ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'">نام خانوادگی</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all" [ngClass]="isFieldValid('username') ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'">نام کاربری</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border transition-all" [ngClass]="isFieldValid('phone_number') ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-slate-100 text-slate-600 border-slate-200'">تلفن همراه</span>
+      </div>
+
+      <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+        <button (click)="isUserModalOpen = false" [disabled]="isSavingUser" class="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50">
+          انصراف
+        </button>
+        <button (click)="saveUser()" [disabled]="isSavingUser" class="px-6 py-2.5 rounded-xl text-xs font-black text-white shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:pointer-events-none" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+          <span *ngIf="isSavingUser" class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+          <svg *ngIf="!isSavingUser" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           <span>{{ isSavingUser ? 'در حال ثبت...' : (editingUser ? 'ذخیره و بروزرسانی پرونده' : 'ایجاد حساب کاربری') }}</span>
-      </button>
+        </button>
+      </div>
     </div>
   </div>
 </div>

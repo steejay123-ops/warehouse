@@ -16,7 +16,7 @@ import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-
 import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
 import { environment } from '../../../environments/environment';
 import { Observable, Subject, Subscription } from 'rxjs';
-import { debounceTime } from 'rxjs/operators';
+import { debounceTime, finalize } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
@@ -179,6 +179,9 @@ export class Users implements OnInit, OnDestroy {
   public isOperationsMode = computed(() => {
     return this.persona.activeApp() === 'operations' || this.router.url.includes('/operations/');
   });
+
+  isSavingUser = false;
+  userFormErrors: { [key: string]: boolean } = {};
 
   // Excel Import/Export
   isExcelModalOpen = false;
@@ -696,6 +699,8 @@ export class Users implements OnInit, OnDestroy {
 
   openUserModal(id: number | null = null) {
     this.closeMenus();
+    this.userFormErrors = {};
+    this.isSavingUser = false;
     if (id) {
       const u = this.state.appState.users.find((x: any) => x.id === id);
       this.editingUser = u;
@@ -784,9 +789,70 @@ export class Users implements OnInit, OnDestroy {
     return (remainder < 2 && checksum === remainder) || (remainder >= 2 && checksum === 11 - remainder);
   }
 
+  clearUserFormError(field: string) {
+    if (this.userFormErrors[field]) {
+      delete this.userFormErrors[field];
+    }
+  }
+
+  generateUsernameFromNames() {
+    if (this.editingUser) return;
+    const f = (this.userForm.first_name || '').trim();
+    const l = (this.userForm.last_name || '').trim();
+    if (!f && !l) return;
+    const transliterate = (text: string) => {
+      const map: { [key: string]: string } = {
+        'ا': 'a', 'آ': 'a', 'ب': 'b', 'پ': 'p', 'ت': 't', 'ث': 's', 'ج': 'j', 'چ': 'ch',
+        'ح': 'h', 'خ': 'kh', 'د': 'd', 'ذ': 'z', 'ر': 'r', 'ز': 'z', 'ژ': 'zh', 'س': 's',
+        'ش': 'sh', 'ص': 's', 'ض': 'z', 'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh', 'ف': 'f',
+        'ق': 'gh', 'ک': 'k', 'گ': 'g', 'ل': 'l', 'م': 'm', 'ن': 'n', 'و': 'v', 'ه': 'h',
+        'ی': 'y', 'ي': 'y', 'ئ': 'y', 'ة': 'h', 'ؤ': 'o', ' ': '.'
+      };
+      return text.toLowerCase().split('').map(c => map[c] !== undefined ? map[c] : c).join('').replace(/[^a-z0-9._-]/g, '');
+    };
+    const engF = transliterate(f);
+    const engL = transliterate(l);
+    let generated = '';
+    if (engF && engL) {
+      generated = `${engF.charAt(0)}.${engL}`;
+    } else if (engL) {
+      generated = engL;
+    } else {
+      generated = engF;
+    }
+    this.userForm.username = generated;
+    this.clearUserFormError('username');
+  }
+
+  generateRandomPassword() {
+    const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
+    let pwd = '';
+    for (let i = 0; i < 10; i++) {
+      pwd += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    this.userForm.password = pwd;
+  }
+
   saveUser() {
-    if (!this.userForm.first_name || !this.userForm.last_name || !this.userForm.username) {
-      return this.toast.show('error', 'وارد کردن نام، نام خانوادگی و شناسه ورود الزامی است.');
+    this.userFormErrors = {};
+
+    const fName = (this.userForm.first_name || '').trim();
+    const lName = (this.userForm.last_name || '').trim();
+    const uName = (this.userForm.username || '').trim();
+
+    if (!fName) {
+      this.userFormErrors['first_name'] = true;
+      return this.toast.show('error', 'وارد کردن «نام» الزامی است.');
+    }
+
+    if (!lName) {
+      this.userFormErrors['last_name'] = true;
+      return this.toast.show('error', 'وارد کردن «نام خانوادگی» الزامی است.');
+    }
+
+    if (!uName) {
+      this.userFormErrors['username'] = true;
+      return this.toast.show('error', 'وارد کردن «کد / نام کاربری (Username)» الزامی است.');
     }
 
     const normalizeDigits = (str: string) => {
@@ -802,6 +868,7 @@ export class Users implements OnInit, OnDestroy {
     let emergency = normalizeDigits(this.userForm.emergency_contact);
 
     if (nid && !this.validateNationalCode(nid)) {
+      this.userFormErrors['national_code'] = true;
       return this.toast.show('error', 'کد ملی وارد شده با الگوریتم استاندارد ۱۰ رقمی همخوانی ندارد.');
     }
 
@@ -813,10 +880,12 @@ export class Users implements OnInit, OnDestroy {
     }
 
     if (!this.editingUser && !phone) {
+      this.userFormErrors['phone_number'] = true;
       return this.toast.show('error', 'وارد کردن شماره تلفن همراه برای تعریف کاربر جدید الزامی است.');
     }
 
     if (phone && !/^09\d{9}$/.test(phone)) {
+      this.userFormErrors['phone_number'] = true;
       return this.toast.show('error', 'فرمت شماره همراه نامعتبر است. شماره همراه باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789).');
     }
 
@@ -827,6 +896,9 @@ export class Users implements OnInit, OnDestroy {
     delete payload._pendingAvatarDelete;
     delete payload.avatar; // Avatar is uploaded via dedicated endpoint
     if (!payload.password) delete payload.password;
+    payload.first_name = fName;
+    payload.last_name = lName;
+    payload.username = uName;
     payload.national_code = nid || null;
     payload.emergency_contact = emergency || null;
     if (!payload.supervisor) payload.supervisor = null;
@@ -836,8 +908,24 @@ export class Users implements OnInit, OnDestroy {
     if (!payload.address) payload.address = null;
     if (!payload.operational_zone) payload.operational_zone = null;
 
+    // پاک‌سازی قطعی فیلدهای سیستمی تا از خطای فرمت تاریخ جنگو جلوگیری شود
+    delete payload.date_joined;
+    delete payload.last_login;
+    delete payload.created_by;
+    delete payload.modified_by;
+    delete payload.updated_at;
+    if (!this.editingUser) {
+      delete payload.id;
+    }
+
+    this.isSavingUser = true;
     if (this.editingUser) {
-      this.accountsService.updateUser(this.editingUser.id, payload).subscribe({
+      this.accountsService.updateUser(this.editingUser.id, payload).pipe(
+        finalize(() => {
+          this.isSavingUser = false;
+          this.cdr.detectChanges();
+        })
+      ).subscribe({
         next: (res) => {
           Object.assign(this.editingUser, res);
           if (pendingBlob) {
@@ -872,7 +960,12 @@ export class Users implements OnInit, OnDestroy {
         }
       });
     } else {
-      this.accountsService.createUser(payload).subscribe({
+      this.accountsService.createUser(payload).pipe(
+        finalize(() => {
+          this.isSavingUser = false;
+          this.cdr.detectChanges();
+        })
+      ).subscribe({
         next: (res) => {
           this.state.appState.users.unshift(res);
           if (pendingBlob) {

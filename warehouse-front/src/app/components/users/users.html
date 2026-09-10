@@ -455,25 +455,39 @@
       </button>
     </div>
     
-    <div class="p-6 max-h-[70vh] overflow-y-auto">
+    <div class="p-6 max-h-[85vh] overflow-y-auto">
       <form class="mt-2 text-right" autocomplete="off" (submit)="$event.preventDefault()">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="md:col-span-2 grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام (First Name) *</label>
-              <input type="text" [(ngModel)]="userForm.first_name" name="first_name" placeholder="مثال: علی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
+                نام (First Name)
+                <span class="text-rose-500 font-black text-xs">*</span>
+              </label>
+              <input type="text" [(ngModel)]="userForm.first_name" (input)="clearUserFormError('first_name')" (blur)="generateUsernameFromNames()" name="first_name" placeholder="مثال: حبیب" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none transition-all" [ngClass]="userFormErrors['first_name'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
             </div>
             <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نام خانوادگی (Last Name) *</label>
-              <input type="text" [(ngModel)]="userForm.last_name" name="last_name" placeholder="مثال: حسینی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
+              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">
+                نام خانوادگی (Last Name)
+                <span class="text-rose-500 font-black text-xs">*</span>
+              </label>
+              <input type="text" [(ngModel)]="userForm.last_name" (input)="clearUserFormError('last_name')" (blur)="generateUsernameFromNames()" name="last_name" placeholder="مثال: عالیشوندی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none transition-all" [ngClass]="userFormErrors['last_name'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
             </div>
             <div>
               <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد ملی (National ID)</label>
-              <input type="text" [(ngModel)]="userForm.national_code" name="national_code" placeholder="۱۰ رقمی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono" dir="ltr">
+              <input type="text" [(ngModel)]="userForm.national_code" (input)="clearUserFormError('national_code')" name="national_code" placeholder="۱۰ رقمی" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono transition-all" dir="ltr" [ngClass]="userFormErrors['national_code'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
             </div>
             <div>
-              <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد/نام کاربری (Personnel ID) *</label>
-              <input type="text" [(ngModel)]="userForm.username" name="username" placeholder="شناسه یکتای ورود" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono font-bold text-indigo-700" dir="ltr" [readonly]="editingUser != null">
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="block text-[11px] font-bold text-slate-600">
+                  کد/نام کاربری (Personnel ID)
+                  <span class="text-rose-500 font-black text-xs">*</span>
+                </label>
+                <button *ngIf="!editingUser" type="button" (click)="generateUsernameFromNames()" class="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 cursor-pointer hover:underline" title="تولید نام کاربری انگلیسی از روی نام و نام خانوادگی">
+                  <span>⚡ تولید خودکار</span>
+                </button>
+              </div>
+              <input type="text" [(ngModel)]="userForm.username" (input)="clearUserFormError('username')" name="username" placeholder="شناسه ورود (مثال: h.alishavandi)" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono font-bold text-indigo-700 transition-all" dir="ltr" [readonly]="editingUser != null" [ngClass]="userFormErrors['username'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
             </div>
           </div>
 
@@ -513,7 +527,7 @@
               تلفن همراه
               <span class="text-rose-500 font-black text-xs">*</span>
             </label>
-            <input type="tel" [(ngModel)]="userForm.phone_number" name="phone_number" placeholder="09123456789" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono" dir="ltr">
+            <input type="tel" [(ngModel)]="userForm.phone_number" (input)="clearUserFormError('phone_number')" name="phone_number" placeholder="09123456789" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border focus:border-indigo-400 text-xs outline-none text-left font-mono transition-all" dir="ltr" [ngClass]="userFormErrors['phone_number'] ? 'border-rose-400 bg-rose-50/40 ring-1 ring-rose-300' : 'border-slate-200'">
           </div>
           <div>
             <label class="block text-[11px] font-bold text-slate-600 mb-1.5">تماس اضطراری (Emergency Contact)</label>
@@ -557,11 +571,20 @@
             </select>
           </div>
 
-          <!-- فیلد کلمه عبور در ساخت کاربر جدید -->
-          <div *ngIf="!editingUser" class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-col justify-center">
-            <label class="block text-[11px] font-bold text-indigo-950 mb-1">کلمه عبور اولیه (Password)</label>
-            <input type="text" [(ngModel)]="userForm.password" name="password" placeholder="پیش‌فرض: 123456" class="w-full px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-xs font-mono outline-none text-left" dir="ltr">
-            <span class="text-[9px] text-indigo-600 mt-1 font-medium">در صورت خالی ماندن، رمز پیش‌فرض 123456 ثبت می‌گردد.</span>
+          <!-- فیلد کلمه عبور در ساخت و ویرایش کاربر -->
+          <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 flex flex-col justify-center">
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-[11px] font-bold text-indigo-950">
+                {{ editingUser ? 'تغییر کلمه عبور (Password)' : 'کلمه عبور اولیه (Password)' }}
+              </label>
+              <button type="button" (click)="generateRandomPassword()" class="text-[9px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-0.5 cursor-pointer hover:underline" title="تولید رمز تصادفی و ایمن">
+                <span>🎲 رمز تصادفی</span>
+              </button>
+            </div>
+            <input type="text" [(ngModel)]="userForm.password" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full px-2.5 py-1.5 rounded-lg bg-white border border-indigo-200 text-xs font-mono outline-none text-left" dir="ltr">
+            <span class="text-[9px] text-indigo-600 mt-1 font-medium leading-normal">
+              {{ editingUser ? 'در صورت خالی ماندن، رمز عبور قبلی کاربر حفظ می‌شود.' : 'در صورت خالی ماندن، رمز پیش‌فرض 123456 ثبت می‌گردد.' }}
+            </span>
           </div>
 
           <div class="col-span-1 md:col-span-3">
@@ -657,10 +680,11 @@
     </div>
 
     <div class="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 rounded-b-3xl">
-      <button (click)="isUserModalOpen = false" class="px-5 py-2.5 bg-slate-50 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors">انصراف</button>
-      <button (click)="saveUser()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all flex items-center gap-2" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          {{editingUser ? 'ذخیره و بروزرسانی پرونده' : 'ایجاد حساب کاربری'}}
+      <button (click)="isUserModalOpen = false" [disabled]="isSavingUser" class="px-5 py-2.5 bg-slate-50 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50">انصراف</button>
+      <button (click)="saveUser()" [disabled]="isSavingUser" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:pointer-events-none" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+          <span *ngIf="isSavingUser" class="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+          <svg *ngIf="!isSavingUser" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>{{ isSavingUser ? 'در حال ثبت...' : (editingUser ? 'ذخیره و بروزرسانی پرونده' : 'ایجاد حساب کاربری') }}</span>
       </button>
     </div>
   </div>

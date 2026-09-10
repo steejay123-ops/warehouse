@@ -422,14 +422,44 @@
         <!-- Roles Tab -->
         <ng-container *ngIf="activeTab === 'roles'">
             <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 overflow-hidden fade-in">
-                <div class="flex items-center justify-between mb-6">
-                  <div class="flex gap-1.5">
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <!-- سوئیچ دوگانه نمایش نقش‌ها: درخت سازمانی vs. جدول ماتریسی -->
+                    <div class="flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200 shrink-0 gap-1 shadow-inner">
+                      <button type="button" (click)="setRoleViewMode('tree')"
+                        [ngClass]="roleViewMode === 'tree' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'"
+                        class="p-1.5 px-3 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 text-[11px] font-bold"
+                        title="نمایش درختی سلسله‌مراتب سازمانی (Tree View)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="3" width="7" height="7"></rect>
+                          <rect x="14" y="3" width="7" height="7"></rect>
+                          <rect x="14" y="14" width="7" height="7"></rect>
+                          <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        <span>درخت سازمانی</span>
+                      </button>
+                      <button type="button" (click)="setRoleViewMode('table')"
+                        [ngClass]="roleViewMode === 'table' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'"
+                        class="p-1.5 px-3 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 text-[11px] font-bold"
+                        title="نمایش جدولی ماتریسی جامع نقش‌ها (Table View)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="8" y1="6" x2="21" y2="6"></line>
+                          <line x1="8" y1="12" x2="21" y2="12"></line>
+                          <line x1="8" y1="18" x2="21" y2="18"></line>
+                          <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                          <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                          <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                        </svg>
+                        <span>جدول ماتریسی</span>
+                      </button>
+                    </div>
+
                     <!-- Excel Action Buttons for Roles -->
-                    <button (click)="exportRolesExcel()" class="px-3 py-2 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5" title="دانلود اکسل نقش‌ها">
+                    <button (click)="exportRolesExcel()" class="px-3 py-2 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95" title="دانلود اکسل نقش‌ها">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                       دانلود اکسل
                     </button>
-                    <button (click)="openRolesImportModal()" class="px-3 py-2 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-all flex items-center gap-1.5" title="آpload اکسل نقش‌ها">
+                    <button (click)="openRolesImportModal()" class="px-3 py-2 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95" title="آپلود اکسل نقش‌ها">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                       آپلود اکسل
                     </button>
@@ -439,16 +469,18 @@
                       {{ isOperationsMode() ? 'مدیریت کلان سلسله‌مراتب و دسترسی‌های نقش‌ها' : 'مدیریت سلسله‌مراتب و دسترسی‌های نقش‌ها' }}
                   </h4>
                 </div>
-                <div class="relative">
+
+                <!-- نمای درختی سلسله‌مراتب (Tree View) -->
+                <div *ngIf="roleViewMode === 'tree'" class="relative">
                     <div class="absolute right-6 top-4 bottom-8 w-0.5 bg-slate-50 z-0"></div>
 
                     <ng-template #roleNode let-role="role" let-depth="depth">
                         <div class="relative z-10 flex items-start gap-4 mb-4" [style.margin-right]="getRoleDepthMargin(depth)">
                             <div *ngIf="depth > 0" class="absolute right-[-1.25rem] top-6 w-5 h-0.5 bg-slate-200"></div>
 
-                            <div class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm flex-1 flex justify-between items-center group hover:border-indigo-400 transition-colors cursor-default">
+                            <div class="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm flex-1 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 group hover:border-indigo-400 transition-colors cursor-default">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-sm" [style.background]="role.color">
+                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold shadow-sm shrink-0" [style.background]="role.color">
                                         {{depth === 0 ? '👑' : '🛡️'}}
                                     </div>
                                     <div>
@@ -460,13 +492,39 @@
                                             <span class="text-slate-400 font-mono">ID: {{role.id}}</span>
                                             <span class="text-slate-300">|</span>
                                             <span class="text-indigo-600 font-bold">{{getUsersInRoleCount(role.id)}} پرسنل در این نقش</span>
+                                            <span class="text-slate-300">|</span>
+                                            <span class="text-slate-500 font-medium">{{role.permissions?.length || 0}} دسترسی فعال</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div class="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                    <button (click)="openRoleModal(role.id)" class="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-colors" title="ویرایش نقش">✏️</button>
-                                    <button (click)="deleteRole(role.id)" class="p-2 bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors" title="حذف نقش">🗑️</button>
+                                <div class="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                                    <!-- نمایش آواتارهای روی‌هم‌افتاده (Stacked Avatars) -->
+                                    <div class="flex items-center -space-x-2 space-x-reverse overflow-hidden py-1">
+                                      <div *ngFor="let u of getUsersInRole(role.id).slice(0, 3)"
+                                        class="inline-block h-7 w-7 rounded-full ring-2 ring-white overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 text-[10px] text-white font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                                        [title]="(u.first_name + ' ' + u.last_name) + ' (@' + u.username + ')'">
+                                        <img *ngIf="u.avatar" [src]="u.avatar" class="h-full w-full object-cover" alt="avatar" />
+                                        <span *ngIf="!u.avatar">{{getUserAvatarLetter(u)}}</span>
+                                      </div>
+                                      <div *ngIf="getUsersInRole(role.id).length > 3"
+                                        class="inline-block h-7 w-7 rounded-full ring-2 ring-white bg-slate-200 text-slate-700 text-[9px] font-black flex items-center justify-center shrink-0 shadow-2xs"
+                                        title="سایر پرسنل دارای این نقش">
+                                        +{{ getUsersInRole(role.id).length - 3 }}
+                                      </div>
+                                    </div>
+
+                                    <!-- عملیات و اکشن‌ها (تکثیر، ویرایش، حذف) -->
+                                    <div class="flex items-center gap-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                        <button type="button" (click)="cloneRole(role)" class="p-2 bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg transition-colors cursor-pointer" title="تکثیر نقش و دسترسی‌ها (Clone Role)">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                          </svg>
+                                        </button>
+                                        <button (click)="openRoleModal(role.id)" class="p-2 bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer" title="ویرایش نقش">✏️</button>
+                                        <button (click)="deleteRole(role.id)" class="p-2 bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 rounded-lg transition-colors cursor-pointer" title="حذف نقش">🗑️</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -484,7 +542,106 @@
                     <ng-container *ngFor="let root of rootRoles">
                         <ng-container *ngTemplateOutlet="roleNode; context: { role: root, depth: 0 }"></ng-container>
                     </ng-container>
+                </div>
 
+                <!-- نمای جدولی ماتریسی جامع نقش‌ها (Table View) -->
+                <div *ngIf="roleViewMode === 'table'" class="overflow-x-auto rounded-2xl border border-slate-200">
+                  <table class="w-full text-right border-collapse text-xs">
+                    <thead>
+                      <tr class="bg-slate-50/90 text-slate-600 font-black border-b border-slate-200 text-[11px]">
+                        <th class="py-3 px-4">عنوان و شناسه نقش</th>
+                        <th class="py-3 px-4">کد سیستمی</th>
+                        <th class="py-3 px-4">نقش والد</th>
+                        <th class="py-3 px-4">پرسنل منتسب</th>
+                        <th class="py-3 px-4 text-center">تعداد دسترسی‌ها</th>
+                        <th class="py-3 px-4 text-center">عملیات</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 bg-white">
+                      <tr *ngFor="let role of allRoles" class="hover:bg-slate-50/80 transition-colors">
+                        <!-- عنوان نقش -->
+                        <td class="py-3 px-4">
+                          <div class="flex items-center gap-2.5">
+                            <span class="w-3.5 h-3.5 rounded-full shrink-0 shadow-2xs" [style.background]="role.color || '#94a3b8'"></span>
+                            <div>
+                              <span class="font-black text-slate-800 block text-xs">{{ role.title || role.name }}</span>
+                              <span class="text-[10px] text-slate-400 font-mono">شناسه: {{ role.id }}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <!-- کد سیستمی -->
+                        <td class="py-3 px-4 font-mono text-slate-600 text-[11px]" dir="ltr">
+                          {{ role.name }}
+                        </td>
+
+                        <!-- نقش والد -->
+                        <td class="py-3 px-4 text-slate-600 text-[11px]">
+                          <span class="px-2 py-0.5 rounded-lg font-bold" [ngClass]="role.parent ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-100 text-slate-500'">
+                            {{ getParentRoleTitle(role.parent) }}
+                          </span>
+                        </td>
+
+                        <!-- پرسنل منتسب (Stacked Avatars) -->
+                        <td class="py-3 px-4">
+                          <div class="flex items-center gap-2">
+                            <div class="flex items-center -space-x-2 space-x-reverse overflow-hidden py-0.5">
+                              <div *ngFor="let u of getUsersInRole(role.id).slice(0, 3)"
+                                class="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 text-[9px] text-white font-bold flex items-center justify-center shrink-0 shadow-2xs"
+                                [title]="(u.first_name + ' ' + u.last_name) + ' (@' + u.username + ')'">
+                                <img *ngIf="u.avatar" [src]="u.avatar" class="h-full w-full object-cover" alt="avatar" />
+                                <span *ngIf="!u.avatar">{{getUserAvatarLetter(u)}}</span>
+                              </div>
+                              <div *ngIf="getUsersInRole(role.id).length > 3"
+                                class="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-slate-200 text-slate-700 text-[8px] font-black flex items-center justify-center shrink-0 shadow-2xs"
+                                title="سایر پرسنل">
+                                +{{ getUsersInRole(role.id).length - 3 }}
+                              </div>
+                            </div>
+                            <span class="text-[10px] font-bold text-slate-600">
+                              {{ getUsersInRoleCount(role.id) }} نفر
+                            </span>
+                          </div>
+                        </td>
+
+                        <!-- تعداد دسترسی‌ها -->
+                        <td class="py-3 px-4 text-center">
+                          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            {{ role.permissions?.length || 0 }}
+                          </span>
+                        </td>
+
+                        <!-- عملیات -->
+                        <td class="py-3 px-4 text-center">
+                          <div class="flex items-center justify-center gap-1">
+                            <button type="button" (click)="cloneRole(role)" class="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer" title="تکثیر نقش و دسترسی‌ها (Clone)">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                              </svg>
+                            </button>
+                            <button type="button" (click)="openRoleModal(role.id)" class="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer" title="ویرایش نقش">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                            <button type="button" (click)="deleteRole(role.id)" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer" title="حذف نقش">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr *ngIf="allRoles.length === 0">
+                        <td colspan="6" class="text-center py-8 text-slate-400 text-xs font-bold">
+                          هیچ نقشی تعریف نشده است.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
             </div>
         </ng-container>
@@ -501,155 +658,251 @@
 <!-- Modals -->
 
 <!-- Role Modal -->
-<div *ngIf="isRoleModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-4" dir="rtl">
+<div *ngIf="isRoleModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4" dir="rtl">
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="isRoleModalOpen = false"></div>
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden relative modal-enter">
-    <div class="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden relative modal-enter border border-slate-100">
+    
+    <!-- Modal Header -->
+    <div class="px-6 py-4.5 border-b border-slate-200 bg-slate-50/90 backdrop-blur-md flex justify-between items-center shrink-0">
+      <div class="flex items-center gap-3.5">
+        <div class="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shadow-sm shrink-0">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <div>
-          <h3 class="text-sm font-black text-slate-800">{{editingRole ? 'ویرایش نقش: ' + (roleForm.title || roleForm.name) : 'تعریف نقش سازمانی جدید'}}</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-black text-slate-800 tracking-tight">{{editingRole ? 'ویرایش نقش: ' + (roleForm.title || roleForm.name) : 'تعریف نقش سازمانی جدید'}}</h3>
+            <span *ngIf="!editingRole" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">نقش جدید</span>
+            <span *ngIf="editingRole" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-200">ویرایش ماتریس</span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">پیکربندی هویت نقش، چارت سازمانی، قالب‌های آماده و ماتریس تفکیک دسترسی‌ها (RBAC)</p>
         </div>
       </div>
-      <button (click)="isRoleModalOpen = false" class="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-200">
+      <button (click)="isRoleModalOpen = false" class="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-200/60 cursor-pointer" title="بستن پنجره">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
     
-    <div class="p-6 max-h-[70vh] overflow-y-auto">
-      <form class="mt-4 text-right" (submit)="$event.preventDefault()">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">عنوان نقش (فارسی)</label>
-            <input type="text" [(ngModel)]="roleForm.title" name="title" placeholder="مثال: سرپرست انبار" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
-          </div>
-          <div>
-            <label class="block text-[11px] font-bold text-slate-600 mb-1.5">کد سیستمی (انگلیسی - یکتا)</label>
-            <input type="text" [(ngModel)]="roleForm.name" name="name" placeholder="مثال: supervisor" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none text-left font-mono" dir="ltr">
-          </div>
-          <div class="md:col-span-2">
-             <label class="block text-[11px] font-bold text-slate-600 mb-1.5">نقش والد (سازمان‌دهی درختی)</label>
-             <select [(ngModel)]="roleForm.parent" name="parent" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 text-xs outline-none">
-                 <option [ngValue]="null">--- بدون نقش والد (سطح ریشه) ---</option>
-                 <option *ngFor="let r of getSelectableParents()" [ngValue]="r.id">{{r.title || r.name}} (ID: {{r.id}})</option>
-             </select>
-          </div>
-          <div class="md:col-span-2 flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
-            <div>
-              <p class="text-[11px] font-bold text-slate-800">رنگ سازمانی نقش (Color Code)</p>
-              <p class="text-[9px] text-slate-500 mt-0.5">برای نمایش در چارت سازمانی، کارت‌های پرسنلی و بج‌های نقش</p>
-            </div>
+    <!-- Modal Body (تک‌اسکرول سراسری بدون اسکرول دوگانه) -->
+    <div class="p-6 overflow-y-auto flex-1 custom-scrollbar">
+      <form class="space-y-5 text-right" (submit)="$event.preventDefault()">
+        <!-- مشخصات پایه نقش -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
             <div class="flex items-center gap-2">
-              <span class="text-[9px] font-mono text-slate-400">{{roleForm.color}}</span>
-              <input type="color" [(ngModel)]="roleForm.color" name="color" class="w-10 h-10 rounded cursor-pointer border-0 bg-transparent p-0">
+              <span class="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">🏷️</span>
+              <div>
+                <h4 class="text-xs font-black text-slate-800">مشخصات اصلی و هویت نقش</h4>
+                <p class="text-[10px] text-slate-400">نام نمایشی، کد یکتای سیستمی، سلسله‌مراتب درختی و پالت رنگ</p>
+              </div>
+            </div>
+            <span class="text-[10px] font-bold text-slate-400">گام ۱ از ۲</span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-[11px] font-black text-slate-700 mb-1.5">
+                عنوان نقش (فارسی)
+                <span class="text-rose-500 text-xs font-black">*</span>
+              </label>
+              <input type="text" [(ngModel)]="roleForm.title" name="title" placeholder="مثال: سرپرست انبار" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white text-xs outline-none transition-all">
+            </div>
+            <div>
+              <label class="block text-[11px] font-black text-slate-700 mb-1.5">
+                کد سیستمی (انگلیسی - یکتا)
+                <span class="text-rose-500 text-xs font-black">*</span>
+              </label>
+              <input type="text" [(ngModel)]="roleForm.name" name="name" placeholder="مثال: supervisor" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white text-xs outline-none text-left font-mono transition-all" dir="ltr">
+            </div>
+            <div class="md:col-span-2">
+               <label class="block text-[11px] font-black text-slate-700 mb-1.5">نقش والد (سازمان‌دهی درختی سلسله‌مراتب)</label>
+               <select [(ngModel)]="roleForm.parent" name="parent" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white text-xs outline-none cursor-pointer transition-all">
+                   <option [ngValue]="null">--- بدون نقش والد (سطح ریشه سازمان) ---</option>
+                   <option *ngFor="let r of getSelectableParents()" [ngValue]="r.id">{{r.title || r.name}} (شناسه: {{r.id}})</option>
+               </select>
+            </div>
+
+            <!-- پالت رنگ سازمانی آماده + انتخابگر سفارشی -->
+            <div class="md:col-span-2 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-[11px] font-black text-slate-800">رنگ سازمانی نقش (Color Theme)</p>
+                  <p class="text-[10px] text-slate-500 mt-0.5">برای نمایش در درخت سازمانی، بج‌های پرسنلی و آواتارها</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">{{roleForm.color}}</span>
+                  <label class="relative cursor-pointer" title="انتخاب رنگ سفارشی">
+                    <input type="color" [(ngModel)]="roleForm.color" name="color" class="w-8 h-8 rounded-xl cursor-pointer border border-slate-300 p-0.5 bg-white">
+                  </label>
+                </div>
+              </div>
+              <!-- پالت دایره‌های رنگی آماده با ۱ کلیک -->
+              <div class="flex items-center gap-2 pt-2 border-t border-slate-200/80 overflow-x-auto pb-1">
+                <span class="text-[10px] text-slate-500 font-bold shrink-0">رنگ‌های پیشنهادی سازمانی:</span>
+                <button *ngFor="let c of ROLE_COLORS" type="button" (click)="setRoleColor(c)"
+                  class="w-6 h-6 rounded-full transition-all cursor-pointer shrink-0 relative flex items-center justify-center hover:scale-110 active:scale-95 shadow-2xs"
+                  [style.background]="c"
+                  [class.ring-2]="roleForm.color?.toLowerCase() === c.toLowerCase()"
+                  [class.ring-offset-2]="roleForm.color?.toLowerCase() === c.toLowerCase()"
+                  [class.ring-indigo-600]="roleForm.color?.toLowerCase() === c.toLowerCase()"
+                  [title]="c">
+                  <span *ngIf="roleForm.color?.toLowerCase() === c.toLowerCase()" class="text-white text-[10px] font-black">✓</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="border-t border-slate-200 pt-4">
-            <!-- قالب‌های آماده تخصیص یکپارچه نقش (Role Presets) -->
-            <div class="mb-4 p-3.5 bg-gradient-to-br from-indigo-50/90 to-purple-50/50 rounded-2xl border border-indigo-100/90 shadow-2xs">
-              <div class="flex items-center justify-between mb-2.5">
-                <span class="text-xs font-black text-indigo-950 flex items-center gap-1.5">
-                  <span class="text-indigo-600">⚡</span>
-                  <span>قالب‌های آماده تخصیص سریع نقش:</span>
-                  <span class="text-[10px] font-normal text-slate-500">(انتخاب یکپارچه تمام مجوزهای مرتبط با ۱ کلیک)</span>
-                </span>
+        <!-- ماتریس دسترسی‌ها و قالب‌های آماده -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">🛡️</span>
+              <div>
+                <h4 class="text-xs font-black text-slate-800">ماتریس دسترسی‌های سیستم (RBAC)</h4>
+                <p class="text-[10px] text-slate-400">انتخاب قالب‌های آماده یا تخصیص گزینشی مجوزهای عملیاتی و مالی</p>
               </div>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <button 
-                  *ngFor="let preset of ROLE_PRESETS" 
-                  type="button" 
-                  (click)="applyRolePreset(preset)" 
-                  class="p-2.5 rounded-xl border bg-white hover:bg-indigo-50/90 transition-all text-right shadow-2xs active:scale-95 cursor-pointer flex items-center gap-2 group hover:border-indigo-300 hover:shadow-xs"
-                  [style.borderColor]="preset.color + '40'"
-                  [title]="preset.description"
-                >
-                  <span class="text-lg shrink-0 group-hover:scale-110 transition-transform">{{preset.icon}}</span>
-                  <div class="min-w-0 flex-1">
-                    <p class="text-[11px] font-black text-slate-800 truncate group-hover:text-indigo-600">{{preset.title}}</p>
-                    <p class="text-[9px] text-slate-400 font-mono truncate">{{preset.id}}</p>
+            </div>
+            <span class="text-[10px] font-bold text-slate-400">گام ۲ از ۲</span>
+          </div>
+
+          <!-- قالب‌های آماده تخصیص یکپارچه نقش (Role Presets) -->
+          <div class="p-3.5 bg-gradient-to-br from-indigo-50/90 via-purple-50/40 to-slate-50 rounded-2xl border border-indigo-100/90 shadow-2xs">
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                <span class="text-indigo-600">⚡</span>
+                <span>قالب‌های آماده تخصیص سریع نقش:</span>
+                <span class="text-[10px] font-normal text-slate-500">(اعمال یکپارچه تمام مجوزهای متداول با ۱ کلیک)</span>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button 
+                *ngFor="let preset of ROLE_PRESETS" 
+                type="button" 
+                (click)="applyRolePreset(preset)" 
+                class="p-2.5 rounded-xl border transition-all text-right shadow-2xs active:scale-95 cursor-pointer flex items-center gap-2 group relative overflow-hidden"
+                [ngClass]="activeRolePresetId === preset.id ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-400/80 shadow-xs' : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-indigo-300'"
+                [title]="preset.description"
+              >
+                <span class="text-lg shrink-0 group-hover:scale-110 transition-transform">{{preset.icon}}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center justify-between gap-1">
+                    <p class="text-[11px] font-black truncate" [ngClass]="activeRolePresetId === preset.id ? 'text-indigo-700' : 'text-slate-800 group-hover:text-indigo-600'">{{preset.title}}</p>
+                    <span *ngIf="activeRolePresetId === preset.id" class="text-[8px] bg-indigo-600 text-white font-bold px-1.5 py-0.2 rounded-full shrink-0">فعال ✓</span>
                   </div>
-                </button>
-              </div>
-            </div>
-
-            <div class="flex items-center justify-between mb-3">
-              <label class="block text-xs font-black text-slate-800">ماتریس دسترسی‌های سیستم (RBAC)</label>
-              
-              <button type="button" (click)="toggleAllPermissions()" class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-bold transition-colors active:scale-95 flex items-center gap-1.5">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                انتخاب همه / لغو همه (کل سیستم)
+                  <p class="text-[9px] text-slate-400 font-mono truncate">{{preset.id}}</p>
+                </div>
               </button>
             </div>
+          </div>
 
-            <!-- Permission Search -->
-            <div class="relative mb-3">
-              <input type="text" [(ngModel)]="permSearchQuery" name="permSearchQuery" placeholder="جستجوی دسترسی یا کد سیستمی..." class="w-full pr-9 pl-4 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:border-indigo-400 outline-none transition-all text-slate-800 shadow-sm">
-              <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              </div>
+          <!-- هدر دسترسی‌ها و دکمه انتخاب همه -->
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-black text-slate-800">
+              مجوزهای تفکیکی نقش
+              <span class="text-indigo-600 font-mono font-bold mr-1">({{ roleForm.permissions.length }} مجوز فعال)</span>
+            </span>
+            
+            <button type="button" (click)="toggleAllPermissions()" class="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-bold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer shadow-2xs">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              انتخاب همه / لغو همه
+            </button>
+          </div>
+
+          <!-- فیلد جستجوی دسترسی -->
+          <div class="relative">
+            <input type="text" [(ngModel)]="permSearchQuery" name="permSearchQuery" placeholder="جستجوی عنوان دسترسی یا کد فنی سیستمی..." class="w-full pr-9 pl-4 py-2.5 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white outline-none transition-all text-slate-800 shadow-2xs">
+            <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </div>
+          </div>
 
-            <div class="flex items-center gap-2 mb-3 bg-slate-50 p-1 rounded-xl overflow-x-auto">
-              <button *ngFor="let group of systemPermissionGroups" type="button" (click)="switchPermTab(group.key)" class="flex-1 py-2 px-2 text-[10px] font-bold rounded-lg transition-all whitespace-nowrap flex items-center justify-center gap-1" [ngClass]="activePermTab === group.key ? (group.is_sensitive_group ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-indigo-600 shadow-sm') : (group.is_sensitive_group ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200/50')">
-                <span>{{group.title}}</span>
-                <span *ngIf="group.is_sensitive_group" class="text-[9px] px-1.5 py-0.2 rounded-full" [ngClass]="activePermTab === group.key ? 'bg-rose-700 text-white' : 'bg-rose-100 text-rose-700'">مدیر ارشد</span>
-              </button>
-            </div>
+          <!-- تب‌های دسته‌بندی مجوزها با شمارنده پویا -->
+          <div class="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl overflow-x-auto border border-slate-200">
+            <button *ngFor="let group of systemPermissionGroups" type="button" (click)="switchPermTab(group.key)"
+              class="flex-1 py-2 px-2.5 text-[11px] font-bold rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
+              [ngClass]="activePermTab === group.key ? (group.is_sensitive_group ? 'bg-rose-600 text-white shadow-sm' : 'bg-white text-indigo-700 shadow-xs') : (group.is_sensitive_group ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60')">
+              <span>{{group.title}}</span>
+              <!-- شمارنده پویا بر روی تب دسته‌بندی -->
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold transition-all"
+                [ngClass]="activePermTab === group.key ? (group.is_sensitive_group ? 'bg-rose-700/80 text-white' : 'bg-indigo-50 text-indigo-700 border border-indigo-200') : (getGroupPermissionCount(group.key).selected > 0 ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-500')">
+                {{ getGroupPermissionCount(group.key).selected }} / {{ getGroupPermissionCount(group.key).total }}
+              </span>
+            </button>
+          </div>
 
-            <div class="max-h-60 overflow-y-auto bg-slate-50 p-2 rounded-xl border border-slate-200">
-               <ng-container *ngFor="let group of filteredPermissionGroups">
-                 <div *ngIf="activePermTab === group.key" class="bg-white p-3 rounded-xl border border-slate-200 fade-in" [ngClass]="group.is_sensitive_group ? 'border-rose-200 bg-rose-50/20' : ''">
-                    <div class="flex items-center justify-between mb-2 border-b border-slate-200 pb-1.5">
-                        <h5 class="text-[11px] font-black flex items-center gap-1.5" [ngClass]="group.is_sensitive_group ? 'text-rose-700' : 'text-indigo-700'">
-                          <span>{{group.title}} ({{group.items.length}} مورد)</span>
-                          <span *ngIf="group.is_sensitive_group" class="text-[9px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">بسیار حساس و پرریسک</span>
-                        </h5>
-                        <button *ngIf="!group.is_sensitive_group" type="button" (click)="toggleGroupPermissions(group.key)" class="text-[9px] bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 px-2 py-1 rounded transition-colors font-bold">انتخاب/لغو همه (این بخش)</button>
-                        <span *ngIf="group.is_sensitive_group && isSuperuser()" class="text-[9px] text-amber-700 font-bold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                          صرفاً تخصیص دستی و انفرادی (با تاییدیه امنیتی)
-                        </span>
-                        <span *ngIf="group.is_sensitive_group && !isSuperuser()" class="text-[9px] text-rose-700 font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 flex items-center gap-1">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                          فقط قابل تخصیص توسط مدیر ارشد (Superuser)
-                        </span>
-                    </div>
+          <!-- فهرست دسترسی‌ها بدون اسکرول دوگانه (طراحی تک‌اسکرول شیک و پیوسته) -->
+          <div class="space-y-4 pt-1">
+             <ng-container *ngFor="let group of filteredPermissionGroups">
+               <div *ngIf="activePermTab === group.key" class="bg-slate-50/70 p-4 rounded-2xl border border-slate-200/90 fade-in space-y-3" [ngClass]="group.is_sensitive_group ? 'border-rose-200 bg-rose-50/20' : ''">
+                  <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <h5 class="text-xs font-black flex items-center gap-2" [ngClass]="group.is_sensitive_group ? 'text-rose-700' : 'text-indigo-700'">
+                        <span>{{group.title}} ({{group.items.length}} مورد)</span>
+                        <span *ngIf="group.is_sensitive_group" class="text-[9px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">بسیار حساس و پرریسک</span>
+                      </h5>
+                      <button *ngIf="!group.is_sensitive_group" type="button" (click)="toggleGroupPermissions(group.key)" class="text-[10px] bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 px-2.5 py-1 rounded-lg border border-slate-200 transition-all font-bold cursor-pointer shadow-2xs">
+                        انتخاب / لغو همه این بخش
+                      </button>
+                      <span *ngIf="group.is_sensitive_group && isSuperuser()" class="text-[10px] text-amber-700 font-bold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        تخصیص انفرادی با تاییدیه امنیتی
+                      </span>
+                      <span *ngIf="group.is_sensitive_group && !isSuperuser()" class="text-[10px] text-rose-700 font-bold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 flex items-center gap-1">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        منحصراً مدیر ارشد (Superuser)
+                      </span>
+                  </div>
 
-                    <!-- Non-superuser info banner -->
-                    <div *ngIf="group.is_sensitive_group && !isSuperuser()" class="mb-2 p-2 bg-amber-50 border border-amber-200 rounded-xl text-[10px] text-amber-800 flex items-center gap-2">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      <span>این دسترسی‌ها به دلیل حساسیت بالا قفل هستند و صرفاً مدیر ارشد سیستم می‌تواند آنها را به نقش‌ها تخصیص دهد.</span>
-                    </div>
+                  <!-- اعلان هشداری دسترسی‌های حساس برای کاربران عادی -->
+                  <div *ngIf="group.is_sensitive_group && !isSuperuser()" class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span>این دسترسی‌ها به دلیل حساسیت بالا قفل هستند و صرفاً مدیر ارشد سیستم می‌تواند آنها را به نقش‌ها تخصیص دهد.</span>
+                  </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <label *ngFor="let perm of group.items" class="flex items-center gap-2 p-2 rounded-xl transition-all border" [ngClass]="[
-                            perm.is_sensitive ? (roleForm.permissions.includes(perm.id) ? 'bg-rose-50 border-rose-300 shadow-sm' : 'bg-white border-rose-100') : 'border-transparent hover:bg-slate-50',
-                            (perm.is_sensitive && !isSuperuser()) ? 'opacity-60 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-rose-50/50'
-                          ]">
-                            <input type="checkbox" [checked]="roleForm.permissions.includes(perm.id)" [disabled]="perm.is_sensitive && !isSuperuser()" (change)="toggleRolePermission(perm, $event)" class="rounded focus:ring-0" [ngClass]="perm.is_sensitive ? 'text-rose-600' : 'text-indigo-600'">
-                            <span class="text-[10px] font-bold flex items-center gap-1 flex-wrap" [ngClass]="perm.is_sensitive ? 'text-rose-900' : 'text-slate-800'">
-                                <span *ngIf="perm.is_sensitive" class="text-rose-600">🛡️</span>
-                                {{perm.name}}
-                                <span class="text-[8px] font-mono" [ngClass]="perm.is_sensitive ? 'text-rose-500' : 'text-slate-400'">({{perm.codename}})</span>
-                            </span>
-                        </label>
-                    </div>
-                 </div>
-               </ng-container>
-            </div>
+                  <!-- چک‌باکس‌های کارت‌محور و تعاملی (Toggle Chips) -->
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <label *ngFor="let perm of group.items"
+                        class="relative flex items-center justify-between p-3 rounded-xl border transition-all select-none group"
+                        [ngClass]="[
+                          roleForm.permissions.includes(perm.id)
+                            ? (perm.is_sensitive ? 'bg-rose-50/90 border-rose-400 ring-1 ring-rose-300 shadow-2xs' : 'bg-indigo-50/70 border-indigo-400 ring-1 ring-indigo-300 shadow-2xs')
+                            : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80',
+                          (perm.is_sensitive && !isSuperuser()) ? 'opacity-50 cursor-not-allowed bg-slate-100' : 'cursor-pointer active:scale-[0.99]'
+                        ]">
+                        <div class="flex items-center gap-2.5 min-w-0 flex-1 pl-2">
+                          <div class="w-5 h-5 rounded-lg flex items-center justify-center text-xs transition-all shrink-0"
+                            [ngClass]="roleForm.permissions.includes(perm.id) ? (perm.is_sensitive ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white') : 'border border-slate-300 bg-white text-transparent group-hover:border-indigo-400'">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                              <span *ngIf="perm.is_sensitive" class="text-xs">🛡️</span>
+                              <span class="text-xs font-black truncate" [ngClass]="perm.is_sensitive ? 'text-rose-900' : (roleForm.permissions.includes(perm.id) ? 'text-indigo-950' : 'text-slate-800')">{{perm.name}}</span>
+                            </div>
+                            <span class="text-[9px] font-mono block truncate mt-0.5" [ngClass]="perm.is_sensitive ? 'text-rose-600' : 'text-slate-400'">{{perm.codename}}</span>
+                          </div>
+                        </div>
+                        <input type="checkbox" [checked]="roleForm.permissions.includes(perm.id)" [disabled]="perm.is_sensitive && !isSuperuser()" (change)="toggleRolePermission(perm, $event)" class="sr-only">
+                      </label>
+                  </div>
+               </div>
+             </ng-container>
+          </div>
         </div>
       </form>
     </div>
 
-    <div class="p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 rounded-b-3xl">
-      <button (click)="isRoleModalOpen = false" class="px-5 py-2.5 bg-slate-50 hover:bg-slate-200 text-slate-800 text-xs font-semibold rounded-xl transition-colors">انصراف</button>
-      <button (click)="saveRole()" class="px-5 py-2.5 rounded-xl text-xs font-bold text-white shadow-md active:scale-95 transition-all" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
-          {{editingRole ? 'ذخیره تغییرات ماتریس' : 'ایجاد نقش با دسترسی‌ها'}}
-      </button>
+    <!-- Modal Footer -->
+    <div class="px-6 py-4 bg-slate-50/90 backdrop-blur-md border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+      <div class="text-[11px] text-slate-500 font-bold hidden sm:block">
+        مجموع مجوزهای انتخابی: <span class="font-mono text-indigo-600 font-black">{{ roleForm.permissions.length }}</span> مورد
+      </div>
+      <div class="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+        <button (click)="isRoleModalOpen = false" class="px-5 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95">انصراف</button>
+        <button (click)="saveRole()" class="px-6 py-2.5 rounded-xl text-xs font-black text-white shadow-md shadow-indigo-200 active:scale-95 transition-all flex items-center gap-2 cursor-pointer hover:brightness-110" style="background:linear-gradient(135deg,#4f46e5,#7c3aed)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>{{editingRole ? 'ذخیره و بروزرسانی ماتریس نقش' : 'ایجاد نقش با دسترسی‌ها'}}</span>
+        </button>
+      </div>
     </div>
   </div>
 </div>

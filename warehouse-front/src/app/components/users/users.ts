@@ -39,11 +39,37 @@ export class Users implements OnInit, OnDestroy {
   visibleCount = 24;
   userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
   userViewMode: 'grid' | 'table' = 'grid';
+  roleViewMode: 'tree' | 'table' = 'tree';
+  activeRolePresetId: string | null = null;
+
+  readonly ROLE_COLORS = [
+    '#4f46e5', // نیلی ایندیگو
+    '#7c3aed', // بنفش سلطنتی
+    '#059669', // سبز زمردی
+    '#0284c7', // آبی آسمانی
+    '#d97706', // کهربایی گرم
+    '#dc2626', // یاقوتی / سرخ
+    '#e11d48', // رز متالیک
+    '#475569', // سربی تیره
+  ];
+
+  setRoleColor(color: string) {
+    this.roleForm.color = color;
+    this.cdr.detectChanges();
+  }
 
   setViewMode(mode: 'grid' | 'table') {
     this.userViewMode = mode;
     try {
       localStorage.setItem('users_view_mode', mode);
+    } catch (e) {}
+    this.cdr.detectChanges();
+  }
+
+  setRoleViewMode(mode: 'tree' | 'table') {
+    this.roleViewMode = mode;
+    try {
+      localStorage.setItem('roles_view_mode', mode);
     } catch (e) {}
     this.cdr.detectChanges();
   }
@@ -217,6 +243,10 @@ export class Users implements OnInit, OnDestroy {
       const savedMode = localStorage.getItem('users_view_mode');
       if (savedMode === 'grid' || savedMode === 'table') {
         this.userViewMode = savedMode;
+      }
+      const savedRoleMode = localStorage.getItem('roles_view_mode');
+      if (savedRoleMode === 'tree' || savedRoleMode === 'table') {
+        this.roleViewMode = savedRoleMode;
       }
     } catch (e) {}
 
@@ -542,6 +572,21 @@ export class Users implements OnInit, OnDestroy {
 
   getUsersInRoleCount(roleId: number): number {
     return this.roleUsersCountMap.get(roleId) || 0;
+  }
+
+  getUsersInRole(roleId: number): any[] {
+    const users = this.state.appState?.users || [];
+    return users.filter((u: any) => u.groups && u.groups.includes(roleId));
+  }
+
+  get allRoles(): any[] {
+    return Array.isArray(this.state.appState?.roles) ? this.state.appState.roles : [];
+  }
+
+  getParentRoleTitle(parentId: number | null): string {
+    if (!parentId) return 'سطح ریشه (بدون والد)';
+    const p = this.allRoles.find((r: any) => r.id === parentId);
+    return p ? (p.title || p.name) : `شناسه ${parentId}`;
   }
 
   getPrimaryRole(u: any) {
@@ -1061,6 +1106,7 @@ export class Users implements OnInit, OnDestroy {
   openRoleModal(id: number | null = null) {
     this.closeMenus();
     this.permSearchQuery = '';
+    this.activeRolePresetId = null;
     if (id) {
       const r = this.state.appState.roles.find((x: any) => x.id === id);
       this.editingRole = r;
@@ -1081,7 +1127,27 @@ export class Users implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  cloneRole(role: any) {
+    this.closeMenus();
+    this.editingRole = null;
+    this.activeRolePresetId = null;
+    this.permSearchQuery = '';
+    this.roleForm = {
+      id: null,
+      name: `${role.name}_copy`,
+      title: `${role.title || role.name} (کپی)`,
+      parent: role.parent !== null && role.parent !== undefined ? role.parent : null,
+      color: role.color || '#94a3b8',
+      permissions: role.permissions ? [...role.permissions] : []
+    };
+    this.activePermTab = 'PERSONNEL_FINANCE';
+    this.isRoleModalOpen = true;
+    this.toast.show('info', `نقش «${role.title || role.name}» با دسترسی‌های مرتبط آماده تکثیر است.`);
+    this.cdr.detectChanges();
+  }
+
   applyRolePreset(preset: any) {
+    this.activeRolePresetId = preset.id;
     if (preset.permissionCodenames === 'ALL') {
       this.roleForm.permissions = this.systemPermissions
         .filter(p => !p.is_sensitive || this.isSuperuser())
@@ -1106,6 +1172,14 @@ export class Users implements OnInit, OnDestroy {
       `قالب «${preset.title}» اعمال شد (${this.roleForm.permissions.length} مجوز انتخاب گردید).`
     );
     this.cdr.detectChanges();
+  }
+
+  getGroupPermissionCount(groupKey: string): { selected: number, total: number } {
+    const group = this.systemPermissionGroups.find(g => g.key === groupKey);
+    if (!group || !group.items) return { selected: 0, total: 0 };
+    const selectedIds = new Set(this.roleForm.permissions || []);
+    const selectedCount = group.items.filter(p => selectedIds.has(p.id)).length;
+    return { selected: selectedCount, total: group.items.length };
   }
 
   get filteredPermissionGroups() {

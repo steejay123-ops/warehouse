@@ -149,135 +149,99 @@
             <div *ngIf="!isLoading && filteredUsers.length === 0" class="text-center py-10 text-slate-400 text-xs font-bold">کاربری با این مشخصات یافت نشد.</div>
             <div *ngIf="!isLoading && filteredUsers.length > 0 && userViewMode === 'grid'" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 <div *ngFor="let u of displayedUsers; trackBy: trackById"
-                     class="bg-white rounded-2xl border shadow-xs p-4 relative group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200 flex flex-col justify-between"
+                     class="bg-white rounded-2xl border shadow-2xs p-3.5 relative group transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200 flex flex-col justify-between"
                      [ngClass]="!u.is_active ? 'border-rose-200 bg-rose-50/20' : 'border-slate-200'"
                      [style.zIndex]="openMenuId === 'usr-' + u.id ? 50 : 1">
-                    <div class="space-y-3">
-                        <!-- هدر کارت: آواتار، نام و نام خانوادگی، ادمین کل و منوی عملیات -->
-                        <div class="flex items-start justify-between">
-                            <div class="flex items-center gap-3" [ngClass]="!u.is_active ? 'opacity-60 grayscale-[40%]' : ''">
-                                <div class="relative shrink-0">
-                                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg text-white shadow-xs shrink-0 overflow-hidden" [style.background]="getPrimaryRole(u).color">
-                                        <img *ngIf="u.avatar" [src]="u.avatar" loading="lazy" class="w-full h-full object-cover" alt="{{u.first_name}}" />
-                                        <span *ngIf="!u.avatar" [style.color]="getContrastTextColor(getPrimaryRole(u).color)">{{getUserAvatarLetter(u)}}</span>
-                                    </div>
-                                    <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white"
-                                          [ngClass]="u.is_active ? 'bg-emerald-500 ring-2 ring-emerald-100' : 'bg-rose-500 ring-2 ring-rose-100'"
-                                          [title]="u.is_active ? 'کاربر فعال' : 'حساب معلق'"></span>
-                                </div>
-                                <div class="min-w-0">
-                                    <h4 class="font-black text-slate-800 text-sm flex items-center gap-1.5 flex-wrap" [ngClass]="!u.is_active ? 'line-through text-slate-500' : ''">
-                                      <span class="truncate">{{u.first_name}} {{u.last_name}}</span>
-                                      <span *ngIf="u.is_superuser" class="text-[9px] px-1.5 py-0.2 rounded-md font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">ادمین کل</span>
-                                    </h4>
-                                    <div class="text-[11px] font-mono text-slate-400 mt-0.5 flex items-center gap-1.5 truncate">
-                                      <span>@{{u.username}}</span>
-                                      <span *ngIf="!u.is_active" class="text-[9px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.2 rounded font-sans">معلق</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- منوی سه‌نقطه برای سایر عملیات -->
-                            <div class="relative action-dropdown" appClickOutside (clickedOutside)="openMenuId === 'usr-' + u.id ? closeMenus() : null">
-                                <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors relative z-[100] cursor-pointer" title="عملیات بیشتر">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-                                </button>
-                                
-                                <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-52 bg-white rounded-2xl shadow-xl border border-slate-200 z-[100] py-1.5 text-right fade-in">
-                                    <button (click)="openUserModal(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>✏️</span> ویرایش پرونده پرسنلی</button>
-                                    <button (click)="openAvatarModalForUser(u)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>📷</span> تغییر تصویر پرسنلی</button>
-                                    <button (click)="resetPassword(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>🔑</span> ریست رمز عبور</button>
-                                    <div class="border-t border-slate-100 my-1"></div>
-                                    <button (click)="deleteUser(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-bold transition-colors cursor-pointer"><span>🗑️</span> حذف کاربر</button>
-                                    <div class="border-t border-slate-100 my-1"></div>
-                                    <ng-container *ngIf="!u.is_active">
-                                        <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-emerald-600 hover:bg-emerald-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>✅</span> خروج از تعلیق (فعال‌سازی)</button>
-                                    </ng-container>
-                                    <ng-container *ngIf="u.is_active">
-                                        <button (click)="toggleUserStatus(u.id)" class="w-full text-right px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>⛔</span> تعلیق / مسدودسازی حساب</button>
-                                    </ng-container>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- نوار شناسه هویتی و تماس (کد ملی + شماره تلفن) -->
-                        <div class="bg-slate-50/90 rounded-xl p-2.5 border border-slate-100 flex items-center justify-between text-[11px]">
-                          <div class="flex items-center gap-1.5 text-slate-600">
-                            <span class="text-slate-400 text-xs">🪪</span>
-                            <span class="font-bold text-slate-500">کد ملی:</span>
-                            <span class="font-mono font-bold text-slate-800">{{ u.national_code || 'ثبت نشده' }}</span>
+                  <div>
+                    <!-- هدر فشرده کارت: آواتار + نام + نشان ادمین + دکمه‌های اقدام سریع -->
+                    <div class="flex items-start justify-between gap-2 mb-2.5">
+                      <div class="flex items-center gap-2.5 min-w-0" [ngClass]="!u.is_active ? 'opacity-60 grayscale-[40%]' : ''">
+                        <div class="relative shrink-0">
+                          <div class="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm text-white shadow-2xs overflow-hidden" [style.background]="getPrimaryRole(u).color">
+                            <img *ngIf="u.avatar" [src]="u.avatar" loading="lazy" class="w-full h-full object-cover" alt="{{u.first_name}}" />
+                            <span *ngIf="!u.avatar" [style.color]="getContrastTextColor(getPrimaryRole(u).color)">{{getUserAvatarLetter(u)}}</span>
                           </div>
-                          <div class="flex items-center gap-1.5 text-slate-600">
-                            <span class="text-slate-400 text-xs">📱</span>
-                            <span class="font-mono font-bold text-slate-700" *ngIf="u.phone_number">{{ u.phone_number }}</span>
-                            <span class="text-slate-400 font-mono text-[10px]" *ngIf="!u.phone_number">فاقد تماس</span>
+                          <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white"
+                                [ngClass]="u.is_active ? 'bg-emerald-500' : 'bg-rose-500'"
+                                [title]="u.is_active ? 'کاربر فعال' : 'حساب معلق'"></span>
+                        </div>
+                        <div class="min-w-0">
+                          <h4 class="font-black text-slate-800 text-xs flex items-center gap-1.5" [ngClass]="!u.is_active ? 'line-through text-slate-500' : ''">
+                            <span class="truncate">{{u.first_name}} {{u.last_name}}</span>
+                            <span *ngIf="u.is_superuser" class="text-[8.5px] px-1 py-0.2 rounded font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">ادمین</span>
+                          </h4>
+                          <div class="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-1.5 truncate">
+                            <span>@{{u.username}}</span>
+                            <span class="text-slate-300" *ngIf="u.national_code">|</span>
+                            <span *ngIf="u.national_code" class="text-slate-500 font-bold" title="کد ملی">{{u.national_code}}</span>
                           </div>
                         </div>
-                        
-                        <!-- نقش‌های سازمانی با چیدمان بلوکی مستقیم -->
-                        <div class="space-y-1">
-                            <span class="text-slate-400 text-[10px] font-bold block">نقش‌های سازمانی:</span>
-                            <div class="flex flex-wrap gap-1">
-                                <span *ngFor="let role of getUserRoles(u)" class="px-2 py-0.5 rounded-lg font-bold text-[10px] border border-transparent shadow-2xs" [style.background]="role.color + '18'" [style.color]="role.color" [style.borderColor]="role.color + '30'">{{role.name}}</span>
-                                <span *ngIf="getUserRoles(u).length === 0" class="text-[10px] text-slate-400 font-medium">بدون نقش سازمانی</span>
-                            </div>
-                        </div>
+                      </div>
 
-                        <!-- دسترسی به انبارها با چیدمان بلوکی مستقیم -->
-                        <div class="space-y-1">
-                            <span class="text-slate-400 text-[10px] font-bold block">دسترسی انبارها:</span>
-                            <div class="flex gap-1 flex-wrap items-center">
-                                <ng-container *ngIf="!u.assigned_warehouses || u.assigned_warehouses.length === 0">
-                                    <span class="text-[9.5px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-200">بدون دسترسی انبار</span>
-                                </ng-container>
-                                <ng-container *ngIf="u.assigned_warehouses && u.assigned_warehouses.length > 0">
-                                    <span *ngFor="let pid of u.assigned_warehouses | slice:0:3" class="bg-slate-50 text-slate-600 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold border border-slate-200">{{getProjectName(pid)}}</span>
-                                    <span *ngIf="u.assigned_warehouses.length > 3" class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md text-[9.5px] font-black border border-indigo-200">+{{u.assigned_warehouses.length - 3}}</span>
-                                </ng-container>
-                            </div>
-                        </div>
-
-                        <!-- شرکت و سازمان -->
-                        <div class="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                            <span class="text-slate-400 text-[10px] font-medium">شرکت / سازمان:</span>
-                            <span class="font-bold text-[10.5px] text-slate-700">{{u.company || 'فارس عالیش'}}</span>
-                        </div>
-                    </div>
-
-                    <!-- فوتر کارت: دکمه‌های اقدام سریع (Quick Actions) -->
-                    <div class="border-t border-slate-100 pt-3 mt-3 flex items-center justify-between">
-                      <button type="button" (click)="openUserModal(u.id)"
-                              class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-                              title="ویرایش کامل پرونده پرسنلی">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                        <span>ویرایش پرونده</span>
-                      </button>
-
-                      <div class="flex items-center gap-1">
-                        <!-- دکمه سریع تغییر تصویر -->
-                        <button type="button" (click)="openAvatarModalForUser(u)"
-                                class="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-                                title="تغییر تصویر پرسنلی">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                            <circle cx="12" cy="13" r="4"></circle>
+                      <!-- اکشن‌های سریع هدر: دکمه ویرایش + منوی سه‌نقطه -->
+                      <div class="flex items-center gap-0.5 shrink-0">
+                        <button type="button" (click)="openUserModal(u.id)" class="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer" title="ویرایش پرونده">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                           </svg>
                         </button>
 
-                        <!-- دکمه سریع ریست رمز عبور -->
-                        <button type="button" (click)="resetPassword(u.id)"
-                                class="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
-                                title="ریست کلمه عبور">
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                          </svg>
-                        </button>
+                        <div class="relative action-dropdown" appClickOutside (clickedOutside)="openMenuId === 'usr-' + u.id ? closeMenus() : null">
+                          <button (click)="toggleMenu($event, 'usr-' + u.id)" class="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative z-[100] cursor-pointer" title="عملیات بیشتر">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                          </button>
+                          
+                          <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 z-[100] py-1.5 text-right fade-in">
+                            <button (click)="openUserModal(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>✏️</span> ویرایش پرونده</button>
+                            <button (click)="openAvatarModalForUser(u)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>📷</span> تغییر تصویر</button>
+                            <button (click)="resetPassword(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>🔑</span> ریست رمز</button>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <button (click)="deleteUser(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 flex items-center gap-2 font-bold transition-colors cursor-pointer"><span>🗑️</span> حذف کاربر</button>
+                            <div class="border-t border-slate-100 my-1"></div>
+                            <button *ngIf="!u.is_active" (click)="toggleUserStatus(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>✅</span> خروج از تعلیق</button>
+                            <button *ngIf="u.is_active" (click)="toggleUserStatus(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 font-bold flex items-center gap-2 transition-colors cursor-pointer"><span>⛔</span> تعلیق حساب</button>
+                          </div>
+                        </div>
                       </div>
                     </div>
+
+                    <!-- ردیف‌های فشرده مشخصات و نشان‌ها -->
+                    <div class="space-y-1.5 text-[11px]">
+                      <!-- نقش‌های سازمانی -->
+                      <div class="flex items-center justify-between gap-1 text-[10px]">
+                        <span class="text-slate-400 shrink-0 font-medium">نقش:</span>
+                        <div class="flex flex-wrap gap-1 justify-end max-w-[75%]">
+                          <span *ngFor="let role of getUserRoles(u)" class="px-1.5 py-0.2 rounded-md font-bold text-[9.5px] border border-transparent" [style.background]="role.color + '18'" [style.color]="role.color" [style.borderColor]="role.color + '30'">{{role.name}}</span>
+                          <span *ngIf="getUserRoles(u).length === 0" class="text-slate-400 text-[9px]">فاقد نقش</span>
+                        </div>
+                      </div>
+
+                      <!-- دسترسی انبارها -->
+                      <div class="flex items-center justify-between gap-1 text-[10px]">
+                        <span class="text-slate-400 shrink-0 font-medium">انبارها:</span>
+                        <div class="flex gap-1 flex-wrap justify-end">
+                          <ng-container *ngIf="!u.assigned_warehouses || u.assigned_warehouses.length === 0">
+                            <span class="text-[9px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">بدون دسترسی</span>
+                          </ng-container>
+                          <ng-container *ngIf="u.assigned_warehouses && u.assigned_warehouses.length > 0">
+                            <span *ngFor="let pid of u.assigned_warehouses | slice:0:2" class="bg-slate-50 text-slate-600 px-1.5 py-0.2 rounded text-[9px] font-bold border border-slate-200">{{getProjectName(pid)}}</span>
+                            <span *ngIf="u.assigned_warehouses.length > 2" class="bg-indigo-50 text-indigo-700 px-1 py-0.2 rounded text-[9px] font-black border border-indigo-200">+{{u.assigned_warehouses.length - 2}}</span>
+                          </ng-container>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- فوتر تک‌خطی جمع‌وجور: شرکت + تلفن همراه -->
+                  <div class="flex items-center justify-between text-[10px] pt-2 mt-2 border-t border-slate-100 text-slate-500 font-mono">
+                    <span class="font-sans text-slate-400 truncate max-w-[130px]" [title]="u.company || 'فارس عالیش'">{{u.company || 'فارس عالیش'}}</span>
+                    <span *ngIf="u.phone_number" class="flex items-center gap-1 text-slate-600 font-bold">
+                      <span class="text-slate-400 text-[9px]">📱</span>
+                      <span>{{u.phone_number}}</span>
+                    </span>
+                    <span *ngIf="!u.phone_number" class="text-slate-400 text-[9.5px] font-sans">بدون تماس</span>
+                  </div>
                 </div>
             </div>
 

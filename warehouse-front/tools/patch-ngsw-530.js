@@ -29,8 +29,8 @@ const ORIGINAL_DEGRADE = 'this.state = DriverReadyState.EXISTING_CLIENTS_ONLY;';
 const PATCHED_DEGRADE = 'if (!String(err).match(/50[234]|52[0-9]|530/)) { this.state = DriverReadyState.EXISTING_CLIENTS_ONLY; }';
 
 if (!fs.existsSync(workerPath)) {
-  console.error(`[patch-ngsw-530] ✖ فایل پیدا نشد: ${workerPath}`);
-  console.error('[patch-ngsw-530] این اسکریپت باید بعد از ng build اجرا شود.');
+  console.error(`[patch-ngsw-530] ✖ File not found: ${workerPath}`);
+  console.error('[patch-ngsw-530] This script must run after ng build.');
   process.exit(1);
 }
 
@@ -38,13 +38,13 @@ let source = fs.readFileSync(workerPath, 'utf8');
 let patched = false;
 
 if (source.includes(PATCHED_MANIFEST_CHECK) && source.includes(PATCHED_DEGRADE)) {
-  console.log('[patch-ngsw-530] ✔ وصله از قبل اعمال شده است.');
+  console.log('[patch-ngsw-530] ✔ Patch already applied.');
   process.exit(0);
 }
 
 if (!source.includes(ORIGINAL_MANIFEST_CHECK) && !source.includes(PATCHED_MANIFEST_CHECK)) {
-  console.error('[patch-ngsw-530] ✖ الگوی مورد انتظار در ngsw-worker.js پیدا نشد.');
-  console.error('[patch-ngsw-530] احتمالاً @angular/service-worker ارتقا یافته و کدش تغییر کرده.');
+  console.error('[patch-ngsw-530] ✖ Expected pattern not found in ngsw-worker.js.');
+  console.error('[patch-ngsw-530] Likely @angular/service-worker was upgraded and code changed.');
   process.exit(1);
 }
 
@@ -52,4 +52,4 @@ source = source.replace(ORIGINAL_MANIFEST_CHECK, PATCHED_MANIFEST_CHECK);
 source = source.replace(new RegExp(ORIGINAL_DEGRADE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), PATCHED_DEGRADE);
 
 fs.writeFileSync(workerPath, source, 'utf8');
-console.log('[patch-ngsw-530] ✔ ngsw-worker.js وصله شد: جلوگیری از غیرفعال شدن کش در هنگام قطعی کلودفلر (کدهای 5xx).');
+console.log('[patch-ngsw-530] ✔ ngsw-worker.js patched successfully (Cloudflare 5xx degradation prevented).');

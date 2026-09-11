@@ -3,7 +3,7 @@
  * هنگام اجرای ng serve استفاده می‌شود
  */
 export const environment = {
-  production: true,
+  production: false,
   apiUrl: '/api', // به جای http://192.168.1.172:8000/api
   accessTokenLifetime: 15 * 60 * 1000,
   useMockData: false,

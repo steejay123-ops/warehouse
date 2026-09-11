@@ -1,7 +1,8 @@
-import { ApplicationConfig, provideZoneChangeDetection, provideBrowserGlobalErrorListeners, isDevMode, provideAppInitializer, ErrorHandler } from '@angular/core';
+import { ApplicationConfig, provideZoneChangeDetection, provideBrowserGlobalErrorListeners, isDevMode, provideAppInitializer, ErrorHandler, inject } from '@angular/core';
 import { provideRouter, RouteReuseStrategy } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideServiceWorker } from '@angular/service-worker';
+import { firstValueFrom, of, catchError, timeout } from 'rxjs';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
@@ -10,6 +11,7 @@ import { GlobalErrorHandler } from './core/error/global-error-handler';
 import { offlineInterceptor } from './core/interceptors/offline.interceptor';
 import { CustomRouteReuseStrategy } from './core/strategies/custom-route-reuse-strategy';
 import { OfflineSyncService } from './core/services/offline-sync.service';
+import { ConfigApiService } from './core/api/config-api.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -38,6 +40,13 @@ export const appConfig: ApplicationConfig = {
         (granted) => console.log(`[Storage] persist: ${granted ? '✅ ماندگار شد' : '⚠️ رد شد (best-effort)'}`),
         () => {}
       );
+      const configApi = inject(ConfigApiService);
+      return firstValueFrom(
+        configApi.getPublicConfig().pipe(
+          timeout(1500),
+          catchError(() => of(null))
+        )
+      ).catch(() => null);
     })
   ]
 };

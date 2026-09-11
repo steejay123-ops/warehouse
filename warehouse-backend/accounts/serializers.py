@@ -26,10 +26,54 @@ class PermissionSerializer(serializers.ModelSerializer):
 
 class CustomRoleSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(many=True, queryset=Permission.objects.all(), required=False)
+    user_ids = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=CustomUser.objects.all(), source='user_set', required=False
+    )
+    users_count = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = CustomRole
-        fields = ['id', 'name', 'title', 'color', 'parent', 'permissions']
+        fields = ['id', 'name', 'title', 'color', 'parent', 'permissions', 'user_ids', 'users_count']
+
+    def get_users_count(self, obj):
+        return obj.user_set.count()
+
+    def validate_permissions(self, permissions):
+        try:
+            from platform_core.module_catalog import get_disallowed_permission_codenames
+            disallowed = get_disallowed_permission_codenames()
+            if disallowed:
+                invalid_perms = [p for p in permissions if p.codename in disallowed]
+                if invalid_perms:
+                    invalid_names = ", ".join(p.codename for p in invalid_perms[:3])
+                    raise serializers.ValidationError(
+                        f"امکان انتساب مجوزهای «{invalid_names}» وجود ندارد؛ ماژول مرتبط با این دسترسی‌ها روی سامانه نصب یا فعال نیست."
+                    )
+        except serializers.ValidationError:
+            raise
+        except Exception:
+            pass
+        return permissions
+
+    def create(self, validated_data):
+        users = validated_data.pop('user_set', None)
+        permissions = validated_data.pop('permissions', None)
+        instance = super().create(validated_data)
+        if permissions is not None:
+            instance.permissions.set(permissions)
+        if users is not None:
+            instance.user_set.set(users)
+        return instance
+
+    def update(self, instance, validated_data):
+        users = validated_data.pop('user_set', None)
+        permissions = validated_data.pop('permissions', None)
+        instance = super().update(instance, validated_data)
+        if permissions is not None:
+            instance.permissions.set(permissions)
+        if users is not None:
+            instance.user_set.set(users)
+        return instance
 
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(

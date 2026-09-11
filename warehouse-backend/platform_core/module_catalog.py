@@ -95,3 +95,45 @@ MODULE_CATALOG = {
     'warehouse': WAREHOUSE_SPEC,
     'accounting': ACCOUNTING_SPEC,
 }
+
+
+WAREHOUSE_PERMISSION_CODENAMES = (
+    'view_wh_dashboard', 'view_wh_docs', 'view_wh_dispatch', 'view_sys_counter',
+    'view_wh_customs', 'view_sys_supervisor', 'view_sys_manager_review', 'view_sys_recounts',
+    'view_wh_attendance', 'view_wh_doc_approvals', 'view_wh_feeding', 'view_wh_feed_approvals',
+    'view_wh_labels', 'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
+    'view_wh_stocktaking', 'view_warehouse', 'add_warehouse', 'change_warehouse', 'delete_warehouse',
+    'view_record', 'add_record', 'change_record', 'delete_record',
+    'can_act_as_counter', 'can_act_as_supervisor', 'can_act_as_manager',
+    'can_act_as_doc_worker', 'can_act_as_doc_supervisor',
+    'perm_doc_approve_action', 'perm_feed_approve_action', 'perm_inventory_finalize',
+    'perm_rec_dispatch', 'perm_rec_recount', 'perm_rec_label', 'perm_rec_import',
+    'perm_wh_create', 'perm_wh_edit', 'perm_wh_freeze',
+)
+
+ACCOUNTING_PERMISSION_CODENAMES = (
+    'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+    'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
+    'can_act_as_operator', 'can_act_as_accountant',
+    'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
+    'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
+    'perm_approve_personnel_finance', 'perm_approve_fleet_finance',
+    'perm_lock_work_period', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action',
+    'perm_manage_projects_sections',
+)
+
+
+def get_disallowed_permission_codenames() -> set[str]:
+    """
+    برگرداندن کدهای دسترسی ماژول‌هایی که در حال حاضر نصب یا فعال نیستند.
+    جهت اعمال کنترل دفاع در عمق (Defense in Depth) در لایه API و اعتبارسنجی نقش‌ها.
+    """
+    from platform_core.registry import installed_modules
+    installed = set(installed_modules())
+    disallowed = set()
+    if 'warehouse' not in installed:
+        disallowed.update(WAREHOUSE_PERMISSION_CODENAMES)
+    if 'accounting' not in installed:
+        disallowed.update(ACCOUNTING_PERMISSION_CODENAMES)
+    return disallowed
+

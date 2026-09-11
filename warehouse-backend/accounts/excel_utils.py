@@ -5,9 +5,10 @@
 import io
 import re
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.datavalidation import DataValidation
 from common.excel_utils import (
     styled_cell, apply_header_styles_to_row, set_column_widths, 
-    freeze_header_panes, find_data_start_and_mapping
+    freeze_header_panes, find_data_start_and_mapping, jalali_now_str
 )
 from django.http import HttpResponse
 from django.contrib.auth.models import Group
@@ -37,6 +38,21 @@ USERS_COLUMNS = [
     {'label': 'نقش‌ها', 'key': 'roles', 'width': 30, 'type': 'text'},
     {'label': 'انبارها', 'key': 'warehouses', 'width': 30, 'type': 'text'},
     {'label': 'فعال', 'key': 'is_active', 'width': 12, 'type': 'text'},
+]
+
+ID_CARDS_COLUMNS = [
+    {'label': 'نام', 'key': 'first_name', 'width': 18, 'type': 'text'},
+    {'label': 'نام خانوادگی', 'key': 'last_name', 'width': 20, 'type': 'text'},
+    {'label': 'کد پرسنلی / شناسه', 'key': 'username', 'width': 20, 'type': 'text'},
+    {'label': 'کد ملی', 'key': 'national_code', 'width': 18, 'type': 'text'},
+    {'label': 'تلفن تماس', 'key': 'phone_number', 'width': 18, 'type': 'text'},
+    {'label': 'نقش سازمانی', 'key': 'roles', 'width': 25, 'type': 'text'},
+    {'label': 'انبارها / پروژه‌های مجاز', 'key': 'warehouses', 'width': 28, 'type': 'text'},
+    {'label': 'منطقه عملیاتی', 'key': 'operational_zone', 'width': 20, 'type': 'text'},
+    {'label': 'شرکت متبوع', 'key': 'company', 'width': 20, 'type': 'text'},
+    {'label': 'وضعیت تردد و گیت‌پاس', 'key': 'card_status', 'width': 22, 'type': 'text'},
+    {'label': 'محتوای بارکد گیت‌پاس', 'key': 'barcode', 'width': 24, 'type': 'text'},
+    {'label': 'تاریخ تهیه گزارش (شمسی)', 'key': 'report_date', 'width': 22, 'type': 'text'},
 ]
 
 MAX_IMPORT_ROWS = 500
@@ -97,6 +113,24 @@ def split_items(text):
         return []
     parts = re.split(r'[,،;\n|]+', str(text))
     return [p.strip() for p in parts if p.strip()]
+
+
+def clean_persian_text(val):
+    """
+    نرمال‌سازی پیشرفته نویسه‌های فارسی/عربی و حذف کاراکترهای نامرئی
+    """
+    if val is None:
+        return ''
+    s = str(val)
+    # 1. تبدیل ی و ک عربی به فارسی
+    s = s.replace('ي', 'ی').replace('ك', 'ک')
+    # 2. حذف کاراکترهای با عرض صفر، فاصله‌های نامرئی و BOM
+    s = re.sub(r'[\u200b\u200c\u200d\u200e\u200f\ufeff]', '', s)
+    # 3. حذف کشیدگی حروف (تطویل)
+    s = s.replace('ـ', '')
+    # 4. یکپارچه‌سازی فاصله‌های متوالی
+    s = re.sub(r'\s+', ' ', s)
+    return s.strip()
 
 
 # ── Excel Export & Template ──────────────────────────────────────────
@@ -171,9 +205,85 @@ def generate_users_excel(queryset):
     return response
 
 
+def generate_id_cards_excel(queryset):
+    """
+    تولید فایل اکسل مشخصات کارت پرسنلی و گیت‌پاس با ساختار ۲ سطری استاندارد
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'کارت پرسنلی و گیت‌پاس'
+    ws.sheet_view.rightToLeft = True
+
+    set_column_widths(ws, ID_CARDS_COLUMNS)
+    freeze_header_panes(ws, row=3)
+
+    # سطر اول: عناوین فارسی
+    header_row = []
+    for c in ID_CARDS_COLUMNS:
+        header_row.append(styled_cell(ws, c['label']))
+    apply_header_styles_to_row(header_row, is_key_row=False)
+    ws.append(header_row)
+
+    # سطر دوم: کلیدهای دیتابیسی
+    key_row = []
+    for c in ID_CARDS_COLUMNS:
+        key_row.append(styled_cell(ws, c['key']))
+    apply_header_styles_to_row(key_row, is_key_row=True)
+    ws.append(key_row)
+
+    now_shamsi = jalali_now_str()
+
+    # سطر سوم به بعد: داده‌های کارت پرسنلی
+    for row_idx, user in enumerate(queryset, 3):
+        role_names = []
+        for g in user.groups.all():
+            try:
+                role_names.append(g.customrole.title or g.name)
+            except Exception:
+                role_names.append(g.name)
+        roles_str = '، '.join(role_names)
+
+        wh_items = []
+        if _warehouse_model() is not None:
+            for w in user.assigned_warehouses.all():
+                wh_items.append(f"{w.name} ({w.code})" if w.code else w.name)
+        wh_str = '، '.join(wh_items)
+
+        barcode_str = f"GP-{user.username or user.pk}"
+        if user.national_code:
+            barcode_str += f"-{user.national_code}"
+
+        row_data = [
+            user.first_name or '',
+            user.last_name or '',
+            user.username or '',
+            user.national_code or '',
+            user.phone_number or '',
+            roles_str,
+            wh_str,
+            user.operational_zone or '',
+            user.company or '',
+            'فعال / مجاز به تردد' if user.is_active else 'مسدود / غیرمجاز',
+            barcode_str,
+            now_shamsi,
+        ]
+        ws.append(row_data)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = 'attachment; filename="id_cards_export.xlsx"'
+    return response
+
+
 def generate_users_template():
     """
-    تولید فایل قالب نمونه دو سطری با ۲ سطر داده تستی
+    تولید فایل قالب نمونه دو سطری با اعتبارسنجی درون اکسل و شیت دوم راهنما
     """
     wb = Workbook()
     ws = wb.active
@@ -197,13 +307,95 @@ def generate_users_template():
     apply_header_styles_to_row(key_row, is_key_row=True)
     ws.append(key_row)
 
+    sample_role = ''
+    first_group = Group.objects.first()
+    if first_group:
+        cr = getattr(first_group, 'customrole', None)
+        sample_role = cr.title if cr and cr.title else first_group.name
+
+    sample_wh = ''
+    WhModel = _warehouse_model()
+    if WhModel is not None:
+        first_wh = WhModel.objects.first()
+        if first_wh:
+            sample_wh = first_wh.name
+
     sample_data = [
-        ['علی', 'محمدی', 'ali.mohammadi', '1234567890', '09121234567', 'منطقه ۱ - جنوب', 'نفت و گاز', 'سرپرست انبار', 'WH-1، WH-2', 'بله'],
-        ['فاطمه', 'احمدی', 'fatemeh.ahmadi', '0987654321', '09351234567', 'منطقه ۲ - مرکز', 'پیمانکار فارس عالیش', 'انبارگردان', 'WH-3', 'بله'],
+        ['علی', 'محمدی', 'ali.mohammadi', '1234567890', '09121234567', 'منطقه ۱ - جنوب', 'نفت و گاز', sample_role, sample_wh, 'بله'],
+        ['فاطمه', 'احمدی', '', '0987654321', '09351234567', 'منطقه ۲ - مرکز', 'پیمانکار فارس عالیش', sample_role, sample_wh, 'بله'],
     ]
 
     for row in sample_data:
         ws.append(row)
+
+    # ۱. اعتبارسنجی درون اکسل (Data Validation Dropdown) برای ستون فعال (J)
+    dv_active = DataValidation(type="list", formula1=chr(34) + "بله,خیر" + chr(34), allow_blank=True)
+    dv_active.error = 'مقدار فیلد فعال باید «بله» یا «خیر» باشد.'
+    dv_active.errorTitle = 'مقدار نامعتبر'
+    dv_active.prompt = 'لطفاً وضعیت حساب را انتخاب کنید'
+    dv_active.promptTitle = 'وضعیت فعال/غیرفعال'
+    ws.add_data_validation(dv_active)
+    dv_active.add("J3:J500")
+
+    # ۲. شیت دوم: راهنما، ضوابط و مقادیر مجاز (Help Sheet)
+    ws_help = wb.create_sheet(title='راهنما و مقادیر مجاز')
+    ws_help.sheet_view.rightToLeft = True
+
+    HELP_COLUMNS = [
+        {'label': 'نام ستون', 'key': 'col_name', 'width': 22, 'type': 'text'},
+        {'label': 'الزامی / اختیاری', 'key': 'required', 'width': 18, 'type': 'text'},
+        {'label': 'فرمت و ضوابط', 'key': 'rules', 'width': 48, 'type': 'text'},
+        {'label': 'نمونه مقدار معتبر', 'key': 'sample', 'width': 25, 'type': 'text'},
+    ]
+    set_column_widths(ws_help, HELP_COLUMNS)
+    freeze_header_panes(ws_help, row=3)
+
+    h_row = [styled_cell(ws_help, c['label']) for c in HELP_COLUMNS]
+    apply_header_styles_to_row(h_row, is_key_row=False)
+    ws_help.append(h_row)
+
+    k_row = [styled_cell(ws_help, c['key']) for c in HELP_COLUMNS]
+    apply_header_styles_to_row(k_row, is_key_row=True)
+    ws_help.append(k_row)
+
+    help_rules = [
+        ['نام (first_name)', 'الزامی', 'متن بدون کاراکترهای خاص', 'علی'],
+        ['نام خانوادگی (last_name)', 'الزامی', 'متن بدون کاراکترهای خاص', 'محمدی'],
+        ['شناسه ورود (username)', 'اختیاری', 'در صورت خالی بودن، به طور خودکار از «کد ملی» استفاده می‌شود', 'ali.mohammadi یا 0012345678'],
+        ['کد ملی (national_code)', 'اختیاری / توصیه‌شده', 'دقیقاً ۱۰ رقم عددی بدون خط تیره (جهت تولید شناسه و رمز عبور اولیه)', '1234567890'],
+        ['تلفن (phone_number)', 'اختیاری', '۱۱ رقم عددی همراه با ۰۹', '09121234567'],
+        ['منطقه عملیاتی (operational_zone)', 'اختیاری', 'عنوان منطقه یا سایت مربوطه', 'منطقه ۱ - جنوب'],
+        ['شرکت متبوع (company)', 'اختیاری', 'نام شرکت یا واحد سازمانی', 'پیمانکار فارس عالیش'],
+        ['نقش‌ها (roles)', 'اختیاری', 'عنوان یا کد نقش‌ها از جدول زیر (تفکیک با ویرگول فارسی «،»)', 'سرپرست انبار، انبارگردان'],
+        ['انبارها (warehouses)', 'اختیاری', 'کد یا نام انبارها از جدول زیر (تفکیک با «،»)', 'WH-1، انبار مرکزی'],
+        ['فعال (is_active)', 'الزامی', 'انتخاب از منوی کشویی: بله یا خیر', 'بله'],
+    ]
+    for r in help_rules:
+        ws_help.append(r)
+
+    ws_help.append([])
+    ws_help.append([])
+
+    # جدول مرجع نقش‌های فعال
+    roles_h = [styled_cell(ws_help, 'عنوان فارسی نقش'), styled_cell(ws_help, 'نام انگلیسی سیستمی'), styled_cell(ws_help, 'توضیحات')]
+    apply_header_styles_to_row(roles_h, is_key_row=False)
+    ws_help.append(roles_h)
+    for g in Group.objects.all():
+        cr = getattr(g, 'customrole', None)
+        title = cr.title if cr and cr.title else g.name
+        ws_help.append([title, g.name, 'نقش سازمانی فعال'])
+
+    ws_help.append([])
+    ws_help.append([])
+
+    # جدول مرجع انبارهای فعال
+    whs_h = [styled_cell(ws_help, 'نام انبار'), styled_cell(ws_help, 'کد انبار'), styled_cell(ws_help, 'وضعیت')]
+    apply_header_styles_to_row(whs_h, is_key_row=False)
+    ws_help.append(whs_h)
+    WhModel = _warehouse_model()
+    if WhModel is not None:
+        for wh in WhModel.objects.all():
+            ws_help.append([wh.name, wh.code or '', 'فعال'])
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -288,16 +480,16 @@ def parse_users_excel(file, update_existing=False):
                 return str(row[idx_pos]).strip()
             return default
 
-        first_name = get_val('first_name', 0)
-        last_name = get_val('last_name', 1)
+        first_name = clean_persian_text(get_val('first_name', 0))
+        last_name = clean_persian_text(get_val('last_name', 1))
         username = normalize_digits(get_val('username', 2)).strip()
         raw_nid = get_val('national_code', 3)
         national_code = normalize_national_code(raw_nid)
         phone_number = normalize_phone(get_val('phone_number', 4))
-        operational_zone = get_val('operational_zone', 5)
-        company = get_val('company', 6)
-        roles_str = get_val('roles', 7)
-        warehouses_str = get_val('warehouses', 8)
+        operational_zone = clean_persian_text(get_val('operational_zone', 5))
+        company = clean_persian_text(get_val('company', 6))
+        roles_str = clean_persian_text(get_val('roles', 7))
+        warehouses_str = clean_persian_text(get_val('warehouses', 8))
         is_active_str = get_val('is_active', 9, 'بله')
         is_active = normalize_boolean(is_active_str, default=True)
 
@@ -308,8 +500,17 @@ def parse_users_excel(file, update_existing=False):
             row_errors.append({'row': row_num, 'field': 'first_name', 'message': 'نام الزامی است.'})
         if not last_name:
             row_errors.append({'row': row_num, 'field': 'last_name', 'message': 'نام خانوادگی الزامی است.'})
+
+        # قانون هوشمند: در صورت خالی بودن شناسه ورود، الزاماً از کد ملی استفاده شود
         if not username:
-            row_errors.append({'row': row_num, 'field': 'username', 'message': 'شناسه ورود الزامی است.'})
+            if national_code:
+                username = national_code
+            else:
+                row_errors.append({
+                    'row': row_num,
+                    'field': 'username',
+                    'message': 'شناسه ورود الزامی است (یا کد ملی جهت تولید خودکار شناسه باید درج شود).'
+                })
 
         # ── یکتایی و اعتبارسنجی شناسه ورود ──
         is_update_record = False
@@ -362,11 +563,9 @@ def parse_users_excel(file, update_existing=False):
                 matched_wh = warehouses_lookup.get(witem.lower())
                 if not matched_wh:
                     # تلاش با استخراج کد داخل پرانتز اگر وجود داشته باشد
-                    match = re.search(r'\((.*?)\)', witem)
-                    if match:
-                        code_inside = match.group(1).strip().lower()
-                        matched_wh = warehouses_lookup.get(code_inside)
-                
+                    paren_match = re.search(r'\(([^)]+)\)', witem)
+                    if paren_match:
+                        matched_wh = warehouses_lookup.get(paren_match.group(1).lower().strip())
                 if not matched_wh:
                     row_errors.append({'row': row_num, 'field': 'warehouses', 'message': f'انبار «{witem}» در سیستم یافت نشد.'})
                 elif matched_wh not in resolved_warehouses:
@@ -376,6 +575,7 @@ def parse_users_excel(file, update_existing=False):
             errors.extend(row_errors)
         else:
             valid_rows.append({
+                '_row_num': row_num,
                 'is_update': is_update_record,
                 'user_id': target_user_id,
                 'first_name': first_name,

@@ -267,6 +267,7 @@ def parse_roles_excel(file, update_existing=False):
             errors.extend(row_errors)
         else:
             valid_rows.append({
+                '_row_num': row_num,
                 'is_update': is_update_record,
                 'role_id': target_role_id,
                 'name': name,

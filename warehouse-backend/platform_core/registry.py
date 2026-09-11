@@ -93,7 +93,7 @@ def discover_entry_point_modules():
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(
-                f"[ModuleRegistry] خطا در بارگذاری ماژول از entry-point «{ep.name}»: {e}"
+                f"[ModuleRegistry] Failed to load module from entry-point '{ep.name}': {e}"
             )
 
 

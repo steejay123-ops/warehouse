@@ -64,7 +64,7 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             permission_classes = [AllowAny()]
         elif self.action in ['change_password', 'update_preferences', 'my_avatar']:
             permission_classes = [IsAuthenticated()]
-        elif self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
+        elif self.action in ['list', 'retrieve', 'export_excel', 'download_template', 'export_id_cards_excel']:
             permission_classes = [HasMenuAccess('view_sys_users')]
         elif self.action in ['create', 'import_excel']:
             permission_classes = [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_add')]
@@ -358,13 +358,35 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=400)
 
-    # ── Excel Import/Export Actions ──────────────────────────────────
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Download all users as an Excel file."""
+        """Download all users as an Excel file, optionally filtered by user IDs."""
         from .excel_utils import generate_users_excel
         queryset = self.get_queryset()
+        ids_param = request.GET.get('ids')
+        if ids_param:
+            try:
+                ids = [int(i.strip()) for i in ids_param.split(',') if i.strip()]
+                if ids:
+                    queryset = queryset.filter(id__in=ids)
+            except Exception:
+                pass
         return generate_users_excel(queryset)
+
+    @action(detail=False, methods=['get'])
+    def export_id_cards_excel(self, request):
+        """Download ID cards data as an Excel file, optionally filtered by user IDs."""
+        from .excel_utils import generate_id_cards_excel
+        queryset = self.get_queryset()
+        ids_param = request.GET.get('ids')
+        if ids_param:
+            try:
+                ids = [int(i.strip()) for i in ids_param.split(',') if i.strip()]
+                if ids:
+                    queryset = queryset.filter(id__in=ids)
+            except Exception:
+                pass
+        return generate_id_cards_excel(queryset)
 
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -384,6 +406,7 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
 
         update_existing = request.POST.get('update_existing') in ('true', 'True', True, '1', 1) or request.data.get('update_existing') in ('true', 'True', True, '1', 1)
+        dry_run = request.POST.get('dry_run') in ('true', 'True', True, '1', 1) or request.data.get('dry_run') in ('true', 'True', True, '1', 1)
         result = parse_users_excel(file, update_existing=update_existing)
 
         # If there are file-level errors (row=0), return immediately
@@ -391,9 +414,50 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         if file_errors:
             return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
 
+        error_rows_set = set(e['row'] for e in result['errors'] if e['row'] > 0)
+        total_rows = len(result['valid_rows']) + len(error_rows_set)
+
+        # ── حالت پیش‌نمایش و اعتبارسنجی اولیه (Dry-Run) ──
+        if dry_run:
+            preview_rows = []
+            for r in result['valid_rows'][:25]:
+                roles_display = '، '.join([
+                    getattr(g, 'customrole', g).title if hasattr(g, 'customrole') and getattr(g.customrole, 'title', None) else g.name
+                    for g in r.get('roles', [])
+                ])
+                wh_display = '، '.join([w.name for w in r.get('warehouses', [])])
+                preview_rows.append({
+                    'row': r.get('_row_num'),
+                    'name': f"{r.get('first_name', '')} {r.get('last_name', '')}",
+                    'username': r.get('username', ''),
+                    'national_code': r.get('national_code', '') or '-',
+                    'phone_number': r.get('phone_number', '') or '-',
+                    'roles': roles_display or 'بدون نقش',
+                    'warehouses': wh_display or 'بدون انبار',
+                    'is_update': r.get('is_update', False),
+                    'is_active': r.get('is_active', True),
+                })
+
+            return Response({
+                'success': True,
+                'dry_run': True,
+                'summary': {
+                    'total_rows': total_rows,
+                    'valid_count': len(result['valid_rows']),
+                    'error_count': len(error_rows_set),
+                    'created': 0,
+                    'updated': 0,
+                    'skipped': len(error_rows_set),
+                },
+                'preview_rows': preview_rows,
+                'errors': result['errors']
+            })
+
+        # ── حالت ثبت نهایی (Commit): ثبت رکوردهای سالم و گزارش رکوردهای رد شده ──
         created_count = 0
         updated_count = 0
         for row_data in result['valid_rows']:
+            row_data.pop('_row_num', None)
             is_update = row_data.pop('is_update', False)
             user_id = row_data.pop('user_id', None)
             roles = row_data.pop('roles', [])
@@ -428,7 +492,6 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 user.assigned_warehouses.set(warehouses)
             created_count += 1
 
-        total_rows = created_count + updated_count + len(result['errors'])
         from .audit_utils import log_audit_event
         log_audit_event(
             user=request.user,
@@ -437,17 +500,18 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             severity='info',
             target_model='CustomUser',
             target_repr=f"بارگذاری اکسل پرسنل ({created_count} ایجاد، {updated_count} ویرایش)",
-            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(result['errors'])},
+            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
             ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
         )
 
         return Response({
             'success': True,
+            'dry_run': False,
             'summary': {
                 'total_rows': total_rows,
                 'created': created_count,
                 'updated': updated_count,
-                'skipped': len(result['errors'])
+                'skipped': len(error_rows_set)
             },
             'errors': result['errors']
         })
@@ -610,17 +674,52 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'errors': [{'row': 0, 'field': 'file', 'message': 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.'}]}, status=400)
 
         update_existing = request.POST.get('update_existing') in ('true', 'True', True, '1', 1) or request.data.get('update_existing') in ('true', 'True', True, '1', 1)
+        dry_run = request.POST.get('dry_run') in ('true', 'True', True, '1', 1) or request.data.get('dry_run') in ('true', 'True', True, '1', 1)
         result = parse_roles_excel(file, update_existing=update_existing)
 
         file_errors = [e for e in result['errors'] if e['row'] == 0]
         if file_errors:
             return Response({'success': False, 'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0}, 'errors': file_errors}, status=400)
 
+        error_rows_set = set(e['row'] for e in result['errors'] if e['row'] > 0)
+        total_rows = len(result['valid_rows']) + len(error_rows_set)
+
+        if dry_run:
+            preview_rows = []
+            for r in result['valid_rows'][:25]:
+                preview_rows.append({
+                    'row': r.get('_row_num'),
+                    'name': r.get('title', '') or r.get('name', ''),
+                    'username': r.get('name', ''),
+                    'national_code': '-',
+                    'phone_number': '-',
+                    'roles': f"والد: {r.get('parent_name') or 'ندارد'}",
+                    'warehouses': f"{len(r.get('permissions', []))} مجوز دسترسی",
+                    'is_update': r.get('is_update', False),
+                    'is_active': True,
+                })
+
+            return Response({
+                'success': True,
+                'dry_run': True,
+                'summary': {
+                    'total_rows': total_rows,
+                    'valid_count': len(result['valid_rows']),
+                    'error_count': len(error_rows_set),
+                    'created': 0,
+                    'updated': 0,
+                    'skipped': len(error_rows_set),
+                },
+                'preview_rows': preview_rows,
+                'errors': result['errors']
+            })
+
         created_count = 0
         updated_count = 0
         # Two-pass creation: first create/update roles without parents, then set parents
         processed_roles = {}
         for row_data in result['valid_rows']:
+            row_data.pop('_row_num', None)
             is_update = row_data.pop('is_update', False)
             role_id = row_data.pop('role_id', None)
             permissions = row_data.pop('permissions', [])
@@ -655,7 +754,6 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     info['role'].parent = parent
                     info['role'].save()
 
-        total_rows = created_count + updated_count + len(result['errors'])
         from .audit_utils import log_audit_event
         log_audit_event(
             user=request.user,
@@ -664,17 +762,18 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             severity='info',
             target_model='CustomRole',
             target_repr=f"بارگذاری اکسل نقش‌ها ({created_count} ایجاد، {updated_count} ویرایش)",
-            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(result['errors'])},
+            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
             ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
         )
 
         return Response({
             'success': True,
+            'dry_run': False,
             'summary': {
                 'total_rows': total_rows,
                 'created': created_count,
                 'updated': updated_count,
-                'skipped': len(result['errors'])
+                'skipped': len(error_rows_set)
             },
             'errors': result['errors']
         })
@@ -682,9 +781,19 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Permission.objects.filter(content_type__model__in=['customuser', 'group', 'warehouse', 'record'])
     serializer_class = PermissionSerializer
     pagination_class = None
+
+    def get_queryset(self):
+        qs = Permission.objects.filter(content_type__model__in=['customuser', 'group', 'warehouse', 'record'])
+        try:
+            from platform_core.module_catalog import get_disallowed_permission_codenames
+            disallowed = get_disallowed_permission_codenames()
+            if disallowed:
+                qs = qs.exclude(codename__in=disallowed)
+        except Exception:
+            pass
+        return qs
 
     def get_permissions(self):
         from .permissions import HasMenuAccess
@@ -2823,7 +2932,7 @@ class RevokeDeviceSessionView(APIView):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
         except Exception as e:
-            logger.warning(f"[RevokeDeviceSessionView] خطا در ثبت لاگ ممیزی: {e}")
+            logger.warning(f"[RevokeDeviceSessionView] Failed to record audit log: {e}")
 
         # برودکست فرمان ابطال نشست و اخراج فوری به کلیه کلاینت‌ها و تبلت مورد نظر
         try:

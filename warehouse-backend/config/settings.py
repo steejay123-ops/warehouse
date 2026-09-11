@@ -139,9 +139,9 @@ if REDIS_URL:
 else:
     import logging
     logging.getLogger('django').warning(
-        "[CHANNEL_LAYERS WARNING] پیکربندی Redis (متغیرهای REDIS_URL یا REDIS_HOST) یافت نشد. "
-        "سیستم به صورت خودکار به InMemoryChannelLayer تغییر حالت داد. "
-        "توجه: این حالت فقط برای محیط توسعه و تک‌پروسه مناسب است و در محیط چند Worker یا کلاستر عمل نخواهد کرد."
+        "[CHANNEL_LAYERS WARNING] Redis configuration (REDIS_URL or REDIS_HOST) not found. "
+        "System automatically falling back to InMemoryChannelLayer. "
+        "Note: This mode is suitable only for single-process development and will not work across multiple workers or clusters."
     )
     CHANNEL_LAYERS = {
         "default": {

@@ -18,6 +18,8 @@ export interface Role {
   color: string;
   parent: number | null;
   permissions: number[];
+  user_ids?: number[];
+  users_count?: number;
   children?: Role[];
 }
 
@@ -46,7 +48,26 @@ export interface User {
 
 export interface ImportResult {
   success: boolean;
-  summary: { total_rows: number; created: number; updated?: number; skipped: number };
+  dry_run?: boolean;
+  summary: {
+    total_rows: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    valid_count?: number;
+    error_count?: number;
+  };
+  preview_rows?: Array<{
+    row: number;
+    name: string;
+    username: string;
+    national_code?: string;
+    phone_number?: string;
+    roles?: string;
+    warehouses?: string;
+    is_update?: boolean;
+    is_active?: boolean;
+  }>;
   errors: { row: number; field: string; message: string }[];
 }
 
@@ -115,14 +136,22 @@ export class AccountsHttpService {
   }
 
   // ── Users Excel ──────────────────────────────────────────────────
-  exportUsersExcel(): Observable<Blob> {
-    return this.http.get(`${this.apiUrl}/auth/users/export_excel/`, { responseType: 'blob' });
+  exportUsersExcel(ids?: number[]): Observable<Blob> {
+    const params: any = {};
+    if (ids && ids.length > 0) {
+      params.ids = ids.join(',');
+    }
+    return this.http.get(`${this.apiUrl}/auth/users/export_excel/`, {
+      params,
+      responseType: 'blob'
+    });
   }
 
-  importUsersExcel(file: File, updateExisting: boolean = false): Observable<ImportResult> {
+  importUsersExcel(file: File, updateExisting: boolean = false, dryRun: boolean = false): Observable<ImportResult> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('update_existing', String(updateExisting));
+    formData.append('dry_run', String(dryRun));
     return this.http.post<ImportResult>(`${this.apiUrl}/auth/users/import_excel/`, formData);
   }
 
@@ -135,15 +164,28 @@ export class AccountsHttpService {
     return this.http.get(`${this.apiUrl}/auth/roles/export_excel/`, { responseType: 'blob' });
   }
 
-  importRolesExcel(file: File, updateExisting: boolean = false): Observable<ImportResult> {
+  importRolesExcel(file: File, updateExisting: boolean = false, dryRun: boolean = false): Observable<ImportResult> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('update_existing', String(updateExisting));
+    formData.append('dry_run', String(dryRun));
     return this.http.post<ImportResult>(`${this.apiUrl}/auth/roles/import_excel/`, formData);
   }
 
   downloadRolesTemplate(): Observable<Blob> {
     return this.http.get(`${this.apiUrl}/auth/roles/download_template/`, { responseType: 'blob' });
+  }
+
+  // ── ID Cards Excel ───────────────────────────────────────────────
+  exportIdCardsExcel(ids?: number[]): Observable<Blob> {
+    const params: any = {};
+    if (ids && ids.length > 0) {
+      params.ids = ids.join(',');
+    }
+    return this.http.get(`${this.apiUrl}/auth/users/export_id_cards_excel/`, {
+      params,
+      responseType: 'blob'
+    });
   }
 
   // ── Avatar Management ────────────────────────────────────────────

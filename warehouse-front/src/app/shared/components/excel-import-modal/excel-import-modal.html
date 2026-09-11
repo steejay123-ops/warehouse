@@ -2,18 +2,23 @@
 <div class="modal-backdrop" (click)="close()"></div>
 
 <!-- Modal -->
-<div class="modal-container" dir="rtl">
+<div class="modal-container" [class.is-preview-mode]="step === 'preview'" dir="rtl">
   <!-- Header -->
   <div class="modal-header">
-    <h2>{{ title }}</h2>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <h2>{{ title }}</h2>
+      <span *ngIf="step === 'preview'" style="font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(99,102,241,0.12); color: #6366f1; font-weight: bold;">
+        پیش‌نمایش و اعتبارسنجی
+      </span>
+    </div>
     <button class="close-btn" (click)="close()" title="بستن">✕</button>
   </div>
 
   <!-- Body -->
   <div class="modal-body">
 
-    <!-- Step 1: File Selection (before upload) -->
-    <div *ngIf="!result" class="upload-section">
+    <!-- Step 1: File Selection -->
+    <div *ngIf="step === 'select'" class="upload-section">
 
       <!-- Drag & Drop Zone -->
       <div
@@ -33,30 +38,18 @@
           style="display: none"
         />
 
-        <div *ngIf="!selectedFile && !isUploading" class="drop-placeholder">
+        <div *ngIf="!selectedFile && !isAnalyzing" class="drop-placeholder">
           <div class="drop-icon">📥</div>
           <p class="drop-text">فایل اکسل را اینجا رها کنید</p>
           <p class="drop-subtext">یا برای انتخاب فایل کلیک کنید</p>
           <span class="drop-badge">.xlsx</span>
         </div>
 
-        <div *ngIf="selectedFile && !isUploading" class="file-preview">
-          <div class="file-icon">📊</div>
-          <div class="file-info">
-            <span class="file-name">{{ selectedFile.name }}</span>
-            <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-          </div>
-          <button class="remove-file-btn" (click)="removeFile(); $event.stopPropagation()" title="حذف فایل">✕</button>
-        </div>
-
-        <!-- Uploading State -->
-        <div *ngIf="isUploading" class="uploading-state">
+        <!-- Analyzing / Dry-run state -->
+        <div *ngIf="isAnalyzing" class="uploading-state">
           <div class="spinner"></div>
-          <p class="uploading-text">در حال پردازش فایل...</p>
-          <div class="progress-bar-container">
-            <div class="progress-bar" [style.width.%]="uploadProgress"></div>
-          </div>
-          <span class="progress-text">{{ uploadProgress | number:'1.0-0' }}%</span>
+          <p class="uploading-text" style="font-weight: bold;">در حال بررسی ساختار و اعتبارسنجی هوشمند داده‌ها (Dry-Run)...</p>
+          <span class="progress-text" style="color: #6366f1;">لطفاً شکیبا باشید</span>
         </div>
       </div>
 
@@ -70,7 +63,7 @@
       <div class="upsert-toggle-container" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:12px; margin-top:12px; display:flex; align-items:center; justify-content:space-between;">
         <div>
           <span style="font-size:11px; font-weight:bold; color:#1e293b; display:block;">به‌روزرسانی رکوردهای تکراری (حالت هوشمند)</span>
-          <span style="font-size:9px; color:#64748b; display:block; margin-top:2px;">در صورت وجود رکورد با شناسه مشابه، مشخصات آن به‌روزرسانی شود.</span>
+          <span style="font-size:9px; color:#64748b; display:block; margin-top:2px;">در صورت وجود رکورد با شناسه یا کد ملی مشابه، اطلاعات آن به‌روزرسانی خواهد شد.</span>
         </div>
         <label style="cursor:pointer; display:flex; align-items:center;">
           <input type="checkbox" [(ngModel)]="updateExisting" style="width:16px; height:16px; cursor:pointer; accent-color:#4f46e5;">
@@ -80,27 +73,141 @@
       <!-- Template Download Hint -->
       <div class="template-hint">
         <span class="hint-icon">💡</span>
-        <span>ساختار فایل آپلودی باید مطابق فایل قالب باشد.</span>
+        <span>ساختار فایل آپلودی باید مطابق فایل استاندارد باشد (همراه با شیت راهنما و منوی آبشاری).</span>
         <button class="template-link" (click)="downloadTemplate(); $event.stopPropagation()">
           دانلود فایل نمونه
         </button>
       </div>
     </div>
 
-    <!-- Step 2: Results -->
-    <div *ngIf="result" class="result-section">
+    <!-- Step 2: Dry-Run Preview -->
+    <div *ngIf="step === 'preview' && previewResult" class="preview-section" style="display: flex; flex-direction: column; gap: 14px;">
+      
+      <!-- Selected File Pill & Actions -->
+      <div style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 20px;">📊</span>
+          <div>
+            <span style="font-size: 12px; font-weight: bold; color: #1e293b; display: block;">{{ selectedFile?.name }}</span>
+            <span style="font-size: 10px; color: #64748b;">{{ formatFileSize(selectedFile?.size || 0) }}</span>
+          </div>
+        </div>
+        <button (click)="removeFile()" style="background: none; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 10px; font-size: 11px; color: #64748b; cursor: pointer;" title="انتخاب فایل دیگر">
+          ✕ تعویض فایل
+        </button>
+      </div>
+
+      <!-- Summary Stat Badges -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+        <div style="background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; text-align: center;">
+          <span style="font-size: 10px; color: #64748b; display: block; font-weight: bold;">کل سطرهای فایل</span>
+          <span style="font-size: 18px; font-weight: 900; color: #1e293b;">{{ previewResult.summary.total_rows }}</span>
+        </div>
+        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 10px; text-align: center;">
+          <span style="font-size: 10px; color: #047857; display: block; font-weight: bold;">رکوردهای سالم و قابل ثبت</span>
+          <span style="font-size: 18px; font-weight: 900; color: #059669;">{{ previewResult.summary.valid_count || 0 }}</span>
+        </div>
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 10px; text-align: center;">
+          <span style="font-size: 10px; color: #b91c1c; display: block; font-weight: bold;">سطرهای دارای خطا</span>
+          <span style="font-size: 18px; font-weight: 900; color: #dc2626;">{{ previewResult.summary.error_count || 0 }}</span>
+        </div>
+      </div>
+
+      <!-- Upsert Option in Preview -->
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 11px; color: #334155; font-weight: bold;">به‌روزرسانی رکوردهای تکراری در صورت تطابق شناسه یا کد ملی</span>
+        <input type="checkbox" [(ngModel)]="updateExisting" (change)="onUpdateExistingToggle()" style="width: 16px; height: 16px; cursor: pointer; accent-color: #4f46e5;">
+      </div>
+
+      <!-- Error Notice & Table (If errors exist) -->
+      <div *ngIf="previewResult.errors && previewResult.errors.length > 0" style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px; max-height: 170px; overflow-y: auto;">
+        <div style="display: flex; align-items: center; gap: 6px; color: #c2410c; font-size: 12px; font-weight: bold; margin-bottom: 6px;">
+          <span>⚠️</span>
+          <span>توجه: {{ previewResult.summary.error_count || previewResult.errors.length }} ردیف دارای خطا شناسایی شد</span>
+        </div>
+        <p style="font-size: 10px; color: #7c2d12; margin: 0 0 8px 0;">
+          در صورت تایید، فقط رکوردهای معتبر ({{ previewResult.summary.valid_count }} رکورد) ثبت می‌شوند و ردیف‌های خطادار زیر رد خواهند شد:
+        </p>
+        <table style="width: 100%; font-size: 11px; border-collapse: collapse;">
+          <thead>
+            <tr style="border-bottom: 1px solid #fdba74; text-align: right; color: #9a3412;">
+              <th style="padding: 4px;">ردیف</th>
+              <th style="padding: 4px;">فیلد</th>
+              <th style="padding: 4px;">علت خطا</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let err of previewResult.errors" style="border-bottom: 1px dashed #fed7aa;">
+              <td style="padding: 4px; font-weight: bold; color: #c2410c;">{{ err.row > 0 ? err.row : '-' }}</td>
+              <td style="padding: 4px; color: #7c2d12;">{{ err.field }}</td>
+              <td style="padding: 4px; color: #991b1b;">{{ err.message }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Valid Records Preview Table -->
+      <div *ngIf="previewResult.preview_rows && previewResult.preview_rows.length > 0">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 12px; font-weight: bold; color: #1e293b;">پیش‌نمایش داده‌های خوانده‌شده ({{ previewResult.preview_rows.length }} رکورد اول)</span>
+          <span style="font-size: 10px; color: #64748b;">پیش‌نمایش غیرمخرب</span>
+        </div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow-x: auto; max-height: 200px; overflow-y: auto;">
+          <table style="width: 100%; font-size: 11px; border-collapse: collapse; text-align: right;">
+            <thead style="background: #f8fafc; position: sticky; top: 0; z-index: 1;">
+              <tr style="border-bottom: 1px solid #e2e8f0; color: #475569;">
+                <th style="padding: 6px 10px;">ردیف</th>
+                <th style="padding: 6px 10px;">نام و مشخصات</th>
+                <th style="padding: 6px 10px;">شناسه کاربری</th>
+                <th style="padding: 6px 10px;">کد ملی</th>
+                <th style="padding: 6px 10px;">نقش(ها)</th>
+                <th style="padding: 6px 10px;">انبار(ها)</th>
+                <th style="padding: 6px 10px; text-align: center;">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of previewResult.preview_rows" style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 10px; color: #64748b;">{{ row.row }}</td>
+                <td style="padding: 6px 10px; font-weight: bold; color: #1e293b;">{{ row.name }}</td>
+                <td style="padding: 6px 10px; font-family: monospace; color: #4f46e5;">{{ row.username }}</td>
+                <td style="padding: 6px 10px; color: #334155;">{{ row.national_code || '-' }}</td>
+                <td style="padding: 6px 10px; color: #475569;">{{ row.roles || '-' }}</td>
+                <td style="padding: 6px 10px; color: #475569;">{{ row.warehouses || '-' }}</td>
+                <td style="padding: 6px 10px; text-align: center;">
+                  <span *ngIf="row.is_update" style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; background: #e0f2fe; color: #0369a1;">ویرایش</span>
+                  <span *ngIf="!row.is_update" style="padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: bold; background: #dcfce7; color: #15803d;">ثبت جدید</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Uploading State during Commit -->
+      <div *ngIf="isUploading" class="uploading-state" style="margin-top: 10px;">
+        <div class="spinner"></div>
+        <p class="uploading-text" style="font-weight: bold;">در حال ذخیره و نهایی‌سازی در پایگاه‌داده...</p>
+        <div class="progress-bar-container">
+          <div class="progress-bar" [style.width.%]="uploadProgress"></div>
+        </div>
+        <span class="progress-text">{{ uploadProgress | number:'1.0-0' }}%</span>
+      </div>
+    </div>
+
+    <!-- Step 3: Final Results -->
+    <div *ngIf="step === 'result' && result" class="result-section">
 
       <!-- Success Summary -->
       <div *ngIf="result.success" class="result-summary success">
         <div class="summary-icon">✅</div>
         <div class="summary-details">
-          <h3>پردازش با موفقیت انجام شد</h3>
+          <h3>پردازش و ثبت با موفقیت به پایان رسید</h3>
           <div class="summary-stats">
             <div class="stat">
               <span class="stat-value">{{ result.summary.total_rows }}</span>
               <span class="stat-label">کل سطرها</span>
             </div>
-            <div class="stat stat-success" *ngIf="result.summary.created > 0">
+            <div class="stat stat-success" *ngIf="result.summary.created && result.summary.created > 0">
               <span class="stat-value">{{ result.summary.created }}</span>
               <span class="stat-label">ایجاد شده</span>
             </div>
@@ -108,7 +215,7 @@
               <span class="stat-value">{{ result.summary.updated }}</span>
               <span class="stat-label">به‌روزرسانی شده</span>
             </div>
-            <div class="stat stat-warning" *ngIf="result.summary.skipped > 0">
+            <div class="stat stat-warning" *ngIf="result.summary.skipped && result.summary.skipped > 0">
               <span class="stat-value">{{ result.summary.skipped }}</span>
               <span class="stat-label">رد شده</span>
             </div>
@@ -128,7 +235,7 @@
       <div *ngIf="result.errors && result.errors.length > 0" class="errors-section">
         <h4 class="errors-title">
           <span class="errors-icon">📋</span>
-          جزئیات خطاها ({{ result.errors.length }} مورد)
+          سطرهای دارای خطا و رد شده ({{ result.errors.length }} مورد)
         </h4>
         <div class="errors-table-wrapper">
           <table class="errors-table">
@@ -158,18 +265,26 @@
   </div>
 
   <!-- Footer -->
-  <div class="modal-footer" *ngIf="!result">
+  <div class="modal-footer" *ngIf="step === 'select'">
     <button class="btn btn-secondary" (click)="close()">انصراف</button>
+  </div>
+
+  <div class="modal-footer" *ngIf="step === 'preview' && previewResult">
+    <button class="btn btn-secondary" (click)="removeFile()" [disabled]="isUploading">
+      انصراف و انتخاب فایل دیگر
+    </button>
     <button
       class="btn btn-primary"
-      [disabled]="!selectedFile || isUploading"
-      (click)="startUpload()"
+      [disabled]="(previewResult.summary.valid_count === 0) || isUploading"
+      (click)="commitUpload()"
+      style="background: linear-gradient(135deg, #4f46e5, #059669); border: none;"
     >
-      <span *ngIf="!isUploading">شروع آپلود</span>
-      <span *ngIf="isUploading">در حال پردازش...</span>
+      <span *ngIf="!isUploading">تایید و ثبت نهایی ({{ previewResult.summary.valid_count || 0 }} رکورد)</span>
+      <span *ngIf="isUploading">در حال ثبت...</span>
     </button>
   </div>
-  <div class="modal-footer" *ngIf="result">
+
+  <div class="modal-footer" *ngIf="step === 'result'">
     <button class="btn btn-primary" (click)="close()">بستن</button>
   </div>
 </div>

@@ -14,16 +14,19 @@ import { ImportResult } from '../../../core/http/accounts-http.service';
 export class ExcelImportModal {
   @Input() title = 'آپلود فایل اکسل';
   @Input() templateDownloadFn!: () => void;
-  @Input() importFn!: (file: File, updateExisting: boolean) => Observable<ImportResult>;
+  @Input() importFn!: (file: File, updateExisting: boolean, dryRun?: boolean) => Observable<ImportResult>;
   @Output() closed = new EventEmitter<void>();
   @Output() imported = new EventEmitter<ImportResult>();
 
+  step: 'select' | 'preview' | 'result' = 'select';
   selectedFile: File | null = null;
   updateExisting = false;
   isDragging = false;
+  isAnalyzing = false;
   isUploading = false;
   uploadProgress = 0;
 
+  previewResult: ImportResult | null = null;
   result: ImportResult | null = null;
   fileError: string | null = null;
 
@@ -62,16 +65,51 @@ export class ExcelImportModal {
   handleFileSelection(file: File) {
     this.fileError = null;
     this.result = null;
+    this.previewResult = null;
 
     if (!file.name.endsWith('.xlsx')) {
       this.fileError = 'فقط فایل‌های با فرمت xlsx پشتیبانی می‌شوند.';
       this.selectedFile = null;
+      this.step = 'select';
       this.cdr.detectChanges();
       return;
     }
 
     this.selectedFile = file;
+    this.runValidation(file);
+  }
+
+  runValidation(file: File) {
+    if (!this.importFn) return;
+    this.isAnalyzing = true;
+    this.fileError = null;
     this.cdr.detectChanges();
+
+    this.importFn(file, this.updateExisting, true).subscribe({
+      next: (res) => {
+        this.isAnalyzing = false;
+        this.previewResult = res;
+        this.step = 'preview';
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isAnalyzing = false;
+        if (err.error && err.error.errors) {
+          this.previewResult = err.error;
+          this.step = 'preview';
+        } else {
+          this.fileError = err.error?.message || 'خطا در خوانش و اعتبارسنجی اولیه فایل اکسل.';
+          this.step = 'select';
+        }
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  onUpdateExistingToggle() {
+    if (this.selectedFile && this.step === 'preview') {
+      this.runValidation(this.selectedFile);
+    }
   }
 
   formatFileSize(bytes: number): string {
@@ -83,31 +121,35 @@ export class ExcelImportModal {
   removeFile() {
     this.selectedFile = null;
     this.result = null;
+    this.previewResult = null;
     this.fileError = null;
+    this.step = 'select';
+    this.isAnalyzing = false;
+    this.isUploading = false;
+    this.uploadProgress = 0;
     this.cdr.detectChanges();
   }
 
-  startUpload() {
-    if (!this.selectedFile || !this.importFn) return;
+  commitUpload() {
+    if (!this.selectedFile || !this.importFn || this.isUploading) return;
 
     this.isUploading = true;
     this.uploadProgress = 0;
-    this.result = null;
 
-    // Simulate progress while waiting for response
     const progressInterval = setInterval(() => {
       if (this.uploadProgress < 90) {
         this.uploadProgress += Math.random() * 15;
         this.cdr.detectChanges();
       }
-    }, 200);
+    }, 150);
 
-    this.importFn(this.selectedFile, this.updateExisting).subscribe({
+    this.importFn(this.selectedFile, this.updateExisting, false).subscribe({
       next: (res) => {
         clearInterval(progressInterval);
         this.uploadProgress = 100;
         this.isUploading = false;
         this.result = res;
+        this.step = 'result';
         this.imported.emit(res);
         this.cdr.detectChanges();
       },
@@ -118,8 +160,9 @@ export class ExcelImportModal {
 
         if (err.error && err.error.errors) {
           this.result = err.error;
+          this.step = 'result';
         } else {
-          this.fileError = 'خطا در آپلود فایل. لطفاً دوباره تلاش کنید.';
+          this.fileError = 'خطا در ثبت نهایی فایل. لطفاً مجدداً تلاش کنید.';
         }
         this.cdr.detectChanges();
       }
@@ -138,7 +181,7 @@ export class ExcelImportModal {
 
   @HostListener('document:keydown.escape')
   handleEscape() {
-    if (!this.isUploading) {
+    if (!this.isUploading && !this.isAnalyzing) {
       this.close();
     }
   }
@@ -146,9 +189,9 @@ export class ExcelImportModal {
   @HostListener('document:keydown', ['$event'])
   handleKeyDown(event: KeyboardEvent) {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      if (this.selectedFile && !this.isUploading) {
+      if (this.step === 'preview' && this.selectedFile && !this.isUploading) {
         event.preventDefault();
-        this.startUpload();
+        this.commitUpload();
       }
     }
   }

@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, tap, EMPTY } from 'rxjs';
+import { Observable, of, tap, EMPTY, catchError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ImportResult } from './accounts-http.service';
 import { OfflineSyncService } from '../services/offline-sync.service';
@@ -44,7 +44,9 @@ export class WarehouseHttpService {
     if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
       return of([]);
     }
-    return this.http.get<Warehouse[]>(this.baseUrl);
+    return this.http.get<Warehouse[]>(this.baseUrl).pipe(
+      catchError(() => of([]))
+    );
   }
 
   getById(id: number): Observable<Warehouse> {

@@ -24,6 +24,12 @@
   z-index: 1000;
   box-shadow: 0 25px 60px rgba(0,0,0,0.4);
   animation: slideUp 0.3s ease;
+  transition: width 0.25s ease;
+}
+
+.modal-container.is-preview-mode {
+  width: 820px;
+  max-height: 90vh;
 }
 
 /* ── Header ── */

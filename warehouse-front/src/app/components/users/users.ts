@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, computed, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -15,7 +15,7 @@ import { ExcelImportModal } from '../../shared/components/excel-import-modal/exc
 import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
 import { environment } from '../../../environments/environment';
-import { Observable, Subject, Subscription } from 'rxjs';
+import { Observable, Subject, Subscription, forkJoin } from 'rxjs';
 import { debounceTime, finalize } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -26,18 +26,25 @@ import { ActivatedRoute, Router } from '@angular/router';
   styleUrl: './users.css'
 })
 export class Users implements OnInit, OnDestroy {
+  @ViewChild(IdCards) idCardsComponent?: IdCards;
   activeTab = 'users';
   activeRoleTab = 'custom';
-  activePermTab = 'MAIN_MENU';
+  activePermTab = 'WH_AUDIT';
   userRoleModalTab: 'all' | 'warehouse' | 'finance' | 'global' = 'warehouse';
   searchQuery = '';
   searchSubject = new Subject<string>();
   private searchSub?: Subscription;
 
-  // Pagination / Chunking
+  // Pagination & Filtering
+  currentPage = 1;
   pageSize = 24;
   visibleCount = 24;
+  pageSizeOptions = [12, 24, 48, 96];
   userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
+  userRoleFilter: number | 'ALL' = 'ALL';
+  userWarehouseFilter: number | string | 'ALL' = 'ALL';
+  selectedUserIds = new Set<number>();
+  activePopoverRoleId: number | null = null;
   userViewMode: 'grid' | 'table' = 'grid';
   roleViewMode: 'tree' | 'table' = 'tree';
   activeRolePresetId: string | null = null;
@@ -74,6 +81,61 @@ export class Users implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  roleSearchQuery: string = '';
+
+  onRoleSearchChange(query: string) {
+    this.roleSearchQuery = query ? query.trim() : '';
+    this.cdr.detectChanges();
+  }
+
+  get displayedRoles(): any[] {
+    const roles = this.allRoles;
+    if (!this.roleSearchQuery) return roles;
+    const q = this.roleSearchQuery.toLowerCase();
+    return roles.filter((r: any) => 
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.title && r.title.toLowerCase().includes(q))
+    );
+  }
+
+  get displayedRootRoles(): any[] {
+    if (!this.roleSearchQuery) return this.rootRoles;
+    const q = this.roleSearchQuery.toLowerCase();
+    return this.allRoles.filter((r: any) => 
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.title && r.title.toLowerCase().includes(q))
+    );
+  }
+
+  printIdCards() {
+    if (this.idCardsComponent) {
+      this.idCardsComponent.executeCardPrint();
+    }
+    this.cdr.detectChanges();
+  }
+
+  openIdCardsSheetPreview() {
+    if (this.idCardsComponent) {
+      this.idCardsComponent.openSheetPreviewModal();
+    }
+    this.cdr.detectChanges();
+  }
+
+  openIdCardsExportModal() {
+    if (this.idCardsComponent) {
+      this.idCardsComponent.openExportModal();
+    }
+    this.cdr.detectChanges();
+  }
+
+  get idCardsPrintableCount(): number {
+    return this.idCardsComponent?.printableUsers?.length || 0;
+  }
+
+  get isIdCardsExporting(): boolean {
+    return this.idCardsComponent?.isExportingImage || false;
+  }
+
   // Memoization Caches (O(1) lookups during change detection)
   roleChildrenMap = new Map<number, any[]>();
   roleUsersCountMap = new Map<number, number>();
@@ -99,8 +161,10 @@ export class Users implements OnInit, OnDestroy {
   // Role Form
   editingRole: any = null;
   roleForm = {
-    id: null as number | null, name: '', title: '', parent: null as number | null, color: '#94a3b8', permissions: [] as number[]
+    id: null as number | null, name: '', title: '', parent: null as number | null, color: '#94a3b8', permissions: [] as number[], user_ids: [] as number[]
   };
+  roleMemberSearchQuery: string = '';
+  isRoleMembersExpanded: boolean = false;
 
   // User Form (با حذف فیلدهای موهومی انقضا و افزودن کلمه عبور و آواتار تراکنشی)
   editingUser: any = null;
@@ -113,58 +177,12 @@ export class Users implements OnInit, OnDestroy {
 
   // Quick Role Presets / Templates for One-Click Permission Granting
   readonly ROLE_PRESETS = [
-    {
-      id: 'manager',
-      title: 'مدیر شرکت / مدیرعامل',
-      color: '#7c3aed',
-      icon: '👑',
-      description: 'دسترسی کامل مدیریتی، تاییدات کارکرد، صدور مجوز پرداخت، مانیتورینگ و گزارش‌ها',
-      permissionCodenames: [
-        'view_sys_dashboard', 'view_sys_users', 'view_sys_projects', 'view_sys_reports',
-        'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
-        'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
-        'view_wh_dashboard', 'view_sys_manager_review', 'view_sys_supervisor', 'view_sys_recounts', 'view_wh_customs',
-        'perm_approve_personnel_manager', 'perm_approve_fleet_manager', 'perm_manager_payment_authorize',
-        'perm_lock_work_period', 'perm_inventory_finalize', 'can_act_as_manager'
-      ]
-    },
-    {
-      id: 'accountant',
-      title: 'حسابدار / مالی و حقوق',
-      color: '#059669',
-      icon: '💳',
-      description: 'محاسبات حقوق و دستمزد، کارتابل مالی، تسویه ناوگان، پرونده‌ها و تایید مرحله مالی',
-      permissionCodenames: [
-        'view_sys_personnel', 'view_sys_payroll', 'view_sys_fleet_settlement',
-        'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
-        'perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'can_act_as_accountant'
-      ]
-    },
-    {
-      id: 'treasury',
-      title: 'خزانه‌دار و پرداخت',
-      color: '#d97706',
-      icon: '🏦',
-      description: 'کارتابل خزانه‌داری، اجرای واریز پایا/چک، مشاهده مبالغ مصوب حقوق و تسویه',
-      permissionCodenames: [
-        'view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'view_sys_personnel'
-      ]
-    },
-    {
-      id: 'supervisor',
-      title: 'سرپرست انبار / اجرا',
-      color: '#2563eb',
-      icon: '📋',
-      description: 'ثبت و تایید کارکرد میدانی پرسنل و ناوگان، کارتابل سرپرست شمارش، تخصیص کالا',
-      permissionCodenames: [
-        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance',
-        'view_wh_dashboard', 'view_wh_docs', 'view_wh_dispatch', 'view_sys_supervisor', 'view_sys_counter',
-        'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor', 'can_act_as_supervisor'
-      ]
-    },
+    // ─── دسته ۱: انبارگردانی و اسناد (Inventory Audit) ───
     {
       id: 'counter',
-      title: 'انبارگردان / شمارشگر',
+      title: 'انبارگردان / شمارشگر کور',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
       color: '#0284c7',
       icon: '🔢',
       description: 'میزکار شمارش کور فیزیکی، اسکن بارکد و ثبت تگ‌ها بدون دسترسی به مبالغ مالی',
@@ -173,34 +191,290 @@ export class Users implements OnInit, OnDestroy {
       ]
     },
     {
-      id: 'docs_auditor',
-      title: 'مسئول اسناد و انبار',
+      id: 'count_supervisor',
+      title: 'سرپرست شمارش',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
+      color: '#2563eb',
+      icon: '📋',
+      description: 'مدیریت شمارشگران میدانی، تخصیص کالا و زون‌ها، مقایسه با موجودی دفتری و صدور دستور بازشماری',
+      permissionCodenames: [
+        'view_sys_supervisor', 'can_act_as_supervisor', 'view_sys_recounts', 'perm_rec_recount',
+        'view_wh_dispatch', 'perm_rec_dispatch', 'view_sys_counter'
+      ]
+    },
+    {
+      id: 'doc_worker',
+      title: 'کارشناس اسناد و کالا',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
       color: '#0d9488',
       icon: '📑',
-      description: 'مدیریت کالا، تایید اسناد وارده و صادره، ممیزی و رهگیری تگ‌ها',
+      description: 'ورود اطلاعات فاکتورها، پکینگ‌لیست‌ها، بارگذاری عکس‌ها و انطباق اسناد در کارتابل اسناد',
       permissionCodenames: [
-        'view_wh_docs', 'view_wh_dispatch', 'view_wh_doc_approvals', 'view_wh_audit', 'perm_doc_approve_action'
+        'view_wh_docs', 'can_act_as_doc_worker', 'view_wh_labels', 'view_wh_dispatch'
       ]
     },
     {
-      id: 'operator',
-      title: 'کارمند / اپراتور ثبت',
+      id: 'doc_supervisor',
+      title: 'سرپرست مالی انبار',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
+      color: '#0891b2',
+      icon: '⚖️',
+      description: 'ممیزی کارتابل اسناد، تایید ارزی و ریالی فاکتورها، مهر و امضا و تایید فیدهای گمرکی و MT',
+      permissionCodenames: [
+        'view_wh_doc_approvals', 'perm_doc_approve_action', 'view_wh_customs',
+        'view_wh_feed_approvals', 'perm_feed_approve_action', 'can_act_as_doc_supervisor', 'view_wh_docs'
+      ]
+    },
+    {
+      id: 'finance_manager',
+      title: 'مدیر مالی انبارگردانی',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
+      color: '#059669',
+      icon: '📊',
+      description: 'ممیزی ارزش ریالی کل انبار، ارزیابی مالی مغایرت‌های کسری و اضافات و امضای صورتجلسه مالی',
+      permissionCodenames: [
+        'view_wh_customs', 'view_wh_audit', 'view_sys_reports', 'view_sys_manager_review',
+        'perm_doc_approve_action'
+      ]
+    },
+    {
+      id: 'count_manager',
+      title: 'مدیر شمارش و انبار',
+      category: 'inventory',
+      categoryTitle: 'انبارگردانی',
+      color: '#7c3aed',
+      icon: '📦',
+      description: 'فرماندهی عملیاتی انبارگردانی، داوری نهایی مغایرت‌ها، فریز انبار و بستن قطعی دوره انبارگردانی',
+      permissionCodenames: [
+        'view_sys_manager_review', 'can_act_as_manager', 'perm_inventory_finalize',
+        'perm_wh_freeze', 'view_wh_dashboard', 'view_sys_recounts', 'view_wh_docs'
+      ]
+    },
+
+    // ─── دسته ۲: حسابداری، کارگاه و کارکرد (Accounting & Workshop) ───
+    {
+      id: 'workshop_operator',
+      title: 'کارمند کارگاه',
+      category: 'accounting',
+      categoryTitle: 'حسابداری و کارگاه',
       color: '#64748b',
       icon: '👤',
-      description: 'ثبت اولیه روزهای کارکرد و حضور غیاب پرسنل و ماشین‌آلات',
+      description: 'ثبت روزانه کارت‌های تردد، حضور و غیاب پرسنل و ساعات کارکرد و سرویس ماشین‌آلات و ناوگان',
       permissionCodenames: [
-        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'can_act_as_operator'
+        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance', 'can_act_as_operator'
       ]
     },
     {
+      id: 'workshop_supervisor',
+      title: 'سرپرست کارگاه',
+      category: 'accounting',
+      categoryTitle: 'حسابداری و کارگاه',
+      color: '#3b82f6',
+      icon: '🦺',
+      description: 'کنترل کارکردها و تایید مرحله اول (عملیاتی و میدانی) کارکرد ماهانه پرسنل و ناوگان',
+      permissionCodenames: [
+        'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
+        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance',
+        'view_sys_supervisor', 'can_act_as_supervisor'
+      ]
+    },
+    {
+      id: 'accountant',
+      title: 'حسابدار',
+      category: 'accounting',
+      categoryTitle: 'حسابداری و کارگاه',
+      color: '#10b981',
+      icon: '💳',
+      description: 'محاسبات حقوق و دستمزد ماهانه، کسر بیمه و مالیات، تسویه پیمانکاران ناوگان و تایید مرحله مالی',
+      permissionCodenames: [
+        'view_sys_personnel', 'view_sys_payroll', 'view_sys_fleet_settlement',
+        'perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'can_act_as_accountant'
+      ]
+    },
+    {
+      id: 'company_manager',
+      title: 'مدیر شرکت',
+      category: 'accounting',
+      categoryTitle: 'حسابداری و کارگاه',
+      color: '#8b5cf6',
+      icon: '👑',
+      description: 'بررسی گزارش‌های مالی و حقوق کارگاه‌ها، قفل دوره ماهانه، تصویب و صدور مجوز پرداخت بانکی',
+      permissionCodenames: [
+        'view_sys_dashboard', 'view_sys_reports', 'view_sys_personnel', 'view_sys_payroll',
+        'view_sys_fleet_settlement', 'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
+        'perm_lock_work_period', 'perm_manager_payment_authorize', 'can_act_as_manager'
+      ]
+    },
+    {
+      id: 'treasury',
+      title: 'خزانه‌دار و پرداخت',
+      category: 'accounting',
+      categoryTitle: 'حسابداری و کارگاه',
+      color: '#d97706',
+      icon: '🏦',
+      description: 'کارتابل خزانه‌داری، صدور فایل پرداخت پایا/چک، ثبت واریز قطعی و صدور رسید تسویه',
+      permissionCodenames: [
+        'view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'view_sys_personnel'
+      ]
+    },
+
+    // ─── دسته ۳: مدیریت و کلان سیستم (Infrastructure & SOC) ───
+    {
       id: 'admin_all',
-      title: 'مدیر کل سیستم (همه دسترسی‌ها)',
+      title: 'مدیر کل سیستم (سوپریوزر)',
+      category: 'system',
+      categoryTitle: 'کلان سیستم',
       color: '#4f46e5',
       icon: '⚡',
-      description: 'اعطای ۱۰۰٪ تمام دسترسی‌های سیستمی، عملیاتی، مالی و فرآیندی',
+      description: 'اعطای ۱۰۰٪ تمام دسترسی‌های سیستمی، عملیاتی، مالی، اتاق فرماندهی مرکز عملیات و بازیابی',
       permissionCodenames: 'ALL'
     }
   ];
+
+  activePresetCategory: 'all' | 'inventory' | 'accounting' | 'system' = 'all';
+  isPresetsExpanded = false;
+
+  getActivePresetTitle(): string {
+    const p = this.ROLE_PRESETS.find(x => x.id === this.activeRolePresetId);
+    return p ? p.title : '';
+  }
+
+  hasInventoryModule(): boolean {
+    return this.systemPermissionGroups.some(g => g.key === 'WH_AUDIT');
+  }
+
+  hasAccountingModule(): boolean {
+    return this.systemPermissionGroups.some(g => g.key === 'ACCOUNTING_FINANCE');
+  }
+
+  get availableRolePresets() {
+    return this.ROLE_PRESETS.filter(p => {
+      if (p.category === 'inventory' && !this.hasInventoryModule()) return false;
+      if (p.category === 'accounting' && !this.hasAccountingModule()) return false;
+      return true;
+    });
+  }
+
+  get filteredRolePresets() {
+    const list = this.availableRolePresets;
+    if (this.activePresetCategory === 'all') {
+      return list;
+    }
+    return list.filter(p => p.category === this.activePresetCategory);
+  }
+
+  // عناوین کوتاه و مختصر جهت نمایش بهینه در چیپ‌های دسترسی تفکیکی
+  readonly SHORT_PERMISSION_NAMES: Record<string, string> = {
+    // کارکرد و پرسنل و ناوگان
+    'view_sys_personnel_attendance': 'کارکرد پرسنل',
+    'view_sys_fleet_attendance': 'کارکرد ناوگان',
+    'view_sys_payroll': 'حقوق و دستمزد',
+    'view_sys_fleet_settlement': 'تسویه ناوگان',
+    'view_sys_personnel': 'مدیریت پرسنل',
+    'view_sys_treasury': 'خزانه‌داری',
+    'view_wh_attendance': 'کارکرد ناوگان انبار',
+
+    // تاییدات و کارتابل‌ها
+    'perm_approve_personnel_supervisor': 'تایید سرپرست پرسنل',
+    'perm_approve_personnel_manager': 'تایید مدیر پرسنل',
+    'perm_approve_personnel_finance': 'تایید مالی پرسنل',
+    'perm_approve_fleet_supervisor': 'تایید سرپرست ناوگان',
+    'perm_approve_fleet_manager': 'تایید مدیر ناوگان',
+    'perm_approve_fleet_finance': 'تایید مالی ناوگان',
+    'perm_manager_payment_authorize': 'مجوز پرداخت مدیر',
+    'perm_treasury_disburse_action': 'واریز خزانه‌داری',
+    'perm_lock_work_period': 'قفل کارکرد ماهانه',
+    'perm_inventory_finalize': 'بستن انبارگردانی',
+    'perm_doc_approve_action': 'امضا و تایید اسناد',
+    'perm_feed_approve_action': 'تایید فیدهای گمرکی',
+    'can_act_as_counter': 'شمارشگر میدانی',
+    'can_act_as_supervisor': 'سرپرست شمارش',
+    'can_act_as_manager': 'مدیر انبار',
+    'can_act_as_doc_worker': 'کارشناس اسناد',
+    'can_act_as_doc_supervisor': 'سرپرست اسناد',
+    'can_act_as_operator': 'کارمند ثبت',
+    'can_act_as_accountant': 'حسابدار',
+
+    // عملیات انبار و شمارش
+    'view_sys_counter': 'میزکار شمارش کور',
+    'view_sys_supervisor': 'کارتابل سرپرست',
+    'view_sys_manager_review': 'بررسی مدیر انبار',
+    'view_sys_recounts': 'مغایرت و بازشماری',
+    'view_wh_dashboard': 'داشبورد انبار',
+    'view_wh_docs': 'مدیریت کالا',
+    'view_wh_dispatch': 'تخصیص کالا',
+    'view_wh_customs': 'مالی و گمرکی',
+    'view_wh_doc_approvals': 'تاییدات اسناد',
+    'view_wh_feeding': 'تغذیه MT',
+    'view_wh_feed_approvals': 'تاییدات تغذیه',
+    'view_wh_labels': 'چاپ لیبل',
+    'view_wh_label_designer': 'طراحی لیبل',
+    'view_wh_audit': 'ممیزی انبار',
+    'view_wh_settings': 'تنظیمات انبار',
+    'perm_rec_dispatch': 'تخصیص به شمارشگر',
+    'perm_rec_recount': 'دستور بازشماری',
+    'perm_rec_label': 'دستور چاپ لیبل',
+    'perm_rec_import': 'آپلود فایل پایه',
+    'perm_wh_create': 'تعریف انبار جدید',
+    'perm_wh_edit': 'ویرایش انبار',
+    'perm_wh_freeze': 'فریز عملیات انبار',
+
+    // کلان سیستم
+    'view_sys_dashboard': 'داشبورد کلان',
+    'view_sys_users': 'کاربران و نقش‌ها',
+    'view_sys_projects': 'انبارها و پروژه‌ها',
+    'view_sys_id_cards': 'صدور کارت پرسنلی',
+    'view_sys_export': 'صدور فایل تغذیه',
+    'view_sys_reports': 'گزارش‌ساز',
+    'view_sys_settings': 'تنظیمات سیستم',
+    'perm_sys_settings': 'تنظیمات کلان',
+    'perm_sys_logs': 'لاگ‌های امنیتی',
+    'perm_usr_add': 'ثبت پرسنل جدید',
+    'perm_usr_edit': 'ویرایش پرونده',
+    'perm_usr_role': 'تغییر ساختار نقش‌ها',
+
+    // دسترسی‌های حساس
+    'perm_rollback_data': 'احیای جامع داده‌ها',
+    'perm_rollback_single': 'بازگردانی تکی سند',
+    'perm_rollback_bulk': 'بازگردانی گروهی',
+    'perm_restore_deleted': 'احیای حذف‌شده‌ها',
+    'perm_sys_backup_manage': 'مدیریت فایل پشتیبان',
+    'perm_sys_backup_restore': 'بازیابی دیتابیس',
+    'perm_sys_audit_export': 'خروجی لاگ ممیزی',
+    'perm_sys_purge_logs': 'حذف لاگ ممیزی',
+    'perm_sys_hard_delete': 'حذف قطعی داده‌ها',
+    'perm_sys_emergency_freeze': 'فریز اضطراری کل سیستم',
+    'perm_sys_factory_reset': 'ریست فکتوری سیستم',
+
+    // عملیات پایه انبار و کالا
+    'view_warehouse': 'مشاهده انبارها',
+    'add_warehouse': 'تعریف انبار جدید',
+    'change_warehouse': 'ویرایش انبار',
+    'delete_warehouse': 'حذف انبار',
+    'view_record': 'مشاهده رکوردهای شمارش',
+    'add_record': 'ثبت رکورد شمارش',
+    'change_record': 'ویرایش رکورد شمارش',
+    'delete_record': 'حذف رکورد شمارش',
+
+    // عملیات پایه کاربران و گروه‌ها
+    'view_customuser': 'مشاهده کاربران',
+    'add_customuser': 'تعریف کاربر جدید',
+    'change_customuser': 'ویرایش اطلاعات کاربر',
+    'delete_customuser': 'حذف کاربر',
+    'view_group': 'مشاهده گروه‌ها',
+    'add_group': 'تعریف گروه جدید',
+    'change_group': 'ویرایش گروه',
+    'delete_group': 'حذف گروه'
+  };
+
+  getShortPermissionName(perm: Permission | any): string {
+    if (!perm) return '';
+    return this.SHORT_PERMISSION_NAMES[perm.codename] || perm.name;
+  }
 
   systemPermissions: Permission[] = [];
   systemPermissionGroups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [];
@@ -221,7 +495,7 @@ export class Users implements OnInit, OnDestroy {
   // Excel Import/Export
   isExcelModalOpen = false;
   excelModalTitle = '';
-  excelImportFn!: (file: File, updateExisting: boolean) => Observable<ImportResult>;
+  excelImportFn!: (file: File, updateExisting: boolean, dryRun?: boolean) => Observable<ImportResult>;
   excelTemplateFn!: () => void;
 
   constructor(
@@ -281,73 +555,76 @@ export class Users implements OnInit, OnDestroy {
       
       const sensitivePerms = res.filter((p: any) => p.is_sensitive);
 
-      const sysPersonnelPerms = [
-        'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
-        'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury'
-      ];
-      const sysGeneralPerms = [
-        'view_sys_dashboard', 'view_sys_users', 'view_sys_projects', 'view_sys_id_cards',
-        'view_sys_settings', 'view_sys_reports'
-      ];
-      const sysWarehousePerms = [
+      // ۱. نرم‌افزار انبارگردانی و اسناد کالا (کلیه منوها، عملیات میدانی و تاییدات انبارگردانی)
+      const warehouseCodenames = [
         'view_wh_dashboard', 'view_wh_docs', 'view_wh_dispatch', 'view_sys_counter',
         'view_wh_customs', 'view_sys_supervisor', 'view_sys_manager_review', 'view_sys_recounts',
         'view_wh_attendance', 'view_wh_doc_approvals', 'view_wh_feeding', 'view_wh_feed_approvals',
-        'view_wh_labels', 'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings'
+        'view_wh_labels', 'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
+        'view_wh_stocktaking', 'view_warehouse', 'add_warehouse', 'change_warehouse', 'delete_warehouse',
+        'view_record', 'add_record', 'change_record', 'delete_record',
+        'can_act_as_counter', 'can_act_as_supervisor', 'can_act_as_manager',
+        'can_act_as_doc_worker', 'can_act_as_doc_supervisor',
+        'perm_doc_approve_action', 'perm_feed_approve_action', 'perm_inventory_finalize',
+        'perm_rec_dispatch', 'perm_rec_recount', 'perm_rec_label', 'perm_rec_import',
+        'perm_wh_create', 'perm_wh_edit', 'perm_wh_freeze'
       ];
 
-      const generalMenuPerms = res.filter((p: any) => sysGeneralPerms.includes(p.codename) && !p.is_sensitive);
-      const personnelMenuPerms = res.filter((p: any) => sysPersonnelPerms.includes(p.codename) && !p.is_sensitive);
-      const warehouseMenuPerms = res.filter((p: any) => sysWarehousePerms.includes(p.codename) && !p.is_sensitive);
-      
-      const workflowPerms = res.filter((p: any) => 
-        (p.codename.startsWith('perm_approve_') || 
-         p.codename.startsWith('perm_manager_') || 
-         p.codename.startsWith('perm_treasury_') || 
-         p.codename.startsWith('perm_doc_') || 
-         p.codename.startsWith('perm_feed_') || 
-         p.codename.startsWith('perm_lock_') || 
-         p.codename.startsWith('perm_inventory_') || 
-         p.codename.startsWith('can_act_as_')) && !p.is_sensitive
-      );
+      // ۲. نرم‌افزار حسابداری و کارگاه (کارکرد پرسنل و ناوگان، حقوق و دستمزد، تسویه و تاییدات مالی)
+      const accountingCodenames = [
+        'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+        'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
+        'can_act_as_operator', 'can_act_as_accountant',
+        'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
+        'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
+        'perm_approve_personnel_finance', 'perm_approve_fleet_finance',
+        'perm_lock_work_period', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action'
+      ];
+
+      // ۳. مدیریت و زیرساخت سیستم
+      const systemCodenames = [
+        'view_sys_dashboard', 'view_sys_users', 'view_sys_projects', 'view_sys_id_cards',
+        'view_sys_export', 'view_sys_settings', 'view_sys_reports',
+        'perm_sys_settings', 'perm_sys_logs', 'perm_usr_add', 'perm_usr_edit', 'perm_usr_role',
+        'view_customuser', 'add_customuser', 'change_customuser', 'delete_customuser',
+        'view_group', 'add_group', 'change_group', 'delete_group'
+      ];
+
+      const warehousePerms = res.filter((p: any) => warehouseCodenames.includes(p.codename) && !p.is_sensitive);
+      const accountingPerms = res.filter((p: any) => accountingCodenames.includes(p.codename) && !p.is_sensitive);
+      const systemPerms = res.filter((p: any) => systemCodenames.includes(p.codename) && !p.is_sensitive);
 
       const otherPerms = res.filter((p: any) => 
         !p.is_sensitive && 
-        !generalMenuPerms.includes(p) && 
-        !personnelMenuPerms.includes(p) && 
-        !warehouseMenuPerms.includes(p) && 
-        !workflowPerms.includes(p)
+        !warehousePerms.includes(p) && 
+        !accountingPerms.includes(p) && 
+        !systemPerms.includes(p)
       );
 
       const groups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [
         {
-          key: 'PERSONNEL_FINANCE',
-          title: 'کارکرد، حقوق و خزانه‌داری 💳',
-          items: personnelMenuPerms
+          key: 'WH_AUDIT',
+          title: 'انبارگردانی 📦',
+          items: warehousePerms
         },
         {
-          key: 'WH_MENU',
-          title: 'عملیات انبار و شمارش 📦',
-          items: warehouseMenuPerms
-        },
-        {
-          key: 'WORKFLOW',
-          title: 'تاییدات و کارتابل‌ها 📋',
-          items: workflowPerms
+          key: 'ACCOUNTING_FINANCE',
+          title: 'حسابداری 💳',
+          items: accountingPerms
         },
         {
           key: 'MAIN_MENU',
-          title: 'مدیریت و کلان سیستم ⚙️',
-          items: generalMenuPerms
+          title: 'سیستم ⚙️',
+          items: systemPerms
         },
         {
           key: 'BACKEND',
-          title: 'سایر دسترسی‌ها 📑',
+          title: 'سایر 📑',
           items: otherPerms
         },
         {
           key: 'SENSITIVE',
-          title: 'حساس و بحرانی 🛡️',
+          title: 'حساس 🛡️',
           items: sensitivePerms,
           is_sensitive_group: true
         }
@@ -474,6 +751,18 @@ export class Users implements OnInit, OnDestroy {
       users = users.filter((u: any) => u.is_superuser);
     }
 
+    // فیلتر انتخابی بر اساس نقش سازمانی
+    if (this.userRoleFilter !== 'ALL') {
+      const rId = Number(this.userRoleFilter);
+      users = users.filter((u: any) => Array.isArray(u.groups) && u.groups.includes(rId));
+    }
+
+    // فیلتر انتخابی بر اساس انبار انتساب‌یافته
+    if (this.userWarehouseFilter !== 'ALL') {
+      const wId = String(this.userWarehouseFilter);
+      users = users.filter((u: any) => Array.isArray(u.assigned_warehouses) && u.assigned_warehouses.some((id: any) => String(id) === wId));
+    }
+
     if (!q) return users;
 
     return users.filter((u: any) => {
@@ -495,21 +784,196 @@ export class Users implements OnInit, OnDestroy {
     });
   }
 
+  // ── Pagination Getters & Methods ─────────────────────────────────
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredUsers.length / this.pageSize));
+  }
+
+  get pagedUsers(): any[] {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredUsers.slice(start, start + this.pageSize);
+  }
+
   get displayedUsers(): any[] {
-    return this.filteredUsers.slice(0, this.visibleCount);
+    return this.pagedUsers;
+  }
+
+  get paginationRange(): { start: number; end: number } {
+    if (this.filteredUsers.length === 0) return { start: 0, end: 0 };
+    const start = (this.currentPage - 1) * this.pageSize + 1;
+    const end = Math.min(this.filteredUsers.length, this.currentPage * this.pageSize);
+    return { start, end };
+  }
+
+  goToPage(page: number): void {
+    if (page < 1 || page > this.totalPages) return;
+    this.currentPage = page;
+    this.cdr.detectChanges();
+  }
+
+  setPageSize(size: number): void {
+    this.pageSize = size;
+    this.currentPage = 1;
+    this.cdr.detectChanges();
+  }
+
+  onFilterChange(): void {
+    this.currentPage = 1;
+    this.clearUserSelection();
+    this.cdr.detectChanges();
+  }
+
+  getPageNumbers(): (number | string)[] {
+    const total = this.totalPages;
+    const current = this.currentPage;
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages: (number | string)[] = [1];
+    if (current > 3) {
+      pages.push('...');
+    }
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    if (current < total - 2) {
+      pages.push('...');
+    }
+    pages.push(total);
+    return pages;
   }
 
   loadMoreUsers(): void {
-    if (this.visibleCount < this.filteredUsers.length) {
-      this.visibleCount += this.pageSize;
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
       this.cdr.detectChanges();
     }
   }
 
   setStatusFilter(filter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser') {
     this.userStatusFilter = filter;
-    this.visibleCount = this.pageSize;
+    this.currentPage = 1;
+    this.clearUserSelection();
     this.cdr.detectChanges();
+  }
+
+  // ── Bulk Selection & Actions ─────────────────────────────────────
+  isUserSelected(id: number): boolean {
+    return this.selectedUserIds.has(id);
+  }
+
+  toggleSelectUser(id: number, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (this.selectedUserIds.has(id)) {
+      this.selectedUserIds.delete(id);
+    } else {
+      this.selectedUserIds.add(id);
+    }
+    this.cdr.detectChanges();
+  }
+
+  isAllCurrentPageSelected(): boolean {
+    const users = this.pagedUsers;
+    return users.length > 0 && users.every(u => this.selectedUserIds.has(u.id));
+  }
+
+  toggleSelectAllCurrentPage(event?: Event): void {
+    if (event) event.stopPropagation();
+    const users = this.pagedUsers;
+    if (this.isAllCurrentPageSelected()) {
+      users.forEach(u => this.selectedUserIds.delete(u.id));
+    } else {
+      users.forEach(u => this.selectedUserIds.add(u.id));
+    }
+    this.cdr.detectChanges();
+  }
+
+  clearUserSelection(): void {
+    this.selectedUserIds.clear();
+    this.cdr.detectChanges();
+  }
+
+  bulkToggleStatus(activate: boolean): void {
+    const targetIds = Array.from(this.selectedUserIds).filter(id => {
+      const u = this.state.appState.users.find((x: any) => x.id === id);
+      return u && u.is_active !== activate;
+    });
+
+    if (targetIds.length === 0) {
+      this.toast.show('info', `تمامی کاربران انتخاب‌شده در حال حاضر ${activate ? 'فعال' : 'معلق'} هستند.`);
+      return;
+    }
+
+    this.isLoading = true;
+    const requests = targetIds.map(id => this.accountsService.toggleUserStatus(id));
+    forkJoin(requests).subscribe({
+      next: () => {
+        targetIds.forEach(id => {
+          const u = this.state.appState.users.find((x: any) => x.id === id);
+          if (u) u.is_active = activate;
+        });
+        this.isLoading = false;
+        this.toast.show('success', `وضعیت ${targetIds.length} کاربر با موفقیت به «${activate ? 'فعال' : 'معلق'}» تغییر یافت.`);
+        this.clearUserSelection();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.isLoading = false;
+        const msg = err.error?.detail || err.error?.error || (typeof err.error === 'string' ? err.error : 'خطا در تغییر وضعیت گروهی کاربران');
+        this.toast.show('error', msg);
+        this.loadData();
+      }
+    });
+  }
+
+  bulkExportSelectedUsers(): void {
+    const ids = Array.from(this.selectedUserIds);
+    if (ids.length === 0) {
+      this.exportUsersExcel();
+      return;
+    }
+    this.accountsService.exportUsersExcel(ids).subscribe({
+      next: (blob) => {
+        this.triggerDownload(blob, `users_export_${ids.length}_selected.xlsx`);
+        this.toast.show('success', `خروجی اکسل ${ids.length} کاربر انتخاب‌شده با موفقیت دانلود شد.`);
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در دانلود فایل اکسل کاربران انتخاب‌شده.');
+      }
+    });
+  }
+
+  // ── Role Percentage & Popover Helpers ────────────────────────────
+  getRolePermissionPercent(role: any): number {
+    const total = this.systemPermissions.length || 70;
+    const count = role.permissions?.length || 0;
+    return Math.min(100, Math.round((count / total) * 100));
+  }
+
+  toggleRolePopover(roleId: number, event: Event): void {
+    event.stopPropagation();
+    this.activePopoverRoleId = this.activePopoverRoleId === roleId ? null : roleId;
+    this.cdr.detectChanges();
+  }
+
+  closeRolePopover(): void {
+    this.activePopoverRoleId = null;
+    this.cdr.detectChanges();
+  }
+
+  getRoleGroupSummary(role: any): { title: string; count: number; total: number }[] {
+    if (!role || !role.permissions) return [];
+    const rolePermSet = new Set<number>(role.permissions);
+    return (this.systemPermissionGroups || []).map(group => {
+      const count = group.items.filter(p => rolePermSet.has(p.id)).length;
+      return {
+        title: group.title,
+        count: count,
+        total: group.items.length
+      };
+    }).filter(g => g.count > 0);
   }
 
   get userCounts() {
@@ -1107,22 +1571,32 @@ export class Users implements OnInit, OnDestroy {
     this.closeMenus();
     this.permSearchQuery = '';
     this.activeRolePresetId = null;
+    this.roleMemberSearchQuery = '';
+    this.isRoleMembersExpanded = false;
     if (id) {
       const r = this.state.appState.roles.find((x: any) => x.id === id);
       this.editingRole = r;
+      const assignedUserIds = (r.user_ids && Array.isArray(r.user_ids))
+        ? [...r.user_ids]
+        : (this.state.appState.users || [])
+            .filter((u: any) => u.groups && u.groups.includes(r.id))
+            .map((u: any) => u.id);
+
       this.roleForm = { 
         id: r.id, 
         name: r.name, 
         title: r.title || r.name, 
         parent: r.parent !== null && r.parent !== undefined ? r.parent : null, 
         color: r.color || '#94a3b8', 
-        permissions: r.permissions ? [...r.permissions] : [] 
+        permissions: r.permissions ? [...r.permissions] : [],
+        user_ids: assignedUserIds
       };
     } else {
       this.editingRole = null;
-      this.roleForm = { id: null, name: '', title: '', parent: null, color: '#94a3b8', permissions: [] };
+      this.roleForm = { id: null, name: '', title: '', parent: null, color: '#94a3b8', permissions: [], user_ids: [] };
     }
-    this.activePermTab = 'PERSONNEL_FINANCE';
+    this.activePermTab = this.systemPermissionGroups[0]?.key || 'MAIN_MENU';
+    this.isPresetsExpanded = false;
     this.isRoleModalOpen = true;
     this.cdr.detectChanges();
   }
@@ -1132,18 +1606,66 @@ export class Users implements OnInit, OnDestroy {
     this.editingRole = null;
     this.activeRolePresetId = null;
     this.permSearchQuery = '';
+    this.roleMemberSearchQuery = '';
+    this.isRoleMembersExpanded = false;
     this.roleForm = {
       id: null,
       name: `${role.name}_copy`,
       title: `${role.title || role.name} (کپی)`,
       parent: role.parent !== null && role.parent !== undefined ? role.parent : null,
       color: role.color || '#94a3b8',
-      permissions: role.permissions ? [...role.permissions] : []
+      permissions: role.permissions ? [...role.permissions] : [],
+      user_ids: []
     };
-    this.activePermTab = 'PERSONNEL_FINANCE';
+    this.activePermTab = this.systemPermissionGroups[0]?.key || 'MAIN_MENU';
     this.isRoleModalOpen = true;
     this.toast.show('info', `نقش «${role.title || role.name}» با دسترسی‌های مرتبط آماده تکثیر است.`);
     this.cdr.detectChanges();
+  }
+
+  getFilteredPersonnelForRole(): any[] {
+    const q = (this.roleMemberSearchQuery || '').trim().toLowerCase();
+    const users = this.state.appState.users || [];
+    if (!q) return users;
+    return users.filter((u: any) => {
+      const fn = (u.first_name || '').toLowerCase();
+      const ln = (u.last_name || '').toLowerCase();
+      const un = (u.username || '').toLowerCase();
+      const nc = (u.national_code || '').toLowerCase();
+      const phone = (u.phone_number || '').toLowerCase();
+      return fn.includes(q) || ln.includes(q) || un.includes(q) || nc.includes(q) || phone.includes(q);
+    });
+  }
+
+  toggleRoleMember(userId: number): void {
+    if (!this.roleForm.user_ids) this.roleForm.user_ids = [];
+    const idx = this.roleForm.user_ids.indexOf(userId);
+    if (idx > -1) {
+      this.roleForm.user_ids.splice(idx, 1);
+    } else {
+      this.roleForm.user_ids.push(userId);
+    }
+  }
+
+  selectAllFilteredRoleMembers(): void {
+    if (!this.roleForm.user_ids) this.roleForm.user_ids = [];
+    const filtered = this.getFilteredPersonnelForRole();
+    const currentSet = new Set(this.roleForm.user_ids);
+    filtered.forEach((u: any) => currentSet.add(u.id));
+    this.roleForm.user_ids = Array.from(currentSet);
+  }
+
+  deselectAllRoleMembers(): void {
+    this.roleForm.user_ids = [];
+  }
+
+  isRoleMemberSelected(userId: number): boolean {
+    return this.roleForm.user_ids?.includes(userId) ?? false;
+  }
+
+  getSelectedRoleMembers(): any[] {
+    const ids = new Set(this.roleForm.user_ids || []);
+    return (this.state.appState.users || []).filter((u: any) => ids.has(u.id));
   }
 
   applyRolePreset(preset: any) {
@@ -1167,6 +1689,7 @@ export class Users implements OnInit, OnDestroy {
       this.roleForm.color = preset.color;
     }
 
+    this.isPresetsExpanded = false;
     this.toast.show(
       'success',
       `قالب «${preset.title}» اعمال شد (${this.roleForm.permissions.length} مجوز انتخاب گردید).`
@@ -1191,6 +1714,7 @@ export class Users implements OnInit, OnDestroy {
       ...group,
       items: group.items.filter((p: any) => 
         (p.name && p.name.toLowerCase().includes(q)) || 
+        (this.getShortPermissionName(p) && this.getShortPermissionName(p).toLowerCase().includes(q)) ||
         (p.codename && p.codename.toLowerCase().includes(q))
       )
     })).filter(group => group.items.length > 0);
@@ -1285,16 +1809,33 @@ export class Users implements OnInit, OnDestroy {
         title: this.roleForm.title.trim(),
         color: this.roleForm.color,
         parent: this.roleForm.parent !== null && this.roleForm.parent !== undefined ? this.roleForm.parent : null,
-        permissions: this.roleForm.permissions
+        permissions: this.roleForm.permissions,
+        user_ids: this.roleForm.user_ids || []
     };
 
     if (!payload.name || !payload.title) return this.toast.show('error', 'عنوان و کد سیستمی نقش الزامی است.');
+
+    const syncUsersLocalRoles = (roleId: number, targetUserIds: number[]) => {
+      const targetSet = new Set(targetUserIds);
+      (this.state.appState.users || []).forEach((u: any) => {
+        if (!u.groups) u.groups = [];
+        const hasRole = u.groups.includes(roleId);
+        const shouldHave = targetSet.has(u.id);
+        if (shouldHave && !hasRole) {
+          u.groups.push(roleId);
+        } else if (!shouldHave && hasRole) {
+          u.groups = u.groups.filter((gid: number) => gid !== roleId);
+        }
+      });
+    };
 
     if (this.editingRole) {
       this.accountsService.updateRole(this.editingRole.id, payload).subscribe({
         next: (res) => {
           Object.assign(this.editingRole, res);
-          this.toast.show('success', 'نقش و دسترسی‌های آن با موفقیت بروزرسانی شد.');
+          this.editingRole.user_ids = [...(payload.user_ids || [])];
+          syncUsersLocalRoles(this.editingRole.id, payload.user_ids || []);
+          this.toast.show('success', 'نقش، دسترسی‌ها و اعضای منتسب با موفقیت بروزرسانی شد.');
           this.isRoleModalOpen = false;
           this.cdr.detectChanges();
         },
@@ -1306,8 +1847,10 @@ export class Users implements OnInit, OnDestroy {
     } else {
       this.accountsService.createRole(payload).subscribe({
         next: (res) => {
+          res.user_ids = [...(payload.user_ids || [])];
           this.state.appState.roles.push(res);
-          this.toast.show('success', 'نقش جدید به همراه ماتریس دسترسی ایجاد شد.');
+          syncUsersLocalRoles(res.id, payload.user_ids || []);
+          this.toast.show('success', 'نقش جدید به همراه اعضای منتسب ایجاد شد.');
           this.isRoleModalOpen = false;
           this.cdr.detectChanges();
         },
@@ -1455,10 +1998,11 @@ export class Users implements OnInit, OnDestroy {
     window.URL.revokeObjectURL(url);
   }
 
-  exportUsersExcel() {
-    this.accountsService.exportUsersExcel().subscribe({
+  exportUsersExcel(ids?: number[]) {
+    this.accountsService.exportUsersExcel(ids).subscribe({
       next: (blob) => {
-        this.triggerDownload(blob, 'users_export.xlsx');
+        const filename = ids && ids.length > 0 ? `users_export_${ids.length}_selected.xlsx` : 'users_export.xlsx';
+        this.triggerDownload(blob, filename);
         this.toast.show('success', 'فایل اکسل کاربران با موفقیت دانلود شد.');
       },
       error: () => {
@@ -1469,7 +2013,7 @@ export class Users implements OnInit, OnDestroy {
 
   openUsersImportModal() {
     this.excelModalTitle = 'آپلود دسته‌جمعی کاربران';
-    this.excelImportFn = (file: File, updateExisting: boolean) => this.accountsService.importUsersExcel(file, updateExisting);
+    this.excelImportFn = (file: File, updateExisting: boolean, dryRun?: boolean) => this.accountsService.importUsersExcel(file, updateExisting, dryRun || false);
     this.excelTemplateFn = () => this.downloadUsersTemplate();
     this.isExcelModalOpen = true;
     this.cdr.detectChanges();
@@ -1500,7 +2044,7 @@ export class Users implements OnInit, OnDestroy {
 
   openRolesImportModal() {
     this.excelModalTitle = 'آپلود دسته‌جمعی نقش‌ها';
-    this.excelImportFn = (file: File, updateExisting: boolean) => this.accountsService.importRolesExcel(file, updateExisting);
+    this.excelImportFn = (file: File, updateExisting: boolean, dryRun?: boolean) => this.accountsService.importRolesExcel(file, updateExisting, dryRun || false);
     this.excelTemplateFn = () => this.downloadRolesTemplate();
     this.isExcelModalOpen = true;
     this.cdr.detectChanges();
@@ -1513,6 +2057,20 @@ export class Users implements OnInit, OnDestroy {
       },
       error: () => {
         this.toast.show('error', 'خطا در دانلود قالب اکسل نقش‌ها.');
+      }
+    });
+  }
+
+  exportIdCardsExcel() {
+    const selectedIds = this.idCardsComponent ? Array.from(this.idCardsComponent.selectedUserIds) : [];
+    this.accountsService.exportIdCardsExcel(selectedIds).subscribe({
+      next: (blob) => {
+        this.triggerDownload(blob, 'id_cards_export.xlsx');
+        const countMsg = selectedIds.length > 0 ? `(${selectedIds.length} نفر انتخاب‌شده)` : 'کل پرسنل انبار';
+        this.toast.show('success', `فایل اکسل کارت‌های پرسنلی ${countMsg} با موفقیت دانلود شد.`);
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در دانلود فایل اکسل کارت‌های پرسنلی.');
       }
     });
   }

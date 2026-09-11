@@ -29,6 +29,7 @@ import { environment } from '../../../environments/environment';
 
 import { WAREHOUSE_SYSTEM_NAV_ITEMS, WAREHOUSE_CONTEXT_NAV_ITEMS } from '../../modules/warehouse/nav-items';
 import { ACCOUNTING_NAV_ITEMS } from '../../modules/accounting/nav-items';
+import { ModuleRegistryService } from '../../core/modules/module-registry.service';
 
 @Component({
   selector: 'app-layout',
@@ -40,6 +41,7 @@ export class Layout implements OnInit, OnDestroy {
   public commService = inject(CommunicationService);
   public wsService = inject(WebSocketService);
   public personaService = inject(AppPersonaService);
+  public moduleRegistry = inject(ModuleRegistryService);
 
   get appTitle(): string {
     if (this.personaService.activeApp() === 'personnel') {
@@ -592,17 +594,25 @@ export class Layout implements OnInit, OnDestroy {
 
   ngOnInit() {
     // دریافت لیست انبارها از بک‌اند (با خودترمیمی آنی در صورت حذف یا نامعتبر شدن انبار فعال)
-    this.whService.getAll().subscribe({
-      next: (data) => {
-        this.handleWarehousesLoaded(data);
+    if (this.moduleRegistry.isModuleInstalled('warehouse')) {
+      this.whService.getAll().subscribe({
+        next: (data) => {
+          this.handleWarehousesLoaded(data);
 
-        // راه‌اندازی سراسری وب‌سوکت پیام‌رسان و بارگذاری پیام‌های خوانده‌نشده
-        const initWhId = this.store.activeWarehouseId() === 'ALL' ? undefined : Number(this.store.activeWarehouseId());
-        this.commService.ensureConnected(initWhId);
-        this.commService.loadConversations(initWhId);
-        this.commService.requestNotificationPermission();
-      }
-    });
+          // راه‌اندازی سراسری وب‌سوکت پیام‌رسان و بارگذاری پیام‌های خوانده‌نشده
+          const initWhId = this.store.activeWarehouseId() === 'ALL' ? undefined : Number(this.store.activeWarehouseId());
+          this.commService.ensureConnected(initWhId);
+          this.commService.loadConversations(initWhId);
+          this.commService.requestNotificationPermission();
+        },
+        error: () => {}
+      });
+    } else {
+      // در حالت حسابداری تنها یا عدم حضور ماژول انبار، پیام‌رسان بدون قفل شدن بر انبار متصل می‌شود
+      this.commService.ensureConnected();
+      this.commService.loadConversations();
+      this.commService.requestNotificationPermission();
+    }
 
     // ─── Subscribe to offline/sync observables ───
     const network = NetworkStatusService.getInstance();
@@ -636,11 +646,13 @@ export class Layout implements OnInit, OnDestroy {
 
         // اگر از حالت آفلاین به آنلاین برگشتیم: استعلام سبک پس‌زمینه برای جبران تغییرات زمان قطعی
         if (wasOffline && state === 'online') {
-          console.log('[Layout] 🌐 اتصال مجدد شبکه — استعلام سبک پس‌زمینه...');
-          this.whService.getAll().subscribe({
-            next: (data) => this.handleWarehousesLoaded(data),
-            error: () => {}
-          });
+          if (this.moduleRegistry.isModuleInstalled('warehouse')) {
+            console.log('[Layout] 🌐 اتصال مجدد شبکه — استعلام سبک پس‌زمینه...');
+            this.whService.getAll().subscribe({
+              next: (data) => this.handleWarehousesLoaded(data),
+              error: () => {}
+            });
+          }
         }
         this.cdr.detectChanges();
       })
@@ -655,17 +667,19 @@ export class Layout implements OnInit, OnDestroy {
           `تغییر شما به دلیل «${reason}» توسط سرور رد شد و داده‌ها به آخرین نسخه سرور بازگردانی شدند.`
         );
         // استعلام تازه برای اطمینان از همگامی کامل نما
-        this.whService.getAll().subscribe({
-          next: (data) => this.handleWarehousesLoaded(data),
-          error: () => {}
-        });
+        if (this.moduleRegistry.isModuleInstalled('warehouse')) {
+          this.whService.getAll().subscribe({
+            next: (data) => this.handleWarehousesLoaded(data),
+            error: () => {}
+          });
+        }
       })
     );
 
     // شنود رویدادهای زنده تغییرات انبار از طریق وب‌سوکت برای همگام‌سازی بلادرنگ همه کلاینت‌ها
     this.offlineSubs.push(
       this.wsService.notifications$.subscribe(async (data: any) => {
-        if (data && (data.event === 'warehouse_mutation' || data.type === 'warehouse_mutation')) {
+        if (this.moduleRegistry.isModuleInstalled('warehouse') && data && (data.event === 'warehouse_mutation' || data.type === 'warehouse_mutation')) {
           console.log('[Layout] 🔔 دریافت رویداد تغییرات انبار از وب‌سوکت:', data);
           await syncService.invalidateCache(`${environment.apiUrl}/warehouses/`);
           this.whService.getAll().subscribe({
@@ -843,16 +857,18 @@ export class Layout implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     // اعتبارسنجی مجدد و رفرش زنده انبارها پیش از آغاز بروزرسانی عمیق
-    this.whService.getAll().subscribe({
-      next: (data) => {
-        this.handleWarehousesLoaded(data);
-        this.deepSyncWarehouses = data || [];
-        const refreshedId = this.store.activeWarehouseId();
-        this.deepSyncPreselectId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
-        this.cdr.detectChanges();
-      },
-      error: () => {}
-    });
+    if (this.moduleRegistry.isModuleInstalled('warehouse')) {
+      this.whService.getAll().subscribe({
+        next: (data) => {
+          this.handleWarehousesLoaded(data);
+          this.deepSyncWarehouses = data || [];
+          const refreshedId = this.store.activeWarehouseId();
+          this.deepSyncPreselectId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
+          this.cdr.detectChanges();
+        },
+        error: () => {}
+      });
+    }
   }
 
   async startDeepSync(warehouseIds: number[]) {

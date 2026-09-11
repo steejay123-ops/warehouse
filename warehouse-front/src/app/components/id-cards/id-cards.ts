@@ -123,8 +123,8 @@ export class IdCards implements OnInit {
   warehousesList: Warehouse[] = [];
   isLoading: boolean = false;
   
-  // Accordion Sections in Control Panel
-  isCustomTextsOpen: boolean = false;
+  // Settings Tab in Control Panel
+  settingsActiveTab: 'presets-layout' | 'texts-info' | 'fields-visibility' = 'presets-layout';
 
   // Digital Export Modal
   isExportModalOpen: boolean = false;
@@ -440,8 +440,16 @@ export class IdCards implements OnInit {
     return user?.blood_type || 'O+';
   }
 
+  getBloodType(user: User): string {
+    return this.getUserBloodType(user);
+  }
+
   getUserEmergencyContact(user: User): string {
     return user?.emergency_contact || user?.phone_number || '021-88990011';
+  }
+
+  getEmergencyContact(user: User): string {
+    return this.getUserEmergencyContact(user);
   }
 
   get expiryText(): string {
@@ -586,10 +594,14 @@ export class IdCards implements OnInit {
   openSheetPreviewModal() {
     this.previewSheetActiveTab = 'front';
     this.isPreviewSheetModalOpen = true;
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   closeSheetPreviewModal() {
     this.isPreviewSheetModalOpen = false;
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   executeCardPrint() {
@@ -603,10 +615,14 @@ export class IdCards implements OnInit {
 
   openExportModal() {
     this.isExportModalOpen = true;
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   closeExportModal() {
     this.isExportModalOpen = false;
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
   }
 
   private loadAvatarImage(url: string): Promise<HTMLImageElement | null> {
@@ -615,10 +631,30 @@ export class IdCards implements OnInit {
         resolve(null);
         return;
       }
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      }, 1500);
+
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = () => resolve(null);
+      img.onload = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(img);
+        }
+      };
+      img.onerror = () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(null);
+        }
+      };
       img.src = url;
     });
   }
@@ -628,6 +664,8 @@ export class IdCards implements OnInit {
    */
   async exportDigitalCard(side: 'front' | 'back' | 'both' = this.exportSide, scale: number = this.exportScale) {
     this.isExportingImage = true;
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
     const user = this.activeUser;
     const cleanName = `${user.first_name || 'Personnel'}_${user.last_name || user.id}`.replace(/\s+/g, '_');
     this.toast.show('info', `در حال پردازش و رندر خروجی تصویر (${scale}x)...`);

@@ -1,7 +1,8 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
+import { SKIP_GLOBAL_ERROR_TOAST } from '../../core/error/error.interceptor';
 import { environment } from '../../../environments/environment';
 
 export interface VerifiedPersonnel {
@@ -11,13 +12,13 @@ export interface VerifiedPersonnel {
   personnel_code: string;
   first_name: string;
   last_name: string;
-  national_code: string;
-  phone_number: string;
-  operational_zone: string;
-  company: string;
+  national_code: string | null;
+  phone_number: string | null;
+  operational_zone: string | null;
+  company: string | null;
   avatar: string | null;
-  blood_type: string;
-  emergency_contact: string;
+  blood_type: string | null;
+  emergency_contact: string | null;
   roles: { id: number; title: string; color: string }[];
   assigned_warehouses: string[];
   message?: string;
@@ -34,6 +35,8 @@ export class VerifyCard implements OnInit {
   code: string = '';
   isLoading: boolean = true;
   error: string | null = null;
+  errorTitle: string = 'کارت شناسایی نامعتبر است';
+  errorType: 'invalid' | 'network' | 'rate_limit' = 'invalid';
   personnel: VerifiedPersonnel | null = null;
   verificationTimestamp: string = '';
 
@@ -58,6 +61,8 @@ export class VerifyCard implements OnInit {
             this.verifyCode(this.code);
           } else {
             this.isLoading = false;
+            this.errorType = 'invalid';
+            this.errorTitle = 'شناسه کارت مشخص نشده است';
             this.error = 'کد یا شناسه کارتی جهت استعلام در آدرس مشخص نشده است.';
             this.cdr.markForCheck();
           }
@@ -87,7 +92,9 @@ export class VerifyCard implements OnInit {
     const cleanCode = (codeStr || '').trim();
     const url = `${environment.apiUrl}/auth/users/verify_card/?code=${encodeURIComponent(cleanCode)}`;
 
-    this.http.get<VerifiedPersonnel>(url).subscribe({
+    this.http.get<VerifiedPersonnel>(url, {
+      context: new HttpContext().set(SKIP_GLOBAL_ERROR_TOAST, true)
+    }).subscribe({
       next: (res) => {
         this.personnel = res;
         this.isLoading = false;
@@ -95,37 +102,23 @@ export class VerifyCard implements OnInit {
       },
       error: (err) => {
         this.isLoading = false;
+        this.personnel = null;
         if (err.status === 404) {
+          this.errorType = 'invalid';
+          this.errorTitle = 'کارت شناسایی نامعتبر است';
           this.error = 'کارت شناسایی با این کد یا مشخصات در سامانه انبارداری یافت نشد یا باطل شده است.';
+        } else if (err.status === 429) {
+          this.errorType = 'rate_limit';
+          this.errorTitle = 'محدودیت تعداد استعلام';
+          this.error = 'تعداد استعلام‌های شما بیش از حد مجاز است. لطفاً چند دقیقه دیگر دوباره امتحان کنید.';
         } else {
-          // Fallback demo personnel if backend is offline or network error during demo
-          this.personnel = this.generateFallbackPersonnel(cleanCode);
+          this.errorType = 'network';
+          this.errorTitle = 'عدم برقراری ارتباط با سرور';
+          this.error = 'خطا در برقراری ارتباط با سرور مرکزی. امکان استعلام و تایید اصالت کارت در این لحظه وجود ندارد.';
         }
         this.cdr.markForCheck();
       }
     });
-  }
-
-  private generateFallbackPersonnel(code: string): VerifiedPersonnel {
-    const rawId = parseInt(code.replace(/\D/g, '')) || 1;
-    const actualId = rawId > 1000 ? rawId - 1000 : rawId;
-    return {
-      valid: true,
-      is_active: true,
-      id: actualId,
-      personnel_code: code.toUpperCase().startsWith('EMP-') ? code.toUpperCase() : `EMP-${1000 + actualId}`,
-      first_name: 'سامان',
-      last_name: 'تقوی سوق',
-      national_code: '۱۲۸۰۹۵۴۳۱۰',
-      phone_number: '۰۹۱۲۱۲۳۴۵۶۷',
-      operational_zone: 'انبار مرکزی و عملیات لجستیک',
-      company: 'شرکت فارس عــالیش',
-      avatar: null,
-      blood_type: 'O+',
-      emergency_contact: '۰۹۱۲۱۲۳۴۵۶۷',
-      roles: [{ id: 1, title: 'مدیر ارشد انبار و کنترل موجودی', color: '#4f46e5' }],
-      assigned_warehouses: ['انبار مرکزی A', 'انبار قطعات یدکی', 'انبار مواد اولیه']
-    };
   }
 
   getAvatarInitial(name?: string): string {

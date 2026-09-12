@@ -107,7 +107,7 @@ export class IdCards implements OnInit {
       regulations: true
     },
     printSide: 'both',
-    printLayout: 'a4-grid'
+    printLayout: 'laminate-side-by-side'
   };
 
   isCardFlipped: boolean = false;
@@ -437,7 +437,7 @@ export class IdCards implements OnInit {
   }
 
   getUserBloodType(user: User): string {
-    return user?.blood_type || 'O+';
+    return user?.blood_type || 'ثبت‌نشده';
   }
 
   getBloodType(user: User): string {
@@ -445,7 +445,7 @@ export class IdCards implements OnInit {
   }
 
   getUserEmergencyContact(user: User): string {
-    return user?.emergency_contact || user?.phone_number || '021-88990011';
+    return user?.emergency_contact || user?.phone_number || 'ثبت‌نشده';
   }
 
   getEmergencyContact(user: User): string {
@@ -608,9 +608,11 @@ export class IdCards implements OnInit {
     this.saveSettings();
     const count = this.printableUsers.length;
     this.toast.show('info', `در حال آماده‌سازی شیت‌های چاپ برای ${count} پرسنل...`);
+    this.cdr.markForCheck();
+    this.cdr.detectChanges();
     setTimeout(() => {
       window.print();
-    }, 300);
+    }, 250);
   }
 
   openExportModal() {

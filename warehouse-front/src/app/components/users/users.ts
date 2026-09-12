@@ -168,7 +168,7 @@ export class Users implements OnInit, OnDestroy {
 
   // User Form (با حذف فیلدهای موهومی انقضا و افزودن کلمه عبور و آواتار تراکنشی)
   editingUser: any = null;
-  userForm = {
+  userForm: any = {
     id: null as number | null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
     operational_zone: '', supervisor: null as number | null, address: '', company: '', email: '', avatar: null as string | null,
     _pendingAvatarBlob: null as Blob | null, _pendingAvatarDelete: false, blood_type: '', emergency_contact: '', groups: [] as number[],
@@ -398,6 +398,7 @@ export class Users implements OnInit, OnDestroy {
     'can_act_as_doc_supervisor': 'سرپرست اسناد',
     'can_act_as_operator': 'کارمند ثبت',
     'can_act_as_accountant': 'حسابدار',
+    'perm_manage_projects_sections': 'پروژه‌ها و بخش‌ها',
 
     // عملیات انبار و شمارش
     'view_sys_counter': 'میزکار شمارش کور',
@@ -578,7 +579,8 @@ export class Users implements OnInit, OnDestroy {
         'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
         'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
         'perm_approve_personnel_finance', 'perm_approve_fleet_finance',
-        'perm_lock_work_period', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action'
+        'perm_lock_work_period', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action',
+        'perm_manage_projects_sections'
       ];
 
       // ۳. مدیریت و زیرساخت سیستم
@@ -907,7 +909,7 @@ export class Users implements OnInit, OnDestroy {
     }
 
     this.isLoading = true;
-    const requests = targetIds.map(id => this.accountsService.toggleUserStatus(id));
+    const requests = targetIds.map(id => this.accountsService.toggleUserStatus(id, activate));
     forkJoin(requests).subscribe({
       next: () => {
         targetIds.forEach(id => {
@@ -1229,8 +1231,9 @@ export class Users implements OnInit, OnDestroy {
     if (id) {
       const u = this.state.appState.users.find((x: any) => x.id === id);
       this.editingUser = u;
+      const { roles, role_objects, ...userFields } = u;
       this.userForm = {
-        ...u,
+        ...userFields,
         company: u.company || '',
         address: u.address || '',
         email: u.email || '',
@@ -1243,7 +1246,7 @@ export class Users implements OnInit, OnDestroy {
         operational_zone: u.operational_zone || '',
         supervisor: u.supervisor || null
       };
-      if (!this.userForm.groups) this.userForm.groups = [];
+      this.userForm.groups = u.groups ? [...u.groups].map(Number) : [];
       this.userForm.assigned_warehouses = (this.userForm.assigned_warehouses || []).map(Number);
     } else {
       this.editingUser = null;
@@ -1279,7 +1282,7 @@ export class Users implements OnInit, OnDestroy {
     if (checked) {
       if (!list.includes(numId)) list.push(numId);
     } else {
-      list = list.filter(id => id !== numId);
+      list = list.filter((id: number) => id !== numId);
     }
     this.userForm.assigned_warehouses = list;
   }
@@ -1303,7 +1306,10 @@ export class Users implements OnInit, OnDestroy {
 
   validateNationalCode(code: string): boolean {
     if (!code) return true;
-    const clean = code.replace(/\D/g, '');
+    let clean = this.toEnglishDigits(code).replace(/\D/g, '');
+    if (clean.length > 0 && clean.length < 10) {
+      clean = clean.padStart(10, '0');
+    }
     if (clean.length !== 10) return false;
     if (/^(\d)\1{9}$/.test(clean)) return false;
     const digits = clean.split('').map(Number);
@@ -1343,7 +1349,10 @@ export class Users implements OnInit, OnDestroy {
       }
 
       case 'national_code': {
-        const val = this.toEnglishDigits(this.userForm.national_code || '').replace(/\D/g, '');
+        let val = this.toEnglishDigits(this.userForm.national_code || '').replace(/\D/g, '');
+        if (val.length > 0 && val.length < 10) {
+          val = val.padStart(10, '0');
+        }
         return val.length === 10 && this.validateNationalCode(val);
       }
 
@@ -1443,6 +1452,10 @@ export class Users implements OnInit, OnDestroy {
 
     let phone = normalizeDigits(this.userForm.phone_number);
     let nid = normalizeDigits(this.userForm.national_code);
+    if (nid && nid.length > 0 && nid.length < 10) {
+      nid = nid.padStart(10, '0');
+      this.userForm.national_code = nid;
+    }
     let emergency = normalizeDigits(this.userForm.emergency_contact);
 
     if (nid && !this.validateNationalCode(nid)) {
@@ -1492,6 +1505,9 @@ export class Users implements OnInit, OnDestroy {
     delete payload.created_by;
     delete payload.modified_by;
     delete payload.updated_at;
+    delete payload.roles;
+    delete payload.role_objects;
+    payload.groups = (this.userForm.groups || []).map(Number);
     if (!this.editingUser) {
       delete payload.id;
     }
@@ -1835,6 +1851,7 @@ export class Users implements OnInit, OnDestroy {
           Object.assign(this.editingRole, res);
           this.editingRole.user_ids = [...(payload.user_ids || [])];
           syncUsersLocalRoles(this.editingRole.id, payload.user_ids || []);
+          this.rebuildMemoizedData();
           this.toast.show('success', 'نقش، دسترسی‌ها و اعضای منتسب با موفقیت بروزرسانی شد.');
           this.isRoleModalOpen = false;
           this.cdr.detectChanges();
@@ -1850,6 +1867,7 @@ export class Users implements OnInit, OnDestroy {
           res.user_ids = [...(payload.user_ids || [])];
           this.state.appState.roles.push(res);
           syncUsersLocalRoles(res.id, payload.user_ids || []);
+          this.rebuildMemoizedData();
           this.toast.show('success', 'نقش جدید به همراه اعضای منتسب ایجاد شد.');
           this.isRoleModalOpen = false;
           this.cdr.detectChanges();
@@ -1903,6 +1921,7 @@ export class Users implements OnInit, OnDestroy {
                         u.groups = u.groups.filter((gId: number) => gId !== id);
                     }
                 });
+                this.rebuildMemoizedData();
                 this.toast.show('success', 'نقش مورد نظر حذف و دسترسی کاربران مرتبط بروزرسانی شد.');
                 this.isDeleteModalOpen = false;
                 this.entityToDelete = null;
@@ -1918,6 +1937,7 @@ export class Users implements OnInit, OnDestroy {
         this.accountsService.deleteUser(id).subscribe({
             next: () => {
                 this.state.appState.users = this.state.appState.users.filter((u: any) => u.id !== id);
+                this.rebuildMemoizedData();
                 this.toast.show('success', 'حساب کاربری برای همیشه حذف شد.');
                 this.isDeleteModalOpen = false;
                 this.entityToDelete = null;
@@ -2030,10 +2050,11 @@ export class Users implements OnInit, OnDestroy {
     });
   }
 
-  exportRolesExcel() {
-    this.accountsService.exportRolesExcel().subscribe({
+  exportRolesExcel(ids?: number[]) {
+    this.accountsService.exportRolesExcel(ids).subscribe({
       next: (blob) => {
-        this.triggerDownload(blob, 'roles_export.xlsx');
+        const filename = ids && ids.length > 0 ? `roles_export_${ids.length}_selected.xlsx` : 'roles_export.xlsx';
+        this.triggerDownload(blob, filename);
         this.toast.show('success', 'فایل اکسل نقش‌ها با موفقیت دانلود شد.');
       },
       error: () => {

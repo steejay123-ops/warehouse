@@ -140,14 +140,24 @@
 .print-sheet-laminate {
   display: flex;
   flex-direction: column;
-  gap: 8mm;
+  gap: 6mm;
   align-items: center;
+  width: 100%;
 }
 
 .print-laminate-pair {
-  display: flex;
-  gap: 0;
-  border: 0.5pt dashed #94a3b8;
+  display: inline-flex;
+  flex-direction: row;
+  gap: 6mm;
+  align-items: center;
+  justify-content: center;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.print-laminate-pair .print-card-unit {
+  border-radius: 3.18mm !important;
+  border: 0.5pt dashed #94a3b8 !important;
 }
 
 .print-only-container {
@@ -169,6 +179,8 @@
 
   /* Hide screen elements */
   .no-print,
+  app-operations-layout header,
+  app-operations-layout aside,
   app-layout header,
   app-layout nav,
   app-layout aside,
@@ -181,6 +193,13 @@
   .print-only-container {
     display: block !important;
     width: 100% !important;
+    visibility: visible !important;
+  }
+
+  .print-only-container * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Grid Layout (Standard A4 sheet imposition) */
@@ -210,21 +229,29 @@
 
   /* Laminate Mode (Side-by-Side Front + Back paired for easy folding) */
   .print-sheet-laminate {
-    page-break-after: always;
-    break-after: page;
-    display: flex;
-    flex-direction: column;
-    gap: 8mm;
-    align-items: center;
-    padding: 4mm 0;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6mm !important;
+    align-items: center !important;
+    padding: 2mm 0 !important;
+    width: 100% !important;
   }
 
   .print-laminate-pair {
-    display: flex;
-    gap: 0; /* Direct touching edge for easy middle fold */
-    border: 0.5pt dashed #64748b !important;
-    page-break-inside: avoid;
-    break-inside: avoid;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    gap: 6mm !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-laminate-pair .print-card-unit {
+    border-radius: 3.18mm !important;
+    border: 0.5pt dashed #94a3b8 !important;
   }
 
   .print-card-unit {

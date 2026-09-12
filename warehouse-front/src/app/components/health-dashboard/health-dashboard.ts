@@ -171,7 +171,7 @@ import { Router, NavigationEnd } from '@angular/router';
                   </div>
                   <div>
                     <h3 class="text-xs font-black text-slate-800 dark:text-slate-100">پایگاه‌داده PostgreSQL</h3>
-                    <p class="text-[10px] text-slate-400 font-mono">انبار داده مرکزی سیستم</p>
+                    <p class="text-[10px] text-slate-400 font-mono">پایگاه داده اصلی و متمرکز سیستم</p>
                   </div>
                 </div>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" [ngClass]="getStatusPillClass(server?.components?.database?.status)">
@@ -258,7 +258,7 @@ import { Router, NavigationEnd } from '@angular/router';
                   </div>
                   <div>
                     <h3 class="text-xs font-black text-slate-800 dark:text-slate-100">دیتابیس‌های محلی تفکیک‌شده</h3>
-                    <p class="text-[10px] text-slate-400 font-mono">Warehouse & Finance DBs</p>
+                    <p class="text-[10px] text-slate-400 font-mono">{{ (isWarehouseInstalled && appScope !== 'finance') ? 'Warehouse & Finance DBs' : 'Finance & HR IndexedDB' }}</p>
                   </div>
                 </div>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
@@ -268,7 +268,7 @@ import { Router, NavigationEnd } from '@angular/router';
               <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs flex items-center justify-between">
                 <span class="text-slate-400 text-[11px]">رکوردهای کش و صف:</span>
                 <span class="font-mono font-bold text-slate-700 dark:text-slate-200 text-[11px]" dir="ltr">
-                  انبار: {{ storage?.warehouseRecords || 0 }} | مالی: {{ storage?.financeRecords || 0 }}
+                  <ng-container *ngIf="isWarehouseInstalled && appScope !== 'finance'">انبار: {{ storage?.warehouseRecords || 0 }} | </ng-container>مالی: {{ storage?.financeRecords || 0 }}
                 </span>
               </div>
             </div>
@@ -383,7 +383,7 @@ import { Router, NavigationEnd } from '@angular/router';
                 </span>
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                شبیه‌سازی صدها تراکنش موازی خزانه‌داری و انبارداری جهت اثبات قفل‌های بدبینانه (select_for_update) و تضمین Zero Deadlock
+                {{ (isWarehouseInstalled && appScope !== 'finance') ? 'شبیه‌سازی صدها تراکنش موازی خزانه‌داری و انبارداری جهت اثبات قفل‌های بدبینانه (select_for_update) و تضمین Zero Deadlock' : 'شبیه‌سازی صدها تراکنش موازی خزانه‌داری جهت اثبات قفل‌های بدبینانه (select_for_update) و تضمین Zero Deadlock' }}
               </p>
             </div>
           </div>
@@ -412,9 +412,9 @@ import { Router, NavigationEnd } from '@angular/router';
               [(ngModel)]="selectedScenario"
               class="w-full py-1.5 px-3 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value="combined">ترکیبی (خزانه‌داری + انبارداری)</option>
+              <option *ngIf="isWarehouseInstalled && appScope !== 'finance'" value="combined">ترکیبی (خزانه‌داری + انبارداری)</option>
               <option value="treasury">فقط خزانه‌داری (جلوگیری از پرداخت دوبل)</option>
-              <option value="warehouse">فقط انبارداری (کسر اتمیک موجودی)</option>
+              <option *ngIf="isWarehouseInstalled && appScope !== 'finance'" value="warehouse">فقط انبارداری (کسر اتمیک موجودی)</option>
             </select>
           </div>
 
@@ -501,7 +501,7 @@ import { Router, NavigationEnd } from '@angular/router';
               <span class="font-bold">تایید شد (۱ پرداخت نهایی)</span>
             </div>
 
-            <div class="p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+            <div *ngIf="isWarehouseInstalled && appScope !== 'finance' && selectedScenario !== 'treasury'" class="p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
               <span>تمامیت اتمیک موجودی انبار:</span>
               <span class="font-bold">تایید شد (کسر دقیق بدون افت تراکنش)</span>
             </div>
@@ -551,6 +551,10 @@ export class HealthDashboardComponent implements OnInit, OnDestroy {
     return Boolean(u?.is_superuser || this.personaService.isSuperuser());
   }
 
+  get isWarehouseInstalled(): boolean {
+    return this.personaService.moduleRegistry.isModuleInstalled('warehouse');
+  }
+
   ngOnInit(): void {
     this.detectScope();
 
@@ -597,11 +601,18 @@ export class HealthDashboardComponent implements OnInit, OnDestroy {
     const path = (this.router.url || (typeof window !== 'undefined' ? window.location.pathname : '') || '').toLowerCase();
     if (path.includes('/app/finance') || path.includes('/finance') || path.includes('/personnel') || path.includes('/payroll')) {
       this.appScope = 'finance';
+      this.selectedScenario = 'treasury';
     } else if (path.includes('/app/warehouse') || path.includes('/warehouse')) {
       this.appScope = 'warehouse';
     } else {
       const active = this.personaService.activeApp();
       this.appScope = active === 'personnel' ? 'finance' : 'warehouse';
+      if (this.appScope === 'finance' || !this.isWarehouseInstalled) {
+        this.selectedScenario = 'treasury';
+      }
+    }
+    if (!this.isWarehouseInstalled && this.selectedScenario !== 'treasury') {
+      this.selectedScenario = 'treasury';
     }
   }
 

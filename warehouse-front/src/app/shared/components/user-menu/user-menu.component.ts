@@ -63,15 +63,28 @@ export class UserMenuComponent implements OnInit, OnDestroy {
   public shortcutsSearchQuery = '';
   public shortcutsActiveCategory = 'all';
 
-  public shortcutsCategories = [
-    { id: 'all', label: 'همه کلیدها', count: 20 },
-    { id: 'global', label: 'عمومی و منو', count: 5 },
-    { id: 'counting', label: 'انبارگردانی و اسکنر', count: 5 },
-    { id: 'table', label: 'جدول اطلاعات و فرم‌ها', count: 5 },
-    { id: 'design', label: 'طراحی لیبل و کارت', count: 5 },
-  ];
+  public get isWarehouseInstalled(): boolean {
+    return this.moduleRegistry.isModuleInstalled('warehouse');
+  }
 
-  public allShortcuts = [
+  public get shortcutsCategories() {
+    return [
+      { id: 'all', label: 'همه کلیدها', count: this.allShortcuts.length },
+      { id: 'global', label: 'عمومی و منو', count: 5 },
+      ...(this.isWarehouseInstalled ? [{ id: 'counting', label: 'انبارگردانی و اسکنر', count: 5 }] : []),
+      { id: 'table', label: 'جدول اطلاعات و فرم‌ها', count: 5 },
+      { id: 'design', label: 'طراحی لیبل و کارت', count: 5 },
+    ];
+  }
+
+  public get allShortcuts() {
+    return this.RAW_SHORTCUTS.filter(s => {
+      if (s.category === 'counting' && !this.isWarehouseInstalled) return false;
+      return true;
+    });
+  }
+
+  private RAW_SHORTCUTS = [
     {
       category: 'global',
       categoryLabel: 'عمومی',

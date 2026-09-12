@@ -16,16 +16,16 @@ import { ModalComponent } from '../modal/modal.component';
             <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
           </div>
           <div>
-            <h3 class="text-sm font-bold text-indigo-900 mb-1">انتخاب انبارهای هدف</h3>
+            <h3 class="text-sm font-bold text-indigo-900 mb-1">{{ isWarehouseScope ? 'انتخاب انبارهای هدف' : 'انتخاب پروژه‌ها و کارگاه‌های هدف' }}</h3>
             <p class="text-xs text-indigo-700/80 leading-relaxed">
-              با بروزرسانی عمیق، اطلاعات آفلاین ذخیره‌شده برای انبارهای انتخاب‌شده کاملاً پاک شده و از نو دریافت می‌شود. این فرآیند امن است اما ممکن است بسته به حجم داده‌ها کمی زمان‌بر باشد.
+              {{ isWarehouseScope ? 'با بروزرسانی عمیق، اطلاعات آفلاین ذخیره‌شده برای انبارهای انتخاب‌شده کاملاً پاک شده و از نو دریافت می‌شود. این فرآیند امن است اما ممکن است بسته به حجم داده‌ها کمی زمان‌بر باشد.' : 'با بروزرسانی عمیق، اطلاعات آفلاین ذخیره‌شده برای پروژه‌ها و کارگاه‌های انتخاب‌شده کاملاً پاک شده و از نو دریافت می‌شود. این فرآیند امن است اما ممکن است بسته به حجم داده‌ها کمی زمان‌بر باشد.' }}
             </p>
           </div>
         </div>
 
         <!-- Selection Controls -->
         <div class="flex items-center justify-between mt-2">
-          <span class="text-xs font-bold text-slate-700">لیست انبارها ({{ warehouses.length }})</span>
+          <span class="text-xs font-bold text-slate-700">{{ isWarehouseScope ? 'لیست انبارها' : 'لیست پروژه‌ها / کارگاه‌ها' }} ({{ warehouses.length }})</span>
           <button 
             (click)="toggleSelectAll()"
             class="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
@@ -89,6 +89,7 @@ export class DeepSyncModalComponent implements OnChanges {
   @Input() isOpen = false;
   @Input() warehouses: { id: number; name: string }[] = [];
   @Input() preselectId: number | null = null;
+  @Input() isWarehouseScope = true;
   @Output() closed = new EventEmitter<void>();
   @Output() startSync = new EventEmitter<number[]>();
 

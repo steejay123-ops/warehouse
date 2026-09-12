@@ -84,6 +84,7 @@
   [isOpen]="isDeepSyncModalOpen"
   [warehouses]="deepSyncWarehouses"
   [preselectId]="deepSyncPreselectId"
+  [isWarehouseScope]="isWarehouseInstalled"
   (closed)="isDeepSyncModalOpen = false"
   (startSync)="startDeepSync($event)">
 </app-deep-sync-modal>
@@ -138,7 +139,7 @@
           <input
             type="text"
             [(ngModel)]="shortcutsSearchQuery"
-            placeholder="جستجوی سریع میانبرها (مثلاً ذخیره، چاپ، اسکنر، Ctrl، Shift...)"
+            [placeholder]="isWarehouseInstalled ? 'جستجوی سریع میانبرها (مثلاً ذخیره، چاپ، اسکنر، Ctrl، Shift...)' : 'جستجوی سریع میانبرها (مثلاً ذخیره، چاپ، فیلتر، جدول، Ctrl، Shift...)'"
             class="w-full bg-white/10 hover:bg-white/15 focus:bg-white/20 text-white placeholder-indigo-200/60 text-xs font-semibold py-2.5 pr-10 pl-9 rounded-2xl border border-white/15 focus:border-indigo-400 focus:outline-none transition-all shadow-inner"
           >
           <div class="absolute right-3.5 flex items-center pointer-events-none text-indigo-300">

@@ -100,7 +100,7 @@
               [class.text-blue-600]="activeTab() === 'contacts'"
               [class.dark:text-blue-400]="activeTab() === 'contacts'"
               class="flex-1 py-1.5 text-xs font-bold rounded-lg text-slate-500 dark:text-slate-400 transition-all text-center">
-        همکاران انبار
+        همکاران و پرسنل
       </button>
     </div>
 
@@ -123,7 +123,7 @@
     <!-- 1. Conversations List -->
     <div *ngIf="activeTab() === 'conversations'" class="p-2 space-y-1">
       <div *ngIf="filteredConversations().length === 0" class="text-center py-12 text-slate-400 text-xs">
-        گفتگویی یافت نشد. از تب «همکاران انبار» پیام جدیدی ارسال کنید.
+        گفتگویی یافت نشد. از تب «همکاران و پرسنل» پیام جدیدی ارسال کنید.
       </div>
 
       <button *ngFor="let conv of filteredConversations(); trackBy: trackByConvId"

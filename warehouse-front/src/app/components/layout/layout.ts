@@ -1282,5 +1282,7 @@ export class Layout implements OnInit, OnDestroy {
       'finance-health': 'مرکز جامع پایش سلامت و تاب‌آوری سامانه'
     };
     this.currentTitle = titles[tab] || tab;
+    this.baseTitle = `${this.appTitle} — ${this.currentTitle}`;
+    document.title = this.isOffline ? `📴 آفلاین — ${this.baseTitle}` : this.baseTitle;
   }
 }

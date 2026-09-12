@@ -38,6 +38,7 @@ describe('FinanceCartable Unit Tests', () => {
         { id: 201, status: 'manager_approved', changes_payload: {} }
       ])),
       getVehicleChangeRequests: vi.fn().mockReturnValue(of([])),
+      getFinancialProjects: vi.fn().mockReturnValue(of([])),
       getMonthlyPayrollRecords: vi.fn().mockReturnValue(of({
         records: [
           {

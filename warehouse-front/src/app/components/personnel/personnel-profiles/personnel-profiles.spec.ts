@@ -83,9 +83,14 @@ describe('PersonnelProfilesHub Unit Tests', () => {
       navigate: vi.fn()
     };
 
+    const mockPersona = {
+      canPerform: vi.fn().mockReturnValue(true)
+    };
+
     component = new PersonnelProfilesHub(
       mockState,
       mockAuth,
+      mockPersona as any,
       mockApi,
       mockWhService,
       mockToast,

@@ -31,6 +31,8 @@ export class FinanceCartable implements OnInit, OnDestroy {
   // 5 Top Tabs:
   activeTab: 'final_approvals' | 'payroll' | 'fleet_settlement' | 'legal_diskettes' | 'reports' = 'final_approvals';
 
+  isLoading = false;
+
   // Filters & State
   selectedWarehouseId: number | null = null;
   warehouses: any[] = [];
@@ -226,6 +228,11 @@ export class FinanceCartable implements OnInit, OnDestroy {
   }
 
   refreshCurrentTabData(): void {
+    this.isLoading = true;
+    setTimeout(() => {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }, 600);
     if (this.activeTab === 'final_approvals') {
       this.loadFinalApprovalsData();
     } else if (this.activeTab === 'payroll') {

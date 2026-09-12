@@ -1,19 +1,30 @@
 <div class="h-full flex flex-col relative w-full max-w-7xl mx-auto" dir="rtl">
 
-  <!-- Mobile UX Header -->
-  <header class="mb-4 flex items-center justify-between gap-3 relative z-20 px-2 mt-2">
-    <!-- Warehouse Selector -->
-    <div class="flex-1 max-w-[200px]">
-      <app-warehouse-selector
-        *ngIf="!authStore.isWarehouseContext()"
-        [allowAll]="true"
-        [projects]="state.appState.projects"
-        [activeId]="authStore.activeWarehouseId()"
-        (changed)="onWarehouseChanged($event)"
-      ></app-warehouse-selector>
+  <!-- Consolidated Premium Header -->
+  <header class="mb-4 flex flex-wrap items-center justify-between gap-3 relative z-20 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs mt-2">
+    <!-- Title & Icon -->
+    <div class="flex items-center gap-2.5">
+      <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shadow-indigo-600/30">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+      </div>
+      <div>
+        <h1 class="text-sm font-black text-slate-800 leading-tight">کارتابل مالی و بررسی نهایی مدیر</h1>
+        <p class="text-[10px] text-slate-400 font-medium">مغایرت‌گیری، اعتبارسنجی مقادیر شمارش، تصمیم‌گیری نهایی و تایید اسناد مالی</p>
+      </div>
     </div>
-    
-    <div class="flex items-center gap-2">
+
+    <!-- Actions & Warehouse Selector -->
+    <div class="flex items-center gap-2 mr-auto flex-wrap">
+      <div class="min-w-[140px] max-w-[200px]">
+        <app-warehouse-selector
+          *ngIf="!authStore.isWarehouseContext()"
+          [allowAll]="true"
+          [projects]="state.appState.projects"
+          [activeId]="authStore.activeWarehouseId()"
+          (changed)="onWarehouseChanged($event)"
+        ></app-warehouse-selector>
+      </div>
+      
       <!-- Barcode Scanner Trigger Button -->
       <button (click)="scanner?.openCamera()" class="btn-icon-square btn-icon-indigo" title="اسکن بارکد با دوربین" aria-label="اسکن دوربین">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -45,11 +56,6 @@
 
   <!-- Embedded Camera Barcode Scanner -->
   <app-barcode-scanner [headless]="true" (scanned)="onBarcodeScanned($event)"></app-barcode-scanner>
-
-  <div class="mb-3 px-2">
-    <h2 class="text-xl font-black text-slate-800">کارتابل مالی و بررسی نهایی مدیر</h2>
-    <p class="text-xs text-slate-500 mt-0.5">مغایرت‌گیری، اعتبارسنجی مقادیر شمارش، تصمیم‌گیری نهایی و تایید اسناد مالی</p>
-  </div>
 
   <!-- Navigation: Section Selector + Sub-tabs -->
   <div class="mb-4 px-2">

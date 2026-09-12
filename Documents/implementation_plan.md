@@ -113,8 +113,35 @@ graph TD
 ### فاز ۶: آزمون‌های جامع ۷ ایجنت نگهبان، اعتبارسنجی Build و تحویل جهت بررسی کاربر
 * اجرای ارزیابی تمامی ۷ ایجنت نگهبان.
 * تست کامپایل کامل فرانت‌اند (`npx tsc --noEmit`).
-* تست سلامت کلیه سرویس‌ها در بک‌اند.
-* تحویل به کاربر جهت بررسی و مقایسه منوهای قدیم و جدید.
 * **مرحله اختیاری پس از تایید کاربر:** حذف و پاک‌سازی منوهای قدیمی (در صورت اعلام رضایت نهایی کاربر).
+
+---
+
+# 🏛️ طرح جامع، فازبندی‌شده و استاندارد ارتقای تمامی ۳۱ صفحه سامانه (Global UI/UX Master Implementation Plan)
+* **سند تفصیلی:** `Documents/Global_UI_UX_Standardization/implementation_plan_global_ui_ux.md`
+* **پوشش:** ۱۰۰٪ صفحات موجود در کل سامانه (۳۱ صفحه در ۶ ماژول)
+* **قانون تخطی‌ناپذیر:** عدم تغییر هیچ خط کدی تا زمان دریافت تاییدیه صریح کاربر
+
+## خلاصه ۱۲ الگوی استاندارد مرجع
+1. **P-01 (Icon-Square Actions):** دکمه‌های آیکونی هدر با نشانگر زنده
+2. **P-02 (Header Consolidation):** تجمیع هدر و عنوان واحد صفحه
+3. **P-03 (Multi-Criteria Filter Bar):** نوار فیلتر چندمعیاره بالای جداول
+4. **P-04 (Bulk Selection & Floating Bar):** انتخاب گروهی با `Set` و نوار اقدام شناور تیره
+5. **P-05 (Selective Excel Export):** خروجی اکسل و دیسکت انتخابی در بک‌اند با پارامتر `ids`
+6. **P-06 (Compact Modern Pagination):** صفحه‌بندی مدرن، متراکم و استاندارد ۳ بخشی
+7. **P-07 (3-Column Studio):** معماری استودیو ۳ ستونه هم‌عرض و هم‌ارتفاع
+8. **P-08 (In-Card Segmented Control):** تب‌بندی خرد سگمنتد داخل فرم‌ها
+9. **P-09 (Visual KPI Mini-Bar):** نوارهای پیشرفت بصری شاخص‌های پیشرفت
+10. **P-10 (Quick Inspection Popover):** پاپ‌اور پیش‌نمایش سریع داده‌ها بدون ترک صفحه
+11. **P-11 (Defensive Safety Timeout):** لودینگ دفاعی تصاویر با سقف ۱۵۰۰ms و فال‌بک امن
+12. **P-12 (Persistent Dual View):** سوئیچ دوگانه نمای کارت/جدول با ذخیره در حافظه محلی
+
+## ۶ فاز اجرایی
+* **فاز ۱: کارتابل‌های عملیاتی انبارگردانی (صفحات ۱ تا ۵)** - روت‌های Counter, Supervisor, Manager Review, Count Tracking, Dispatch
+* **فاز ۲: کارتابل‌های اسناد، کالا، گمرک و لیبل (صفحات ۶ تا ۱۰)** - روت‌های Docs, Customs, Feeding, Label Studio, Placeholders
+* **فاز ۳: کارکرد پرسنل، ناوگان و پرونده‌ها (صفحات ۱۱ تا ۱۴)** - روت‌های Attendance, Fleet, Profiles Hub, Base Settings
+* **فاز ۴: کارتابل‌های مالی، حقوق و خزانه‌داری (صفحات ۱۵ تا ۱۹)** - روت‌های Payroll, Fleet Settlement, Manager Approvals, Treasury, Projects & Sections
+* **فاز ۵: داشبوردها، گزارش‌ساز و سلامت (صفحات ۲۰ تا ۲۶)** - روت‌های Wh Dashboard, Dynamic Reports Builder, Wh/Fin/Ops Health, Ops Cockpit, Sync Monitor
+* **فاز ۶: زیرساخت، حاکمیت RBAC و پورتال‌ها (صفحات ۲۷ تا ۳۱)** - روت‌های Projects, Settings/Backup, Audit Trail, RBAC Governance, Auth Portals
 
 </div>

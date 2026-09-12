@@ -91,7 +91,7 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             permission_classes = [AllowAny()]
         elif self.action in ['change_password', 'update_preferences', 'my_avatar']:
             permission_classes = [IsAuthenticated()]
-        elif self.action in ['list', 'retrieve', 'export_excel', 'download_template', 'export_id_cards_excel']:
+        elif self.action in ['list', 'retrieve', 'export_excel', 'download_template']:
             permission_classes = [HasMenuAccess('view_sys_users')]
         elif self.action in ['create', 'import_excel']:
             permission_classes = [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_add')]
@@ -493,21 +493,6 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             except Exception:
                 pass
         return generate_users_excel(queryset)
-
-    @action(detail=False, methods=['get'])
-    def export_id_cards_excel(self, request):
-        """Download ID cards data as an Excel file, optionally filtered by user IDs."""
-        from .excel_utils import generate_id_cards_excel
-        queryset = self.get_queryset()
-        ids_param = request.GET.get('ids')
-        if ids_param:
-            try:
-                ids = [int(i.strip()) for i in ids_param.split(',') if i.strip()]
-                if ids:
-                    queryset = queryset.filter(id__in=ids)
-            except Exception:
-                pass
-        return generate_id_cards_excel(queryset)
 
     @action(detail=False, methods=['get'])
     def download_template(self, request):

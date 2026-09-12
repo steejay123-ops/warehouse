@@ -45,21 +45,6 @@ USERS_COLUMNS = [
     {'label': 'فعال', 'key': 'is_active', 'width': 12, 'type': 'text'},
 ]
 
-ID_CARDS_COLUMNS = [
-    {'label': 'نام', 'key': 'first_name', 'width': 18, 'type': 'text'},
-    {'label': 'نام خانوادگی', 'key': 'last_name', 'width': 20, 'type': 'text'},
-    {'label': 'کد پرسنلی / شناسه', 'key': 'username', 'width': 20, 'type': 'text'},
-    {'label': 'کد ملی', 'key': 'national_code', 'width': 18, 'type': 'text'},
-    {'label': 'تلفن تماس', 'key': 'phone_number', 'width': 18, 'type': 'text'},
-    {'label': 'نقش سازمانی', 'key': 'roles', 'width': 25, 'type': 'text'},
-    {'label': 'انبارها / پروژه‌های مجاز', 'key': 'warehouses', 'width': 28, 'type': 'text'},
-    {'label': 'منطقه عملیاتی', 'key': 'operational_zone', 'width': 20, 'type': 'text'},
-    {'label': 'شرکت متبوع', 'key': 'company', 'width': 20, 'type': 'text'},
-    {'label': 'وضعیت تردد و گیت‌پاس', 'key': 'card_status', 'width': 22, 'type': 'text'},
-    {'label': 'محتوای بارکد گیت‌پاس', 'key': 'barcode', 'width': 24, 'type': 'text'},
-    {'label': 'تاریخ تهیه گزارش (شمسی)', 'key': 'report_date', 'width': 22, 'type': 'text'},
-]
-
 MAX_IMPORT_ROWS = 500
 
 
@@ -211,82 +196,6 @@ def generate_users_excel(queryset):
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
     response['Content-Disposition'] = 'attachment; filename="users_export.xlsx"'
-    return response
-
-
-def generate_id_cards_excel(queryset):
-    """
-    تولید فایل اکسل مشخصات کارت پرسنلی و گیت‌پاس با ساختار ۲ سطری استاندارد
-    """
-    wb = Workbook()
-    ws = wb.active
-    ws.title = 'کارت پرسنلی و گیت‌پاس'
-    ws.sheet_view.rightToLeft = True
-
-    set_column_widths(ws, ID_CARDS_COLUMNS)
-    freeze_header_panes(ws, row=3)
-
-    # سطر اول: عناوین فارسی
-    header_row = []
-    for c in ID_CARDS_COLUMNS:
-        header_row.append(styled_cell(ws, c['label']))
-    apply_header_styles_to_row(header_row, is_key_row=False)
-    ws.append(header_row)
-
-    # سطر دوم: کلیدهای دیتابیسی
-    key_row = []
-    for c in ID_CARDS_COLUMNS:
-        key_row.append(styled_cell(ws, c['key']))
-    apply_header_styles_to_row(key_row, is_key_row=True)
-    ws.append(key_row)
-
-    now_shamsi = jalali_now_str()
-
-    # سطر سوم به بعد: داده‌های کارت پرسنلی
-    for row_idx, user in enumerate(queryset, 3):
-        role_names = []
-        for g in user.groups.all():
-            try:
-                role_names.append(g.customrole.title or g.name)
-            except Exception:
-                role_names.append(g.name)
-        roles_str = '، '.join(role_names)
-
-        wh_items = []
-        if _warehouse_model() is not None:
-            for w in user.assigned_warehouses.all():
-                wh_items.append(f"{w.name} ({w.code})" if w.code else w.name)
-        wh_str = '، '.join(wh_items)
-
-        barcode_str = f"GP-{user.username or user.pk}"
-        if user.national_code:
-            barcode_str += f"-{user.national_code}"
-
-        row_data = [
-            user.first_name or '',
-            user.last_name or '',
-            user.username or '',
-            user.national_code or '',
-            user.phone_number or '',
-            roles_str,
-            wh_str,
-            user.operational_zone or '',
-            user.company or '',
-            'فعال / مجاز به تردد' if user.is_active else 'مسدود / غیرمجاز',
-            barcode_str,
-            now_shamsi,
-        ]
-        ws.append(sanitize_excel_row(row_data))
-
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-
-    response = HttpResponse(
-        buffer.getvalue(),
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    response['Content-Disposition'] = 'attachment; filename="id_cards_export.xlsx"'
     return response
 
 

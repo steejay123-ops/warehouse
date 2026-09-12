@@ -421,3 +421,103 @@ class ExcelFormulaInjectionSanitizationTests(TestCase):
         self.assertTrue(str(title_val).startswith("'="))
 
 
+class CustomRoleSecurityAndHierarchyTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_superuser('admin_role_sec', 'admin@role-sec.com', 'pass1234')
+        self.normal_user = CustomUser.objects.create_user(
+            username='staff_role_user',
+            password='passStaff123',
+            first_name='کاربر',
+            last_name='کارمند',
+            phone_number='09121113344',
+            is_staff=True
+        )
+        perm = Permission.objects.filter(codename='view_sys_users').first()
+        if perm:
+            self.normal_user.user_permissions.add(perm)
+
+    def test_non_superuser_cannot_assign_sensitive_permissions_on_create(self):
+        self.client.force_authenticate(user=self.normal_user)
+        from accounts.models import SENSITIVE_PERMISSION_CODENAMES
+        sens_perm = Permission.objects.filter(codename__in=SENSITIVE_PERMISSION_CODENAMES).first()
+        self.assertIsNotNone(sens_perm)
+
+        data = {
+            'name': 'critical_role_attempt',
+            'title': 'نقش حساس غیرمجاز',
+            'color': '#dc2626',
+            'permissions': [sens_perm.id]
+        }
+        res = self.client.post('/api/accounts/roles/', data, format='json')
+        # Non-superuser must receive 403 PermissionDenied
+        self.assertEqual(res.status_code, 403)
+        self.assertIn('حساس', str(res.data))
+
+    def test_superuser_can_create_role_with_sensitive_permissions(self):
+        self.client.force_authenticate(user=self.admin)
+        from accounts.models import SENSITIVE_PERMISSION_CODENAMES
+        sens_perm = Permission.objects.filter(codename__in=SENSITIVE_PERMISSION_CODENAMES).first()
+        self.assertIsNotNone(sens_perm)
+
+        data = {
+            'name': 'superuser_critical_role',
+            'title': 'نقش ارشد سامانه',
+            'color': '#4f46e5',
+            'permissions': [sens_perm.id]
+        }
+        res = self.client.post('/api/accounts/roles/', data, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['name'], 'superuser_critical_role')
+
+    def test_role_cannot_be_parent_of_itself(self):
+        self.client.force_authenticate(user=self.admin)
+        role = CustomRole.objects.create(name='self_parent_role', title='نقش خودوالد', color='#4f46e5')
+        res = self.client.patch(f'/api/accounts/roles/{role.id}/', {'parent': role.id}, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('والد خودش', str(res.data))
+
+    def test_role_circular_parent_chain_rejected(self):
+        self.client.force_authenticate(user=self.admin)
+        role_a = CustomRole.objects.create(name='role_chain_a', title='نقش الف', color='#4f46e5')
+        role_b = CustomRole.objects.create(name='role_chain_b', title='نقش ب', color='#0284c7', parent=role_a)
+        role_c = CustomRole.objects.create(name='role_chain_c', title='نقش ج', color='#059669', parent=role_b)
+
+        # Try to make role_c the parent of role_a (A -> B -> C -> A)
+        res = self.client.patch(f'/api/accounts/roles/{role_a.id}/', {'parent': role_c.id}, format='json')
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('چرخه', str(res.data))
+
+    def test_role_model_clean_prevents_circular_parent(self):
+        from django.core.exceptions import ValidationError
+        role_1 = CustomRole.objects.create(name='m_role_1', title='نقش مدل ۱')
+        role_2 = CustomRole.objects.create(name='m_role_2', title='نقش مدل ۲', parent=role_1)
+        role_1.parent = role_2
+        with self.assertRaises(ValidationError):
+            role_1.clean()
+
+
+class UserDeactivationAndSecurityGuardsTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_superuser('admin_guard_sec', 'admin@guard.com', 'pass1234')
+        self.client.force_authenticate(user=self.admin)
+
+    def test_cannot_deactivate_self(self):
+        res = self.client.patch(f'/api/accounts/users/{self.admin.id}/toggle_status/', {'is_active': False})
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('خود', str(res.data))
+
+    def test_cannot_deactivate_last_active_superuser(self):
+        operator_admin = CustomUser.objects.create_superuser('operator_admin', 'op@guard.com', 'pass1234')
+        self.client.force_authenticate(user=operator_admin)
+
+        # Deactivate admin first
+        res = self.client.patch(f'/api/accounts/users/{self.admin.id}/toggle_status/', {'is_active': False})
+        self.assertEqual(res.status_code, 200)
+
+        # Now operator_admin is the LAST active superuser. Trying to deactivate self should fail:
+        res_fail = self.client.patch(f'/api/accounts/users/{operator_admin.id}/toggle_status/', {'is_active': False})
+        self.assertEqual(res_fail.status_code, 400)
+
+

@@ -1,0 +1,253 @@
+{
+  "totalChecked": 19,
+  "totalPassed": 19,
+  "results": [
+    {
+      "file": "src/app/components/supervisor/supervisor-dashboard/supervisor-dashboard.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 94,
+        "btnIconSquare": 3,
+        "svgs": 62,
+        "tables": 0,
+        "inputs": 19,
+        "rtlContainers": 2
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/manager-review/manager-review.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 94,
+        "btnIconSquare": 3,
+        "svgs": 58,
+        "tables": 0,
+        "inputs": 19,
+        "rtlContainers": 2
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/count-tracking/count-tracking.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 25,
+        "btnIconSquare": 5,
+        "svgs": 38,
+        "tables": 2,
+        "inputs": 6,
+        "rtlContainers": 3
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/dispatch/dispatch.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 38,
+        "btnIconSquare": 2,
+        "svgs": 29,
+        "tables": 0,
+        "inputs": 15,
+        "rtlContainers": 4
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/customs/customs.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 54,
+        "btnIconSquare": 3,
+        "svgs": 50,
+        "tables": 0,
+        "inputs": 19,
+        "rtlContainers": 2
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/docs/docs.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 18,
+        "btnIconSquare": 0,
+        "svgs": 32,
+        "tables": 0,
+        "inputs": 6,
+        "rtlContainers": 5
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/warehouse-attendance/warehouse-attendance.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 100,
+        "btnIconSquare": 0,
+        "svgs": 38,
+        "tables": 7,
+        "inputs": 62,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/personnel-profiles/personnel-profiles.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 42,
+        "btnIconSquare": 1,
+        "svgs": 16,
+        "tables": 3,
+        "inputs": 53,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/base-settings/base-settings.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 13,
+        "btnIconSquare": 0,
+        "svgs": 3,
+        "tables": 1,
+        "inputs": 34,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/treasury-cartable/treasury-cartable.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 12,
+        "btnIconSquare": 1,
+        "svgs": 1,
+        "tables": 3,
+        "inputs": 3,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/manager-approvals/manager-approvals.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 38,
+        "btnIconSquare": 1,
+        "svgs": 4,
+        "tables": 4,
+        "inputs": 5,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/personnel/finance-cartable/finance-cartable.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 48,
+        "btnIconSquare": 1,
+        "svgs": 23,
+        "tables": 7,
+        "inputs": 12,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/dashboard/dashboard.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 2,
+        "btnIconSquare": 1,
+        "svgs": 11,
+        "tables": 0,
+        "inputs": 0,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/reports/reports.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 35,
+        "btnIconSquare": 7,
+        "svgs": 17,
+        "tables": 0,
+        "inputs": 18,
+        "rtlContainers": 0
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/operations/operations-sync-monitor/operations-sync-monitor.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 6,
+        "btnIconSquare": 0,
+        "svgs": 2,
+        "tables": 2,
+        "inputs": 0,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/operations/operations-rbac-governance/operations-rbac-governance.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 5,
+        "btnIconSquare": 1,
+        "svgs": 1,
+        "tables": 2,
+        "inputs": 0,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/projects/projects.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 16,
+        "btnIconSquare": 3,
+        "svgs": 10,
+        "tables": 0,
+        "inputs": 28,
+        "rtlContainers": 1
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/audit/audit.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 66,
+        "btnIconSquare": 6,
+        "svgs": 82,
+        "tables": 3,
+        "inputs": 33,
+        "rtlContainers": 9
+      },
+      "warnings": []
+    },
+    {
+      "file": "src/app/components/login/login.html",
+      "status": "VALID",
+      "elements": {
+        "buttons": 3,
+        "btnIconSquare": 0,
+        "svgs": 9,
+        "tables": 0,
+        "inputs": 2,
+        "rtlContainers": 0
+      },
+      "warnings": []
+    }
+  ]
+}

@@ -15,8 +15,8 @@ import { ExcelImportModal } from '../../shared/components/excel-import-modal/exc
 import { SmartDeleteModalComponent } from '../../shared/components/smart-delete-modal/smart-delete-modal';
 import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
 import { environment } from '../../../environments/environment';
-import { Observable, Subject, Subscription, forkJoin } from 'rxjs';
-import { debounceTime, finalize } from 'rxjs/operators';
+import { Observable, Subject, Subscription, forkJoin, of } from 'rxjs';
+import { debounceTime, finalize, map, catchError } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
 
 @Component({
@@ -908,23 +908,52 @@ export class Users implements OnInit, OnDestroy {
       return;
     }
 
+    interface BulkToggleItem {
+      success: boolean;
+      id: number;
+      res?: any;
+      err?: any;
+    }
+
     this.isLoading = true;
-    const requests = targetIds.map(id => this.accountsService.toggleUserStatus(id, activate));
+    const requests: Observable<BulkToggleItem>[] = targetIds.map(id =>
+      this.accountsService.toggleUserStatus(id, activate).pipe(
+        map((res): BulkToggleItem => ({ success: true, id, res })),
+        catchError((err): Observable<BulkToggleItem> => of({ success: false, id, err }))
+      )
+    );
+
     forkJoin(requests).subscribe({
-      next: () => {
-        targetIds.forEach(id => {
-          const u = this.state.appState.users.find((x: any) => x.id === id);
-          if (u) u.is_active = activate;
-        });
+      next: (results) => {
         this.isLoading = false;
-        this.toast.show('success', `وضعیت ${targetIds.length} کاربر با موفقیت به «${activate ? 'فعال' : 'معلق'}» تغییر یافت.`);
-        this.clearUserSelection();
+        const successes = results.filter(r => r.success);
+        const failures = results.filter(r => !r.success);
+
+        // بروزرسانی رکوردهای موفق در حافظه کامپوننت و حذف تیک انتخاب آن‌ها
+        successes.forEach(r => {
+          const u = this.state.appState.users.find((x: any) => x.id === r.id);
+          if (u) u.is_active = activate;
+          this.selectedUserIds.delete(r.id);
+        });
+
+        if (failures.length === 0) {
+          this.toast.show('success', `وضعیت ${successes.length} کاربر با موفقیت به «${activate ? 'فعال' : 'معلق'}» تغییر یافت.`);
+          this.clearUserSelection();
+        } else if (successes.length > 0) {
+          const firstErr = failures[0].err;
+          const msg = firstErr?.error?.detail || firstErr?.error?.error || (typeof firstErr?.error === 'string' ? firstErr.error : 'خطای دسترسی یا محدودیت سیستمی');
+          this.toast.show('warning', `وضعیت ${successes.length} کاربر تغییر یافت؛ اما ${failures.length} کاربر تغییر نکرد: ${msg}`);
+        } else {
+          const firstErr = failures[0].err;
+          const msg = firstErr?.error?.detail || firstErr?.error?.error || (typeof firstErr?.error === 'string' ? firstErr.error : 'خطا در تغییر وضعیت کاربران');
+          this.toast.show('error', msg);
+        }
+
         this.cdr.detectChanges();
       },
-      error: (err) => {
+      error: () => {
         this.isLoading = false;
-        const msg = err.error?.detail || err.error?.error || (typeof err.error === 'string' ? err.error : 'خطا در تغییر وضعیت گروهی کاربران');
-        this.toast.show('error', msg);
+        this.toast.show('error', 'خطای غیرمنتظره در تغییر وضعیت کاربران');
         this.loadData();
       }
     });
@@ -1478,6 +1507,18 @@ export class Users implements OnInit, OnDestroy {
     if (phone && !/^09\d{9}$/.test(phone)) {
       this.userFormErrors['phone_number'] = true;
       return this.toast.show('error', 'فرمت شماره همراه نامعتبر است. شماره همراه باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789).');
+    }
+
+    const emailVal = (this.userForm.email || '').trim();
+    if (emailVal && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(emailVal)) {
+      this.userFormErrors['email'] = true;
+      return this.toast.show('error', 'فرمت آدرس ایمیل واردشده نامعتبر است (مانند user@example.com).');
+    }
+
+    const pwdVal = (this.userForm.password || '').trim();
+    if (pwdVal && pwdVal.length < 6) {
+      this.userFormErrors['password'] = true;
+      return this.toast.show('error', 'کلمه عبور باید حداقل ۶ کاراکتر باشد.');
     }
 
     const pendingBlob = this.userForm._pendingAvatarBlob;
@@ -2078,20 +2119,6 @@ export class Users implements OnInit, OnDestroy {
       },
       error: () => {
         this.toast.show('error', 'خطا در دانلود قالب اکسل نقش‌ها.');
-      }
-    });
-  }
-
-  exportIdCardsExcel() {
-    const selectedIds = this.idCardsComponent ? Array.from(this.idCardsComponent.selectedUserIds) : [];
-    this.accountsService.exportIdCardsExcel(selectedIds).subscribe({
-      next: (blob) => {
-        this.triggerDownload(blob, 'id_cards_export.xlsx');
-        const countMsg = selectedIds.length > 0 ? `(${selectedIds.length} نفر انتخاب‌شده)` : 'کل پرسنل انبار';
-        this.toast.show('success', `فایل اکسل کارت‌های پرسنلی ${countMsg} با موفقیت دانلود شد.`);
-      },
-      error: () => {
-        this.toast.show('error', 'خطا در دانلود فایل اکسل کارت‌های پرسنلی.');
       }
     });
   }

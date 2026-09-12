@@ -6,6 +6,8 @@ import { warehouseOfflineDb, financeOfflineDb } from './offline-db';
 import { NetworkStatusService } from './network-status.service';
 import { ToastService } from '../../services/toast.service';
 import { WebSocketService } from '../http/websocket.service';
+import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
+import { SKIP_GLOBAL_ERROR_TOAST } from '../error/error.interceptor';
 import { firstValueFrom } from 'rxjs';
 
 export interface FleetSessionItem {
@@ -209,7 +211,7 @@ export class ClientTelemetryService {
     }, 3000);
 
     this.heartbeatTimer = setInterval(() => {
-      if (this.network.isBrowserOnline) {
+      if (this.network.isBrowserOnline && !this.network.isServerUnreachable) {
         this.sendHeartbeat().catch(() => {});
       }
     }, 30000);
@@ -219,7 +221,7 @@ export class ClientTelemetryService {
    * ارسال پالس زنده به سرور
    */
   public async sendHeartbeat(): Promise<boolean> {
-    if (!this.network.isBrowserOnline) return false;
+    if (!this.network.isBrowserOnline || this.network.isServerUnreachable) return false;
 
     // بررسی وجود توکن ورود
     const token = this.sessionTab.getScopedAccessToken();
@@ -248,7 +250,13 @@ export class ClientTelemetryService {
       };
 
       const res = await firstValueFrom(
-        this.http.post<{ status: string; is_revoked: boolean }>('/api/accounts/telemetry/heartbeat/', payload)
+        this.http.post<{ status: string; is_revoked: boolean }>(
+          '/api/accounts/telemetry/heartbeat/',
+          payload,
+          {
+            context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
+          }
+        )
       );
 
       return res?.status === 'ok';
@@ -267,7 +275,10 @@ export class ClientTelemetryService {
     try {
       const res = await firstValueFrom(
         this.http.get<{ status: string; fleet: FleetSessionItem[] }>(
-          `/api/accounts/telemetry/fleet/?tab_id=${this.sessionTab.tabId}`
+          `/api/accounts/telemetry/fleet/?tab_id=${this.sessionTab.tabId}`,
+          {
+            context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
+          }
         )
       );
       return res?.fleet || [];
@@ -285,7 +296,10 @@ export class ClientTelemetryService {
       const res = await firstValueFrom(
         this.http.post<{ status: string; message: string }>(
           `/api/accounts/telemetry/sessions/${sessionId}/revoke/`,
-          {}
+          {},
+          {
+            context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
+          }
         )
       );
       return { success: true, message: res?.message || 'نشست دستگاه با موفقیت ابطال شد.' };

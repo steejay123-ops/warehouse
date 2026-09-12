@@ -5,6 +5,7 @@ import { ConfirmDialogComponent, ConfirmDialogService } from './shared/component
 import { AuthService } from './core/auth/auth.service';
 import { WebSocketService } from './core/http/websocket.service';
 import { ClientTelemetryService } from './core/services/client-telemetry.service';
+import { NetworkStatusService } from './core/services/network-status.service';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { interval, concat, fromEvent } from 'rxjs';
 import { first, filter } from 'rxjs/operators';
@@ -77,9 +78,12 @@ export class App {
 
     everyHourOnceAppIsStable$.subscribe(async () => {
       try {
-        await this.swUpdate.checkForUpdate();
+        const net = NetworkStatusService.getInstance();
+        if (net.isBrowserOnline && !net.isServerUnreachable) {
+          await this.swUpdate.checkForUpdate();
+        }
       } catch (err) {
-        console.error('Failed to check for updates', err);
+        console.warn('Failed to check for updates', err);
       }
     });
 
@@ -87,9 +91,12 @@ export class App {
     if (typeof window !== 'undefined') {
       fromEvent(window, 'online').subscribe(async () => {
         try {
-          await this.swUpdate.checkForUpdate();
+          const net = NetworkStatusService.getInstance();
+          if (net.isBrowserOnline && !net.isServerUnreachable) {
+            await this.swUpdate.checkForUpdate();
+          }
         } catch (err) {
-          console.error('Failed to check for updates on online event', err);
+          console.warn('Failed to check for updates on online event', err);
         }
       });
     }

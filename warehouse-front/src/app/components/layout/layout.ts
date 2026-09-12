@@ -15,8 +15,7 @@ import { OfflineSyncService } from '../../core/services/offline-sync.service';
 import { SyncErrorEntry } from '../../core/services/offline-db';
 import { ConfigApiService } from '../../core/api/config-api.service';
 import { ToastService } from '../../shared/components/toast/toast.component';
-import { DeepSyncModalComponent } from '../../shared/components/deep-sync-modal/deep-sync-modal.component';
-import { AvatarCropperModal } from '../../shared/components/avatar-cropper-modal/avatar-cropper-modal';
+import { UserMenuComponent } from '../../shared/components/user-menu/user-menu.component';
 import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { NavigationHistoryService } from '../../core/services/navigation-history.service';
 import { OfflinePendingBadgeComponent } from '../../shared/components/offline-pending-badge/offline-pending-badge.component';
@@ -33,7 +32,7 @@ import { ModuleRegistryService } from '../../core/modules/module-registry.servic
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, FormsModule, RouterOutlet, DeepSyncModalComponent, AvatarCropperModal, OfflinePendingBadgeComponent, ChatDrawerComponent, AppRoleSwitcherComponent],
+  imports: [CommonModule, FormsModule, RouterOutlet, UserMenuComponent, OfflinePendingBadgeComponent, ChatDrawerComponent, AppRoleSwitcherComponent],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
@@ -389,6 +388,16 @@ export class Layout implements OnInit, OnDestroy {
    */
   async onManualAppUpdate() {
     if (this.isCheckingAppUpdate) return;
+
+    const network = NetworkStatusService.getInstance();
+    if (!network.isBrowserOnline || network.isServerUnreachable) {
+      this.toast.show(
+        'warning',
+        'سامانه در حالت آفلاین / عدم دسترسی به سرور است. امکان دریافت بروزرسانی در این وضعیت وجود ندارد.'
+      );
+      return;
+    }
+
     this.isCheckingAppUpdate = true;
     this.cdr.detectChanges();
 
@@ -415,16 +424,29 @@ export class Layout implements OnInit, OnDestroy {
         }
       }
 
-      this.toast.show('success', 'برنامه به آخرین نسخه بروزرسانی شد.');
-      setTimeout(() => {
-        window.location.reload();
-      }, 600);
+      this.toast.show('success', 'شما در حال استفاده از آخرین نسخه برنامه هستید.');
     } catch (err: any) {
-      console.error('Manual app update failed', err);
-      this.toast.show('error', 'خطا در بررسی بروزرسانی: ' + (err?.message || 'سرور پاسخگو نیست'));
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      console.warn('Manual app update failed', err);
+      const errMsg = String(err?.message || err || '');
+
+      if (
+        errMsg.includes('530') ||
+        errMsg.includes('502') ||
+        errMsg.includes('503') ||
+        errMsg.includes('504') ||
+        errMsg.includes('Failed to update a ServiceWorker') ||
+        errMsg.includes('bad HTTP response code') ||
+        errMsg.includes('Failed to fetch') ||
+        errMsg.includes('NetworkError')
+      ) {
+        network.reportServerUnreachable();
+        this.toast.show(
+          'warning',
+          'سرور اصلی در دسترس نیست (کد ۵۳۰ یا خطای شبکه). نسخه محلی برنامه فعال و پایدار است.'
+        );
+      } else {
+        this.toast.show('error', 'عدم امکان بررسی نسخه جدید: ' + (err?.message || 'سرور پاسخگو نیست'));
+      }
     } finally {
       this.isCheckingAppUpdate = false;
       this.cdr.detectChanges();

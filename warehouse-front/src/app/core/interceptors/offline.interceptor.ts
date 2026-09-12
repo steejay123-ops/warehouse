@@ -33,6 +33,25 @@ export const OFFLINE_UPLOAD_UNSUPPORTED = new HttpContextToken<boolean>(() => fa
 const SLOW_NETWORK_TIMEOUT_MS = 20_000;
 
 /**
+ * آدرس‌های سیگنالینگ، ضربان قلب، پایش سلامت و مدیریت نشست که هرگز نباید در صف آفلاین ذخیره شوند
+ */
+export function isNonQueueableEndpoint(url: string): boolean {
+  if (!url) return false;
+  const clean = url.toLowerCase();
+  return (
+    clean.includes('/telemetry/') ||
+    clean.includes('/heartbeat/') ||
+    clean.includes('/health/') ||
+    clean.includes('/system-health/') ||
+    clean.includes('/auth/login') ||
+    clean.includes('/auth/logout') ||
+    clean.includes('/auth/token') ||
+    clean.includes('/auth/refresh') ||
+    clean.includes('/ping')
+  );
+}
+
+/**
  * offlineInterceptor — اینترسپتور آفلاین با قابلیت Lie-Fi و ادغام کش+صف
  *
  * رفتار:
@@ -55,8 +74,8 @@ export const offlineInterceptor: HttpInterceptorFn = (
     return next(req);
   }
 
-  // اگر SKIP_OFFLINE تنظیم شده، رد شو (مثلا login)
-  if (req.context.get(SKIP_OFFLINE)) {
+  // اگر SKIP_OFFLINE تنظیم شده یا آدرس سیستمی/گذرا است، از مدار آفلاین رد شو
+  if (req.context.get(SKIP_OFFLINE) || isNonQueueableEndpoint(req.url)) {
     return next(req);
   }
 
@@ -289,6 +308,20 @@ export const offlineInterceptor: HttpInterceptorFn = (
   };
 
   const handleOfflineMutation = (): Observable<any> => {
+    // درخواست‌های پایش، سیگنالینگ، ضربان قلب و نشست نباید صف‌بندی شوند
+    if (isNonQueueableEndpoint(req.url)) {
+      console.warn(`[OfflineInterceptor] 🚫 جلوگیری از صف‌بندی اندپوینت سیستمی/گذرا: ${req.method} ${req.url}`);
+      return throwError(
+        () =>
+          new HttpErrorResponse({
+            error: { detail: 'این درخواست مربوط به پایش سیستمی بوده و در صف آفلاین ذخیره نمی‌شود.' },
+            status: 503,
+            statusText: 'Offline - Non Queueable',
+            url: req.url,
+          })
+      );
+    }
+
     // FormData در IndexedDB قابل ذخیره نیست (DataCloneError) و حتی اگر بود،
     // replay با JSON.stringify بدنه را خالی می‌کرد. صف نکن؛ خطای روشن بده
     // تا کاربر بداند فایل نزد خودش مانده و باید بعد از اتصال دوباره تلاش کند.

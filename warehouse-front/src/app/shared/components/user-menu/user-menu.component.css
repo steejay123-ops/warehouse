@@ -1,11 +1,8 @@
 :host {
   display: block;
-  width: 100%;
-  height: 100vh;
-  overflow: hidden;
 }
 
-/* Keyboard Shortcuts Modal Styling */
+/* Keyboard Shortcuts Modal Keycap Styling */
 .keycap {
   display: inline-flex;
   align-items: center;

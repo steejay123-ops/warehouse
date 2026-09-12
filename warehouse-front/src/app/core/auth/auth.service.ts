@@ -4,6 +4,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, of, from, throwError, tap, catchError, map, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
+import { SKIP_GLOBAL_ERROR_TOAST } from '../error/error.interceptor';
 import { offlineDb } from '../services/offline-db';
 import {
   AuthTokens,
@@ -163,17 +164,19 @@ export class AuthService {
     const lastHeartbeat = this.getItem('last_daily_heartbeat');
     if (lastHeartbeat === todayStr) return;
 
+    const authContext = new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true);
+
     detectClientDeviceModel().then((deviceModel) => {
       const body = deviceModel ? { device_model: deviceModel } : {};
       this.http
-        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, body)
+        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, body, { context: authContext })
         .pipe(catchError(() => of(null)))
         .subscribe(() => {
           this.setItem('last_daily_heartbeat', todayStr);
         });
     }).catch(() => {
       this.http
-        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, {})
+        .post(`${environment.apiUrl}/auth/login-logs/heartbeat/`, {}, { context: authContext })
         .pipe(catchError(() => of(null)))
         .subscribe(() => {
           this.setItem('last_daily_heartbeat', todayStr);
@@ -196,7 +199,8 @@ export class AuthService {
       const token = this.getItem(TOKEN_KEY);
       if (token) {
         this.http.post(`${environment.apiUrl}/auth/logout/`, { tab_id: this.sessionTab.tabId }, {
-          headers: { 'X-Client-Tab-Id': this.sessionTab.tabId }
+          headers: { 'X-Client-Tab-Id': this.sessionTab.tabId },
+          context: new HttpContext().set(SKIP_OFFLINE, true).set(SKIP_GLOBAL_ERROR_TOAST, true)
         }).subscribe({ error: () => {} });
       }
     } catch {}

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router, RouterModule, NavigationEnd } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -9,6 +9,7 @@ import { CommunicationService } from '../../../core/services/communication.servi
 import { AppRoleSwitcherComponent } from '../../../shared/components/app-role-switcher/app-role-switcher.component';
 import { OfflinePendingBadgeComponent } from '../../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { ChatDrawerComponent } from '../../communications/chat-drawer/chat-drawer.component';
+import { UserMenuComponent } from '../../../shared/components/user-menu/user-menu.component';
 import { filter, Subscription } from 'rxjs';
 
 interface NavItem {
@@ -29,7 +30,8 @@ interface NavItem {
     RouterModule,
     AppRoleSwitcherComponent,
     OfflinePendingBadgeComponent,
-    ChatDrawerComponent
+    ChatDrawerComponent,
+    UserMenuComponent
   ],
   templateUrl: './operations-layout.html',
   styleUrl: './operations-layout.css'
@@ -40,56 +42,13 @@ export class OperationsLayoutComponent implements OnInit, OnDestroy {
   public healthService = inject(SystemHealthService);
   public navHistory = inject(NavigationHistoryService);
   public commService = inject(CommunicationService);
-  private cdr = inject(ChangeDetectorRef);
   private router = inject(Router);
 
   public isSidebarCollapsed = signal<boolean>(false);
   public isMobileMenuOpen = signal<boolean>(false);
-  public isUserMenuOpen = false;
   public activeRoute = signal<string>('cockpit');
   public currentTitle = signal<string>('مرکز عملیات و زیرساخت سازمان — اتاق فرماندهی کل');
   private routerSub?: Subscription;
-
-  public get userAvatar(): string {
-    return this.auth.userAvatar();
-  }
-
-  public get userName(): string {
-    return this.auth.userName();
-  }
-
-  public get userRole(): string {
-    return this.auth.userRoleTitles()[0] || 'فرمانده پدافند و مدیر ارشد';
-  }
-
-  public toggleUserMenu(): void {
-    this.isUserMenuOpen = !this.isUserMenuOpen;
-    this.cdr.detectChanges();
-  }
-
-  public closeUserMenu(): void {
-    this.isUserMenuOpen = false;
-    this.cdr.detectChanges();
-  }
-
-  public toggleChatDrawer(): void {
-    const nextState = !this.commService.isChatDrawerOpen();
-    this.commService.isChatDrawerOpen.set(nextState);
-    if (nextState) {
-      this.commService.hasNewIncomingPulse.set(false);
-      const active = this.commService.activeConversation$.value;
-      if (active) {
-        this.commService.markAsRead(active.id);
-      }
-    } else {
-      this.commService.closeActiveConversation();
-    }
-    this.cdr.detectChanges();
-  }
-
-  public goToChangePassword(): void {
-    this.router.navigate(['/app/change-password']);
-  }
 
   public navItems: NavItem[] = [
     {
@@ -173,6 +132,20 @@ export class OperationsLayoutComponent implements OnInit, OnDestroy {
 
   public closeMobileMenu(): void {
     this.isMobileMenuOpen.set(false);
+  }
+
+  public toggleChatDrawer(): void {
+    const nextState = !this.commService.isChatDrawerOpen();
+    this.commService.isChatDrawerOpen.set(nextState);
+    if (nextState) {
+      this.commService.hasNewIncomingPulse.set(false);
+      const active = this.commService.activeConversation$.value;
+      if (active) {
+        this.commService.markAsRead(active.id);
+      }
+    } else {
+      this.commService.closeActiveConversation();
+    }
   }
 
   public navigateTo(route: string): void {

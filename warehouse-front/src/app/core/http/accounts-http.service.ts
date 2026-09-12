@@ -107,8 +107,9 @@ export class AccountsHttpService {
     return this.http.post(`${this.apiUrl}/auth/users/${id}/admin_reset_password/`, {});
   }
 
-  toggleUserStatus(id: number): Observable<any> {
-    return this.http.patch(`${this.apiUrl}/auth/users/${id}/toggle_status/`, {});
+  toggleUserStatus(id: number, isActive?: boolean): Observable<any> {
+    const body = isActive !== undefined ? { is_active: isActive } : {};
+    return this.http.patch(`${this.apiUrl}/auth/users/${id}/toggle_status/`, body);
   }
 
   getRoles(): Observable<Role[]> {
@@ -160,8 +161,12 @@ export class AccountsHttpService {
   }
 
   // ── Roles Excel ──────────────────────────────────────────────────
-  exportRolesExcel(): Observable<Blob> {
-    return this.http.get(`${this.apiUrl}/auth/roles/export_excel/`, { responseType: 'blob' });
+  exportRolesExcel(ids?: number[]): Observable<Blob> {
+    const params: any = {};
+    if (ids && ids.length > 0) {
+      params.ids = ids.join(',');
+    }
+    return this.http.get(`${this.apiUrl}/auth/roles/export_excel/`, { params, responseType: 'blob' });
   }
 
   importRolesExcel(file: File, updateExisting: boolean = false, dryRun: boolean = false): Observable<ImportResult> {

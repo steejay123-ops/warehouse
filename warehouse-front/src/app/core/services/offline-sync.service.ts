@@ -211,7 +211,46 @@ export class OfflineSyncService {
     // پاکسازی دادهٔ دامنهٔ خیلی قدیمی (نگهداری ۶ ماه) — روزی یک‌بار
     this.pruneOldLocalData().catch(() => {});
 
+    // پاکسازی رکوردهای گذرا/تله‌متری از صف آفلاین
+    this.purgeEphemeralQueueEntries().catch(() => {});
+
     console.log('[OfflineSync] ✅ سرویس همگام‌سازی آفلاین راه‌اندازی شد');
+  }
+
+  /**
+   * پاکسازی رکوردهای گذرا، ضربان قلب، تله‌متری و لاگ‌اوت از صف‌های آفلاین IndexedDB
+   */
+  public async purgeEphemeralQueueEntries(): Promise<void> {
+    try {
+      const isEphemeral = (url?: string) => {
+        const u = (url || '').toLowerCase();
+        return (
+          u.includes('/telemetry/') ||
+          u.includes('/heartbeat/') ||
+          u.includes('/health/') ||
+          u.includes('/system-health/') ||
+          u.includes('/auth/logout') ||
+          u.includes('/auth/login') ||
+          u.includes('/ping')
+        );
+      };
+
+      for (const db of [warehouseOfflineDb, financeOfflineDb]) {
+        const entries = await db.syncQueue.toArray();
+        const toDelete = entries
+          .filter((e) => isEphemeral(e.url))
+          .map((e) => e.id)
+          .filter((id): id is number => typeof id === 'number');
+
+        if (toDelete.length > 0) {
+          await db.syncQueue.bulkDelete(toDelete);
+          console.log(`[OfflineSync] 🧹 ${toDelete.length} رکورد غیرمجاز پالس/تله‌متری از صف آفلاین پاکسازی شد.`);
+        }
+      }
+      await this.refreshCounts();
+    } catch (err) {
+      console.warn('[OfflineSync] خطا در پاکسازی رکوردهای گذرا از صف:', err);
+    }
   }
 
   /**
@@ -369,6 +408,29 @@ export class OfflineSyncService {
     body: any,
     meta?: { userId?: number; entityType?: string; entitySyncId?: string; baseUpdatedAt?: string; appScope?: AppScope }
   ): Promise<SyncQueueEntry> {
+    const cleanUrl = (url || '').toLowerCase();
+    if (
+      cleanUrl.includes('/telemetry/') ||
+      cleanUrl.includes('/heartbeat/') ||
+      cleanUrl.includes('/health/') ||
+      cleanUrl.includes('/system-health/') ||
+      cleanUrl.includes('/auth/logout') ||
+      cleanUrl.includes('/auth/login') ||
+      cleanUrl.includes('/ping')
+    ) {
+      console.warn(`[OfflineSync] ⚠️ نادیده گرفتن درخواست سیستمی/گذرا از صف آفلاین: ${method} ${url}`);
+      return {
+        id: -1,
+        method,
+        url,
+        body,
+        createdAt: Date.now(),
+        retryCount: 0,
+        status: 'failed',
+        appScope: meta?.appScope || resolveScopeFromUrl(url),
+      };
+    }
+
     const appScope: AppScope = meta?.appScope || resolveScopeFromUrl(url);
     const entry: SyncQueueEntry = {
       method,

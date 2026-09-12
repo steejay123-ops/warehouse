@@ -74,6 +74,9 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
   }
 
   /* Completely hide all application UI, navigation, headers, tabs, and toast popups */
+  app-operations-layout header,
+  app-operations-layout aside,
+  app-operations-layout nav,
   app-layout header,
   app-layout aside,
   app-layout nav,
@@ -91,8 +94,44 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
     overflow: hidden !important;
   }
 
-  /* Force display ONLY of the isolated print container */
+  /* Reset layout containers to avoid clipping or overflow scrollbars */
+  app-operations-layout,
+  app-operations-layout main,
+  app-layout,
+  app-layout main,
+  main,
+  app-users,
+  app-users > div,
+  app-id-cards {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+    display: block !important;
+  }
+
+  /* Force display of the isolated print container for ID Cards */
+  #id-cards-print-sheet {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
   #id-cards-print-sheet,
+  #id-cards-print-sheet * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Timesheet Print Container */
   #printable-timesheet-area {
     display: block !important;
     visibility: visible !important;
@@ -107,9 +146,10 @@ input:checked + .toggle-slider:before{right:calc(100% - 21px)}
     page: timesheet;
   }
 
-  #id-cards-print-sheet *,
   #printable-timesheet-area * {
     visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 

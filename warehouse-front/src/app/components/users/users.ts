@@ -28,9 +28,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 export class Users implements OnInit, OnDestroy {
   @ViewChild(IdCards) idCardsComponent?: IdCards;
   activeTab = 'users';
-  activeRoleTab = 'custom';
-  activePermTab = 'WH_AUDIT';
-  userRoleModalTab: 'all' | 'warehouse' | 'finance' | 'global' = 'warehouse';
+  activePermTab = 'MAIN_MENU';
+  userRoleModalTab: 'all' | 'warehouse' | 'finance' | 'global' = 'finance';
   searchQuery = '';
   searchSubject = new Subject<string>();
   private searchSub?: Subscription;
@@ -38,7 +37,6 @@ export class Users implements OnInit, OnDestroy {
   // Pagination & Filtering
   currentPage = 1;
   pageSize = 24;
-  visibleCount = 24;
   pageSizeOptions = [12, 24, 48, 96];
   userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
   userRoleFilter: number | 'ALL' = 'ALL';
@@ -344,11 +342,19 @@ export class Users implements OnInit, OnDestroy {
   }
 
   hasInventoryModule(): boolean {
-    return this.systemPermissionGroups.some(g => g.key === 'WH_AUDIT');
+    return this.registry.isModuleInstalled('warehouse') && this.systemPermissionGroups.some(g => g.key === 'WH_AUDIT');
   }
 
   hasAccountingModule(): boolean {
-    return this.systemPermissionGroups.some(g => g.key === 'ACCOUNTING_FINANCE');
+    return this.registry.isModuleInstalled('accounting') && this.systemPermissionGroups.some(g => g.key === 'ACCOUNTING_FINANCE');
+  }
+
+  get visiblePermissionGroups() {
+    return (this.systemPermissionGroups || []).filter(group => {
+      if (group.key === 'WH_AUDIT' && !this.hasInventoryModule()) return false;
+      if (group.key === 'ACCOUNTING_FINANCE' && !this.hasAccountingModule()) return false;
+      return true;
+    });
   }
 
   get availableRolePresets() {
@@ -477,6 +483,15 @@ export class Users implements OnInit, OnDestroy {
     return this.SHORT_PERMISSION_NAMES[perm.codename] || perm.name;
   }
 
+  getPermissionTooltip(perm: Permission | any): string {
+    if (!perm) return '';
+    if (!this.hasInventoryModule()) {
+      if (perm.codename === 'perm_approve_personnel_supervisor') return 'تایید مرحله سرپرست برای پرسنل';
+      if (perm.codename === 'perm_approve_fleet_supervisor') return 'تایید مرحله سرپرست برای ناوگان';
+    }
+    return perm.name || '';
+  }
+
   systemPermissions: Permission[] = [];
   systemPermissionGroups: { key: string, title: string, items: Permission[], is_sensitive_group?: boolean }[] = [];
   permSearchQuery = '';
@@ -527,7 +542,6 @@ export class Users implements OnInit, OnDestroy {
 
     this.route.queryParams.subscribe((params: any) => {
       this.activeTab = params['tab'] || 'users';
-      this.activeRoleTab = params['roleTab'] || 'custom';
       const q = params['q'] || '';
       if (q !== this.searchQuery) {
         this.searchQuery = q;
@@ -847,13 +861,6 @@ export class Users implements OnInit, OnDestroy {
     return pages;
   }
 
-  loadMoreUsers(): void {
-    if (this.currentPage < this.totalPages) {
-      this.currentPage++;
-      this.cdr.detectChanges();
-    }
-  }
-
   setStatusFilter(filter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser') {
     this.userStatusFilter = filter;
     this.currentPage = 1;
@@ -1049,12 +1056,6 @@ export class Users implements OnInit, OnDestroy {
     return this.state.appState.users.filter((u: any) => !this.editingUser || u.id !== this.editingUser.id);
   }
 
-  getSupervisorName(supId: number | null): string {
-    if (!supId) return '---';
-    const sup = this.state.appState.users.find((u: any) => u.id === supId);
-    return sup ? `${sup.first_name} ${sup.last_name}` : `کاربر #${supId}`;
-  }
-
   getUserAvatarLetter(u: any): string {
     if (u.first_name && u.first_name.trim().length > 0) {
       return u.first_name.trim()[0];
@@ -1100,10 +1101,6 @@ export class Users implements OnInit, OnDestroy {
   switchTab(tab: string) {
     this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
     this.openMenuId = null;
-  }
-
-  switchRoleTab(tab: string) {
-    this.router.navigate([], { queryParams: { roleTab: tab }, queryParamsHandling: 'merge' });
   }
 
   switchPermTab(tab: string) {
@@ -1286,6 +1283,7 @@ export class Users implements OnInit, OnDestroy {
         date_joined: '', last_login: '', is_active: true, is_superuser: false
       };
     }
+    this.userRoleModalTab = this.hasInventoryModule() ? 'warehouse' : 'finance';
     this.isUserModalOpen = true;
     this.cdr.detectChanges();
   }
@@ -1652,7 +1650,7 @@ export class Users implements OnInit, OnDestroy {
       this.editingRole = null;
       this.roleForm = { id: null, name: '', title: '', parent: null, color: '#94a3b8', permissions: [], user_ids: [] };
     }
-    this.activePermTab = this.systemPermissionGroups[0]?.key || 'MAIN_MENU';
+    this.activePermTab = this.visiblePermissionGroups[0]?.key || 'MAIN_MENU';
     this.isPresetsExpanded = false;
     this.isRoleModalOpen = true;
     this.cdr.detectChanges();
@@ -1674,7 +1672,7 @@ export class Users implements OnInit, OnDestroy {
       permissions: role.permissions ? [...role.permissions] : [],
       user_ids: []
     };
-    this.activePermTab = this.systemPermissionGroups[0]?.key || 'MAIN_MENU';
+    this.activePermTab = this.visiblePermissionGroups[0]?.key || 'MAIN_MENU';
     this.isRoleModalOpen = true;
     this.toast.show('info', `نقش «${role.title || role.name}» با دسترسی‌های مرتبط آماده تکثیر است.`);
     this.cdr.detectChanges();
@@ -1763,11 +1761,12 @@ export class Users implements OnInit, OnDestroy {
   }
 
   get filteredPermissionGroups() {
+    const sourceGroups = this.visiblePermissionGroups;
     if (!this.permSearchQuery.trim()) {
-      return this.systemPermissionGroups;
+      return sourceGroups;
     }
     const q = this.permSearchQuery.trim().toLowerCase();
-    return this.systemPermissionGroups.map(group => ({
+    return sourceGroups.map(group => ({
       ...group,
       items: group.items.filter((p: any) => 
         (p.name && p.name.toLowerCase().includes(q)) || 

@@ -28,7 +28,7 @@
     <div class="flex items-center gap-2 p-1 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-inner">
       <button type="button" (click)="setMainTab('personnel')" [class]="mainSectionTab === 'personnel' ? 'bg-white text-emerald-800 shadow-sm font-black border border-emerald-300' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer">
         <span class="text-base">📋</span>
-        <span>۱. ثبت کارکرد پرسنل انبار</span>
+        <span>۱. ثبت کارکرد پرسنل</span>
       </button>
       <button type="button" (click)="setMainTab('fleet')" [class]="mainSectionTab === 'fleet' ? 'bg-white text-blue-800 shadow-sm font-black border border-blue-300' : 'text-slate-600 hover:text-slate-800 font-bold'" class="flex-1 py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer">
         <span class="text-base">🚛</span>
@@ -348,7 +348,7 @@
               <th class="p-2.5 w-20 text-center bg-slate-100/70">مجموع ساعات</th>
               <th class="p-2.5 w-28 text-center">مساعده (ریال)</th>
               <th class="p-2.5 min-w-[180px]">توضیحات روزانه</th>
-              <th class="p-2.5 w-32 text-center">تگ انبار</th>
+              <th class="p-2.5 w-32 text-center">پروژه / کارگاه</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">

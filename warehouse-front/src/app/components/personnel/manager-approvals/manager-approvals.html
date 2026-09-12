@@ -89,7 +89,7 @@
       <div class="flex items-center gap-3">
         <!-- Warehouse Selector -->
         <select [(ngModel)]="selectedWarehouseId" (change)="onWarehouseChange()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
-          <option [ngValue]="null">همه انبارها</option>
+          <option [ngValue]="null">همه پروژه‌ها / کارگاه‌ها</option>
           <option *ngFor="let wh of warehouses" [ngValue]="wh.id">{{wh.name}}</option>
         </select>
 
@@ -223,7 +223,7 @@
       <div class="flex items-center gap-3">
         <!-- Warehouse Selector -->
         <select [(ngModel)]="selectedWarehouseId" (change)="onWarehouseChange()" class="bg-slate-50 border border-slate-200 text-slate-800 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
-          <option [ngValue]="null">همه انبارها</option>
+          <option [ngValue]="null">همه پروژه‌ها / کارگاه‌ها</option>
           <option *ngFor="let wh of warehouses" [ngValue]="wh.id">{{wh.name}}</option>
         </select>
 

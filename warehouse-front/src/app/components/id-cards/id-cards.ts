@@ -7,6 +7,7 @@ import { AccountsHttpService, User, Role } from '../../core/http/accounts-http.s
 import { WarehouseHttpService, Warehouse } from '../../core/http/warehouse-http.service';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { QRCodeWriter, BarcodeFormat, EncodeHintType } from '@zxing/library';
+import { ModuleRegistryService } from '../../core/modules/module-registry.service';
 
 export interface CardCustomTexts {
   companyName: string;
@@ -21,10 +22,10 @@ export interface CardCustomTexts {
 export const DEFAULT_CARD_TEXTS: CardCustomTexts = {
   companyName: 'فارس عــالیش',
   companySub: 'FARS AALISH CO. - REG: 420',
-  backHeaderTitle: 'ضوابط و امنیت تردد انبار',
+  backHeaderTitle: 'ضوابط و امنیت تردد سازمانی',
   backHeaderSub: 'SECURITY & SAFETY GUIDELINES',
-  regulationsText: 'همراه داشتن این کارت در کلیه مبادی ورودی و محوطه انبارها الزامی است. هرگونه واگذاری به غیر ممنوع می‌باشد.',
-  signatureTitle: 'مهر و امضای حراست انبار',
+  regulationsText: 'همراه داشتن این کارت در کلیه مبادی ورودی و محوطه سازمانی الزامی است. هرگونه واگذاری به غیر ممنوع می‌باشد.',
+  signatureTitle: 'مهر و امضای حراست و انتظامات',
   signatureSub: 'SECURITY CLEARANCE'
 };
 
@@ -72,7 +73,7 @@ export class IdCards implements OnInit {
   readonly PRESET_COLORS = [
     { name: 'سورمه‌ای سازمانی', color: '#4f46e5' },
     { name: 'آبی تیره رسمی', color: '#0284c7' },
-    { name: 'زرد ایمنی انبار', color: '#d97706' },
+    { name: 'زرد ایمنی و هشدار', color: '#d97706' },
     { name: 'زمردی عملیاتی', color: '#059669' },
     { name: 'زرشکی مدیریتی', color: '#dc2626' },
     { name: 'کربن متالیک تیره', color: '#1e293b' }
@@ -89,7 +90,7 @@ export class IdCards implements OnInit {
     barcodeType: '1d',
     barcodePlacement: 'back',
     expiryDays: 0,
-    globalProjectNote: 'پروژه ساماندهی و انبارداری مرکزی',
+    globalProjectNote: 'پروژه ساماندهی و مدیریت متمرکز',
     customTexts: { ...DEFAULT_CARD_TEXTS },
     fields: {
       photo: true,
@@ -184,8 +185,17 @@ export class IdCards implements OnInit {
     private warehouseHttp: WarehouseHttpService,
     private toast: ToastService,
     private sanitizer: DomSanitizer,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private registry: ModuleRegistryService
   ) {}
+
+  get isWarehouseInstalled(): boolean {
+    return this.registry.isModuleInstalled('warehouse');
+  }
+
+  get isWarehouseScope(): boolean {
+    return this.isWarehouseInstalled && this.state.appState.appScope !== 'finance';
+  }
 
   ngOnInit() {
     this.restoreSavedSettings();
@@ -194,15 +204,17 @@ export class IdCards implements OnInit {
 
   private restoreSavedSettings() {
     try {
-      const saved = localStorage.getItem(this.STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        this.idCardSettings = {
-          ...this.idCardSettings,
-          ...parsed,
-          customTexts: { ...DEFAULT_CARD_TEXTS, ...(parsed.customTexts || {}) },
-          fields: { ...this.idCardSettings.fields, ...(parsed.fields || {}) }
-        };
+      if (typeof localStorage !== 'undefined') {
+        const saved = localStorage.getItem(this.STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          this.idCardSettings = {
+            ...this.idCardSettings,
+            ...parsed,
+            customTexts: { ...DEFAULT_CARD_TEXTS, ...(parsed.customTexts || {}) },
+            fields: { ...this.idCardSettings.fields, ...(parsed.fields || {}) }
+          };
+        }
       }
     } catch (e) {
       console.warn('Failed to load id card settings from localStorage', e);
@@ -211,7 +223,9 @@ export class IdCards implements OnInit {
 
   saveSettings() {
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.idCardSettings));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.idCardSettings));
+      }
     } catch (e) {}
   }
 
@@ -278,8 +292,8 @@ export class IdCards implements OnInit {
               last_name: 'تقوی سوق',
               national_code: '1280954310',
               phone_number: '09121234567',
-              operational_zone: 'انبار مرکزی',
-              assigned_warehouses: ['انبار مرکزی A', 'انبار قطعات یدکی'],
+              operational_zone: this.isWarehouseScope ? 'انبار مرکزی' : 'دفتر مرکزی / ستاد',
+              assigned_warehouses: this.isWarehouseScope ? ['انبار مرکزی A', 'انبار قطعات یدکی'] : ['دفتر مرکزی', 'پروژه مرکزی'],
               avatar: null,
               blood_type: 'O+',
               emergency_contact: '09121234567',
@@ -323,8 +337,9 @@ export class IdCards implements OnInit {
   }
 
   getWarehouseNamesList(user: User): string[] {
+    const defaultZone = this.isWarehouseScope ? 'انبار مرکزی' : 'دفتر مرکزی';
     if (!user || !user.assigned_warehouses || user.assigned_warehouses.length === 0) {
-      return ['انبار مرکزی'];
+      return [defaultZone];
     }
     const names: string[] = [];
     for (const item of user.assigned_warehouses) {
@@ -335,7 +350,7 @@ export class IdCards implements OnInit {
         names.push(item);
       }
     }
-    return names.length > 0 ? names : ['انبار مرکزی'];
+    return names.length > 0 ? names : [defaultZone];
   }
 
   /**
@@ -344,7 +359,7 @@ export class IdCards implements OnInit {
   getWarehouseSummary(user: User, maxItems: number = 1): string {
     const list = this.getWarehouseNamesList(user);
     if (this.warehousesList.length > 0 && list.length >= this.warehousesList.length && this.warehousesList.length > 1) {
-      return 'تمامی انبارها (دسترسی کامل)';
+      return this.isWarehouseScope ? 'تمامی انبارها (دسترسی کامل)' : 'تمامی پروژه‌ها (دسترسی کامل)';
     }
     if (list.length <= maxItems) {
       return list.join('، ');
@@ -369,8 +384,8 @@ export class IdCards implements OnInit {
       last_name: 'تقوی سوق',
       national_code: '1280954310',
       phone_number: '09121234567',
-      operational_zone: 'انبار مرکزی',
-      assigned_warehouses: ['انبار مرکزی A', 'انبار قطعات یدکی'],
+      operational_zone: this.isWarehouseScope ? 'انبار مرکزی' : 'دفتر مرکزی / ستاد',
+      assigned_warehouses: this.isWarehouseScope ? ['انبار مرکزی A', 'انبار قطعات یدکی'] : ['دفتر مرکزی', 'پروژه مرکزی'],
       avatar: null,
       blood_type: 'O+',
       emergency_contact: '09121234567',
@@ -412,7 +427,7 @@ export class IdCards implements OnInit {
       const roleObj = this.rolesList.find(r => r.id === user.groups[0]);
       if (roleObj) return { title: roleObj.title || roleObj.name, color: roleObj.color || '#4f46e5' };
     }
-    return { title: 'پرسنل عملیات انبار', color: '#4f46e5' };
+    return { title: 'پرسنل و کاربر سازمانی', color: '#4f46e5' };
   }
 
   getUserAvatarInitial(user: User): string {

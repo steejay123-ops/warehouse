@@ -9,7 +9,7 @@
       <!-- هدر سایدبار پرسنل -->
       <div class="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-2">
-          <span class="text-xs font-black text-slate-800">۱. انتخاب پرسنل انبار</span>
+          <span class="text-xs font-black text-slate-800">۱. انتخاب پرسنل و کاربران</span>
           <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-[10px] font-black">{{filteredUsers.length}}</span>
         </div>
         <button (click)="toggleSelectAll()" class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer">
@@ -32,7 +32,7 @@
           </select>
 
           <select [(ngModel)]="filterWarehouseId" class="w-full px-2 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 outline-none cursor-pointer">
-            <option value="ALL">همه انبارها</option>
+            <option value="ALL">همه پروژه‌ها / کارگاه‌ها</option>
             <option *ngFor="let w of warehousesList" [value]="w.id">{{w.name}}</option>
           </select>
         </div>
@@ -423,7 +423,7 @@
 
               <button (click)="applyPreset('industrial-security')" [ngClass]="idCardSettings.presetLayout === 'industrial-security' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-white text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all bg-white cursor-pointer">
                 <span class="text-base">⚠️</span>
-                <span>صنعتی انبار</span>
+                <span>صنعتی و کارگاهی</span>
               </button>
 
               <button (click)="applyPreset('compact-minimal')" [ngClass]="idCardSettings.presetLayout === 'compact-minimal' ? 'border-2 border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black' : 'border border-slate-200 hover:bg-white text-slate-700 font-bold'" class="p-2 rounded-xl text-[11px] flex flex-col items-center gap-1 transition-all bg-white cursor-pointer">

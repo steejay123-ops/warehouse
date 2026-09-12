@@ -165,7 +165,7 @@
         <div class="relative w-full sm:w-40 shrink-0">
           <select [(ngModel)]="userWarehouseFilter" (ngModelChange)="onFilterChange()"
             class="w-full pr-8 pl-6 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all text-slate-700 font-bold appearance-none cursor-pointer shadow-2xs">
-            <option value="ALL">همه انبارها</option>
+            <option value="ALL">{{ hasInventoryModule() ? 'همه انبارها' : 'همه پروژه‌ها / کارگاه‌ها' }}</option>
             <option *ngFor="let p of state.appState.projects" [value]="p.id">{{ p.name }}</option>
           </select>
           <div class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none text-slate-400">
@@ -214,7 +214,7 @@
           <button type="button" (click)="setStatusFilter('no_warehouse')"
             [ngClass]="userStatusFilter === 'no_warehouse' ? 'bg-white text-amber-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'"
             class="px-2.5 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap flex items-center gap-1">
-            <span>بدون انبار</span>
+            <span>{{ hasInventoryModule() ? 'بدون انبار' : 'بدون پروژه' }}</span>
             <span class="text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold" [ngClass]="userStatusFilter === 'no_warehouse' ? 'bg-amber-50 text-amber-700' : 'bg-slate-200 text-slate-600'">{{ userCounts.noWarehouse }}</span>
           </button>
           <button type="button" (click)="setStatusFilter('superuser')"
@@ -403,7 +403,7 @@
 
                       <!-- دسترسی انبارها -->
                       <div class="flex items-center justify-between gap-1 text-[10px]">
-                        <span class="text-slate-400 shrink-0 font-medium">انبارها:</span>
+                        <span class="text-slate-400 shrink-0 font-medium">{{ hasInventoryModule() ? 'انبارها:' : 'پروژه‌ها:' }}</span>
                         <div class="flex gap-1 flex-wrap justify-end">
                           <ng-container *ngIf="!u.assigned_warehouses || u.assigned_warehouses.length === 0">
                             <span class="text-[9px] text-rose-500 font-bold bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200">بدون دسترسی</span>
@@ -446,7 +446,7 @@
                       <th class="py-3.5 px-4 min-w-[200px]">کاربر و هویت</th>
                       <th class="py-3.5 px-4 min-w-[130px]">کد ملی / تماس</th>
                       <th class="py-3.5 px-4 min-w-[160px]">نقش‌های سازمانی</th>
-                      <th class="py-3.5 px-4 min-w-[160px]">دسترسی انبارها</th>
+                      <th class="py-3.5 px-4 min-w-[160px]">{{ hasInventoryModule() ? 'دسترسی انبارها' : 'محدوده پروژه‌ها' }}</th>
                       <th class="py-3.5 px-4 min-w-[110px]">شرکت / سازمان</th>
                       <th class="py-3.5 px-4 text-center min-w-[100px]">وضعیت حساب</th>
                       <th class="py-3.5 px-4 text-center min-w-[160px] w-40">عملیات</th>
@@ -1060,7 +1060,7 @@
                 عنوان نقش (فارسی)
                 <span class="text-rose-500 font-black">*</span>
               </label>
-              <input type="text" [(ngModel)]="roleForm.title" name="title" placeholder="مثال: سرپرست انبار" class="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 focus:border-indigo-400 text-xs outline-none transition-all shadow-2xs">
+              <input type="text" [(ngModel)]="roleForm.title" name="title" [placeholder]="hasInventoryModule() ? 'مثال: سرپرست انبار' : 'مثال: کارشناس ارشد مالی'" class="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 focus:border-indigo-400 text-xs outline-none transition-all shadow-2xs">
             </div>
 
             <!-- کد سیستمی -->
@@ -1118,11 +1118,11 @@
                 <span>قالب فعال: {{ getActivePresetTitle() }}</span>
                 <span>✓</span>
               </span>
-              <span *ngIf="!activeRolePresetId" class="text-[10.5px] text-slate-500 truncate hidden sm:inline">تخصیص یکپارچه نقش‌های انبارگردانی و حسابداری با ۱ کلیک</span>
+              <span *ngIf="!activeRolePresetId" class="text-[10.5px] text-slate-500 truncate hidden sm:inline">{{ hasInventoryModule() ? 'تخصیص یکپارچه نقش‌های انبارگردانی و حسابداری با ۱ کلیک' : 'تخصیص یکپارچه نقش‌های استاندارد سازمانی با ۱ کلیک' }}</span>
             </div>
 
             <button type="button" (click)="isPresetsExpanded = !isPresetsExpanded" class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-white hover:bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 transition-all shrink-0 flex items-center gap-1 cursor-pointer shadow-2xs">
-              <span>{{ isPresetsExpanded ? 'بستن پنل قالب‌ها ▲' : 'انتخاب از ۱۲ قالب آماده ▼' }}</span>
+              <span>{{ isPresetsExpanded ? 'بستن پنل قالب‌ها ▲' : ('انتخاب از ' + availableRolePresets.length + ' قالب آماده ▼') }}</span>
             </button>
           </div>
 
@@ -1293,7 +1293,7 @@
 
           <!-- تب‌های ۴ گانه تفکیک‌شده (انبارگردانی، حسابداری، سیستم، حساس) -->
           <div class="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200">
-            <button *ngFor="let group of systemPermissionGroups" type="button" (click)="switchPermTab(group.key)"
+            <button *ngFor="let group of visiblePermissionGroups" type="button" (click)="switchPermTab(group.key)"
               class="flex-1 py-1.5 px-2 text-[11px] font-bold rounded-lg transition-all whitespace-nowrap flex items-center justify-center gap-1.5 cursor-pointer"
               [ngClass]="activePermTab === group.key ? (group.is_sensitive_group ? 'bg-rose-600 text-white shadow-xs' : 'bg-white text-indigo-700 shadow-xs') : (group.is_sensitive_group ? 'text-rose-600 hover:bg-rose-50' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60')">
               <span>{{group.title}}</span>
@@ -1342,7 +1342,7 @@
                             : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80',
                           (perm.is_sensitive && !isSuperuser()) ? 'opacity-50 cursor-not-allowed bg-slate-100' : 'cursor-pointer active:scale-[0.99]'
                         ]"
-                        [title]="perm.name">
+                        [title]="getPermissionTooltip(perm)">
                         <div class="flex items-center gap-2 min-w-0 flex-1 pl-1">
                           <div class="w-4 h-4 rounded-md flex items-center justify-center text-[10px] transition-all shrink-0"
                             [ngClass]="roleForm.permissions.includes(perm.id) ? (perm.is_sensitive ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white') : 'border border-slate-300 bg-white text-transparent group-hover:border-indigo-400'">
@@ -1416,7 +1416,7 @@
             <span *ngIf="editingUser" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-800 border border-amber-200">ویرایش پرونده</span>
           </div>
           <p class="text-[11px] text-slate-500 mt-0.5">
-            {{ editingUser ? 'بروزرسانی مشخصات هویتی، سطوح دسترسی RBAC، کلمه عبور و پروژه‌ها' : 'تکمیل هویت فردی، شناسه ورود یکتا، نقش‌های سازمانی و انبارهای مجاز' }}
+            {{ editingUser ? 'بروزرسانی مشخصات هویتی، سطوح دسترسی RBAC، کلمه عبور و پروژه‌ها' : 'تکمیل هویت فردی، شناسه ورود یکتا، نقش‌های سازمانی و پروژه‌های مجاز' }}
           </p>
         </div>
       </div>
@@ -1659,7 +1659,7 @@
                     <span class="text-xs font-black text-purple-900">مدیر ارشد (Superuser)</span>
                   </div>
                   <p class="text-[10px] text-purple-700/80">
-                    {{ userForm.is_superuser ? 'دسترسی ۱۰۰٪ به تمام تنظیمات و ماژول‌ها' : 'دسترسی محدود به نقش‌ها و انبارهای تخصیصی' }}
+                    {{ userForm.is_superuser ? 'دسترسی ۱۰۰٪ به تمام تنظیمات و ماژول‌ها' : 'دسترسی محدود به نقش‌ها و پروژه‌های تخصیصی' }}
                   </p>
                 </div>
                 <label class="toggle-switch shrink-0 mr-2">
@@ -1780,7 +1780,7 @@
 
           <!-- تب‌های تفکیک‌شده قلمرو نقش‌ها -->
           <div class="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200">
-            <button type="button" (click)="userRoleModalTab = 'warehouse'"
+            <button *ngIf="hasInventoryModule()" type="button" (click)="userRoleModalTab = 'warehouse'"
               [ngClass]="userRoleModalTab === 'warehouse' ? 'bg-white text-sky-700 shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'"
               class="flex-1 py-1.5 px-2.5 rounded-lg text-[11px] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
               <span>📦 سامانه انبارداری</span>
@@ -1841,8 +1841,8 @@
             <div class="flex items-center gap-2">
               <span class="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">🏬</span>
               <div>
-                <h3 class="text-xs font-black text-slate-800">محدوده عملیاتی مجاز (انبارها و پروژه‌ها)</h3>
-                <p class="text-[10px] text-slate-400">انبارها یا پروژه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد</p>
+                <h3 class="text-xs font-black text-slate-800">{{ hasInventoryModule() ? 'محدوده عملیاتی مجاز (انبارها و پروژه‌ها)' : 'محدوده عملیاتی مجاز (پروژه‌ها و کارگاه‌ها)' }}</h3>
+                <p class="text-[10px] text-slate-400">{{ hasInventoryModule() ? 'انبارها یا پروژه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد' : 'پروژه‌ها یا کارگاه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد' }}</p>
               </div>
             </div>
             <span class="text-[10px] font-bold text-slate-400">بخش ۵ از ۵</span>
@@ -1948,7 +1948,7 @@
         <div class="flex items-start gap-2">
           <span class="text-rose-500 font-black text-sm leading-none">•</span>
           <p class="font-medium text-[11px] text-slate-700">
-            این دسترسی دارای <strong class="text-rose-600 font-black">بالاترین سطح ریسک عملیاتی و سیستمی</strong> است (مانند بازگردانی اطلاعات، حذف و احیای رکوردهای انبار یا دستکاری پایگاه داده).
+            این دسترسی دارای <strong class="text-rose-600 font-black">بالاترین سطح ریسک عملیاتی و سیستمی</strong> است (مانند بازگردانی اطلاعات، حذف و احیای رکوردهای {{ hasInventoryModule() ? 'انبار' : 'پایگاه داده' }} یا دستکاری اطلاعات کلان).
           </p>
         </div>
         <div class="flex items-start gap-2">

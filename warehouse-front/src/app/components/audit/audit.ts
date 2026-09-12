@@ -151,6 +151,10 @@ export class Audit implements OnInit, OnDestroy {
            this.router.url.includes('/app/warehouse');
   }
 
+  get isWarehouseInstalled(): boolean {
+    return this.personaService.moduleRegistry.isModuleInstalled('warehouse');
+  }
+
   activeTab: 'audit' | 'security' | 'login' = 'audit';
   selectedAppScope: 'all' | 'warehouse' | 'finance' = 'all';
   selectedEvent: string = '';

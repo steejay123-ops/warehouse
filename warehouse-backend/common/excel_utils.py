@@ -38,6 +38,33 @@ def jalali_now_str():
     except ImportError:
         return now.strftime('%Y-%m-%d %H:%M')
 
+def sanitize_excel_cell(v):
+    """
+    OWASP Spreadsheet Formula Injection (CSV / Excel Formula Injection) Sanitization:
+    اگر مقدار متنی با کاراکترهای محرک فرمول مانند =, +, -, @, \\t, \\r آغاز شود،
+    یک کوتیشن تکی (') به ابتدای آن اضافه می‌شود تا اکسل آن را صرفاً رشته متنی در نظر بگیرد
+    و از اجرای فرمول‌ها، ماکروها یا کدهای مخرب DDE جلوگیری شود.
+    اعداد واقعی (int, float, Decimal) دستکاری نمی‌شوند.
+    """
+    if v is None:
+        return v
+    if isinstance(v, str):
+        stripped = v.lstrip()
+        if stripped and stripped[0] in ('=', '+', '-', '@', '\t', '\r'):
+            if not v.startswith("'"):
+                return f"'{v}"
+    return v
+
+
+def sanitize_excel_row(row):
+    """
+    پاکسازی تمام مقادیر یک سطر از داده‌ها برای جلوگیری از آسیب‌پذیری Formula Injection
+    """
+    if not row:
+        return row
+    return [sanitize_excel_cell(cell) for cell in row]
+
+
 def get_cell_value(v):
     if v is None:
         return ''
@@ -53,7 +80,7 @@ def get_cell_value(v):
         return v
     if hasattr(v, 'isoformat'):
         return v.isoformat()
-    return str(v)
+    return sanitize_excel_cell(str(v))
 
 def styled_cell(ws, value, number_format=None, fill=None, is_write_only=False):
     """

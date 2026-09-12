@@ -1,7 +1,9 @@
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, filters
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
+from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth.models import Group, Permission
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -9,6 +11,24 @@ from .models import CustomUser, CustomRole
 from .serializers import UserSerializer, CustomTokenObtainPairSerializer, CustomRoleSerializer, PermissionSerializer
 
 from common.mixins import DeleteImpactMixin
+from common.excel_utils import sanitize_excel_row
+
+class OptionalPageNumberPagination(PageNumberPagination):
+    """
+    صفحه‌بندی دوگانه و هوشمند (Dual-Mode Smart Pagination):
+    اگر کلاینت پارامترهای صفحه‌بندی (page، page_size یا paginate=true) را ارسال کند،
+    پاسخ استاندارد صفحه‌بندی‌شده ({ count, next, previous, results }) تحویل داده می‌شود.
+    در غیر این صورت، جهت حفظ پایداری کامل دراپ‌دان‌ها، فرم‌های تخصیص کالا و کش‌های کلاینت،
+    پاسخ به صورت آرایه مستقیم بازگردانده می‌شود.
+    """
+    page_size = 25
+    page_size_query_param = 'page_size'
+    max_page_size = 500
+
+    def paginate_queryset(self, queryset, request, view=None):
+        if 'page' not in request.query_params and 'page_size' not in request.query_params and request.query_params.get('paginate') != 'true':
+            return None
+        return super().paginate_queryset(queryset, request, view=view)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
@@ -31,7 +51,12 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
-    pagination_class = None
+    pagination_class = OptionalPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'first_name', 'last_name', 'national_code', 'phone_number', 'company', 'operational_zone']
+    ordering_fields = ['id', 'username', 'first_name', 'last_name', 'date_joined', 'last_login']
+    ordering = ['-id']
+    filterset_fields = ['is_active', 'company', 'operational_zone']
 
     def get_queryset(self):
         from django.apps import apps
@@ -270,9 +295,12 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         from rest_framework.exceptions import ValidationError
         from .audit_utils import log_audit_event
         
-        target_active = request.data.get('is_active') if isinstance(request.data, dict) else None
+        target_active = request.data.get('is_active') if hasattr(request.data, 'get') else None
         if target_active is not None:
-            new_active = bool(target_active)
+            if isinstance(target_active, str):
+                new_active = target_active.strip().lower() in ('true', '1', 'yes')
+            else:
+                new_active = bool(target_active)
         else:
             new_active = not user.is_active
 
@@ -282,6 +310,10 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     
         old_active = user.is_active
         user.is_active = new_active
+        if not new_active:
+            from django.utils import timezone
+            user.password_changed_at = timezone.now()
+            self._revoke_user_sessions_and_tokens(user)
         user.save()
 
         try:
@@ -300,6 +332,21 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             pass
 
         return Response({'status': 'success', 'is_active': user.is_active})
+
+    def _revoke_user_sessions_and_tokens(self, user):
+        """
+        ابطال فوری و سراسری کلیه نشست‌های دستگاه‌ها و بلک‌لیست کردن توکن‌های فعال کاربر
+        """
+        from .models import UserDeviceSession
+        UserDeviceSession.objects.filter(user=user).update(is_revoked=True)
+
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+            outstanding_tokens = OutstandingToken.objects.filter(user=user)
+            for token in outstanding_tokens:
+                BlacklistedToken.objects.get_or_create(token=token)
+        except Exception:
+            pass
 
     @action(detail=False, methods=['post'])
     def change_password(self, request):
@@ -343,6 +390,9 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         user.password_changed_at = timezone.now()
         user.save()
 
+        # ابطال کلیه نشست‌های دستگاه‌ها و بلک‌لیست توکن‌های فعال
+        self._revoke_user_sessions_and_tokens(user)
+
         from .audit_utils import log_audit_event
         log_audit_event(
             user=request.user,
@@ -351,12 +401,12 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             severity='warning',
             target_model='CustomUser',
             target_object_id=user.id,
-            target_repr=f"بازنشانی رمز عبور کاربر {user.username} توسط مدیر",
+            target_repr=f"بازنشانی رمز عبور کاربر {user.username} توسط مدیر و ابطال نشست‌ها",
             details={'target_user_id': user.id, 'target_username': user.username},
             ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
         )
             
-        return Response({'success': True, 'message': 'رمز عبور با موفقیت به مقدار پیش‌فرض تغییر یافت و کاربر باید دوباره لاگین کند.'})
+        return Response({'success': True, 'message': 'رمز عبور با موفقیت به مقدار پیش‌فرض تغییر یافت و کلیه نشست‌ها و توکن‌های فعال کاربر ابطال شدند.'})
 
     @action(detail=False, methods=['post'])
     def update_preferences(self, request):
@@ -672,7 +722,11 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     queryset = CustomRole.objects.all()
     serializer_class = CustomRoleSerializer
-    pagination_class = None
+    pagination_class = OptionalPageNumberPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'title']
+    ordering_fields = ['id', 'name', 'title']
+    ordering = ['id']
 
     def get_permissions(self):
         from .permissions import HasMenuAccess
@@ -1399,7 +1453,7 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
                         row_vals.append(item.failure_reason or "—")
                     elif col_key == 'created_at':
                         row_vals.append(format_shamsi_datetime(item.created_at))
-                writer.writerow(row_vals)
+                writer.writerow(sanitize_excel_row(row_vals))
 
             response = HttpResponse(output.getvalue().encode('utf-8-sig'), content_type='text/csv; charset=utf-8')
             response['Content-Disposition'] = 'attachment; filename="login_history_report.csv"'
@@ -1481,7 +1535,7 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
                 elif col_key == 'created_at':
                     row_vals.append(format_shamsi_datetime(item.created_at))
 
-            ws.append(row_vals)
+            ws.append(sanitize_excel_row(row_vals))
             row_num = idx + 2
             ws.row_dimensions[row_num].height = 22
             is_zebra = (idx % 2 == 0)
@@ -2201,7 +2255,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
                 elif col_key == 'created_at':
                     row_vals.append(format_shamsi_datetime(item.created_at))
 
-            ws.append(row_vals)
+            ws.append(sanitize_excel_row(row_vals))
             row_num = idx + 2
             ws.row_dimensions[row_num].height = 22
             is_zebra = (idx % 2 == 0)

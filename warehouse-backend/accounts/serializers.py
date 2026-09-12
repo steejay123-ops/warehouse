@@ -121,8 +121,12 @@ class UserSerializer(serializers.ModelSerializer):
             'requires_password_change', 'ui_preferences', 'roles'
         ]
         extra_kwargs = {
-            'email': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'email': {
+                'required': False, 'allow_blank': True, 'allow_null': True,
+                'error_messages': {'invalid': 'فرمت آدرس ایمیل واردشده نامعتبر است.'}
+            },
             'phone_number': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'password': {'write_only': True, 'required': False},
         }
 
     def get_fields(self):
@@ -144,9 +148,25 @@ class UserSerializer(serializers.ModelSerializer):
         return []
 
     def validate_email(self, value):
-        if value is None:
+        if not value:
             return ""
-        return value.strip()
+        val = str(value).strip()
+        if not val:
+            return ""
+        from django.core.validators import validate_email as django_validate_email
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            django_validate_email(val)
+        except DjangoValidationError:
+            raise serializers.ValidationError("فرمت آدرس ایمیل نامعتبر است (مانند user@example.com).")
+        return val
+
+    def validate_password(self, value):
+        if not value:
+            return value
+        if len(value) < 6:
+            raise serializers.ValidationError("کلمه عبور باید حداقل ۶ کاراکتر باشد.")
+        return value
 
     def validate_phone_number(self, value):
         if not value:

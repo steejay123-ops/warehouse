@@ -61,6 +61,56 @@ class UserSerializerValidationTests(TestCase):
         user = serializer.save()
         self.assertEqual(user.phone_number, '09123456789')
 
+    def test_create_user_with_invalid_email_fails(self):
+        data = {
+            'username': 'bad_email_user',
+            'first_name': 'رضا',
+            'last_name': 'محمدی',
+            'phone_number': '09121112233',
+            'email': 'not-a-valid-email',
+        }
+        serializer = UserSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('email', serializer.errors)
+        self.assertIn('نامعتبر', str(serializer.errors['email']))
+
+    def test_create_user_with_valid_email_succeeds(self):
+        data = {
+            'username': 'good_email_user',
+            'first_name': 'رضا',
+            'last_name': 'محمدی',
+            'phone_number': '09121112233',
+            'email': 'reza.mohammadi@example.com',
+        }
+        serializer = UserSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['email'], 'reza.mohammadi@example.com')
+
+    def test_create_user_with_short_password_fails(self):
+        data = {
+            'username': 'short_pwd_user',
+            'first_name': 'رضا',
+            'last_name': 'محمدی',
+            'phone_number': '09121112233',
+            'password': '123',
+        }
+        serializer = UserSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('password', serializer.errors)
+        self.assertIn('۶ کاراکتر', str(serializer.errors['password']))
+
+    def test_create_user_with_valid_password_succeeds(self):
+        data = {
+            'username': 'good_pwd_user',
+            'first_name': 'رضا',
+            'last_name': 'محمدی',
+            'phone_number': '09121112233',
+            'password': 'StrongPassword123!',
+        }
+        serializer = UserSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+
 
 import io
 import openpyxl
@@ -198,3 +248,176 @@ class RoleExcelImportTests(TestCase):
 
         self.assertFalse(CustomRole.objects.filter(name='atomic_role_1').exists())
         self.assertFalse(CustomRole.objects.filter(name='atomic_role_2').exists())
+
+
+class UserAndRolePaginationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_superuser('admin_pagination', 'admin@pagination.com', 'pass1234')
+        self.client.force_authenticate(user=self.admin)
+        for i in range(10):
+            CustomUser.objects.create(
+                username=f'pagination_user_{i}',
+                first_name=f'کاربر{i}',
+                last_name=f'تستی{i}',
+                phone_number=f'0912000000{i}'
+            )
+
+    def test_users_unpaginated_by_default(self):
+        # By default without ?page=, must return a list directly for dropdowns & client caches
+        res = self.client.get('/api/accounts/users/')
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.data, list)
+        self.assertGreaterEqual(len(res.data), 11)
+
+    def test_users_paginated_when_page_param_provided(self):
+        # When ?page= is provided, must return a paginated response with count & results
+        res = self.client.get('/api/accounts/users/?page=1&page_size=5')
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.data, dict)
+        self.assertIn('count', res.data)
+        self.assertIn('results', res.data)
+        self.assertEqual(len(res.data['results']), 5)
+        self.assertGreaterEqual(res.data['count'], 11)
+
+    def test_users_server_side_search(self):
+        # Server-side search on username / first_name / phone
+        res = self.client.get('/api/accounts/users/?search=pagination_user_3')
+        self.assertEqual(res.status_code, 200)
+        users = res.data if isinstance(res.data, list) else res.data['results']
+        self.assertEqual(len(users), 1)
+        self.assertEqual(users[0]['username'], 'pagination_user_3')
+
+    def test_roles_paginated_when_page_param_provided(self):
+        CustomRole.objects.create(name='test_role_p1', title='نقش تستی ۱')
+        res = self.client.get('/api/accounts/roles/?page=1&page_size=10')
+        self.assertEqual(res.status_code, 200)
+        self.assertIsInstance(res.data, dict)
+        self.assertIn('count', res.data)
+        self.assertIn('results', res.data)
+
+
+from accounts.models import UserDeviceSession
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+
+class UserSessionRevocationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = CustomUser.objects.create_superuser('admin_revoke_test', 'admin@revoke.com', 'pass1234')
+        self.client.force_authenticate(user=self.admin)
+        self.target_user = CustomUser.objects.create(
+            username='user_to_reset',
+            first_name='علی',
+            last_name='تقوی',
+            phone_number='09121234567'
+        )
+        self.session = UserDeviceSession.objects.create(
+            user=self.target_user,
+            session_key=f'{self.target_user.id}_tab1',
+            tab_id='tab1',
+            is_revoked=False
+        )
+
+    def test_admin_reset_password_revokes_sessions_and_blacklists_tokens(self):
+        refresh = RefreshToken.for_user(self.target_user)
+        self.assertFalse(self.session.is_revoked)
+
+        res = self.client.post(f'/api/accounts/users/{self.target_user.id}/admin_reset_password/')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['success'])
+
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.is_revoked)
+
+        # Token must be blacklisted
+        token_entry = OutstandingToken.objects.filter(token=str(refresh)).first()
+        if token_entry:
+            self.assertTrue(BlacklistedToken.objects.filter(token=token_entry).exists())
+
+    def test_toggle_status_deactivation_revokes_sessions(self):
+        self.assertFalse(self.session.is_revoked)
+        res = self.client.patch(f'/api/accounts/users/{self.target_user.id}/toggle_status/', {'is_active': False})
+        self.assertEqual(res.status_code, 200)
+
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.is_revoked)
+
+
+class ExcelFormulaInjectionSanitizationTests(TestCase):
+    def test_sanitize_excel_cell_unit(self):
+        from common.excel_utils import sanitize_excel_cell
+
+        # Payload tests starting with dangerous characters
+        self.assertEqual(sanitize_excel_cell("=cmd|' /C calc'!A0"), "'=cmd|' /C calc'!A0")
+        self.assertEqual(sanitize_excel_cell("+1+1"), "'+1+1")
+        self.assertEqual(sanitize_excel_cell("-10%"), "'-10%")
+        self.assertEqual(sanitize_excel_cell("@SUM(1,2)"), "'@SUM(1,2)")
+        self.assertEqual(sanitize_excel_cell("\t=calc"), "'\t=calc")
+        self.assertEqual(sanitize_excel_cell("  =cmd"), "'  =cmd")
+
+        # Normal text and numbers should not be modified
+        self.assertEqual(sanitize_excel_cell("علی رضایی"), "علی رضایی")
+        self.assertEqual(sanitize_excel_cell("پتروشیمی خلیج فارس"), "پتروشیمی خلیج فارس")
+        self.assertEqual(sanitize_excel_cell(12345), 12345)
+        self.assertEqual(sanitize_excel_cell(-99), -99)
+        self.assertEqual(sanitize_excel_cell(3.14), 3.14)
+        self.assertIsNone(sanitize_excel_cell(None))
+
+        # Already sanitized strings should not be double escaped
+        self.assertEqual(sanitize_excel_cell("'+123"), "'+123")
+
+    def test_generate_users_excel_sanitizes_injected_formulas(self):
+        import io
+        from openpyxl import load_workbook
+        from accounts.excel_utils import generate_users_excel
+
+        user = CustomUser.objects.create(
+            username="attacker_user",
+            first_name="=cmd|' /C calc'!A0",
+            last_name="+1+1",
+            company="@EVIL_CORP",
+            operational_zone="-ZONE-1",
+            phone_number="09129998877"
+        )
+
+        response = generate_users_excel(CustomUser.objects.filter(id=user.id))
+        self.assertEqual(response.status_code, 200)
+
+        wb = load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        # Row 1 is Persian labels, Row 2 is keys, Row 3 is user data
+        row3_values = [cell.value for cell in ws[3]]
+
+        # Verify values in row 3 start with '
+        first_name_val = row3_values[0]
+        last_name_val = row3_values[1]
+        zone_val = row3_values[8]
+        company_val = row3_values[9]
+
+        self.assertTrue(str(first_name_val).startswith("'="))
+        self.assertTrue(str(last_name_val).startswith("'+"))
+        self.assertTrue(str(zone_val).startswith("'-"))
+        self.assertTrue(str(company_val).startswith("'@"))
+
+    def test_generate_roles_excel_sanitizes_injected_formulas(self):
+        import io
+        from openpyxl import load_workbook
+        from accounts.roles_excel_utils import generate_roles_excel
+        from accounts.models import CustomRole
+        role = CustomRole.objects.create(
+            name="evil_role",
+            title="=2+5+cmd|' /C calc'!A0",
+            color="#ef4444"
+        )
+
+        response = generate_roles_excel(CustomRole.objects.filter(id=role.id))
+        self.assertEqual(response.status_code, 200)
+
+        wb = load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        row3_values = [cell.value for cell in ws[3]]
+        title_val = row3_values[1]
+        self.assertTrue(str(title_val).startswith("'="))
+
+

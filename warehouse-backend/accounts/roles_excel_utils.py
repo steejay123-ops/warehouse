@@ -7,7 +7,7 @@ import re
 from openpyxl import Workbook, load_workbook
 from common.excel_utils import (
     styled_cell, apply_header_styles_to_row, set_column_widths, 
-    freeze_header_panes, find_data_start_and_mapping
+    freeze_header_panes, find_data_start_and_mapping, sanitize_excel_row
 )
 from django.http import HttpResponse
 from django.contrib.auth.models import Permission
@@ -79,7 +79,7 @@ def generate_roles_excel(queryset):
             parent_title,
             perms_str,
         ]
-        ws.append(row_data)
+        ws.append(sanitize_excel_row(row_data))
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -125,7 +125,7 @@ def generate_roles_template():
     ]
 
     for row in sample_data:
-        ws.append(row)
+        ws.append(sanitize_excel_row(row))
 
     buffer = io.BytesIO()
     wb.save(buffer)

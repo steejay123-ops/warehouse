@@ -8,7 +8,8 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.datavalidation import DataValidation
 from common.excel_utils import (
     styled_cell, apply_header_styles_to_row, set_column_widths, 
-    freeze_header_panes, find_data_start_and_mapping, jalali_now_str
+    freeze_header_panes, find_data_start_and_mapping, jalali_now_str,
+    sanitize_excel_cell, sanitize_excel_row
 )
 from django.http import HttpResponse
 from django.contrib.auth.models import Group
@@ -199,7 +200,7 @@ def generate_users_excel(queryset):
             wh_str,
             'بله' if user.is_active else 'خیر',
         ]
-        ws.append(row_data)
+        ws.append(sanitize_excel_row(row_data))
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -275,7 +276,7 @@ def generate_id_cards_excel(queryset):
             barcode_str,
             now_shamsi,
         ]
-        ws.append(row_data)
+        ws.append(sanitize_excel_row(row_data))
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -334,7 +335,7 @@ def generate_users_template():
     ]
 
     for row in sample_data:
-        ws.append(row)
+        ws.append(sanitize_excel_row(row))
 
     # ۱. اعتبارسنجی درون اکسل (Data Validation Dropdown) برای ستون فعال (J)
     dv_active = DataValidation(type="list", formula1=chr(34) + "بله,خیر" + chr(34), allow_blank=True)
@@ -555,6 +556,15 @@ def parse_users_excel(file, update_existing=False):
                     if not update_existing or (is_update_record and nid_user.id != target_user_id):
                         row_errors.append({'row': row_num, 'field': 'national_code', 'message': 'این کد ملی به کاربر دیگری تخصیص دارد.'})
                 seen_national_codes.add(national_code)
+
+        # ── اعتبارسنجی فرمت ایمیل ──
+        if email:
+            from django.core.validators import validate_email as django_validate_email
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            try:
+                django_validate_email(email)
+            except DjangoValidationError:
+                row_errors.append({'row': row_num, 'field': 'email', 'message': f'فرمت آدرس ایمیل «{email}» نامعتبر است.'})
 
         # ── تطبیق هوشمند نقش‌ها ──
         resolved_roles = []

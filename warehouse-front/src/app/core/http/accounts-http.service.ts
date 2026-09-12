@@ -181,18 +181,6 @@ export class AccountsHttpService {
     return this.http.get(`${this.apiUrl}/auth/roles/download_template/`, { responseType: 'blob' });
   }
 
-  // ── ID Cards Excel ───────────────────────────────────────────────
-  exportIdCardsExcel(ids?: number[]): Observable<Blob> {
-    const params: any = {};
-    if (ids && ids.length > 0) {
-      params.ids = ids.join(',');
-    }
-    return this.http.get(`${this.apiUrl}/auth/users/export_id_cards_excel/`, {
-      params,
-      responseType: 'blob'
-    });
-  }
-
   // ── Avatar Management ────────────────────────────────────────────
   updateMyAvatar(file: Blob): Observable<{ success: boolean; avatar: string; message: string }> {
     const formData = new FormData();

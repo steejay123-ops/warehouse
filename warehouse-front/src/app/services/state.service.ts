@@ -8,7 +8,7 @@ export class StateService {
     user: null,
     unit: 'admin',
     tab: 'dashboard',
-    activeWarehouseId: (localStorage.getItem('wh_active_id') === 'ALL' ? 'ALL' : (localStorage.getItem('wh_active_id') ? Number(localStorage.getItem('wh_active_id')) : 'ALL')) as any,
+    activeWarehouseId: (typeof localStorage !== 'undefined' && localStorage.getItem('wh_active_id') === 'ALL' ? 'ALL' : (typeof localStorage !== 'undefined' && localStorage.getItem('wh_active_id') ? Number(localStorage.getItem('wh_active_id')) : 'ALL')) as any,
     projects: [],
     rolesMap: {} as any,  // Deprecated: titles & colors now come from API (role.title, role.color)
     users: [],

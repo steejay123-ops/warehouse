@@ -1,4 +1,6 @@
 import { Injectable, signal } from '@angular/core';
+import { IS_WAREHOUSE_INSTALLED } from '../../modules/warehouse/warehouse.routes';
+import { IS_ACCOUNTING_INSTALLED } from '../../modules/accounting/accounting.routes';
 
 export interface FrontendModuleSpec {
   code: string;
@@ -83,16 +85,27 @@ export class ModuleRegistryService {
   private installedModuleCodes = signal<string[]>(this.getInitialModuleCodes());
 
   private getInitialModuleCodes(): string[] {
+    const codes = ['operations'];
+    if (IS_WAREHOUSE_INSTALLED) codes.push('warehouse');
+    if (IS_ACCOUNTING_INSTALLED) codes.push('accounting');
+
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(ModuleRegistryService.STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter(c => {
+              const norm = String(c).toLowerCase();
+              if ((norm === 'warehouse' || norm === 'wh') && !IS_WAREHOUSE_INSTALLED) return false;
+              if ((norm === 'accounting' || norm === 'finance') && !IS_ACCOUNTING_INSTALLED) return false;
+              return true;
+            });
+          }
         }
       } catch {}
     }
-    return ['warehouse', 'accounting', 'operations'];
+    return codes;
   }
 
   /**
@@ -100,7 +113,11 @@ export class ModuleRegistryService {
    */
   public setInstalledModules(codes: string[]): void {
     if (!codes || !Array.isArray(codes) || codes.length === 0) return;
-    const normalized = codes.map(c => c.toLowerCase());
+    const normalized = codes.map(c => c.toLowerCase()).filter(norm => {
+      if ((norm === 'warehouse' || norm === 'wh') && !IS_WAREHOUSE_INSTALLED) return false;
+      if ((norm === 'accounting' || norm === 'finance') && !IS_ACCOUNTING_INSTALLED) return false;
+      return true;
+    });
     // اگر پلتفرم یا حسابداری اعلام شده، به رسمیت بشناس
     if (!normalized.includes('operations')) normalized.push('operations');
     this.installedModuleCodes.set(normalized);
@@ -123,6 +140,9 @@ export class ModuleRegistryService {
    */
   public isModuleInstalled(code: string): boolean {
     const norm = code.toLowerCase();
+    if ((norm === 'warehouse' || norm === 'wh') && !IS_WAREHOUSE_INSTALLED) return false;
+    if ((norm === 'accounting' || norm === 'finance') && !IS_ACCOUNTING_INSTALLED) return false;
+
     const installed = this.installedModuleCodes();
     if (installed.includes(norm)) return true;
     const spec = this.getSpec(norm);

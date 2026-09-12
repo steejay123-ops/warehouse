@@ -5,6 +5,8 @@ import { Routes } from '@angular/router';
  * این فایل جایگزین accounting.routes.ts می‌شود تا هیچ کامپوننت و کدی
  * از دامنه حسابداری وارد باندل خروجی انبارداری‌تنها نگردد.
  */
+export const IS_ACCOUNTING_INSTALLED = false;
+
 export const ACCOUNTING_ROUTES: Routes = [
   { path: '**', redirectTo: '/app/launcher' }
 ];

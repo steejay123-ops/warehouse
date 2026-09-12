@@ -11,6 +11,8 @@ import { ProjectsAndSectionsComponent } from '../../components/organization/proj
 import { Audit } from '../../components/audit/audit';
 import { HealthDashboardComponent } from '../../components/health-dashboard/health-dashboard';
 
+export const IS_ACCOUNTING_INSTALLED = true;
+
 export const ACCOUNTING_ROUTES: Routes = [
   { path: 'finance-cartable', component: FinanceCartable, data: { reuse: true } },
   { path: 'attendance', component: WarehouseAttendance, data: { defaultTab: 'personnel' } },

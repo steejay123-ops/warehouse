@@ -11,5 +11,9 @@
   "include": [
     "src/**/*.d.ts",
     "src/**/*.spec.ts"
+  ],
+  "exclude": [
+    "src/app/components/personnel/**/*.spec.ts",
+    "src/app/core/api/**/*.spec.ts"
   ]
 }

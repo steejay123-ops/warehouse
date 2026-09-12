@@ -38,6 +38,23 @@ class CustomRoleSerializer(serializers.ModelSerializer):
     def get_users_count(self, obj):
         return obj.user_set.count()
 
+    def validate_parent(self, parent):
+        if parent is None:
+            return None
+        if self.instance and parent.id == self.instance.id:
+            raise serializers.ValidationError("یک نقش سازمانی نمی‌تواند نقش والد خودش باشد.")
+        if self.instance:
+            curr = parent
+            visited = set()
+            while curr:
+                if curr.id == self.instance.id:
+                    raise serializers.ValidationError("انتساب این نقش به عنوان والد موجب بروز وابستگی چرخه‌ای در ساختار درختی نقش‌ها می‌گردد.")
+                if curr.id in visited:
+                    break
+                visited.add(curr.id)
+                curr = curr.parent
+        return parent
+
     def validate_permissions(self, permissions):
         try:
             from platform_core.module_catalog import get_disallowed_permission_codenames
@@ -215,7 +232,7 @@ class UserSerializer(serializers.ModelSerializer):
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
 
-        groups = validated_data.pop('groups', [])
+        groups = validated_data.pop('groups', None)
         roles = validated_data.pop('roles', None)
         user_permissions = validated_data.pop('user_permissions', [])
         # فاز ۲ §۲.۳ — در نصب بدون انبار این کلید وجود ندارد.
@@ -233,11 +250,11 @@ class UserSerializer(serializers.ModelSerializer):
             user.requires_password_change = True
         user.save()
 
-        if roles is not None:
+        if groups is not None:
+            user.groups.set(groups)
+        elif roles is not None:
             group_objs = Group.objects.filter(name__in=roles)
             user.groups.set(group_objs)
-        else:
-            user.groups.set(groups)
 
         user.user_permissions.set(user_permissions)
         if assigned_warehouses:
@@ -258,6 +275,7 @@ class UserSerializer(serializers.ModelSerializer):
             if not is_req_admin and 'is_superuser' in validated_data:
                 validated_data.pop('is_superuser')
 
+        groups = validated_data.pop('groups', None)
         roles = validated_data.pop('roles', None)
         password = validated_data.pop('password', None)
         if password:
@@ -284,7 +302,9 @@ class UserSerializer(serializers.ModelSerializer):
             if active_admins == 0:
                 raise ValidationError("شما نمی‌توانید آخرین مدیر (Admin) فعال سیستم را تنزل درجه داده یا غیرفعال کنید.")
                 
-        if roles is not None:
+        if groups is not None:
+            instance.groups.set(groups)
+        elif roles is not None:
             group_objs = Group.objects.filter(name__in=roles)
             instance.groups.set(group_objs)
         
@@ -408,10 +428,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             device_model=device_model
         )
         
-        # Calculate permissions
+        # Calculate permissions (including hierarchical child roles)
         user_perms = set(user.user_permissions.values_list('codename', flat=True))
-        for group in user.groups.all():
-            user_perms.update(group.permissions.values_list('codename', flat=True))
+        all_role_ids = CustomRole.get_all_role_ids_for_user(user)
+        if all_role_ids:
+            user_perms.update(
+                Permission.objects.filter(group__id__in=all_role_ids).values_list('codename', flat=True)
+            )
         
         if user.is_superuser:
             user_perms.add('admin_all') # Or all permissions

@@ -48,6 +48,12 @@ class CustomUser(AbstractUser):
             ("view_sys_fleet_attendance", "ثبت کارکرد ناوگان و ماشین‌آلات"),
             ("view_sys_payroll", "محاسبات حقوق و دستمزد پرسنل"),
             ("view_sys_fleet_settlement", "تسویه و محاسبات مالی ناوگان"),
+            ("perm_sys_settings", "تنظیمات کلان سیستم"),
+            ("perm_sys_logs", "مشاهده لاگ‌های امنیتی (Audit)"),
+            ("perm_usr_add", "ثبت پرسنل جدید"),
+            ("perm_usr_edit", "ویرایش پرونده پرسنلی"),
+            ("perm_usr_role", "تغییر ساختار سازمانی و نقش‌ها"),
+            ("perm_manage_projects_sections", "مدیریت پروژه‌ها و بخش‌ها"),
             
             # Warehouse Tabs (منوی انبار)
             ("view_wh_dashboard", "داشبورد انبار"),
@@ -62,8 +68,26 @@ class CustomUser(AbstractUser):
             ("view_wh_label_designer", "طراحی و کانفیگ لیبل (انبار)"),
             ("view_wh_audit", "رهگیری تغییرات و ممیزی (انبار)"),
             ("view_wh_settings", "تنظیمات انبار"),
+            ("perm_wh_create", "تعریف کارگاه/انبار جدید"),
+            ("perm_wh_edit", "ویرایش مشخصات انبارها"),
+            ("perm_wh_freeze", "فریز کردن و توقف عملیات انبار"),
 
-            # Operational Approval & Action Permissions (فرآیندی و کارتابل‌ها)
+            # Records & Inventory Operations (عملیات و رکوردهای میدانی)
+            ("perm_rec_import", "تزریق و آپلود فایل پایه (Excel)"),
+            ("perm_rec_dispatch", "تخصیص رکورد به شمارشگر میدانی"),
+            ("perm_rec_label", "صدور دستور چاپ لیبل و QR Code"),
+            ("perm_rec_recount", "صدور دستور بازشماری (مغایرت)"),
+
+            # Operational Roles & Workflow (فرآیندی، نقش‌های عملیاتی و کارتابل‌ها)
+            ("can_act_as_counter", "شمارنده و انبارگردانی میدانی"),
+            ("can_act_as_supervisor", "سرپرست شمارش (تایید مغایرت‌ها)"),
+            ("can_act_as_manager", "مدیر انبار (تایید نهایی)"),
+            ("can_act_as_doc_worker", "کارشناس اسناد مالی"),
+            ("can_act_as_doc_supervisor", "سرپرست اسناد"),
+            ("can_act_as_operator", "کارمند کارگاه و ثبت کارکرد"),
+            ("can_act_as_accountant", "حسابدار و کارشناس مالی"),
+
+            # Approvals & Actions (تاییدات و چرخه تاییدات)
             ("view_sys_treasury", "کارتابل خزانه‌داری و پرداخت"),
             ("perm_doc_approve_action", "تایید، رد و ثبت امضای اسناد"),
             ("perm_feed_approve_action", "تایید و اعمال فیدهای تغذیه/گمرکی"),
@@ -141,6 +165,28 @@ class CustomRole(Group):
 
     def __str__(self):
         return self.title or self.name
+
+    @classmethod
+    def get_all_role_ids_for_user(cls, user_obj):
+        """
+        دریافت شناسه تمام نقش‌های کاربر به همراه کلیه نقش‌های فرزند در درخت سلسله‌مراتب (Hierarchical Role Traversal)
+        """
+        if not user_obj or not getattr(user_obj, 'is_active', False) or getattr(user_obj, 'is_anonymous', True):
+            return set()
+
+        all_ids = set(user_obj.groups.values_list('id', flat=True))
+        current_layer_ids = list(cls.objects.filter(id__in=all_ids).values_list('id', flat=True))
+
+        while current_layer_ids:
+            children_ids = list(cls.objects.filter(
+                parent_id__in=current_layer_ids
+            ).exclude(id__in=all_ids).values_list('id', flat=True))
+            if not children_ids:
+                break
+            all_ids.update(children_ids)
+            current_layer_ids = children_ids
+
+        return all_ids
 
 
 class UserTableViewState(models.Model):

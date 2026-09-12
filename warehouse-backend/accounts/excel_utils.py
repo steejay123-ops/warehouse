@@ -33,8 +33,12 @@ USERS_COLUMNS = [
     {'label': 'شناسه ورود', 'key': 'username', 'width': 20, 'type': 'text'},
     {'label': 'کد ملی', 'key': 'national_code', 'width': 18, 'type': 'text'},
     {'label': 'تلفن', 'key': 'phone_number', 'width': 18, 'type': 'text'},
+    {'label': 'ایمیل', 'key': 'email', 'width': 25, 'type': 'text'},
+    {'label': 'گروه خونی', 'key': 'blood_type', 'width': 14, 'type': 'text'},
+    {'label': 'تماس اضطراری', 'key': 'emergency_contact', 'width': 18, 'type': 'text'},
     {'label': 'منطقه عملیاتی', 'key': 'operational_zone', 'width': 22, 'type': 'text'},
     {'label': 'شرکت متبوع', 'key': 'company', 'width': 22, 'type': 'text'},
+    {'label': 'آدرس', 'key': 'address', 'width': 30, 'type': 'text'},
     {'label': 'نقش‌ها', 'key': 'roles', 'width': 30, 'type': 'text'},
     {'label': 'انبارها', 'key': 'warehouses', 'width': 30, 'type': 'text'},
     {'label': 'فعال', 'key': 'is_active', 'width': 12, 'type': 'text'},
@@ -185,8 +189,12 @@ def generate_users_excel(queryset):
             user.username or '',
             user.national_code or '',
             user.phone_number or '',
+            user.email or '',
+            user.blood_type or '',
+            user.emergency_contact or '',
             user.operational_zone or '',
             user.company or '',
+            user.address or '',
             roles_str,
             wh_str,
             'بله' if user.is_active else 'خیر',
@@ -486,11 +494,15 @@ def parse_users_excel(file, update_existing=False):
         raw_nid = get_val('national_code', 3)
         national_code = normalize_national_code(raw_nid)
         phone_number = normalize_phone(get_val('phone_number', 4))
-        operational_zone = clean_persian_text(get_val('operational_zone', 5))
-        company = clean_persian_text(get_val('company', 6))
-        roles_str = clean_persian_text(get_val('roles', 7))
-        warehouses_str = clean_persian_text(get_val('warehouses', 8))
-        is_active_str = get_val('is_active', 9, 'بله')
+        email = get_val('email', 5)
+        blood_type = get_val('blood_type', 6)
+        emergency_contact = normalize_phone(get_val('emergency_contact', 7))
+        operational_zone = clean_persian_text(get_val('operational_zone', 8))
+        company = clean_persian_text(get_val('company', 9))
+        address = clean_persian_text(get_val('address', 10))
+        roles_str = clean_persian_text(get_val('roles', 11))
+        warehouses_str = clean_persian_text(get_val('warehouses', 12))
+        is_active_str = get_val('is_active', 13, 'بله')
         is_active = normalize_boolean(is_active_str, default=True)
 
         row_errors = []
@@ -583,8 +595,12 @@ def parse_users_excel(file, update_existing=False):
                 'username': username,
                 'national_code': national_code or None,
                 'phone_number': phone_number or None,
+                'email': email or '',
+                'blood_type': blood_type or None,
+                'emergency_contact': emergency_contact or None,
                 'operational_zone': operational_zone or None,
                 'company': company or None,
+                'address': address or None,
                 'is_active': is_active,
                 'roles': resolved_roles,
                 'warehouses': resolved_warehouses,

@@ -29,11 +29,16 @@ class Command(BaseCommand):
             {'codename': 'view_sys_fleet_settlement', 'name': 'تسویه و محاسبات مالی ناوگان'},
             {'codename': 'perm_sys_settings', 'name': 'تنظیمات کلان سیستم'},
             {'codename': 'perm_sys_logs', 'name': 'مشاهده لاگ‌های امنیتی (Audit)'},
+            {'codename': 'perm_usr_add', 'name': 'ثبت پرسنل جدید'},
+            {'codename': 'perm_usr_edit', 'name': 'ویرایش پرونده پرسنلی'},
+            {'codename': 'perm_usr_role', 'name': 'تغییر ساختار سازمانی و نقش‌ها'},
+            {'codename': 'perm_manage_projects_sections', 'name': 'مدیریت پروژه‌ها و بخش‌ها'},
             
             # Warehouse Tabs (منوی انبار)
             {'codename': 'view_wh_dashboard', 'name': 'داشبورد انبار'},
             {'codename': 'view_wh_docs', 'name': 'مدیریت کالا (انبار)'},
             {'codename': 'view_wh_dispatch', 'name': 'تخصیص کالا (انبار)'},
+            {'codename': 'view_wh_attendance', 'name': 'ثبت کارکرد و سرویس ناوگان (انبار)'},
             {'codename': 'view_wh_customs', 'name': 'فیلدهای مالی و گمرکی (انبار)'},
             {'codename': 'view_wh_doc_approvals', 'name': 'تاییدات سرپرست اسناد (انبار)'},
             {'codename': 'view_wh_feeding', 'name': 'مدیریت و تغذیه MT (انبار)'},
@@ -46,27 +51,35 @@ class Command(BaseCommand):
             {'codename': 'perm_wh_edit', 'name': 'ویرایش مشخصات انبارها'},
             {'codename': 'perm_wh_freeze', 'name': 'فریز کردن و توقف عملیات انبار'},
             
-            # Records (سایر)
+            # Records & Operations (عملیات و رکوردهای میدانی)
             {'codename': 'perm_rec_import', 'name': 'تزریق و آپلود فایل پایه (Excel)'},
             {'codename': 'perm_rec_dispatch', 'name': 'تخصیص رکورد به شمارشگر میدانی'},
             {'codename': 'perm_rec_label', 'name': 'صدور دستور چاپ لیبل و QR Code'},
             {'codename': 'perm_rec_recount', 'name': 'صدور دستور بازشماری (مغایرت)'},
-            {'codename': 'perm_usr_add', 'name': 'ثبت پرسنل جدید'},
-            {'codename': 'perm_usr_edit', 'name': 'ویرایش پرونده پرسنلی'},
-            {'codename': 'perm_usr_role', 'name': 'تغییر ساختار سازمانی و نقش‌ها'},
 
-            # Operations / Workflow (فرآیندی و کارتابل‌ها)
+            # Operational Roles & Workflow (فرآیندی، نقش‌های عملیاتی و کارتابل‌ها)
             {'codename': 'can_act_as_counter', 'name': 'شمارنده و انبارگردانی میدانی'},
             {'codename': 'can_act_as_supervisor', 'name': 'سرپرست شمارش (تایید مغایرت‌ها)'},
             {'codename': 'can_act_as_manager', 'name': 'مدیر انبار (تایید نهایی)'},
             {'codename': 'can_act_as_doc_worker', 'name': 'کارشناس اسناد مالی'},
+            {'codename': 'can_act_as_doc_supervisor', 'name': 'سرپرست اسناد'},
+            {'codename': 'can_act_as_operator', 'name': 'کارمند کارگاه و ثبت کارکرد'},
+            {'codename': 'can_act_as_accountant', 'name': 'حسابدار و کارشناس مالی'},
+
+            # Approvals & Actions (تاییدات و چرخه تاییدات)
+            {'codename': 'view_sys_treasury', 'name': 'کارتابل خزانه‌داری و پرداخت'},
             {'codename': 'perm_doc_approve_action', 'name': 'تایید، رد و ثبت امضای اسناد'},
             {'codename': 'perm_feed_approve_action', 'name': 'تایید و اعمال فیدهای تغذیه/گمرکی'},
             {'codename': 'perm_inventory_finalize', 'name': 'تایید نهایی و بستن دوره‌های انبارگردانی'},
+            {'codename': 'perm_lock_work_period', 'name': 'قفل و تایید نهایی کارکرد ماهانه'},
+            {'codename': 'perm_approve_personnel_supervisor', 'name': 'تایید مرحله سرپرست انبار برای پرسنل'},
             {'codename': 'perm_approve_personnel_manager', 'name': 'تایید مرحله اول (عملیاتی) پرسنل'},
             {'codename': 'perm_approve_personnel_finance', 'name': 'تایید مرحله دوم (مالی و بانکی) پرسنل'},
+            {'codename': 'perm_approve_fleet_supervisor', 'name': 'تایید مرحله سرپرست انبار برای ناوگان'},
             {'codename': 'perm_approve_fleet_manager', 'name': 'تایید مرحله اول (عملیاتی) ناوگان و خودروها'},
             {'codename': 'perm_approve_fleet_finance', 'name': 'تایید مرحله دوم (مالی و بانکی) ناوگان و خودروها'},
+            {'codename': 'perm_manager_payment_authorize', 'name': 'صدور مجوز پرداخت نهایی مدیر شرکت'},
+            {'codename': 'perm_treasury_disburse_action', 'name': 'ثبت واریز و تسویه نهایی خزانه‌داری'},
 
             # Sensitive & Critical (حساس و بحرانی)
             {'codename': 'perm_rollback_data', 'name': 'بازگردانی و احیای جامع داده‌ها'},

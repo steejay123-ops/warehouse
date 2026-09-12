@@ -249,6 +249,7 @@ REST_FRAMEWORK = {
         'chat_message': '60/minute',
         'chat_upload': '20/minute',
         'chat_comments': '60/minute',
+        'verify_card': '30/minute',
     },
 }
 

@@ -3,6 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.models import Group, Permission
+from django.db import transaction
+from django.core.exceptions import ValidationError
 from .models import CustomUser, CustomRole
 from .serializers import UserSerializer, CustomTokenObtainPairSerializer, CustomRoleSerializer, PermissionSerializer
 
@@ -73,6 +75,13 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             
         return permission_classes
 
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+        if self.action == 'verify_card':
+            self.throttle_scope = 'verify_card'
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
     def _validate_user_deactivation(self, request, user, action_name="حذف"):
         from rest_framework.exceptions import ValidationError
         from django.db.models import Q
@@ -118,6 +127,48 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 role_name = KEY_PERMISSIONS.get(perm, perm)
                 raise ValidationError(f"امکان {action_name} این کاربر وجود ندارد. سیستم باید حداقل یک کاربر فعال با دسترسی «{role_name}» داشته باشد.")
 
+    def _get_user_audit_state(self, user):
+        """تهیه دیکشنری جامع از وضعیت کاربر جهت ثبت دقیق تغییرات در لاگ ممیزی"""
+        if not user or not hasattr(user, 'id'):
+            return {}
+
+        roles = []
+        for g in user.groups.all():
+            try:
+                cr = g.customrole
+                roles.append(cr.title or cr.name)
+            except Exception:
+                roles.append(g.name)
+        roles.sort()
+
+        warehouses = []
+        if hasattr(user, 'assigned_warehouses'):
+            warehouses = list(user.assigned_warehouses.values_list('name', flat=True))
+            warehouses.sort()
+
+        direct_perms = list(user.user_permissions.values_list('codename', flat=True))
+        direct_perms.sort()
+
+        return {
+            'username': user.username,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'email': user.email or '',
+            'phone_number': user.phone_number or '',
+            'national_code': user.national_code or '',
+            'company': user.company or '',
+            'address': user.address or '',
+            'operational_zone': user.operational_zone or '',
+            'blood_type': user.blood_type or '',
+            'emergency_contact': user.emergency_contact or '',
+            'supervisor': f"{user.supervisor.first_name} {user.supervisor.last_name}".strip() if user.supervisor else None,
+            'is_active': user.is_active,
+            'is_superuser': user.is_superuser,
+            'roles': roles,
+            'warehouses': warehouses,
+            'direct_permissions': direct_perms,
+        }
+
     def perform_create(self, serializer):
         from .audit_utils import log_audit_event
         from rest_framework.exceptions import PermissionDenied
@@ -139,9 +190,9 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 severity='warning',
                 target_model='CustomUser',
                 target_object_id=instance.id,
-                target_repr=f"{instance.username} ({instance.first_name} {instance.last_name})",
+                target_repr=f"{instance.username} ({instance.first_name} {instance.last_name})".strip(),
                 user=self.request.user if self.request.user.is_authenticated else None,
-                after_state={'username': instance.username, 'first_name': instance.first_name, 'last_name': instance.last_name, 'is_active': instance.is_active}
+                after_state=self._get_user_audit_state(instance)
             )
         except Exception:
             pass
@@ -160,19 +211,27 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 raise PermissionDenied("تنها مدیر ارشد سامانه (Superuser) مجاز به اعطا یا تغییر دسترسی‌های حساس است.")
 
         old_instance = self.get_object()
-        before_state = {'username': old_instance.username, 'first_name': old_instance.first_name, 'last_name': old_instance.last_name, 'is_active': old_instance.is_active}
+        new_is_active = serializer.validated_data.get('is_active', None)
+        if old_instance.is_active and new_is_active is False:
+            self._validate_user_deactivation(self.request, old_instance, action_name="غیرفعال‌سازی")
+
+        before_state = self._get_user_audit_state(old_instance)
         instance = serializer.save(modified_by=self.request.user if self.request.user.is_authenticated else None)
-        after_state = {'username': instance.username, 'first_name': instance.first_name, 'last_name': instance.last_name, 'is_active': instance.is_active}
+        after_state = self._get_user_audit_state(instance)
         diff_b, diff_a = calculate_model_diff(before_state, after_state)
         if diff_b or diff_a:
+            is_security_change = bool(
+                (diff_a and any(k in diff_a for k in ('is_superuser', 'direct_permissions', 'roles', 'is_active', 'warehouses'))) or
+                (diff_b and any(k in diff_b for k in ('is_superuser', 'direct_permissions', 'roles', 'is_active', 'warehouses')))
+            )
             try:
                 log_audit_event(
                     module='users',
                     action='UPDATE',
-                    severity='warning',
+                    severity='critical' if is_security_change else 'warning',
                     target_model='CustomUser',
                     target_object_id=instance.id,
-                    target_repr=f"{instance.username} ({instance.first_name} {instance.last_name})",
+                    target_repr=f"{instance.username} ({instance.first_name} {instance.last_name})".strip(),
                     user=self.request.user if self.request.user.is_authenticated else None,
                     before_state=diff_b,
                     after_state=diff_a
@@ -183,6 +242,12 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         user = self.get_object()
         self._validate_user_deactivation(request, user, action_name="حذف")
+        user_id = user.id
+        user_repr = f"{user.username} ({user.first_name} {user.last_name})".strip()
+        before_state = self._get_user_audit_state(user)
+
+        response = super().destroy(request, *args, **kwargs)
+
         from .audit_utils import log_audit_event
         try:
             log_audit_event(
@@ -190,14 +255,14 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 action='DELETE',
                 severity='critical',
                 target_model='CustomUser',
-                target_object_id=user.id,
-                target_repr=f"{user.username} ({user.first_name} {user.last_name})",
+                target_object_id=user_id,
+                target_repr=user_repr,
                 user=request.user if request.user.is_authenticated else None,
-                before_state={'username': user.username, 'first_name': user.first_name, 'last_name': user.last_name, 'is_active': user.is_active}
+                before_state=before_state
             )
         except Exception:
             pass
-        return super().destroy(request, *args, **kwargs)
+        return response
 
     @action(detail=True, methods=['patch'])
     def toggle_status(self, request, pk=None):
@@ -205,12 +270,18 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         from rest_framework.exceptions import ValidationError
         from .audit_utils import log_audit_event
         
+        target_active = request.data.get('is_active') if isinstance(request.data, dict) else None
+        if target_active is not None:
+            new_active = bool(target_active)
+        else:
+            new_active = not user.is_active
+
         # If user is currently active and is being deactivated
-        if user.is_active:
+        if user.is_active and not new_active:
             self._validate_user_deactivation(request, user, action_name="غیرفعال‌سازی")
                     
         old_active = user.is_active
-        user.is_active = not user.is_active
+        user.is_active = new_active
         user.save()
 
         try:
@@ -453,56 +524,63 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 'errors': result['errors']
             })
 
-        # ── حالت ثبت نهایی (Commit): ثبت رکوردهای سالم و گزارش رکوردهای رد شده ──
+        # ── حالت ثبت نهایی (Commit): ثبت رکوردهای سالم به صورت اتمیک ──
         created_count = 0
         updated_count = 0
-        for row_data in result['valid_rows']:
-            row_data.pop('_row_num', None)
-            is_update = row_data.pop('is_update', False)
-            user_id = row_data.pop('user_id', None)
-            roles = row_data.pop('roles', [])
-            warehouses = row_data.pop('warehouses', [])
+        commit_errors = list(result.get('errors', []))
 
-            if is_update and user_id:
-                user = CustomUser.objects.filter(id=user_id).first()
-                if user:
-                    for k, v in row_data.items():
-                        setattr(user, k, v)
+        try:
+            with transaction.atomic():
+                for row_data in result['valid_rows']:
+                    row_num = row_data.pop('_row_num', None)
+                    is_update = row_data.pop('is_update', False)
+                    user_id = row_data.pop('user_id', None)
+                    roles = row_data.pop('roles', [])
+                    warehouses = row_data.pop('warehouses', [])
+
+                    if is_update and user_id:
+                        user = CustomUser.objects.filter(id=user_id).first()
+                        if user:
+                            for k, v in row_data.items():
+                                setattr(user, k, v)
+                            if request.user and request.user.is_authenticated:
+                                user.modified_by = request.user
+                            user.save()
+                            # همگام‌سازی قطعی دسترسی‌ها (خالی بودن ستون در اکسل باعث پاک شدن دسترسی‌ها می‌شود)
+                            user.groups.set(roles)
+                            user.assigned_warehouses.set(warehouses)
+                            updated_count += 1
+                            continue
+
+                    password = row_data.get('national_code') or '123456'
+                    user = CustomUser(**row_data)
+                    user.set_password(password)
+                    user.requires_password_change = True
                     if request.user and request.user.is_authenticated:
-                        user.modified_by = request.user
+                        user.created_by = request.user
                     user.save()
-                    if roles:
-                        user.groups.set(roles)
-                    if warehouses:
-                        user.assigned_warehouses.set(warehouses)
-                    updated_count += 1
-                    continue
 
-            password = row_data.get('national_code') or '123456'
-            user = CustomUser(**row_data)
-            user.set_password(password)
-            user.requires_password_change = True
-            if request.user and request.user.is_authenticated:
-                user.created_by = request.user
-            user.save()
+                    user.groups.set(roles)
+                    user.assigned_warehouses.set(warehouses)
+                    created_count += 1
 
-            if roles:
-                user.groups.set(roles)
-            if warehouses:
-                user.assigned_warehouses.set(warehouses)
-            created_count += 1
-
-        from .audit_utils import log_audit_event
-        log_audit_event(
-            user=request.user,
-            module='users',
-            action='IMPORT',
-            severity='info',
-            target_model='CustomUser',
-            target_repr=f"بارگذاری اکسل پرسنل ({created_count} ایجاد، {updated_count} ویرایش)",
-            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
-            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
-        )
+                from .audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    module='users',
+                    action='IMPORT',
+                    severity='info',
+                    target_model='CustomUser',
+                    target_repr=f"بارگذاری اکسل پرسنل ({created_count} ایجاد، {updated_count} ویرایش)",
+                    details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
+        except Exception as e:
+            return Response({
+                'success': False,
+                'summary': {'total_rows': total_rows, 'created': 0, 'updated': 0, 'skipped': total_rows},
+                'errors': [{'row': 0, 'field': 'database', 'message': f'خطا در ذخیره‌سازی پایگاه‌داده (تراکنش کاملاً رول‌بک شد): {str(e)}'}]
+            }, status=400)
 
         return Response({
             'success': True,
@@ -513,31 +591,49 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 'updated': updated_count,
                 'skipped': len(error_rows_set)
             },
-            'errors': result['errors']
+            'errors': commit_errors
         })
 
     @action(detail=False, methods=['get'], url_path='verify_card')
     def verify_card(self, request):
         """Public verification endpoint for personnel ID card scanning."""
-        code = request.query_params.get('code', '').strip()
+        code = request.query_params.get('code', '').strip().upper()
         user_id = None
-        if code.upper().startswith('EMP-'):
+        if code.startswith('EMP-'):
             try:
                 user_id = int(code[4:]) - 1000
             except ValueError:
                 pass
-        elif code.isdigit():
-            user_id = int(code)
-            
-        user = None
-        if user_id is not None and user_id > 0:
-            user = CustomUser.objects.filter(id=user_id).first()
-        if not user and code:
-            user = CustomUser.objects.filter(national_code=code).first() or CustomUser.objects.filter(username=code).first()
-            
+
+        if user_id is None or user_id <= 0:
+            return Response({
+                'valid': False,
+                'message': 'فرمت شناسه کارت شناسایی نامعتبر است یا در سامانه یافت نشد.'
+            }, status=404)
+
+        user = CustomUser.objects.filter(id=user_id).first()
         if not user:
-            return Response({'valid': False, 'message': 'پرسنل با این شناسه در سامانه یافت نشد.'}, status=404)
-            
+            return Response({
+                'valid': False,
+                'message': 'پرسنل با این شناسه در سامانه یافت نشد یا باطل شده است.'
+            }, status=404)
+
+        def mask_national_code(val):
+            if not val:
+                return None
+            val = str(val).strip()
+            if len(val) >= 8:
+                return val[:3] + '****' + val[-3:]
+            return '****'
+
+        def mask_phone(val):
+            if not val:
+                return None
+            val = str(val).strip()
+            if len(val) >= 7:
+                return val[:4] + '****' + val[-3:]
+            return '****'
+
         roles = []
         for g in user.groups.all():
             try:
@@ -545,11 +641,16 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 roles.append({'id': cr.id, 'title': cr.title or cr.name, 'color': cr.color or '#4f46e5'})
             except Exception:
                 roles.append({'id': g.id, 'title': g.name, 'color': '#4f46e5'})
-                
-        wh_names = list(user.assigned_warehouses.values_list('name', flat=True))
-        
+
+        wh_names = []
+        if hasattr(user, 'assigned_warehouses'):
+            try:
+                wh_names = list(user.assigned_warehouses.values_list('name', flat=True))
+            except Exception:
+                wh_names = []
+
         avatar_url = user.avatar.url if user.avatar else None
-        
+
         return Response({
             'valid': True,
             'is_active': user.is_active,
@@ -557,15 +658,15 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             'personnel_code': f"EMP-{1000 + user.id}",
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'national_code': user.national_code or '---',
-            'phone_number': user.phone_number or '---',
-            'operational_zone': user.operational_zone or 'انبار مرکزی',
-            'company': user.company or 'فارس عــالیش',
+            'national_code': mask_national_code(user.national_code),
+            'phone_number': mask_phone(user.phone_number),
+            'operational_zone': user.operational_zone or None,
+            'company': user.company or None,
             'avatar': avatar_url,
-            'blood_type': user.blood_type or 'O+',
-            'emergency_contact': user.emergency_contact or user.phone_number or '۰۲۱-۸۸۹۹۰۰۱۱',
-            'roles': roles if roles else [{'id': 0, 'title': 'پرسنل عملیات انبار', 'color': '#4f46e5'}],
-            'assigned_warehouses': wh_names if wh_names else ['انبار مرکزی']
+            'blood_type': user.blood_type or None,
+            'emergency_contact': mask_phone(user.emergency_contact) if user.emergency_contact else None,
+            'roles': roles,
+            'assigned_warehouses': wh_names
         })
 
 class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
@@ -651,9 +752,17 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     # ── Excel Import/Export Actions ──────────────────────────────────
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
-        """Download all roles as an Excel file."""
+        """Download all roles as an Excel file, optionally filtered by role IDs."""
         from .roles_excel_utils import generate_roles_excel
         queryset = self.get_queryset()
+        ids_param = request.GET.get('ids')
+        if ids_param:
+            try:
+                ids = [int(i.strip()) for i in ids_param.split(',') if i.strip()]
+                if ids:
+                    queryset = queryset.filter(id__in=ids)
+            except Exception:
+                pass
         return generate_roles_excel(queryset)
 
     @action(detail=False, methods=['get'])
@@ -716,55 +825,92 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
         created_count = 0
         updated_count = 0
+        commit_errors = list(result.get('errors', []))
         # Two-pass creation: first create/update roles without parents, then set parents
         processed_roles = {}
-        for row_data in result['valid_rows']:
-            row_data.pop('_row_num', None)
-            is_update = row_data.pop('is_update', False)
-            role_id = row_data.pop('role_id', None)
-            permissions = row_data.pop('permissions', [])
-            parent_name = row_data.pop('parent_name', None)
 
-            if is_update and role_id:
-                role = CustomRole.objects.filter(id=role_id).first()
-                if role:
-                    role.title = row_data['title']
-                    role.color = row_data['color']
+        try:
+            with transaction.atomic():
+                for row_data in result['valid_rows']:
+                    row_num = row_data.pop('_row_num', None)
+                    is_update = row_data.pop('is_update', False)
+                    role_id = row_data.pop('role_id', None)
+                    permissions = row_data.pop('permissions', [])
+                    parent_name = row_data.pop('parent_name', None)
+
+                    if is_update and role_id:
+                        role = CustomRole.objects.filter(id=role_id).first()
+                        if role:
+                            role.title = row_data['title']
+                            role.color = row_data['color']
+                            role.save()
+                            # همگام‌سازی قطعی دسترسی‌ها (خالی بودن ستون در اکسل باعث پاک شدن دسترسی‌ها می‌شود)
+                            role.permissions.set(permissions)
+                            processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name, 'row_num': row_num, 'is_update': True}
+                            updated_count += 1
+                            continue
+
+                    role = CustomRole(name=row_data['name'], title=row_data['title'], color=row_data['color'])
                     role.save()
-                    if permissions:
-                        role.permissions.set(permissions)
-                    processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
-                    updated_count += 1
-                    continue
+                    role.permissions.set(permissions)
+                    processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name, 'row_num': row_num, 'is_update': False}
+                    created_count += 1
 
-            role = CustomRole(name=row_data['name'], title=row_data['title'], color=row_data['color'])
-            role.save()
-            if permissions:
-                role.permissions.set(permissions)
-            processed_roles[row_data['name']] = {'role': role, 'parent_name': parent_name}
-            created_count += 1
+                # Second pass: resolve parents with circular dependency protection
+                for name, info in processed_roles.items():
+                    role_obj = info['role']
+                    p_name = info['parent_name']
+                    row_n = info.get('row_num', 0)
 
-        # Second pass: resolve parents
-        for name, info in processed_roles.items():
-            if info['parent_name']:
-                parent = CustomRole.objects.filter(name__iexact=info['parent_name']).first()
-                if not parent:
-                    parent = CustomRole.objects.filter(title__iexact=info['parent_name']).first()
-                if parent and parent.id != info['role'].id:
-                    info['role'].parent = parent
-                    info['role'].save()
+                    if p_name:
+                        parent = CustomRole.objects.filter(name__iexact=p_name).first()
+                        if not parent:
+                            parent = CustomRole.objects.filter(title__iexact=p_name).first()
+                        if parent and parent.id != role_obj.id:
+                            role_obj.parent = parent
+                            try:
+                                # سیوپوینت جهت جلوگیری از توقف کل تراکنش هنگام بروز حلقه چرخه‌ای در یک سطر
+                                with transaction.atomic():
+                                    role_obj.save()
+                            except ValidationError as ve:
+                                role_obj.parent = None
+                                error_msg = ve.message_dict.get('parent', [str(ve)])[0] if hasattr(ve, 'message_dict') else str(ve)
+                                commit_errors.append({
+                                    'row': row_n,
+                                    'field': 'parent',
+                                    'message': f"خطای وابستگی چرخه‌ای نقش «{role_obj.title}»: {error_msg}"
+                                })
+                                error_rows_set.add(row_n)
+                            except Exception as ex:
+                                role_obj.parent = None
+                                commit_errors.append({
+                                    'row': row_n,
+                                    'field': 'parent',
+                                    'message': f"خطا در انتساب والد برای نقش «{role_obj.title}»: {str(ex)}"
+                                })
+                                error_rows_set.add(row_n)
+                    elif info.get('is_update') and role_obj.parent_id is not None:
+                        # اگر در فایل اکسل والد خالی گذاشته شده، والد قبلی پاک می‌شود
+                        role_obj.parent = None
+                        role_obj.save(update_fields=['parent'])
 
-        from .audit_utils import log_audit_event
-        log_audit_event(
-            user=request.user,
-            module='users',
-            action='IMPORT',
-            severity='info',
-            target_model='CustomRole',
-            target_repr=f"بارگذاری اکسل نقش‌ها ({created_count} ایجاد، {updated_count} ویرایش)",
-            details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
-            ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
-        )
+                from .audit_utils import log_audit_event
+                log_audit_event(
+                    user=request.user,
+                    module='users',
+                    action='IMPORT',
+                    severity='info',
+                    target_model='CustomRole',
+                    target_repr=f"بارگذاری اکسل نقش‌ها ({created_count} ایجاد، {updated_count} ویرایش)",
+                    details={'total_rows': total_rows, 'created': created_count, 'updated': updated_count, 'skipped': len(error_rows_set)},
+                    ip_address=getattr(request, 'META', {}).get('REMOTE_ADDR')
+                )
+        except Exception as e:
+            return Response({
+                'success': False,
+                'summary': {'total_rows': total_rows, 'created': 0, 'updated': 0, 'skipped': total_rows},
+                'errors': [{'row': 0, 'field': 'database', 'message': f'خطا در ذخیره‌سازی پایگاه‌داده (تراکنش کاملاً رول‌بک شد): {str(e)}'}]
+            }, status=400)
 
         return Response({
             'success': True,
@@ -775,7 +921,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                 'updated': updated_count,
                 'skipped': len(error_rows_set)
             },
-            'errors': result['errors']
+            'errors': commit_errors
         })
 
 

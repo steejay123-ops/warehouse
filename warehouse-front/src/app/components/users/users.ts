@@ -2048,6 +2048,127 @@ export class Users implements OnInit, OnDestroy {
     return roles.filter((r: any) => selectedIds.includes(r.id) && this.getRoleAppScope(r) === scope).length;
   }
 
+  /**
+   * محاسبه خودکار و هوشمند سامانه‌های مجاز کاربر بر اساس سطح دسترسی و نقش‌های انتخابی (Computed Scope Badge)
+   */
+  getUserAuthorizedSystems(u: any): {
+    isSuperuser: boolean;
+    hasWarehouse: boolean;
+    hasFinance: boolean;
+    hasGlobal: boolean;
+    warehouseCount: number;
+    badges: { key: string; label: string; icon: string; bgClass: string; textClass: string; borderClass: string }[];
+    isEmpty: boolean;
+  } {
+    if (!u) {
+      return {
+        isSuperuser: false,
+        hasWarehouse: false,
+        hasFinance: false,
+        hasGlobal: false,
+        warehouseCount: 0,
+        badges: [],
+        isEmpty: true
+      };
+    }
+
+    const isSuperuser = Boolean(u.is_superuser);
+    const assignedWhs = Array.isArray(u.assigned_warehouses) ? u.assigned_warehouses : [];
+    const warehouseCount = assignedWhs.length;
+
+    if (isSuperuser) {
+      return {
+        isSuperuser: true,
+        hasWarehouse: true,
+        hasFinance: true,
+        hasGlobal: true,
+        warehouseCount,
+        badges: [
+          {
+            key: 'superuser',
+            label: 'تمام سامانه‌ها (مدیر ارشد)',
+            icon: '🌐',
+            bgClass: 'bg-purple-100',
+            textClass: 'text-purple-900',
+            borderClass: 'border-purple-300'
+          }
+        ],
+        isEmpty: false
+      };
+    }
+
+    const groupIds: number[] = Array.isArray(u.groups) ? u.groups.map(Number) : [];
+    const allRoles: any[] = Array.isArray(this.state.appState.roles) ? this.state.appState.roles : [];
+    const userRoles = allRoles.filter((r: any) => groupIds.includes(Number(r.id)));
+
+    let hasWarehouse = false;
+    let hasFinance = false;
+    let hasGlobal = false;
+
+    for (const r of userRoles) {
+      const scope = this.getRoleAppScope(r);
+      if (scope === 'warehouse') {
+        hasWarehouse = true;
+      } else if (scope === 'finance') {
+        hasFinance = true;
+      } else if (scope === 'global') {
+        hasGlobal = true;
+      }
+    }
+
+    const badges: { key: string; label: string; icon: string; bgClass: string; textClass: string; borderClass: string }[] = [];
+
+    if (hasWarehouse) {
+      const whLabel = warehouseCount > 0 ? `سامانه انبارداری (${warehouseCount} انبار)` : 'سامانه انبارداری (فاقد انبار)';
+      badges.push({
+        key: 'warehouse',
+        label: whLabel,
+        icon: '📦',
+        bgClass: 'bg-sky-50',
+        textClass: 'text-sky-800',
+        borderClass: 'border-sky-300'
+      });
+    }
+
+    if (hasFinance) {
+      badges.push({
+        key: 'finance',
+        label: 'سامانه مالی و پرسنلی',
+        icon: '💳',
+        bgClass: 'bg-emerald-50',
+        textClass: 'text-emerald-800',
+        borderClass: 'border-emerald-300'
+      });
+    }
+
+    if (hasGlobal) {
+      badges.push({
+        key: 'global',
+        label: 'مدیریت و مانیتورینگ کلان',
+        icon: '⚡',
+        bgClass: 'bg-indigo-50',
+        textClass: 'text-indigo-800',
+        borderClass: 'border-indigo-300'
+      });
+    }
+
+    const isEmpty = badges.length === 0;
+
+    return {
+      isSuperuser: false,
+      hasWarehouse,
+      hasFinance,
+      hasGlobal,
+      warehouseCount,
+      badges,
+      isEmpty
+    };
+  }
+
+  get currentFormAuthorizedSystems() {
+    return this.getUserAuthorizedSystems(this.userForm);
+  }
+
   // ── Excel Import/Export ──────────────────────────────────────────
   private triggerDownload(blob: Blob, filename: string) {
     const url = window.URL.createObjectURL(blob);

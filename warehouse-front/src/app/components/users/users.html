@@ -401,6 +401,22 @@
                         </div>
                       </div>
 
+                      <!-- سامانه‌های مجاز بر اساس نقش (نشانگر خودکار) -->
+                      <div class="flex items-center justify-between gap-1 text-[10px]">
+                        <span class="text-slate-400 shrink-0 font-medium">سامانه‌ها:</span>
+                        <div class="flex flex-wrap gap-1 justify-end max-w-[75%]">
+                          <ng-container *ngIf="!getUserAuthorizedSystems(u).isEmpty">
+                            <span *ngFor="let b of getUserAuthorizedSystems(u).badges"
+                                  [class]="b.bgClass + ' ' + b.textClass + ' ' + b.borderClass"
+                                  class="px-1.5 py-0.2 rounded-md text-[9px] border font-bold flex items-center gap-0.5">
+                              <span>{{ b.icon }}</span>
+                              <span>{{ b.key === 'warehouse' ? 'انبارداری' : (b.key === 'finance' ? 'مالی' : (b.key === 'superuser' ? 'همه (ادمین)' : 'کلان')) }}</span>
+                            </span>
+                          </ng-container>
+                          <span *ngIf="getUserAuthorizedSystems(u).isEmpty" class="text-slate-400 text-[9px]">فاقد سامانه</span>
+                        </div>
+                      </div>
+
                       <!-- دسترسی انبارها -->
                       <div class="flex items-center justify-between gap-1 text-[10px]">
                         <span class="text-slate-400 shrink-0 font-medium">{{ hasInventoryModule() ? 'انبارها:' : 'پروژه‌ها:' }}</span>
@@ -514,6 +530,17 @@
                             {{role.name}}
                           </span>
                           <span *ngIf="getUserRoles(u).length === 0" class="text-[10px] text-slate-400 font-medium">بدون نقش</span>
+                        </div>
+                        <!-- نشانگر خودکار سامانه‌های مجاز -->
+                        <div class="flex flex-wrap gap-1 mt-1">
+                          <ng-container *ngIf="!getUserAuthorizedSystems(u).isEmpty">
+                            <span *ngFor="let b of getUserAuthorizedSystems(u).badges"
+                                  [class]="b.bgClass + ' ' + b.textClass + ' ' + b.borderClass"
+                                  class="px-1.5 py-0.2 rounded-md text-[8.5px] border font-bold flex items-center gap-0.5">
+                              <span>{{ b.icon }}</span>
+                              <span>{{ b.key === 'warehouse' ? 'انبار' : (b.key === 'finance' ? 'مالی' : (b.key === 'superuser' ? 'ادمین کل' : 'کلان')) }}</span>
+                            </span>
+                          </ng-container>
                         </div>
                       </td>
 
@@ -1775,6 +1802,38 @@
             <div class="flex items-center gap-2">
               <span class="text-[10px] text-slate-500 font-medium">مجموع نقش‌های انتخابی:</span>
               <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200">{{userForm.groups.length}}</span>
+            </div>
+          </div>
+
+          <!-- نشانگر خودکار و هوشمند سامانه‌های مجاز کاربر (Computed Scope Badge Indicator) -->
+          <div class="p-3 rounded-2xl bg-gradient-to-r from-slate-50 via-indigo-50/30 to-slate-50 border border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-all">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-xl bg-white border border-slate-200 text-indigo-600 flex items-center justify-center text-xs shadow-2xs">🧭</span>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-black text-slate-800">سامانه‌های مجاز کاربر:</span>
+                  <span class="text-[9.5px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200/70 text-slate-600 font-mono">نشانگر خودکار</span>
+                </div>
+                <p class="text-[10px] text-slate-400">سامانه‌های فعال به طور هوشمند بر اساس نقش‌های انتخابی تعیین می‌شوند</p>
+              </div>
+            </div>
+
+            <!-- بج‌های سامانه‌های فعال -->
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <ng-container *ngIf="!currentFormAuthorizedSystems.isEmpty">
+                <span *ngFor="let b of currentFormAuthorizedSystems.badges" 
+                      [class]="b.bgClass + ' ' + b.textClass + ' ' + b.borderClass"
+                      class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] border shadow-2xs transition-all animate-in fade-in zoom-in-95">
+                  <span class="text-xs">{{ b.icon }}</span>
+                  <span>{{ b.label }}</span>
+                </span>
+              </ng-container>
+
+              <span *ngIf="currentFormAuthorizedSystems.isEmpty" 
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                <span>⚠️</span>
+                <span>فاقد دسترسی به سامانه‌ها (هنوز نقشی انتخاب نشده)</span>
+              </span>
             </div>
           </div>
 

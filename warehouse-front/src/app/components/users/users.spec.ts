@@ -516,4 +516,68 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       expect(component.userViewMode).toBe('table');
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // 10. اعتبارسنجی نشانگر خودکار سامانه‌های مجاز (Computed Scope Badges)
+  // ─────────────────────────────────────────────────────────────────
+  describe('۱۰. نشانگر خودکار سامانه‌های مجاز کاربر (Computed Scope Badges)', () => {
+    it('باید برای مدیر ارشد (Superuser) نشانگر تمام سامانه‌ها را فعال کند', () => {
+      const authSystems = component.getUserAuthorizedSystems({ is_superuser: true });
+      expect(authSystems.isSuperuser).toBe(true);
+      expect(authSystems.hasWarehouse).toBe(true);
+      expect(authSystems.hasFinance).toBe(true);
+      expect(authSystems.isEmpty).toBe(false);
+      expect(authSystems.badges.some(b => b.key === 'superuser')).toBe(true);
+    });
+
+    it('باید برای کاربر دارای نقش انبارداری، نشانگر سامانه انبارداری فعال شود', () => {
+      // نقش ۱۱ در mockRoles نقش سرپرست انبار است
+      const authSystems = component.getUserAuthorizedSystems({
+        is_superuser: false,
+        groups: [11],
+        assigned_warehouses: [101, 102]
+      });
+      expect(authSystems.isSuperuser).toBe(false);
+      expect(authSystems.hasWarehouse).toBe(true);
+      expect(authSystems.warehouseCount).toBe(2);
+      expect(authSystems.badges.some(b => b.key === 'warehouse')).toBe(true);
+    });
+
+    it('باید برای کاربر دارای نقش مالی، نشانگر سامانه مالی و پرسنلی فعال شود', () => {
+      // ایجاد یا شبیه‌سازی نقش مالی در کش
+      component.state.appState.roles = [
+        ...component.state.appState.roles,
+        { id: 99, name: 'accountant_role', title: 'کارشناس مالی و حقوق', color: '#10b981', permissions: [] }
+      ];
+      const authSystems = component.getUserAuthorizedSystems({
+        is_superuser: false,
+        groups: [99]
+      });
+      expect(authSystems.hasFinance).toBe(true);
+      expect(authSystems.badges.some(b => b.key === 'finance')).toBe(true);
+    });
+
+    it('باید برای کاربر بدون نقش، نشانگر فاقد سامانه (isEmpty) فعال شود', () => {
+      const authSystems = component.getUserAuthorizedSystems({
+        is_superuser: false,
+        groups: []
+      });
+      expect(authSystems.isEmpty).toBe(true);
+      expect(authSystems.badges.length).toBe(0);
+    });
+
+    it('باید گتر currentFormAuthorizedSystems در مودال با تغییر نقش‌ها ری‌اکتیو به‌روز شود', () => {
+      component.openUserModal();
+      expect(component.currentFormAuthorizedSystems.isEmpty).toBe(true);
+
+      // افزودن نقش انبارداری (نقش ۱۱: سرپرست انبار)
+      component.userForm.groups = [11];
+      expect(component.currentFormAuthorizedSystems.hasWarehouse).toBe(true);
+
+      // فعال‌سازی سوپریوزر
+      component.userForm.is_superuser = true;
+      expect(component.currentFormAuthorizedSystems.isSuperuser).toBe(true);
+      expect(component.currentFormAuthorizedSystems.badges[0].key).toBe('superuser');
+    });
+  });
 });

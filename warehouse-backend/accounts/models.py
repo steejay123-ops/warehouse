@@ -144,6 +144,16 @@ class CustomRole(Group):
         null=True, blank=True, related_name='children',
         verbose_name="نقش والد"
     )
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True, verbose_name="زمان ایجاد")
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True, verbose_name="زمان آخرین ویرایش")
+    created_by = models.ForeignKey(
+        'CustomUser', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_roles', verbose_name="ایجادکننده"
+    )
+    modified_by = models.ForeignKey(
+        'CustomUser', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='modified_roles', verbose_name="ویرایش‌کننده"
+    )
 
     class Meta:
         verbose_name = "نقش سازمانی"

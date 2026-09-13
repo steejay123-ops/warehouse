@@ -33,10 +33,16 @@ class CustomRoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomRole
-        fields = ['id', 'name', 'title', 'color', 'parent', 'permissions', 'user_ids', 'users_count']
+        fields = [
+            'id', 'name', 'title', 'color', 'parent', 'permissions',
+            'user_ids', 'users_count', 'created_at', 'updated_at',
+            'created_by', 'modified_by'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'modified_by', 'users_count']
 
     def get_users_count(self, obj):
-        return obj.user_set.count()
+        # استفاده از len روی کش prefetch_related به جای count دیتابیسی جهت رفع N+1 Query
+        return len(obj.user_set.all())
 
     def validate_parent(self, parent):
         if parent is None:

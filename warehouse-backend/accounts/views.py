@@ -760,7 +760,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         permissions = serializer.validated_data.get('permissions', [])
         self._check_sensitive_permissions(permissions)
-        instance = serializer.save()
+        instance = serializer.save(created_by=self.request.user if self.request.user.is_authenticated else None)
         from .audit_utils import log_audit_event
         log_audit_event(
             user=self.request.user,
@@ -778,7 +778,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         permissions = serializer.validated_data.get('permissions', None)
         if permissions is not None:
             self._check_sensitive_permissions(permissions)
-        instance = serializer.save()
+        instance = serializer.save(modified_by=self.request.user if self.request.user.is_authenticated else None)
         from .audit_utils import log_audit_event
         log_audit_event(
             user=self.request.user,

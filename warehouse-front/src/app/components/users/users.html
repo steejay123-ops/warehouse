@@ -1,4 +1,17 @@
 <div class="space-y-6 text-right" (click)="closeMenus()" dir="rtl">
+    <!-- سربرگ هوشمند متناسب با قلمرو فعال (انبارداری / مرکز عملیات) -->
+    <div class="flex items-center justify-between px-1">
+      <div>
+        <h1 class="text-base md:text-lg font-black text-slate-800 flex items-center gap-2">
+          <span>👥</span>
+          <span>{{ isOperationsMode() ? 'مدیریت کاربران و نقش‌های سازمان (مرکز عملیات)' : 'مدیریت کاربران و تخصیص سطح دسترسی به انبارها' }}</span>
+        </h1>
+        <p class="text-[11px] text-slate-400 mt-0.5">
+          {{ isOperationsMode() ? 'مرکز عملیات: پیکربندی هویت، سطوح امنیتی و نقش‌های پرسنل' : 'مدیریت دسترسی به انبارها و حساب‌های کاربری' }}
+        </p>
+      </div>
+    </div>
+
     <!-- نوار اصلی هدر: تب‌ها در راست و دکمه‌های اکشن استاندارد در چپ -->
     <div class="bg-white p-3 md:p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
       <!-- لیست تب‌ها (سمت راست در RTL) -->
@@ -353,6 +366,9 @@
                           <h4 class="font-black text-slate-800 text-xs flex items-center gap-1.5" [ngClass]="!u.is_active ? 'line-through text-slate-500' : ''">
                             <span class="truncate">{{u.first_name}} {{u.last_name}}</span>
                             <span *ngIf="u.is_superuser" class="text-[8.5px] px-1 py-0.2 rounded font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">ادمین</span>
+                            <span *ngIf="isUserLocked(u.username)" class="text-[8px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-800 border border-amber-300 shrink-0 flex items-center gap-0.5" title="مسدود شده توسط سیستم ضدنفوذ">
+                              <span>🔒</span> قفل
+                            </span>
                           </h4>
                           <div class="text-[10px] font-mono text-slate-400 mt-0.5 flex items-center gap-1.5 truncate">
                             <span>@{{u.username}}</span>
@@ -377,6 +393,7 @@
                           </button>
                           
                           <div *ngIf="openMenuId === 'usr-' + u.id" class="absolute left-0 top-full mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 z-[100] py-1.5 text-right fade-in">
+                            <button *ngIf="isUserLocked(u.username)" (click)="unlockUser(u, $event)" class="w-full text-right px-3 py-1.5 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 flex items-center gap-2 font-bold transition-colors cursor-pointer"><span>🔓</span> رفع مسدودیت ضدنفوذ</button>
                             <button (click)="openUserModal(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>✏️</span> ویرایش پرونده</button>
                             <button (click)="openAvatarModalForUser(u)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>📷</span> تغییر تصویر</button>
                             <button (click)="resetPassword(u.id)" class="w-full text-right px-3 py-1.5 text-xs text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700 flex items-center gap-2 font-medium transition-colors cursor-pointer"><span>🔑</span> ریست رمز</button>
@@ -445,6 +462,13 @@
                 </div>
             </div>
 
+            <!-- دکمه بارگذاری تدریجی کارت‌ها (Chunking Load More) -->
+            <div *ngIf="userViewMode === 'grid' && visibleCount < filteredUsers.length" class="text-center mt-4">
+              <button type="button" (click)="loadMoreUsers()" class="px-5 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95">
+                نمایش پرسنل بیشتر ({{ filteredUsers.length - visibleCount }} کاربر دیگر)
+              </button>
+            </div>
+
             <!-- نمای جدول سازمانی (DataGrid Table View) -->
             <div *ngIf="!isLoading && filteredUsers.length > 0 && userViewMode === 'table'" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden fade-in">
               <div class="overflow-x-auto">
@@ -458,13 +482,23 @@
                                class="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
                                title="انتخاب همه در این صفحه">
                       </th>
-                      <th class="py-3.5 px-2 w-10 text-center text-slate-400">#</th>
-                      <th class="py-3.5 px-4 min-w-[200px]">کاربر و هویت</th>
-                      <th class="py-3.5 px-4 min-w-[130px]">کد ملی / تماس</th>
+                      <th (click)="setSort('id')" class="py-3.5 px-2 w-10 text-center text-slate-400 cursor-pointer hover:text-indigo-600 transition-colors select-none" title="مرتب‌سازی بر اساس شناسه">
+                        <span class="inline-flex items-center gap-0.5"># <span *ngIf="sortField === 'id'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></span>
+                      </th>
+                      <th (click)="setSort('full_name')" class="py-3.5 px-4 min-w-[200px] cursor-pointer hover:text-indigo-600 transition-colors select-none" title="مرتب‌سازی بر اساس نام">
+                        <span class="inline-flex items-center gap-1">کاربر و هویت <span *ngIf="sortField === 'full_name'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></span>
+                      </th>
+                      <th (click)="setSort('national_code')" class="py-3.5 px-4 min-w-[130px] cursor-pointer hover:text-indigo-600 transition-colors select-none" title="مرتب‌سازی بر اساس کد ملی">
+                        <span class="inline-flex items-center gap-1">کد ملی / تماس <span *ngIf="sortField === 'national_code'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></span>
+                      </th>
                       <th class="py-3.5 px-4 min-w-[160px]">نقش‌های سازمانی</th>
                       <th class="py-3.5 px-4 min-w-[160px]">{{ hasInventoryModule() ? 'دسترسی انبارها' : 'محدوده پروژه‌ها' }}</th>
-                      <th class="py-3.5 px-4 min-w-[110px]">شرکت / سازمان</th>
-                      <th class="py-3.5 px-4 text-center min-w-[100px]">وضعیت حساب</th>
+                      <th (click)="setSort('company')" class="py-3.5 px-4 min-w-[110px] cursor-pointer hover:text-indigo-600 transition-colors select-none" title="مرتب‌سازی بر اساس شرکت">
+                        <span class="inline-flex items-center gap-1">شرکت / سازمان <span *ngIf="sortField === 'company'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></span>
+                      </th>
+                      <th (click)="setSort('is_active')" class="py-3.5 px-4 text-center min-w-[100px] cursor-pointer hover:text-indigo-600 transition-colors select-none" title="مرتب‌سازی بر اساس وضعیت">
+                        <span class="inline-flex items-center gap-1">وضعیت حساب <span *ngIf="sortField === 'is_active'">{{ sortOrder === 'asc' ? '▲' : '▼' }}</span></span>
+                      </th>
                       <th class="py-3.5 px-4 text-center min-w-[160px] w-40">عملیات</th>
                     </tr>
                   </thead>
@@ -568,19 +602,31 @@
 
                       <!-- Status Badge -->
                       <td class="py-3.5 px-4 text-center">
-                        <span *ngIf="u.is_active" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                          فعال
-                        </span>
-                        <span *ngIf="!u.is_active" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
-                          <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                          معلق
-                        </span>
+                        <div class="flex flex-col items-center gap-1">
+                          <span *ngIf="u.is_active" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            فعال
+                          </span>
+                          <span *ngIf="!u.is_active" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                            معلق
+                          </span>
+                          <span *ngIf="isUserLocked(u.username)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300" title="مسدود شده توسط سیستم ضدنفوذ">
+                            <span>🔒</span> قفل
+                          </span>
+                        </div>
                       </td>
 
                       <!-- Actions -->
                       <td class="py-3.5 px-4 text-center">
                         <div class="flex items-center justify-center gap-1">
+                          <!-- Unlock Button (Axes) -->
+                          <button *ngIf="isUserLocked(u.username)" type="button" (click)="unlockUser(u, $event)" class="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer" title="رفع مسدودیت ضدنفوذ (آنلاک)">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                              <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                            </svg>
+                          </button>
                           <!-- Edit Button -->
                           <button type="button" (click)="openUserModal(u.id)" class="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer" title="ویرایش پرونده">
                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -906,7 +952,7 @@
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100 bg-white">
-                      <tr *ngFor="let role of displayedRoles" class="hover:bg-slate-50/80 transition-colors">
+                      <tr *ngFor="let role of displayedRoles; trackBy: trackById" class="hover:bg-slate-50/80 transition-colors">
                         <!-- عنوان نقش -->
                         <td class="py-3 px-4">
                           <div class="flex items-center gap-2.5">
@@ -1300,7 +1346,7 @@
           <div class="flex items-center justify-between gap-2.5">
             <!-- فیلد جستجو -->
             <div class="relative flex-1">
-              <input type="text" [(ngModel)]="permSearchQuery" name="permSearchQuery" placeholder="جستجوی عنوان دسترسی یا کد فنی سیستمی..." class="w-full pr-8 pl-3 py-1.5 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white outline-none transition-all text-slate-800 shadow-2xs">
+              <input type="text" [(ngModel)]="permSearchQuery" (ngModelChange)="onPermSearchChange($event)" name="permSearchQuery" placeholder="جستجوی عنوان دسترسی یا کد فنی سیستمی..." class="w-full pr-8 pl-3 py-1.5 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white outline-none transition-all text-slate-800 shadow-2xs">
               <div class="absolute inset-y-0 right-0 flex items-center pr-2.5 pointer-events-none">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               </div>
@@ -1388,6 +1434,9 @@
                   </div>
                </div>
              </ng-container>
+             <div *ngIf="filteredPermissionGroups.length === 0" class="p-6 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200 text-xs text-slate-400 font-bold">
+               هیچ مجوزی مطابق با عبارت «{{ permSearchQuery }}» یافت نشد.
+             </div>
           </div>
         </div>
       </form>
@@ -1645,7 +1694,11 @@
                   </button>
                 </div>
                 <div class="relative">
-                  <input type="text" [(ngModel)]="userForm.password" (input)="clearUserFormError('password')" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full px-3 py-2 rounded-xl bg-white border border-indigo-200 text-xs font-mono outline-none text-left transition-all" dir="ltr" [class]="getFieldClass('password')">
+                  <input [type]="showPassword ? 'text' : 'password'" [(ngModel)]="userForm.password" (input)="clearUserFormError('password')" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full pr-10 pl-10 py-2 rounded-xl bg-white border border-indigo-200 text-xs font-mono outline-none text-left transition-all" dir="ltr" [class]="getFieldClass('password')">
+                  <button type="button" (click)="toggleShowPassword()" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 p-1 rounded-md transition-colors cursor-pointer" [title]="showPassword ? 'مخفی‌سازی رمز' : 'نمایش رمز'">
+                    <svg *ngIf="!showPassword" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg *ngIf="showPassword" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  </button>
                   <div *ngIf="isFieldValid('password')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                   </div>

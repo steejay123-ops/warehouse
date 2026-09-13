@@ -201,4 +201,13 @@ export class AccountsHttpService {
   deleteUserAvatar(userId: number): Observable<{ success: boolean; avatar: null; message: string }> {
     return this.http.delete<any>(`${this.apiUrl}/auth/users/${userId}/avatar/`);
   }
+
+  // ── Axes Lockout Management ──────────────────────────────────────
+  getLockedStatus(): Observable<{ locked_users: any[]; total_locked: number }> {
+    return this.http.get<any>(`${this.apiUrl}/auth/login-logs/locked_status/`);
+  }
+
+  resetLockout(username: string, ipAddress?: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/login-logs/reset_lockout/`, { username, ip_address: ipAddress });
+  }
 }

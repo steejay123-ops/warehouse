@@ -37,15 +37,35 @@ export class Users implements OnInit, OnDestroy {
   // Pagination & Filtering
   currentPage = 1;
   pageSize = 24;
+  visibleCount = 24;
   pageSizeOptions = [12, 24, 48, 96];
   userStatusFilter: 'all' | 'active' | 'inactive' | 'no_warehouse' | 'superuser' = 'all';
   userRoleFilter: number | 'ALL' = 'ALL';
   userWarehouseFilter: number | string | 'ALL' = 'ALL';
   selectedUserIds = new Set<number>();
+  lockedUsernames = new Set<string>();
   activePopoverRoleId: number | null = null;
   userViewMode: 'grid' | 'table' = 'grid';
   roleViewMode: 'tree' | 'table' = 'tree';
   activeRolePresetId: string | null = null;
+  showPassword = false;
+  sortField: string = 'id';
+  sortOrder: 'asc' | 'desc' = 'desc';
+
+  setSort(field: string): void {
+    if (this.sortField === field) {
+      this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortField = field;
+      this.sortOrder = 'asc';
+    }
+    this.cdr.detectChanges();
+  }
+
+  toggleShowPassword(): void {
+    this.showPassword = !this.showPassword;
+    this.cdr.detectChanges();
+  }
 
   readonly ROLE_COLORS = [
     '#4f46e5', // نیلی ایندیگو
@@ -99,10 +119,13 @@ export class Users implements OnInit, OnDestroy {
   get displayedRootRoles(): any[] {
     if (!this.roleSearchQuery) return this.rootRoles;
     const q = this.roleSearchQuery.toLowerCase();
-    return this.allRoles.filter((r: any) => 
+    const matched = this.allRoles.filter((r: any) =>
       (r.name && r.name.toLowerCase().includes(q)) ||
       (r.title && r.title.toLowerCase().includes(q))
     );
+    const matchedIds = new Set(matched.map((r: any) => r.id));
+    // فقط ریشه‌هایی که والدشان جزو نتایج فیلترشده نیست در بالاترین سطح رندر شوند تا از تکرار چندباره جلوگیری شود
+    return matched.filter((r: any) => !r.parent || !matchedIds.has(r.parent));
   }
 
   printIdCards() {
@@ -500,9 +523,10 @@ export class Users implements OnInit, OnDestroy {
   // Sensitive Permissions Guard Modal
   pendingSensitivePerm: Permission | null = null;
   isSensitiveWarningModalOpen = false;
-  isSuperuser = computed(() => !!(this.auth.user()?.is_superuser || this.auth.user()?.roles?.includes('admin') || this.auth.user()?.department === 'admin'));
+  isSuperuser = computed(() => !!(this.auth.user()?.is_superuser));
   public isOperationsMode = computed(() => {
-    return this.persona.activeApp() === 'operations' || this.router.url.includes('/operations/');
+    const app = typeof this.persona?.activeApp === 'function' ? this.persona.activeApp() : (this.persona?.activeApp || '');
+    return app === 'operations' || (this.router?.url ? this.router.url.includes('/operations/') : false);
   });
 
   isSavingUser = false;
@@ -698,6 +722,20 @@ export class Users implements OnInit, OnDestroy {
       },
       error: () => {}
     });
+
+    if (typeof this.accountsService?.getLockedStatus === 'function') {
+      this.accountsService.getLockedStatus().subscribe({
+        next: (res) => {
+          if (res && Array.isArray(res.locked_users)) {
+            this.lockedUsernames = new Set(
+              res.locked_users.filter((u: any) => u.is_locked).map((u: any) => u.username)
+            );
+            this.cdr.detectChanges();
+          }
+        },
+        error: () => {}
+      });
+    }
   }
 
   rebuildMemoizedData(): void {
@@ -779,25 +817,45 @@ export class Users implements OnInit, OnDestroy {
       users = users.filter((u: any) => Array.isArray(u.assigned_warehouses) && u.assigned_warehouses.some((id: any) => String(id) === wId));
     }
 
-    if (!q) return users;
+    let resultList = users;
+    if (q) {
+      resultList = users.filter((u: any) => {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
+        const username = (u.username || '').toLowerCase();
+        const nid = (u.national_code || '');
+        const phone = (u.phone_number || '');
+        const comp = (u.company || '').toLowerCase();
+        const opZone = (u.operational_zone || '').toLowerCase();
+        const roleTitles = this.getUserRoles(u).map((r: any) => r.name.toLowerCase()).join(' ');
 
-    return users.filter((u: any) => {
-      const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
-      const username = (u.username || '').toLowerCase();
-      const nid = (u.national_code || '');
-      const phone = (u.phone_number || '');
-      const comp = (u.company || '').toLowerCase();
-      const opZone = (u.operational_zone || '').toLowerCase();
-      const roleTitles = this.getUserRoles(u).map((r: any) => r.name.toLowerCase()).join(' ');
+        return fullName.includes(q) ||
+               username.includes(q) ||
+               nid.includes(q) ||
+               phone.includes(q) ||
+               comp.includes(q) ||
+               opZone.includes(q) ||
+               roleTitles.includes(q);
+      });
+    }
 
-      return fullName.includes(q) ||
-             username.includes(q) ||
-             nid.includes(q) ||
-             phone.includes(q) ||
-             comp.includes(q) ||
-             opZone.includes(q) ||
-             roleTitles.includes(q);
+    const sorted = [...resultList];
+    sorted.sort((a: any, b: any) => {
+      let valA = a[this.sortField];
+      let valB = b[this.sortField];
+      if (this.sortField === 'full_name') {
+        valA = `${a.first_name || ''} ${a.last_name || ''}`.trim();
+        valB = `${b.first_name || ''} ${b.last_name || ''}`.trim();
+      }
+      if (typeof valA === 'string') valA = valA.toLowerCase();
+      if (typeof valB === 'string') valB = valB.toLowerCase();
+      if (valA === valB) return 0;
+      if (valA == null || valA === '') return 1;
+      if (valB == null || valB === '') return -1;
+      const cmp = valA > valB ? 1 : -1;
+      return this.sortOrder === 'asc' ? cmp : -cmp;
     });
+
+    return sorted;
   }
 
   // ── Pagination Getters & Methods ─────────────────────────────────
@@ -811,7 +869,20 @@ export class Users implements OnInit, OnDestroy {
   }
 
   get displayedUsers(): any[] {
-    return this.pagedUsers;
+    if (this.userViewMode === 'table') {
+      return this.pagedUsers;
+    }
+    return this.filteredUsers.slice(0, this.visibleCount);
+  }
+
+  loadMoreUsers(): void {
+    if (this.visibleCount < this.filteredUsers.length) {
+      this.visibleCount += this.pageSize;
+    }
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+    }
+    this.cdr.detectChanges();
   }
 
   get paginationRange(): { start: number; end: number } {
@@ -1030,7 +1101,14 @@ export class Users implements OnInit, OnDestroy {
   }
 
   getRoleChildren(parentId: number) {
-    return this.roleChildrenMap.get(parentId) || [];
+    const children = this.roleChildrenMap.get(parentId) || [];
+    if (!this.roleSearchQuery) return children;
+    const q = this.roleSearchQuery.toLowerCase();
+    return children.filter((r: any) =>
+      (r.name && r.name.toLowerCase().includes(q)) ||
+      (r.title && r.title.toLowerCase().includes(q)) ||
+      (this.roleChildrenMap.get(r.id) || []).length > 0
+    );
   }
 
   getSelectableParents() {
@@ -1053,7 +1131,24 @@ export class Users implements OnInit, OnDestroy {
   }
 
   getAvailableSupervisors() {
-    return this.state.appState.users.filter((u: any) => !this.editingUser || u.id !== this.editingUser.id);
+    const users = this.state.appState.users || [];
+    if (!this.editingUser || !this.editingUser.id) return users;
+
+    const invalidIds = new Set<number>();
+    invalidIds.add(this.editingUser.id);
+
+    // پیشگیری از بروز وابستگی چرخه‌ای مستقیم و غیرمستقیم در چارت سازمانی (A -> B -> A)
+    const addSubordinates = (supId: number) => {
+      users.forEach((u: any) => {
+        if (u.supervisor === supId && !invalidIds.has(u.id)) {
+          invalidIds.add(u.id);
+          addSubordinates(u.id);
+        }
+      });
+    };
+    addSubordinates(this.editingUser.id);
+
+    return users.filter((u: any) => !invalidIds.has(u.id));
   }
 
   getUserAvatarLetter(u: any): string {
@@ -1109,7 +1204,27 @@ export class Users implements OnInit, OnDestroy {
   }
 
   onSearchChange(val: string) {
+    this.currentPage = 1;
     this.searchSubject.next(val);
+  }
+
+  isUserLocked(username: string): boolean {
+    return this.lockedUsernames.has(username);
+  }
+
+  unlockUser(u: any, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.closeMenus();
+    this.accountsService.resetLockout(u.username).subscribe({
+      next: () => {
+        this.lockedUsernames.delete(u.username);
+        this.toast.show('success', `مسدودیت ضدنفوذ کاربر ${u.username} با موفقیت رفع شد.`);
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.toast.show('error', 'خطا در رفع مسدودیت ضدنفوذ کاربر');
+      }
+    });
   }
 
   toggleMenu(event: Event, menuId: string) {
@@ -1316,7 +1431,7 @@ export class Users implements OnInit, OnDestroy {
 
   getRoleDepthMargin(depth: number): string {
     if (depth === 0) return '0rem';
-    return `clamp(0.75rem, ${depth * 1.5}vw, ${(depth * 2.2)}rem)`;
+    return `clamp(0.5rem, ${depth * 1.2}vw, ${Math.min(depth * 1.5, 3.5)}rem)`;
   }
 
   getContrastTextColor(hexColor: string): string {
@@ -1324,9 +1439,9 @@ export class Users implements OnInit, OnDestroy {
     let c = hexColor.replace('#', '');
     if (c.length === 3) c = c.split('').map(x => x + x).join('');
     if (c.length !== 6) return '#ffffff';
-    const r = parseInt(c.substr(0, 2), 16);
-    const g = parseInt(c.substr(2, 2), 16);
-    const b = parseInt(c.substr(4, 2), 16);
+    const r = parseInt(c.substring(0, 2), 16);
+    const g = parseInt(c.substring(2, 4), 16);
+    const b = parseInt(c.substring(4, 6), 16);
     const yiq = (r * 299 + g * 587 + b * 114) / 1000;
     return yiq >= 165 ? '#0f172a' : '#ffffff';
   }
@@ -1711,7 +1826,13 @@ export class Users implements OnInit, OnDestroy {
   }
 
   deselectAllRoleMembers(): void {
-    this.roleForm.user_ids = [];
+    if (!this.roleMemberSearchQuery.trim()) {
+      this.roleForm.user_ids = [];
+      return;
+    }
+    const filtered = this.getFilteredPersonnelForRole();
+    const filteredIds = new Set(filtered.map((u: any) => u.id));
+    this.roleForm.user_ids = (this.roleForm.user_ids || []).filter((id: number) => !filteredIds.has(id));
   }
 
   isRoleMemberSelected(userId: number): boolean {
@@ -1740,7 +1861,14 @@ export class Users implements OnInit, OnDestroy {
     // اگر در حال ایجاد نقش جدید هستیم و فیلدها خالی هستند، مشخصات قالب را پر کند
     if (!this.editingRole && (!this.roleForm.title || !this.roleForm.name)) {
       this.roleForm.title = preset.title.split('/')[0].trim();
-      this.roleForm.name = preset.id;
+      let baseName = preset.id;
+      let candidate = baseName;
+      let counter = 1;
+      const existingNames = new Set((this.state.appState.roles || []).map((r: any) => (r.name || '').toLowerCase()));
+      while (existingNames.has(candidate.toLowerCase())) {
+        candidate = `${baseName}_${counter++}`;
+      }
+      this.roleForm.name = candidate;
       this.roleForm.color = preset.color;
     }
 
@@ -1758,6 +1886,20 @@ export class Users implements OnInit, OnDestroy {
     const selectedIds = new Set(this.roleForm.permissions || []);
     const selectedCount = group.items.filter(p => selectedIds.has(p.id)).length;
     return { selected: selectedCount, total: group.items.length };
+  }
+
+  onPermSearchChange(query: string): void {
+    this.permSearchQuery = query || '';
+    if (query && query.trim()) {
+      const activeGroup = this.filteredPermissionGroups.find(g => g.key === this.activePermTab);
+      if (!activeGroup || activeGroup.items.length === 0) {
+        const firstWithMatches = this.filteredPermissionGroups.find(g => g.items.length > 0);
+        if (firstWithMatches) {
+          this.activePermTab = firstWithMatches.key;
+        }
+      }
+    }
+    this.cdr.detectChanges();
   }
 
   get filteredPermissionGroups() {

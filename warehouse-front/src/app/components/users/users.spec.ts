@@ -105,6 +105,8 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       downloadUsersTemplate: vi.fn().mockReturnValue(of(new Blob(['template-users']))),
       downloadRolesTemplate: vi.fn().mockReturnValue(of(new Blob(['template-roles']))),
       uploadUserAvatar: vi.fn().mockReturnValue(of({ success: true, avatar: '/media/avatar.webp' })),
+      getLockedStatus: vi.fn().mockReturnValue(of({ locked_users: [] })),
+      resetLockout: vi.fn().mockReturnValue(of({ success: true }))
     };
 
     mockWarehouseHttp = {
@@ -125,6 +127,7 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
     };
 
     mockPersona = {
+      activeApp: vi.fn().mockReturnValue('warehouse'),
       canPerform: vi.fn().mockReturnValue(true),
       isCurrentActive: vi.fn().mockReturnValue(true)
     };

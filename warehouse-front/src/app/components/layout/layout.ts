@@ -1046,8 +1046,8 @@ export class Layout implements OnInit, OnDestroy {
 
   /** ──── Sidebar Navigation Signals ──── */
   readonly primaryNavItems = computed(() => {
-    // اگر کاربر در سامانه کارکرد و مالی است، منوهای انبارداری مخفی می‌شوند
-    if (this.personaService.activeApp() === 'personnel') {
+    // اگر ماژول انبار نصب نیست یا کاربر در سامانه کارکرد و مالی است، منوهای انبارداری مخفی می‌شوند
+    if (!this.moduleRegistry.isModuleInstalled('warehouse') || this.personaService.activeApp() === 'personnel') {
       return [];
     }
 
@@ -1076,8 +1076,8 @@ export class Layout implements OnInit, OnDestroy {
   });
 
   readonly accountingNavItems = computed(() => {
-    // اگر کاربر در سامانه انبارداری است، منوهای مالی مخفی می‌شوند
-    if (this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+    // اگر ماژول مالی نصب نیست یا کاربر در سامانه انبارداری است، منوهای مالی مخفی می‌شوند
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
       return [];
     }
 
@@ -1167,7 +1167,13 @@ export class Layout implements OnInit, OnDestroy {
       this.store.setIsSwitchingWarehouse(false);
     }
     this.store.setWarehouseContext(false);
-    this.router.navigate(['/app/warehouse/projects']);
+    if (this.moduleRegistry.isModuleInstalled('warehouse')) {
+      this.router.navigate(['/app/warehouse/projects']);
+    } else if (this.moduleRegistry.isModuleInstalled('accounting')) {
+      this.router.navigate(['/app/finance/finance-cartable']);
+    } else {
+      this.router.navigate(['/app/launcher']);
+    }
   }
 
   get progressStats() {

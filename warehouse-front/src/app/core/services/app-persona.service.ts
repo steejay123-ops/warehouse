@@ -248,7 +248,7 @@ export class AppPersonaService {
       if (perms.includes('view_sys_personnel_attendance') || perms.includes('view_sys_personnel')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'operator')!);
       }
-      if (perms.includes('perm_approve_personnel_supervisor') || perms.includes('perm_approve_fleet_supervisor') || perms.includes('view_sys_supervisor')) {
+      if (perms.includes('perm_approve_personnel_supervisor') || perms.includes('perm_approve_fleet_supervisor')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'supervisor')!);
       }
       if (perms.includes('perm_approve_personnel_finance') || perms.includes('perm_approve_fleet_finance') || perms.includes('view_sys_payroll')) {

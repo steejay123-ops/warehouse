@@ -7,7 +7,7 @@ import { Layout } from './components/layout/layout';
 import { AppLauncherComponent } from './components/app-launcher/app-launcher';
 import { ChangePassword } from './components/change-password/change-password';
 import { VerifyCard } from './components/verify-card/verify-card';
-import { AuthGuard, AuthGuardChild } from './core/auth/auth.guard';
+import { AuthGuard, AuthGuardChild, WarehouseModuleMatchGuard, AccountingModuleMatchGuard } from './core/auth/auth.guard';
 import { OperationsGuard, OperationsGuardChild } from './core/guards/operations.guard';
 import { OperationsLayoutComponent } from './components/operations/operations-layout/operations-layout';
 import { OperationsCockpitComponent } from './components/operations/operations-cockpit/operations-cockpit';
@@ -33,6 +33,7 @@ export const routes: Routes = [
   {
     path: 'app/warehouse',
     component: Layout,
+    canMatch: [WarehouseModuleMatchGuard],
     canActivate: [AuthGuard],
     canActivateChild: [AuthGuardChild],
     loadChildren: () => import('./modules/warehouse/warehouse.routes').then(m => m.WAREHOUSE_ROUTES)
@@ -42,6 +43,7 @@ export const routes: Routes = [
   {
     path: 'app/finance',
     component: Layout,
+    canMatch: [AccountingModuleMatchGuard],
     canActivate: [AuthGuard],
     canActivateChild: [AuthGuardChild],
     loadChildren: () => import('./modules/accounting/accounting.routes').then(m => m.ACCOUNTING_ROUTES)

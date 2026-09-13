@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
-import { IS_WAREHOUSE_INSTALLED } from '../../modules/warehouse/warehouse.routes';
-import { IS_ACCOUNTING_INSTALLED } from '../../modules/accounting/accounting.routes';
+import { IS_WAREHOUSE_INSTALLED } from '../../modules/warehouse/warehouse-flags';
+import { IS_ACCOUNTING_INSTALLED } from '../../modules/accounting/accounting-flags';
 
 export interface FrontendModuleSpec {
   code: string;

@@ -3,6 +3,7 @@ import { NetworkStatusService } from './network-status.service';
 import { isServerUnreachable } from './server-reachability';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { IS_WAREHOUSE_INSTALLED } from '../../modules/warehouse/warehouse-flags';
 
 /**
  * SyncPullService — دانلود دلتای سرور به Dexie (نیمهٔ Pull معماری Local-First)
@@ -100,12 +101,24 @@ export class SyncPullService {
   // ════════════════════════════════════════════
 
   /**
-   * دانلود دلتای یک انبار. امن برای فراخوانی مکرر (هم‌زمانی ندارد).
+   * دانلود دلتای یک قلمرو (انبار یا مالی). امن برای فراخوانی مکرر (هم‌زمانی ندارد).
+   * @param scopeId شناسه انبار یا شناسه پروژه مالی
+   * @param scopeKindOrRetry نوع قلمرو ('warehouse' یا 'finance') یا پرچم ریترای میراثی (boolean)
    * @param isRetryAfter410 جلوگیری از حلقهٔ بی‌نهایت Full Resync
    */
-  async pullChanges(warehouseId: number, isRetryAfter410 = false): Promise<PullOutcome> {
+  async pullChanges(
+    scopeId: number,
+    scopeKindOrRetry: 'warehouse' | 'finance' | boolean = 'warehouse',
+    isRetryAfter410 = false
+  ): Promise<PullOutcome> {
+    const scopeKind: 'warehouse' | 'finance' = typeof scopeKindOrRetry === 'string' ? scopeKindOrRetry : 'warehouse';
+    const isRetry: boolean = typeof scopeKindOrRetry === 'boolean' ? scopeKindOrRetry : isRetryAfter410;
+
     if (this.inFlight) return { status: 'already-running' };
     if (!this.network.isBrowserOnline) return { status: 'offline' };
+    if (scopeKind === 'warehouse' && !IS_WAREHOUSE_INSTALLED) {
+      return { status: 'completed', upserted: 0, deleted: 0, bytes: 0 };
+    }
 
     const userId = this.getCurrentUserId();
     if (userId === null) return { status: 'auth-required' };
@@ -121,11 +134,11 @@ export class SyncPullService {
     this._pullProgress$.next({ current: 0, total: null, bytes: 0 });
 
     try {
-      const cursorKey = buildCursorKey(userId, warehouseId, 'warehouse');
-      let state = await getCursorState(userId, warehouseId, 'warehouse');
+      const cursorKey = buildCursorKey(userId, scopeId, scopeKind);
+      let state = await getCursorState(userId, scopeId, scopeKind);
       if (!state) {
         state = {
-          key: cursorKey, userId, warehouseId,
+          key: cursorKey, userId, warehouseId: scopeId, scopeKind,
           cursor: null, inFlightSince: null, pendingServerTime: null, lastServerTime: null,
         };
       }
@@ -146,12 +159,17 @@ export class SyncPullService {
       let cursor: string | null = state.cursor;
       let hasMore = true;
 
+      const endpoint = scopeKind === 'finance'
+        ? '/personnel/sync/pull/'
+        : '/inventory/sync/pull/';
+
       while (hasMore) {
-        const params = new URLSearchParams({ warehouse_id: String(warehouseId), limit: String(PAGE_LIMIT) });
+        const paramKey = scopeKind === 'finance' ? 'project_id' : 'warehouse_id';
+        const params = new URLSearchParams({ [paramKey]: String(scopeId), limit: String(PAGE_LIMIT) });
         if (since) params.set('since', since);
         if (cursor) params.set('cursor', cursor);
 
-        const response = await this.fetchPage(params);
+        const response = await this.fetchPage(endpoint, params);
 
         if (response.kind === 'http') {
           const res = response.res;
@@ -163,15 +181,21 @@ export class SyncPullService {
 
           if (res.status === 401) return { status: 'auth-required' };
           if (res.status === 403) return { status: 'forbidden' };
+          if (res.status === 404) {
+            // اندپوینت در این پروفایل سرور موجود نیست
+            return { status: 'completed', upserted: 0, deleted: 0, bytes: 0 };
+          }
           if (res.status === 410) {
             // کلاینت قدیمی‌تر از عمر tombstoneها → Full Resync (فقط یک بار)
-            console.warn('[SyncPull] ⏳ 410 — Full Resync انبار', warehouseId);
+            console.warn(`[SyncPull] ⏳ 410 — Full Resync قلمرو ${scopeKind}:`, scopeId);
             await offlineDb.syncCursors.delete(cursorKey);
-            await offlineDb.syncCursors.delete(`${userId}:${warehouseId}`);
+            if (scopeKind === 'warehouse') {
+              await offlineDb.syncCursors.delete(`${userId}:${scopeId}`);
+            }
             this.inFlight = false;
             this._isPulling$.next(false);
-            if (isRetryAfter410) return { status: 'error', message: 'full_resync_loop' };
-            return this.pullChanges(warehouseId, true);
+            if (isRetry) return { status: 'error', message: 'full_resync_loop' };
+            return this.pullChanges(scopeId, scopeKind, true);
           }
           if (!res.ok) {
             return { status: 'error', message: `HTTP ${res.status}` };
@@ -190,7 +214,7 @@ export class SyncPullService {
             state.pendingServerTime = data.server_time;
           }
 
-          const counts = await this.applyPage(data.results || {}, warehouseId, userId);
+          const counts = await this.applyPage(data.results || {}, scopeId, userId);
           upserted += counts.upserted;
           deleted += counts.deleted;
 
@@ -202,6 +226,8 @@ export class SyncPullService {
           // ثبت پیشرفت — قطعی بعد از این نقطه یعنی ادامه از همین‌جا
           await offlineDb.syncCursors.put({
             ...state,
+            key: cursorKey,
+            scopeKind,
             cursor: hasMore ? cursor : null,
             inFlightSince: hasMore ? state.inFlightSince : null,
             pendingServerTime: hasMore ? state.pendingServerTime : null,
@@ -214,8 +240,8 @@ export class SyncPullService {
         }
       }
 
-      console.log(`[SyncPull] ✅ انبار ${warehouseId}: ${upserted} upsert، ${deleted} حذف`);
-      this._pullCompleted$.next({ warehouseId });
+      console.log(`[SyncPull] ✅ قلمرو ${scopeKind} ${scopeId}: ${upserted} upsert، ${deleted} حذف`);
+      this._pullCompleted$.next({ warehouseId: scopeId });
       return { status: 'completed', upserted, deleted, bytes: bytesDownloaded };
     } catch (error: any) {
       console.error('[SyncPull] ❌ خطا در Pull:', error);
@@ -228,12 +254,12 @@ export class SyncPullService {
   }
 
   /** fetch یک صفحه — خطای transport را از پاسخ HTTP جدا می‌کند */
-  private async fetchPage(params: URLSearchParams): Promise<{ kind: 'http'; res: Response } | { kind: 'transport' }> {
+  private async fetchPage(endpoint: string, params: URLSearchParams): Promise<{ kind: 'http'; res: Response } | { kind: 'transport' }> {
     const token = sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     try {
-      const res = await fetch(`${environment.apiUrl}/inventory/sync/pull/?${params.toString()}`, { headers });
+      const res = await fetch(`${environment.apiUrl}${endpoint}?${params.toString()}`, { headers });
       return { kind: 'http', res };
     } catch {
       return { kind: 'transport' };

@@ -8,6 +8,7 @@ import { AppPersonaService } from '../../core/services/app-persona.service';
 import { ModuleRegistryService } from '../../core/modules/module-registry.service';
 import { AccountsHttpService, User, Role, Permission, ImportResult } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
+import { PersonnelApiService } from '../../core/api/personnel-api.service';
 import { ClickOutsideDirective } from '../../shared/directives/click-outside.directive';
 import { IdCards } from '../id-cards/id-cards';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -546,6 +547,7 @@ export class Users implements OnInit, OnDestroy {
     private toast: ToastService,
     private accountsService: AccountsHttpService,
     private whService: WarehouseHttpService,
+    private personnelApi: PersonnelApiService,
     private cdr: ChangeDetectorRef,
     private confirmDialog: ConfirmDialogService,
     private route: ActivatedRoute,
@@ -715,13 +717,21 @@ export class Users implements OnInit, OnDestroy {
       }
     });
 
-    this.whService.getAll().subscribe({
-      next: (res: any) => {
-        this.state.appState.projects = Array.isArray(res) ? res : [];
-        this.cdr.detectChanges();
-      },
-      error: () => {}
-    });
+    if (this.hasInventoryModule()) {
+      this.whService.getAll().subscribe({
+        next: (res: any) => {
+          this.state.appState.projects = Array.isArray(res) ? res : [];
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          if (this.hasAccountingModule()) {
+            this.loadFinancialProjects();
+          }
+        }
+      });
+    } else if (this.hasAccountingModule()) {
+      this.loadFinancialProjects();
+    }
 
     if (typeof this.accountsService?.getLockedStatus === 'function') {
       this.accountsService.getLockedStatus().subscribe({
@@ -736,6 +746,22 @@ export class Users implements OnInit, OnDestroy {
         error: () => {}
       });
     }
+  }
+
+  private loadFinancialProjects(): void {
+    this.personnelApi.getFinancialProjects({ is_active: true }).subscribe({
+      next: (projects: any[]) => {
+        if (Array.isArray(projects)) {
+          this.state.appState.projects = projects.map(p => ({
+            id: p.id,
+            name: p.name || p.title || `پروژه ${p.id}`,
+            code: p.code
+          }));
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => {}
+    });
   }
 
   rebuildMemoizedData(): void {

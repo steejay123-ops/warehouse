@@ -1,6 +1,23 @@
 import { inject } from '@angular/core';
-import { Router, CanActivateFn, CanActivateChildFn } from '@angular/router';
+import { Router, CanActivateFn, CanActivateChildFn, CanMatchFn } from '@angular/router';
 import { AuthService } from './auth.service';
+import { ModuleRegistryService } from '../modules/module-registry.service';
+
+/**
+ * گارد تطبیق ماژول انبارداری — در صورت عدم نصب، از روت عبور می‌کند
+ */
+export const WarehouseModuleMatchGuard: CanMatchFn = () => {
+  const moduleRegistry = inject(ModuleRegistryService);
+  return moduleRegistry.isModuleInstalled('warehouse');
+};
+
+/**
+ * گارد تطبیق ماژول مالی و پرسنلی — در صورت عدم نصب، از روت عبور می‌کند
+ */
+export const AccountingModuleMatchGuard: CanMatchFn = () => {
+  const moduleRegistry = inject(ModuleRegistryService);
+  return moduleRegistry.isModuleInstalled('accounting');
+};
 
 /**
  * گارد احراز هویت — فقط کاربران لاگین‌شده اجازه ورود دارند
@@ -115,25 +132,36 @@ export const AuthGuard: CanActivateFn = (route, state) => {
       return true;
     }
 
+    const moduleRegistry = inject(ModuleRegistryService);
     const hasWarehouseAccess = isAdmin || WAREHOUSE_PERMISSIONS.some(p => userPerms.includes(p));
     const hasPersonnelAccess = isAdmin || PERSONNEL_PERMISSIONS.some(p => userPerms.includes(p));
 
-    // بررسی دسترسی به سطح ماژول انبار
+    // بررسی دسترسی به سطح ماژول انبار (هم نصب بودن ماژول و هم مجوز دسترسی کاربر)
     const isWarehouseScope = state.url.includes('/app/warehouse') || route.routeConfig?.path === 'warehouse';
-    if (isWarehouseScope && !hasWarehouseAccess) {
-      if (hasPersonnelAccess) {
-        return router.parseUrl('/app/finance/finance-cartable');
+    if (isWarehouseScope) {
+      if (!moduleRegistry.isModuleInstalled('warehouse')) {
+        return router.parseUrl(moduleRegistry.isModuleInstalled('accounting') ? '/app/finance/finance-cartable' : '/app/launcher');
       }
-      return router.parseUrl('/login');
+      if (!hasWarehouseAccess) {
+        if (hasPersonnelAccess && moduleRegistry.isModuleInstalled('accounting')) {
+          return router.parseUrl('/app/finance/finance-cartable');
+        }
+        return router.parseUrl('/login');
+      }
     }
 
-    // بررسی دسترسی به سطح ماژول مالی
+    // بررسی دسترسی به سطح ماژول مالی (هم نصب بودن ماژول و هم مجوز دسترسی کاربر)
     const isFinanceScope = state.url.includes('/app/finance') || route.routeConfig?.path === 'finance';
-    if (isFinanceScope && !hasPersonnelAccess) {
-      if (hasWarehouseAccess) {
-        return router.parseUrl('/app/warehouse/dashboard');
+    if (isFinanceScope) {
+      if (!moduleRegistry.isModuleInstalled('accounting')) {
+        return router.parseUrl(moduleRegistry.isModuleInstalled('warehouse') ? '/app/warehouse/dashboard' : '/app/launcher');
       }
-      return router.parseUrl('/login');
+      if (!hasPersonnelAccess) {
+        if (hasWarehouseAccess && moduleRegistry.isModuleInstalled('warehouse')) {
+          return router.parseUrl('/app/warehouse/dashboard');
+        }
+        return router.parseUrl('/login');
+      }
     }
 
     // Check RBAC permissions on individual page

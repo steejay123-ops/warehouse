@@ -120,10 +120,11 @@ export interface PhotoQueueEntry {
  * lastServerTime همیشه از server_time پاسخ سرور است، نه ساعت دستگاه (رفع Clock Skew).
  */
 export interface SyncCursorEntry {
-  /** کلید مرکب: `${userId}:${warehouseId}` */
+  /** کلید مرکب: `${userId}:${scopeKind}:${scopeId}` یا میراثی `${userId}:${warehouseId}` */
   key: string;
   userId: number;
   warehouseId: number;
+  scopeKind?: string;
   /** cursor مات وسط یک دانلود نیمه‌تمام؛ null یعنی دانلود قبلی کامل شد */
   cursor: string | null;
   /** since که دانلود نیمه‌تمام با آن شروع شد (باید تا پایان همان بماند) */
@@ -372,14 +373,14 @@ export const financeOfflineDb: OfflineDatabase = getOfflineDb('finance');
 export const offlineDb: OfflineDatabase = new Proxy({} as OfflineDatabase, {
   get(_target, prop: string | symbol) {
     // ۱. جداول اختصاصی دامنه انبارداری
-    if (['countTasks', 'items', 'dynamicFields', 'photoQueue'].includes(prop as string)) {
+    if (['countTasks', 'items', 'dynamicFields', 'photoQueue', 'docTasks'].includes(prop as string)) {
       const whDb = getOfflineDb('warehouse');
       const val = (whDb as any)[prop];
       return typeof val === 'function' ? val.bind(whDb) : val;
     }
 
     // ۲. جداول اختصاصی دامنه مالی
-    if (prop === 'docTasks' || prop === 'attendanceRecords') {
+    if (prop === 'attendanceRecords') {
       const finDb = getOfflineDb('finance');
       const val = (finDb as any)[prop];
       return typeof val === 'function' ? val.bind(finDb) : val;
@@ -420,12 +421,12 @@ export async function migrateLegacyDatabaseIfNeeded(): Promise<void> {
     await legacyDb.open();
     const tableNames = legacyDb.tables.map(t => t.name);
 
-    // ۱. انتقال رکوردهای مالی (docTasks) به دیتابیس مالی
+    // ۱. انتقال رکوردهای اسناد انبار (docTasks) به دیتابیس انبارداری
     if (tableNames.includes('docTasks')) {
       const legacyDocs = await legacyDb.table('docTasks').toArray();
       if (legacyDocs.length > 0) {
-        await financeOfflineDb.docTasks.bulkPut(legacyDocs);
-        console.log(`[OfflineDB Migration] 🚚 ${legacyDocs.length} سند مالی به دیتابیس مالی منتقل شد.`);
+        await warehouseOfflineDb.docTasks.bulkPut(legacyDocs);
+        console.log(`[OfflineDB Migration] 🚚 ${legacyDocs.length} سند انبار به دیتابیس انبارداری منتقل شد.`);
       }
     }
 

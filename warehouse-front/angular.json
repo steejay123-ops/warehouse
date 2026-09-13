@@ -88,6 +88,10 @@
                 {
                   "replace": "src/app/modules/warehouse/warehouse.routes.ts",
                   "with": "src/app/modules/warehouse/warehouse.routes.stub.ts"
+                },
+                {
+                  "replace": "src/app/modules/warehouse/warehouse-flags.ts",
+                  "with": "src/app/modules/warehouse/warehouse-flags.stub.ts"
                 }
               ],
               "serviceWorker": "ngsw-config.json"
@@ -113,6 +117,10 @@
                 {
                   "replace": "src/app/modules/accounting/accounting.routes.ts",
                   "with": "src/app/modules/accounting/accounting.routes.stub.ts"
+                },
+                {
+                  "replace": "src/app/modules/accounting/accounting-flags.ts",
+                  "with": "src/app/modules/accounting/accounting-flags.stub.ts"
                 }
               ],
               "serviceWorker": "ngsw-config.json"
@@ -129,6 +137,10 @@
                 {
                   "replace": "src/app/modules/warehouse/warehouse.routes.ts",
                   "with": "src/app/modules/warehouse/warehouse.routes.stub.ts"
+                },
+                {
+                  "replace": "src/app/modules/warehouse/warehouse-flags.ts",
+                  "with": "src/app/modules/warehouse/warehouse-flags.stub.ts"
                 }
               ]
             },
@@ -144,6 +156,10 @@
                 {
                   "replace": "src/app/modules/accounting/accounting.routes.ts",
                   "with": "src/app/modules/accounting/accounting.routes.stub.ts"
+                },
+                {
+                  "replace": "src/app/modules/accounting/accounting-flags.ts",
+                  "with": "src/app/modules/accounting/accounting-flags.stub.ts"
                 }
               ]
             }

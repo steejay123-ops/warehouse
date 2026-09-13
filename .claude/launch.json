@@ -2,6 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "attach-frontend",
+      "url": "http://localhost:4200",
+      "port": 4200
+    },
+    {
       "name": "backend-django",
       "runtimeExecutable": "E:\\warehouse project\\warehouse-backend\\venv\\Scripts\\python.exe",
       "runtimeArgs": ["E:\\warehouse project\\warehouse-backend\\manage.py", "runserver", "8000"],

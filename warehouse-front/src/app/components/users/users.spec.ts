@@ -518,6 +518,26 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       fixture.detectChanges();
       expect(component.userViewMode).toBe('table');
     });
+
+    it('باید کادر تکراری سربرگ بالای صفحه در DOM وجود نداشته باشد', () => {
+      fixture.detectChanges();
+      const topHeaderH1 = fixture.debugElement.query(By.css('h1'));
+      expect(topHeaderH1).toBeNull();
+    });
+
+    it('باید ورودی‌های نام کاربری و رمز در مودال دارای autocomplete="new-password" باشند تا مرورگر تکمیل خودکار نکند', () => {
+      component.openUserModal();
+      fixture.detectChanges();
+      const usernameInput = fixture.debugElement.query(By.css('input[name="personnel_username"]'));
+      const passwordInput = fixture.debugElement.query(By.css('input[name="personnel_password"]'));
+      expect(usernameInput).not.toBeNull();
+      expect(passwordInput).not.toBeNull();
+      expect(usernameInput.nativeElement.getAttribute('autocomplete')).toBe('new-password');
+      expect(passwordInput.nativeElement.getAttribute('autocomplete')).toBe('new-password');
+      expect(component.userForm.username).toBe('');
+      expect(component.userForm.password).toBe('');
+      expect(component.showPassword).toBe(false);
+    });
   });
 
   // ─────────────────────────────────────────────────────────────────

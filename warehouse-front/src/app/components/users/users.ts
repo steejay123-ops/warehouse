@@ -864,7 +864,8 @@ export class Users implements OnInit, OnDestroy {
   }
 
   get pagedUsers(): any[] {
-    const start = (this.currentPage - 1) * this.pageSize;
+    const page = Math.min(Math.max(1, this.currentPage), this.totalPages);
+    const start = (page - 1) * this.pageSize;
     return this.filteredUsers.slice(start, start + this.pageSize);
   }
 
@@ -1391,6 +1392,7 @@ export class Users implements OnInit, OnDestroy {
       this.userForm.assigned_warehouses = (this.userForm.assigned_warehouses || []).map(Number);
     } else {
       this.editingUser = null;
+      this.showPassword = false;
       this.userForm = {
         id: null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
         operational_zone: '', supervisor: null, address: '', company: '', email: '', avatar: null, _pendingAvatarBlob: null,
@@ -2118,6 +2120,7 @@ export class Users implements OnInit, OnDestroy {
     } else {
         this.accountsService.deleteUser(id).subscribe({
             next: () => {
+                this.selectedUserIds.delete(id);
                 this.state.appState.users = this.state.appState.users.filter((u: any) => u.id !== id);
                 this.rebuildMemoizedData();
                 this.toast.show('success', 'حساب کاربری برای همیشه حذف شد.');

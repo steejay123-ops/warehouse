@@ -1,17 +1,4 @@
-<div class="space-y-6 text-right" (click)="closeMenus()" dir="rtl">
-    <!-- سربرگ هوشمند متناسب با قلمرو فعال (انبارداری / مرکز عملیات) -->
-    <div class="flex items-center justify-between px-1">
-      <div>
-        <h1 class="text-base md:text-lg font-black text-slate-800 flex items-center gap-2">
-          <span>👥</span>
-          <span>{{ isOperationsMode() ? 'مدیریت کاربران و نقش‌های سازمان (مرکز عملیات)' : 'مدیریت کاربران و تخصیص سطح دسترسی به انبارها' }}</span>
-        </h1>
-        <p class="text-[11px] text-slate-400 mt-0.5">
-          {{ isOperationsMode() ? 'مرکز عملیات: پیکربندی هویت، سطوح امنیتی و نقش‌های پرسنل' : 'مدیریت دسترسی به انبارها و حساب‌های کاربری' }}
-        </p>
-      </div>
-    </div>
-
+<div class="space-y-5 text-right pb-10" (click)="closeMenus()" dir="rtl">
     <!-- نوار اصلی هدر: تب‌ها در راست و دکمه‌های اکشن استاندارد در چپ -->
     <div class="bg-white p-3 md:p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
       <!-- لیست تب‌ها (سمت راست در RTL) -->
@@ -1473,12 +1460,12 @@
 ></app-smart-delete-modal>
 
 <!-- User Modal -->
-<div *ngIf="isUserModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4" dir="rtl">
+<div *ngIf="isUserModalOpen" class="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 md:p-6" dir="rtl">
   <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" (click)="isUserModalOpen = false"></div>
-  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden relative modal-enter flex flex-col max-h-[92vh] border border-slate-100">
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden relative modal-enter flex flex-col max-h-[90vh] border border-slate-100 my-auto">
     
     <!-- Modal Header -->
-    <div class="px-6 py-4.5 border-b border-slate-200/80 bg-slate-50/90 backdrop-blur-md flex justify-between items-center shrink-0">
+    <div class="px-6 py-4 border-b border-slate-200/80 bg-slate-50/90 backdrop-blur-md flex justify-between items-center shrink-0">
       <div class="flex items-center gap-3.5">
         <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 text-white flex items-center justify-center font-black shadow-md shadow-indigo-200 shrink-0">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -1502,8 +1489,11 @@
     </div>
     
     <!-- Modal Body -->
-    <div class="p-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
-      <form class="space-y-4 text-right" autocomplete="off" (submit)="$event.preventDefault()">
+    <div class="p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar">
+      <form class="space-y-5 text-right" autocomplete="off" (submit)="$event.preventDefault()">
+        <!-- Fake fields to intercept aggressive browser credential autofill -->
+        <input type="text" name="fake_user_remembered" style="display:none" tabindex="-1" autocomplete="off">
+        <input type="password" name="fake_password_remembered" style="display:none" tabindex="-1" autocomplete="off">
         
         <!-- بخش اول: اطلاعات هویتی و پرسنلی -->
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
@@ -1670,7 +1660,7 @@
                   <span *ngIf="editingUser" class="text-[9px] text-slate-400 font-medium">غیرقابل تغییر در ویرایش</span>
                 </div>
                 <div class="relative">
-                  <input type="text" [(ngModel)]="userForm.username" (input)="clearUserFormError('username')" name="username" placeholder="مثال: h.alishavandi یا 10054" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono font-bold text-indigo-800 transition-all" dir="ltr" [readonly]="editingUser != null" [class]="getFieldClass('username')">
+                  <input type="text" [(ngModel)]="userForm.username" (input)="clearUserFormError('username')" name="personnel_username" autocomplete="new-password" placeholder="مثال: h.alishavandi یا 10054" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none text-left font-mono font-bold text-indigo-800 transition-all" dir="ltr" [readonly]="editingUser != null" [class]="getFieldClass('username')">
                   <div *ngIf="isFieldValid('username')" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                   </div>
@@ -1694,7 +1684,7 @@
                   </button>
                 </div>
                 <div class="relative">
-                  <input [type]="showPassword ? 'text' : 'password'" [(ngModel)]="userForm.password" (input)="clearUserFormError('password')" name="password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full pr-10 pl-10 py-2 rounded-xl bg-white border border-indigo-200 text-xs font-mono outline-none text-left transition-all" dir="ltr" [class]="getFieldClass('password')">
+                  <input [type]="showPassword ? 'text' : 'password'" [(ngModel)]="userForm.password" (input)="clearUserFormError('password')" name="personnel_password" autocomplete="new-password" [placeholder]="editingUser ? 'در صورت عدم تغییر خالی بگذارید' : 'پیش‌فرض: 123456'" class="w-full pr-10 pl-10 py-2 rounded-xl bg-white border border-indigo-200 text-xs font-mono outline-none text-left transition-all" dir="ltr" [class]="getFieldClass('password')">
                   <button type="button" (click)="toggleShowPassword()" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 p-1 rounded-md transition-colors cursor-pointer" [title]="showPassword ? 'مخفی‌سازی رمز' : 'نمایش رمز'">
                     <svg *ngIf="!showPassword" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg *ngIf="showPassword" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>

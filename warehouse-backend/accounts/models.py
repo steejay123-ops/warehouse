@@ -30,6 +30,7 @@ class CustomUser(AbstractUser):
         return f"{self.username}"
 
     class Meta:
+        ordering = ['-id']
         permissions = [
             # System Tabs (منوی اصلی)
             ("view_sys_dashboard", "داشبورد مانیتورینگ کلی"),

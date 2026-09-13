@@ -188,7 +188,30 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "شماره تلفن همراه نامعتبر است. شماره معتبر باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789)."
             )
+
+        qs = CustomUser.objects.filter(phone_number=digits)
+        if self.instance:
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("این شماره تلفن همراه قبلاً به حساب کاربری دیگری تخصیص داده شده است.")
         return digits
+
+    def validate_supervisor(self, supervisor):
+        if supervisor is None:
+            return None
+        if self.instance and supervisor.id == self.instance.id:
+            raise serializers.ValidationError("یک کاربر نمی‌تواند سرپرست مستقیم خودش باشد.")
+        if self.instance:
+            curr = supervisor
+            visited = set()
+            while curr:
+                if curr.id == self.instance.id:
+                    raise serializers.ValidationError("انتساب این سرپرست موجب بروز وابستگی چرخه‌ای در ساختار سازمانی می‌گردد.")
+                if curr.id in visited:
+                    break
+                visited.add(curr.id)
+                curr = curr.supervisor
+        return supervisor
 
     def validate_national_code(self, value):
         if not value:

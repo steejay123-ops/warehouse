@@ -7,6 +7,9 @@ import uuid
 from PIL import Image, ImageOps
 from django.core.files.base import ContentFile
 
+# محدودیت امنیتی جهت جلوگیری از حملات Decompression Bomb
+Image.MAX_IMAGE_PIXELS = 10_000_000
+
 
 def process_and_optimize_avatar(file_obj, max_dimension=600, quality=85):
     """

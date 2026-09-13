@@ -436,6 +436,9 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         avatar_file = request.FILES.get('avatar')
         if not avatar_file:
             return Response({'error': 'فایل تصویری ارسال نشده است.'}, status=400)
+
+        if avatar_file.size > 5 * 1024 * 1024:
+            return Response({'error': 'حجم فایل تصویر نباید بیش از ۵ مگابایت باشد.'}, status=400)
             
         try:
             optimized_file = process_and_optimize_avatar(avatar_file)
@@ -465,6 +468,9 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         avatar_file = request.FILES.get('avatar')
         if not avatar_file:
             return Response({'error': 'فایل تصویری ارسال نشده است.'}, status=400)
+
+        if avatar_file.size > 5 * 1024 * 1024:
+            return Response({'error': 'حجم فایل تصویر نباید بیش از ۵ مگابایت باشد.'}, status=400)
             
         try:
             optimized_file = process_and_optimize_avatar(avatar_file)
@@ -493,6 +499,21 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             except Exception:
                 pass
         return generate_users_excel(queryset)
+
+    @action(detail=False, methods=['get'])
+    def export_id_cards_excel(self, request):
+        """Download ID cards data as an Excel file, optionally filtered by user IDs."""
+        from .excel_utils import generate_id_cards_excel
+        queryset = self.get_queryset()
+        ids_param = request.GET.get('ids')
+        if ids_param:
+            try:
+                ids = [int(i.strip()) for i in ids_param.split(',') if i.strip()]
+                if ids:
+                    queryset = queryset.filter(id__in=ids)
+            except Exception:
+                pass
+        return generate_id_cards_excel(queryset)
 
     @action(detail=False, methods=['get'])
     def download_template(self, request):
@@ -718,7 +739,7 @@ class CustomRoleViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         return [HasMenuAccess('view_sys_users') | HasMenuAccess('perm_usr_role')]
 
     def get_queryset(self):
-        return CustomRole.objects.all()
+        return CustomRole.objects.all().prefetch_related('permissions', 'user_set')
 
     def _check_sensitive_permissions(self, permissions):
         user = self.request.user
@@ -1670,6 +1691,13 @@ class UserLoginLogViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def locked_users(self, request):
+        return self._get_locked_users_response(request)
+
+    @action(detail=False, methods=['get'], url_path='locked_status')
+    def locked_status(self, request):
+        return self._get_locked_users_response(request)
+
+    def _get_locked_users_response(self, request):
         user = getattr(request, 'user', None)
         if not (user and user.is_authenticated and (
             user.is_superuser or

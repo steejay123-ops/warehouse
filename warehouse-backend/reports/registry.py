@@ -305,16 +305,59 @@ def _build_warehouse_entities():
     return entities
 
 
+def _build_accounting_entities():
+    """ساخت تعاریف موجودیت‌های ماژول حسابداری و پرسنلی در موتور گزارش‌ساز."""
+    from django.apps import apps
+    if not apps.is_installed('personnel'):
+        return []
+
+    from personnel.models import PersonnelProfile, MonthlyPayrollRecord, VehicleTripLog
+    entities = [
+        EntityConfig(
+            key='personnel_profiles',
+            label='پرسنل و کارمندان',
+            model=PersonnelProfile,
+            permissions=('view_sys_personnel',),
+            scope_path=None,
+            include=('id', 'personnel_code', 'national_code', 'first_name', 'last_name',
+                     'contract_type', 'employment_status', 'created_at'),
+            module_code='accounting',
+        ),
+        EntityConfig(
+            key='monthly_payrolls',
+            label='محاسبات ماهانه حقوق',
+            model=MonthlyPayrollRecord,
+            permissions=('view_sys_payroll',),
+            scope_path=None,
+            include=('id', 'national_code', 'full_name', 'gross_salary', 'net_salary',
+                     'payable_amount', 'income_tax', 'worker_insurance', 'payment_status'),
+            module_code='accounting',
+        ),
+        EntityConfig(
+            key='fleet_trips',
+            label='کارکرد و سفرهای ناوگان',
+            model=VehicleTripLog,
+            permissions=('view_sys_fleet_settlement',),
+            scope_path=None,
+            include=('id', 'trip_date', 'total_amount', 'is_settled', 'settled_at'),
+            module_code='accounting',
+        ),
+    ]
+    return entities
+
+
 _REGISTERED = False
 
 
 def register_warehouse_reports():
-    """ثبت موجودیت‌ها و روابط ماژول انبارداری در رجیستری مرکزی پلتفرم."""
+    """ثبت موجودیت‌ها و روابط ماژول‌های سامانه در رجیستری مرکزی پلتفرم."""
     global _REGISTERED
     if _REGISTERED:
         return
     for ent in _build_warehouse_entities():
         register_entity(ent, module_code='warehouse')
+    for ent in _build_accounting_entities():
+        register_entity(ent, module_code='accounting')
     for ent_key, joins_dict in WAREHOUSE_JOINS.items():
         register_joins(ent_key, joins_dict, module_code='warehouse')
     _REGISTERED = True

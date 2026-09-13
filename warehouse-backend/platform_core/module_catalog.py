@@ -16,8 +16,8 @@ from platform_core.registry import ModuleSpec
 WAREHOUSE_SPEC = ModuleSpec(
     code='warehouse',
     title_fa='سامانه انبارداری و انبارگردانی',
-    django_apps=('warehouses.apps.WarehousesConfig', 'inventory.apps.InventoryConfig', 'reports.apps.ReportsConfig'),
-    api_prefixes=('api/warehouses/', 'api/inventory/', 'api/reports/'),
+    django_apps=('warehouses.apps.WarehousesConfig', 'inventory.apps.InventoryConfig'),
+    api_prefixes=('api/warehouses/', 'api/inventory/'),
     permission_markers=(
         'accounts.view_sys_counter',
         'accounts.view_sys_supervisor',
@@ -37,7 +37,6 @@ WAREHOUSE_SPEC = ModuleSpec(
     url_includes=(
         ('api/warehouses/', 'warehouses.urls'),
         ('api/inventory/', 'inventory.urls'),
-        ('api/reports/', 'reports.urls'),
     ),
     audit_modules=(
         ('docs', 'مدیریت کالا (انبار)'),

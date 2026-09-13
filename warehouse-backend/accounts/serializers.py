@@ -326,6 +326,8 @@ class UserSerializer(serializers.ModelSerializer):
 
         groups = validated_data.pop('groups', None)
         roles = validated_data.pop('roles', None)
+        user_permissions = validated_data.pop('user_permissions', None)
+        assigned_warehouses = validated_data.pop('assigned_warehouses', None) if _warehouse_model() is not None else None
         password = validated_data.pop('password', None)
         if password:
             instance.set_password(password)
@@ -356,6 +358,12 @@ class UserSerializer(serializers.ModelSerializer):
         elif roles is not None:
             group_objs = Group.objects.filter(name__in=roles)
             instance.groups.set(group_objs)
+            
+        if user_permissions is not None:
+            instance.user_permissions.set(user_permissions)
+
+        if assigned_warehouses is not None and hasattr(instance, 'assigned_warehouses'):
+            instance.assigned_warehouses.set(assigned_warehouses)
         
         return super().update(instance, validated_data)
 

@@ -16,6 +16,7 @@ from .models import Warehouse
 def purge_warehouse_settings(sender, instance, **kwargs):
     from settings_core.models import SystemSetting
     from settings_core.services import clear_setting_cache
+    from django.apps import apps
 
     keys = list(
         SystemSetting.objects.filter(warehouse_id=instance.id)
@@ -27,3 +28,34 @@ def purge_warehouse_settings(sender, instance, **kwargs):
         for k in keys:
             clear_setting_cache(k, instance.id)
         clear_setting_cache(None, instance.id)
+
+    # رفع مشکل شناسه‌های یتیم (Orphaned IDs) در مدل‌های تفکیک‌شده
+    if apps.is_installed('personnel'):
+        try:
+            from personnel.models import (
+                PersonnelProfile, VehicleDriverProfile,
+                DailyAttendance, MonthlyWorkPeriod
+            )
+            PersonnelProfile.objects.filter(assigned_warehouse_id=instance.id).update(assigned_warehouse_id=None)
+            VehicleDriverProfile.objects.filter(assigned_warehouse_id=instance.id).update(assigned_warehouse_id=None)
+            DailyAttendance.objects.filter(warehouse_id=instance.id).update(warehouse_id=None)
+            MonthlyWorkPeriod.objects.filter(warehouse_id=instance.id).update(warehouse_id=None)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[WarehouseSignals] Error cleaning personnel warehouse_ids: {e}")
+
+    if apps.is_installed('communications'):
+        try:
+            from communications.models import Conversation
+            Conversation.objects.filter(warehouse_id=instance.id).update(warehouse_id=None)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[WarehouseSignals] Error cleaning communications warehouse_ids: {e}")
+
+    if apps.is_installed('accounts'):
+        try:
+            from accounts.models import AuditLog
+            AuditLog.objects.filter(warehouse_id=instance.id).update(warehouse_id=None)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[WarehouseSignals] Error cleaning audit log warehouse_ids: {e}")

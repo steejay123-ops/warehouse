@@ -146,6 +146,16 @@ class TreasuryDisbursementService:
                     'payment_status', 'paid_at', 'paid_by',
                     'payment_tracking_code', 'payment_batch_id', 'updated_at'
                 ])
+                try:
+                    from .models import emit_accounting_event
+                    emit_accounting_event(
+                        source_instance=rec,
+                        event_type='PAYROLL_PAID',
+                        occurred_at=now,
+                        payload={'tracking_code': tracking_code, 'batch_id': batch_id, 'treasury_user': treasury_user.username}
+                    )
+                except Exception as ex:
+                    logger.warning(f"[TreasuryOutbox] Error emitting event for record {rec.pk}: {ex}")
                 paid_count += 1
                 total_paid_amount += int(round(rec.payable_amount or 0))
 
@@ -159,6 +169,16 @@ class TreasuryDisbursementService:
             'status', 'treasury_paid_at', 'treasury_paid_by',
             'payment_tracking_code', 'payment_batch_id', 'updated_at'
         ])
+        try:
+            from .models import emit_accounting_event
+            emit_accounting_event(
+                source_instance=locked_period,
+                event_type='PERIOD_PAYROLL_FINALIZED',
+                occurred_at=now,
+                payload={'tracking_code': tracking_code, 'batch_id': batch_id, 'total_paid_amount': total_paid_amount, 'paid_count': paid_count}
+            )
+        except Exception as ex:
+            logger.warning(f"[TreasuryOutbox] Error emitting period event for {locked_period.pk}: {ex}")
 
         logger.info(
             f"[TREASURY] Period {locked_period.year_month} disbursed by {treasury_user.username}. "
@@ -166,13 +186,13 @@ class TreasuryDisbursementService:
         )
 
         return {
-            'status': 'SUCCESS',
-            'period': locked_period.year_month,
-            'paid_records_count': paid_count,
-            'failed_records_count': failed_count,
+            'period_id': period.id,
+            'year_month': period.year_month,
+            'paid_count': paid_count,
+            'failed_count': failed_count,
             'total_paid_amount': total_paid_amount,
+            'batch_id': batch_id,
             'tracking_code': tracking_code,
-            'batch_id': batch_id
         }
 
     @classmethod
@@ -213,6 +233,16 @@ class TreasuryDisbursementService:
             'payment_tracking_code', 'payment_batch_id',
             'payment_failure_reason', 'updated_at'
         ])
+        try:
+            from .models import emit_accounting_event
+            emit_accounting_event(
+                source_instance=locked_rec,
+                event_type='PAYROLL_PAID',
+                occurred_at=now,
+                payload={'tracking_code': tracking_code, 'batch_id': locked_rec.payment_batch_id}
+            )
+        except Exception as ex:
+            logger.warning(f"[TreasuryOutbox] Error emitting event for record {locked_rec.pk}: {ex}")
 
         return locked_rec
 
@@ -244,6 +274,16 @@ class TreasuryDisbursementService:
             trip.settled_by = treasury_user
             trip.payment_tracking_code = tracking_code
             trip.save(update_fields=['is_settled', 'settled_at', 'settled_by', 'payment_tracking_code'])
+            try:
+                from .models import emit_accounting_event
+                emit_accounting_event(
+                    source_instance=trip,
+                    event_type='FLEET_TRIP_SETTLED',
+                    occurred_at=now,
+                    payload={'tracking_code': tracking_code, 'batch_id': batch_id}
+                )
+            except Exception as ex:
+                logger.warning(f"[TreasuryOutbox] Error emitting fleet trip event: {ex}")
             total_amount += int(trip.total_amount or 0)
             updated_count += 1
 

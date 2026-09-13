@@ -1922,19 +1922,21 @@ class MonthlyPayrollRecord(models.Model):
         from decimal import Decimal
         from platform_core.accounting_protocol import JournalLine
 
-        gross = Decimal(str(self.total_gross_salary or 0))
+        gross = Decimal(str(self.gross_salary or 0))
         payable = Decimal(str(self.payable_amount or 0))
-        tax = Decimal(str(self.tax_amount or 0))
-        insurance = Decimal(str(self.employee_insurance_share or 0))
+        tax = Decimal(str(self.income_tax or 0))
+        insurance = Decimal(str(self.worker_insurance or 0))
+        advance = Decimal(str(self.advance_payment_deduction or 0))
 
         cost_center = None
-        if self.personnel and self.personnel.section:
+        if self.personnel_id and getattr(self, 'personnel', None) and getattr(self.personnel, 'section', None):
             sec = self.personnel.section
             proj_code = sec.project.code if sec.project else "PRJ"
             cost_center = f"{proj_code}-{sec.code}"
 
-        detail = self.national_code or f"EMP-{self.personnel_id}"
-        desc = f"حقوق و دستمزد {self.full_name} - دوره {self.period.year_month}"
+        detail = self.national_code or (f"EMP-{self.personnel_id}" if self.personnel_id else "EMP-0")
+        period_str = self.period.year_month if self.period_id and hasattr(self, 'period') and self.period else "جاری"
+        desc = f"حقوق و دستمزد {self.full_name or 'پرسنل'} - دوره {period_str}"
 
         lines = [
             JournalLine(
@@ -1974,6 +1976,44 @@ class MonthlyPayrollRecord(models.Model):
                     cost_center_code=cost_center,
                     detail_code=detail,
                     description=f"بیمه سهم کارمند {desc}",
+                )
+            )
+        if advance > 0:
+            lines.append(
+                JournalLine(
+                    account_code="1201",  # حساب معین مساعده و پیش‌پرداخت پرسنل
+                    side="credit",
+                    amount=advance,
+                    cost_center_code=cost_center,
+                    detail_code=detail,
+                    description=f"کسر مساعده {desc}",
+                )
+            )
+
+        # محاسبه و تسویه هرگونه کسورات متفرقه جهت تضمین تراز دوبل (Debit == Credit)
+        credits_sum = payable + tax + insurance + advance
+        discrepancy = gross - credits_sum
+        if discrepancy > 0:
+            lines.append(
+                JournalLine(
+                    account_code="4105",  # سایر کسورات و تعدیلات حقوق
+                    side="credit",
+                    amount=discrepancy,
+                    cost_center_code=cost_center,
+                    detail_code=detail,
+                    description=f"سایر کسورات {desc}",
+                )
+            )
+        elif discrepancy < 0:
+            # در موارد استثنایی اگر پرداخت بیش از ناخالص باشد
+            lines.append(
+                JournalLine(
+                    account_code="6102",  # اضافه پرداختی و تعدیلات حقوق
+                    side="debit",
+                    amount=abs(discrepancy),
+                    cost_center_code=cost_center,
+                    detail_code=detail,
+                    description=f"تعدیلات مثبت {desc}",
                 )
             )
         return lines

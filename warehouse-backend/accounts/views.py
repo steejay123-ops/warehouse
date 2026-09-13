@@ -604,7 +604,8 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                             user.save()
                             # همگام‌سازی قطعی دسترسی‌ها (خالی بودن ستون در اکسل باعث پاک شدن دسترسی‌ها می‌شود)
                             user.groups.set(roles)
-                            user.assigned_warehouses.set(warehouses)
+                            if hasattr(user, 'assigned_warehouses'):
+                                user.assigned_warehouses.set(warehouses)
                             updated_count += 1
                             continue
 
@@ -617,7 +618,8 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
                     user.save()
 
                     user.groups.set(roles)
-                    user.assigned_warehouses.set(warehouses)
+                    if hasattr(user, 'assigned_warehouses'):
+                        user.assigned_warehouses.set(warehouses)
                     created_count += 1
 
                 from .audit_utils import log_audit_event
@@ -1808,8 +1810,20 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
 
         # Warehouse restriction: non-superusers without perm_sys_logs only see assigned warehouses
         if user and user.is_authenticated and not (user.is_superuser or user.has_perm('accounts.perm_sys_logs')):
-            assigned_wh_ids = list(user.assigned_warehouses.values_list('id', flat=True))
-            qs = qs.filter(warehouse_id__in=assigned_wh_ids)
+            if hasattr(user, 'assigned_warehouses'):
+                from django.db.models import Q
+                assigned_wh_ids = list(user.assigned_warehouses.values_list('id', flat=True))
+                app_scope_param = str(params.get('app_scope', '')).lower().strip()
+                if app_scope_param in ['finance', 'personnel']:
+                    qs = qs.filter(Q(warehouse_id__in=assigned_wh_ids) | Q(warehouse_id__isnull=True))
+                elif app_scope_param == 'warehouse':
+                    qs = qs.filter(warehouse_id__in=assigned_wh_ids)
+                else:
+                    # در نمای جامع، لاگ‌های مالی با شناسه انبار تهی نیز برای حسابداران/کاربران مجاز نمایش داده می‌شوند
+                    qs = qs.filter(
+                        Q(warehouse_id__in=assigned_wh_ids) |
+                        Q(warehouse_id__isnull=True, module__in=['personnel', 'payroll', 'attendance', 'fleet', 'treasury', 'finance'])
+                    )
 
 
         module = params.get('module')

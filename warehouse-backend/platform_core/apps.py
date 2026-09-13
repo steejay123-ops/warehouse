@@ -9,3 +9,7 @@ class PlatformCoreConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'platform_core'
     verbose_name = 'هستهٔ پلتفرم'
+
+    def ready(self):
+        from .registry import discover_entry_point_modules
+        discover_entry_point_modules()

@@ -440,6 +440,16 @@ def execute_treasury_disbursement(instance, user, tracking_code: str, batch_id: 
         locked_instance.settled_by = user
 
     locked_instance.save()
+    try:
+        from .models import emit_accounting_event
+        emit_accounting_event(
+            source_instance=locked_instance,
+            event_type='WORKFLOW_SETTLED_PAID',
+            occurred_at=now,
+            payload={'tracking_code': tracking_code, 'batch_id': batch_id, 'payment_method': payment_method, 'user_id': user.pk}
+        )
+    except Exception as ex:
+        logger.warning(f"[WorkflowEngine] Error emitting accounting event: {ex}")
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} PAID & SETTLED by {user.username}. Tracking: {tracking_code}")
     return locked_instance
 

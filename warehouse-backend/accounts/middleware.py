@@ -105,9 +105,8 @@ def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[st
         return []
 
     module_code = app_code_to_module(app_module)
-    if module_code not in installed_modules():
-        module_code = 'accounting' if 'accounting' in installed_modules() else (
-            'warehouse' if 'warehouse' in installed_modules() else '')
+    if not module_code or module_code not in installed_modules():
+        return []
     spec = get_module(module_code)
 
     if user.is_superuser:
@@ -129,7 +128,7 @@ def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[st
             roles.append('treasury')
         if not roles:
             roles.append('operator')
-    else:
+    elif module_code == 'warehouse':
         # Warehouse & Inventory App
         if user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.view_wh_dispatch'):
             roles.append('counter')
@@ -141,6 +140,8 @@ def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[st
             roles.append('manager_review')
         if not roles:
             roles.append('counter')
+    else:
+        return []
 
     return roles
 

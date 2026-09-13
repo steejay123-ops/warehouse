@@ -55,6 +55,7 @@ PLATFORM_APPS = [
     'platform_core.apps.PlatformCoreConfig',
     'notifications.apps.NotificationsConfig',
     'communications.apps.CommunicationsConfig',
+    'reports.apps.ReportsConfig',
 ]
 
 # اپ‌های ماژول‌های نصب‌شده از کاتالوگ؛ نام اپ‌ها در `module_catalog.py` نگه‌داری

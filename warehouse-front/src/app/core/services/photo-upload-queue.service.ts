@@ -131,6 +131,21 @@ export class PhotoUploadQueueService {
    * ناگهانی مرورگر یا قطع وسط آپلود حفظ می‌کند.
    */
   async enqueue(input: PhotoQueueInput): Promise<PhotoQueueEntry> {
+    // بررسی ظرفیت ذخیره‌سازی محلی جهت پیشگیری از QuotaExceededError (تسک ۱۹)
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      try {
+        const estimate = await navigator.storage.estimate();
+        if (estimate.quota && estimate.usage) {
+          const remainingBytes = estimate.quota - estimate.usage;
+          if (remainingBytes < 10 * 1024 * 1024) {
+            console.warn('[PhotoQueue] ⚠️ حافظه مرورگر بسیار محدود است (کمتر از ۱۰ مگابایت فضای خالی باقیمانده).');
+          }
+        }
+      } catch {
+        /* عدم پشتیبانی مرورگر */
+      }
+    }
+
     const entry: PhotoQueueEntry = {
       ...input,
       syncId: newSyncId(),
@@ -223,6 +238,14 @@ export class PhotoUploadQueueService {
 
       if (entries.length === 0) return { status: 'nothing-to-send' };
 
+      // اولویت‌بندی هوشمند (تسک ۱): رکوردهای مکرراً شکست‌خورده مانع عکس‌های تازه نشوند
+      entries.sort((a, b) => {
+        const aExceeded = (a.retryCount || 0) >= this.MAX_RETRIES ? 1 : 0;
+        const bExceeded = (b.retryCount || 0) >= this.MAX_RETRIES ? 1 : 0;
+        if (aExceeded !== bExceeded) return aExceeded - bExceeded;
+        return a.createdAt - b.createdAt;
+      });
+
       console.log(`[PhotoQueue] 🔄 ارسال ${entries.length} عکس از صف...`);
 
       for (let i = 0; i < entries.length; i++) {
@@ -248,7 +271,18 @@ export class PhotoUploadQueueService {
           authRequired = true;
           break;
         }
-        // server-error یا transport-failed — سرور در دسترس نیست؛ کوبیدنش کمکی نمی‌کند
+        if (result === 'server-error') {
+          // رفع Head-of-line Blocking (تسک ۱): اگر عکس به سقف تلاش مجدد رسیده، متوقف نشو و بقیه عکس‌ها را بفرست
+          if (entries[i].retryCount >= this.MAX_RETRIES) {
+            console.warn(
+              `[PhotoQueue] ⚠️ عکس ${entries[i].id} پس از حداکثر تلاش‌ها با خطای سرور معلق ماند؛ از مسدودسازی صف رد شد.`
+            );
+            continue;
+          }
+          aborted = true;
+          break;
+        }
+        // transport-failed — سرور در دسترس نیست
         aborted = true;
         break;
       }
@@ -297,8 +331,17 @@ export class PhotoUploadQueueService {
       if (entry.isPrimary) form.append('is_primary', 'true');
 
       const token =
-        sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
-      const headers: Record<string, string> = {};
+        sessionStorage.getItem('wh_access_token_warehouse') ||
+        sessionStorage.getItem('wh_access_token') ||
+        localStorage.getItem('wh_access_token_warehouse') ||
+        localStorage.getItem('wh_access_token');
+      const tabId = sessionStorage.getItem('wh_tab_session_id') || 'tab_photo_queue';
+      const role = sessionStorage.getItem('active_role_persona') || 'counter';
+      const headers: Record<string, string> = {
+        'X-Active-App': 'warehouse',
+        'X-Active-Role': role,
+        'X-Client-Tab-Id': tabId,
+      };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       // Content-Type عمداً ست نمی‌شود: مرورگر باید خودش boundary را بگذارد.
 

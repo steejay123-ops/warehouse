@@ -117,10 +117,25 @@ export class WebSocketService implements OnDestroy {
 
           this.notifications$.next(data);
 
-          // نمایش اعلان‌های سیستم در Toast (به جز رویدادهای بی‌صدای پس‌زمینه)
-          const silentTypes = ['count_task_update', 'doc_task_update', 'pong', 'ping', 'fleet_update', 'telemetry_update'];
-          if (data.message && data.type && !silentTypes.includes(data.type)) {
-            this.toast.show(data.type, data.message);
+          // نمایش اعلان‌های سیستم در Toast (صرفاً برای رویدادهای کاربری و پیام‌های معتبر، نه لاگ‌های پس‌زمینه و ممیزی)
+          const silentTypes = [
+            'count_task_update',
+            'doc_task_update',
+            'pong',
+            'ping',
+            'fleet_update',
+            'telemetry_update',
+            'audit_log_created',
+            'login_log_created',
+            'warehouse_mutation',
+            'attendance_updated',
+            'fleet_trips_updated',
+            'org_structure_updated',
+            'session_revoked'
+          ];
+          const validToastTypes: string[] = ['info', 'warning', 'success', 'error'];
+          if (data.message && data.type && !silentTypes.includes(data.type) && validToastTypes.includes(data.type)) {
+            this.toast.show(data.type as any, data.message);
           }
         } catch (e) {
           console.error('[WebSocket] خطا در پارس پیام دریافتی:', e);

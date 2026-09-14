@@ -12,7 +12,7 @@ import {
   SyncQueueEntry,
   SyncErrorEntry,
 } from './offline-db';
-import { SyncPullService } from './sync-pull.service';
+import { SyncPullService, getStoredCurrentUserId } from './sync-pull.service';
 import { NetworkStatusService } from './network-status.service';
 import { PhotoUploadQueueService, PhotoFlushOutcome } from './photo-upload-queue.service';
 import { isServerUnreachable } from './server-reachability';
@@ -265,11 +265,16 @@ export class OfflineSyncService {
     localStorage.setItem(PRUNE_KEY, String(Date.now()));
 
     const cutoffIso = new Date(Date.now() - 180 * ONE_DAY).toISOString();
-    const pendingEntries = await offlineDb.syncQueue.toArray();
+    // خواندن صف هر دو قلمرو تا هیچ رکورد معلقی چه در انبار و چه در مالی هرگز پاک نشود (تسک ۲)
+    const [whPending, finPending] = await Promise.all([
+      warehouseOfflineDb.syncQueue.toArray(),
+      financeOfflineDb.syncQueue.toArray(),
+    ]);
+    const pendingEntries = [...whPending, ...finPending];
     const protectedIds = new Set(pendingEntries.map((e) => e.entitySyncId).filter(Boolean));
 
     let pruned = 0;
-    for (const table of [offlineDb.countTasks, offlineDb.items, offlineDb.dynamicFields]) {
+    for (const table of [warehouseOfflineDb.countTasks, warehouseOfflineDb.items, warehouseOfflineDb.dynamicFields]) {
       const old = await table.where('updated_at').below(cutoffIso).primaryKeys();
       const deletable = old.filter((k) => !protectedIds.has(k as string));
       if (deletable.length) {
@@ -432,6 +437,7 @@ export class OfflineSyncService {
     }
 
     const appScope: AppScope = meta?.appScope || resolveScopeFromUrl(url);
+    const userId = meta?.userId ?? getStoredCurrentUserId() ?? undefined;
     const entry: SyncQueueEntry = {
       method,
       url,
@@ -440,6 +446,7 @@ export class OfflineSyncService {
       retryCount: 0,
       status: 'pending',
       appScope,
+      userId,
       ...(meta || {}),
     };
     const targetDb = getOfflineDb(appScope);
@@ -781,16 +788,27 @@ export class OfflineSyncService {
       await this.invalidateCache(baseUrl, err.appScope);
     }
 
+    if (err.entityType === 'count_task_bulk') {
+      try {
+        const db = getOfflineDb('warehouse');
+        await db.countTasks.where('status').equals('SENDING').modify({ status: 'PENDING_COUNT' });
+      } catch (bulkErr) {
+        console.warn('[OfflineSync] خطا در reconciliation تسک‌های گروهی:', bulkErr);
+      }
+      return;
+    }
+
     if (!err.entitySyncId || !err.entityType) return;
-    const tableMap: Record<string, 'countTasks' | 'items' | 'dynamicFields'> = {
+    const tableMap: Record<string, 'countTasks' | 'items' | 'dynamicFields' | 'docTasks'> = {
       count_task: 'countTasks',
       item: 'items',
       dynamic_field: 'dynamicFields',
+      doc_task: 'docTasks',
     };
     const tableName = tableMap[err.entityType];
     if (!tableName) return;
     const db = getOfflineDb(err.appScope);
-    const table = (db as any)[tableName] || (offlineDb as any)[tableName];
+    const table = (db as any)[tableName] || (warehouseOfflineDb as any)[tableName] || (offlineDb as any)[tableName];
 
     try {
       // آیا تغییر دیگری از همین رکورد هنوز در صف است؟ اگر بله پرچم می‌ماند.
@@ -832,6 +850,29 @@ export class OfflineSyncService {
    * • خطای شبکه یا ۵xx هرگز باعث از دست رفتن داده نمی‌شود
    */
   async processQueue(): Promise<SyncOutcome> {
+    // قفل هماهنگ‌سازی میان تب‌های باز مرورگر (تسک ۱۶: Web Locks API)
+    if (typeof navigator !== 'undefined' && 'locks' in navigator && (navigator as any).locks?.request) {
+      try {
+        return await (navigator as any).locks.request(
+          'wh_offline_sync_queue_lock',
+          { ifAvailable: true },
+          async (lock: any) => {
+            if (!lock) {
+              console.log('[OfflineSync] 🔒 تب دیگری در حال پردازش صف است؛ این تب منصرف شد.');
+              return { status: 'nothing-to-sync' };
+            }
+            return await this.executeProcessQueue();
+          }
+        );
+      } catch (e) {
+        console.warn('[OfflineSync] خطای Web Locks API؛ اجرای مستقیم صف:', e);
+        return await this.executeProcessQueue();
+      }
+    }
+    return await this.executeProcessQueue();
+  }
+
+  private async executeProcessQueue(): Promise<SyncOutcome> {
     const queueOutcome = await this.runQueue();
     // صف عکس *بعد* از صف JSON تخلیه می‌شود: اگر توکن منقضی بوده باشد تا اینجا
     // یک بار تازه شده و آپلود عکس با توکن معتبر انجام می‌شود.
@@ -903,63 +944,110 @@ export class OfflineSyncService {
     console.log('[OfflineSync] 🔄 شروع پردازش صف همگام‌سازی تفکیک‌شده...');
 
     try {
-      const currentScope = getCurrentActiveAppScope();
-      const otherScope: AppScope = currentScope === 'warehouse' ? 'finance' : 'warehouse';
+      const currentUserId = getStoredCurrentUserId();
+      let drainPass = 0;
+      const MAX_DRAIN_PASSES = 5;
 
-      const currentDb = getOfflineDb(currentScope);
-      const otherDb = getOfflineDb(otherScope);
+      // تخلیه چندمرحله‌ای (Drain Loop) جهت جلوگیری از جا ماندن تغییرات همزمان (تسک ۱۱)
+      while (drainPass < MAX_DRAIN_PASSES && !transportAborted && !authRequired && this.network.isBrowserOnline) {
+        drainPass++;
 
-      const [currentEntries, otherEntries] = await Promise.all([
-        currentDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
-        otherDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
-      ]);
+        const currentScope = getCurrentActiveAppScope();
+        const otherScope: AppScope = currentScope === 'warehouse' ? 'finance' : 'warehouse';
 
-      const queueJobs: { entry: SyncQueueEntry; db: OfflineDatabase }[] = [
-        ...currentEntries.map((e) => ({ entry: e, db: currentDb })),
-        ...otherEntries.map((e) => ({ entry: e, db: otherDb })),
-      ];
+        const currentDb = getOfflineDb(currentScope);
+        const otherDb = getOfflineDb(otherScope);
 
-      if (queueJobs.length === 0) {
-        console.log('[OfflineSync] ✅ صف‌های هر دو قلمرو خالی هستند');
-        this._lastSyncTime$.next(Date.now());
-        return { status: 'nothing-to-sync' };
-      }
+        const [currentEntries, otherEntries] = await Promise.all([
+          currentDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
+          otherDb.syncQueue.where('status').anyOf(['pending', 'failed']).sortBy('createdAt'),
+        ]);
 
-      console.log(
-        `[OfflineSync] 📋 ${queueJobs.length} درخواست در صف‌های تفکیک‌شده (${currentEntries.length} در ${currentScope}، ${otherEntries.length} در ${otherScope})`
-      );
+        let queueJobs: { entry: SyncQueueEntry; db: OfflineDatabase }[] = [
+          ...currentEntries.map((e) => ({ entry: e, db: currentDb })),
+          ...otherEntries.map((e) => ({ entry: e, db: otherDb })),
+        ];
 
-      for (const { entry, db } of queueJobs) {
-        if (!this.network.isBrowserOnline) {
-          console.log('[OfflineSync] 📴 اتصال قطع شد — پردازش متوقف شد (داده‌ها محفوظ است)');
+        if (queueJobs.length === 0) {
+          if (drainPass === 1) {
+            console.log('[OfflineSync] ✅ صف‌های هر دو قلمرو خالی هستند');
+            this._lastSyncTime$.next(Date.now());
+          }
+          break;
+        }
+
+        // اولویت‌بندی هوشمند صف (تسک ۱): رکوردهای تازه اولویت بالاتر از رکوردهای مکرراً شکست‌خورده دارند
+        queueJobs.sort((a, b) => {
+          const aExceeded = (a.entry.retryCount || 0) >= this.MAX_RETRIES ? 1 : 0;
+          const bExceeded = (b.entry.retryCount || 0) >= this.MAX_RETRIES ? 1 : 0;
+          if (aExceeded !== bExceeded) return aExceeded - bExceeded;
+          return a.entry.createdAt - b.entry.createdAt;
+        });
+
+        console.log(
+          `[OfflineSync] 📋 دور ${drainPass}: ${queueJobs.length} درخواست در صف‌های تفکیک‌شده (${currentEntries.length} در ${currentScope}، ${otherEntries.length} در ${otherScope})`
+        );
+
+        let passProcessed = 0;
+
+        for (const { entry, db } of queueJobs) {
+          if (!this.network.isBrowserOnline) {
+            console.log('[OfflineSync] 📴 اتصال قطع شد — پردازش متوقف شد (داده‌ها محفوظ است)');
+            transportAborted = true;
+            break;
+          }
+
+          // امنیت چندکاربری (تسک ۴): اگر رکورد متعلق به کاربر دیگری است، با توکن کاربر جاری ارسال نشود
+          if (entry.userId && currentUserId && entry.userId !== currentUserId) {
+            console.warn(
+              `[OfflineSync] ⏸️ رکورد ${entry.id} متعلق به کاربر ${entry.userId} است (کاربر لاگین: ${currentUserId})؛ ارسال متوقف شد.`
+            );
+            continue;
+          }
+
+          const result = await this.sendEntry(entry, db);
+          await this.refreshCounts();
+          passProcessed++;
+
+          if (result === 'sent') {
+            synced++;
+            continue;
+          }
+          if (result === 'rejected') {
+            rejected++;
+            continue;
+          }
+          if (result === 'auth-failed') {
+            authRequired = true;
+            break;
+          }
+          if (result === 'server-error') {
+            // رفع Head-of-line Blocking (تسک ۱): اگر رکورد به سقف تلاش رسیده، متوقف نشو و مانع کارهای بعدی نشو
+            if (entry.retryCount >= this.MAX_RETRIES) {
+              console.warn(`[OfflineSync] ⚠️ رکورد ${entry.id} به سقف تلاش مجدد رسید و با خطای سرور معلق شد؛ مسدودسازی برداشته شد.`);
+              continue;
+            }
+            transportAborted = true;
+            break;
+          }
+          // transport-failed: عدم دسترسی واقعی به سرور
           transportAborted = true;
           break;
         }
 
-        const result = await this.sendEntry(entry, db);
-        await this.refreshCounts();
-
-        if (result === 'sent') {
-          synced++;
-          continue;
-        }
-        if (result === 'rejected') {
-          rejected++;
-          continue;
-        }
-        if (result === 'auth-failed') {
-          // ادامه دادن بی‌فایده است — همه درخواست‌ها با همین توکن رد می‌شوند
-          authRequired = true;
+        if (passProcessed === 0) {
+          // همه رکوردهای باقیمانده متعلق به کاربران دیگر یا غیرقابل‌پردازش هستند
           break;
         }
-        // transport-failed یا server-error — سرور در دسترس نیست یا مشکل دارد؛
-        // ادامه دادن فقط سرور را می‌کوبد. متوقف شو و بعداً دوباره تلاش کن.
-        transportAborted = true;
-        break;
+
+        const remainingCount = await this.getPendingCount();
+        if (remainingCount === 0) {
+          break;
+        }
       }
 
       // زمان آخرین همگام‌سازی فقط وقتی معنا دارد که واقعاً با سرور حرف زده باشیم
-      if (!transportAborted) {
+      if (!transportAborted && synced > 0) {
         this._lastSyncTime$.next(Date.now());
       }
     } catch (error) {
@@ -1141,11 +1229,19 @@ export class OfflineSyncService {
       const data = await response.json();
       if (!data?.access) return false;
 
-      // ذخیره توکن جدید در localStorage
+      // ذخیره توکن جدید در localStorage و sessionStorage (تسک ۲۰)
       localStorage.setItem('wh_access_token', data.access);
+      sessionStorage.setItem('wh_access_token', data.access);
+
+      const currentScope = getCurrentActiveAppScope();
+      const scopedKey = currentScope === 'finance' ? 'wh_access_token_finance' : 'wh_access_token_warehouse';
+      sessionStorage.setItem(scopedKey, data.access);
+      localStorage.setItem(scopedKey, data.access);
+
       // ذخیره refresh token جدید
       if (data.refresh) {
         localStorage.setItem('wh_refresh_token', data.refresh);
+        sessionStorage.setItem('wh_refresh_token', data.refresh);
       }
       console.log('[OfflineSync] 🔑 توکن با موفقیت تازه‌سازی شد');
       return true;

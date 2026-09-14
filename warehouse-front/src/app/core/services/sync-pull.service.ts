@@ -1,4 +1,4 @@
-import { offlineDb, SyncCursorEntry } from './offline-db';
+import { offlineDb, warehouseOfflineDb, financeOfflineDb, SyncCursorEntry } from './offline-db';
 import { NetworkStatusService } from './network-status.service';
 import { isServerUnreachable } from './server-reachability';
 import { BehaviorSubject, Subject } from 'rxjs';
@@ -44,6 +44,18 @@ const MODEL_TABLES = PULL_ENTITIES;
  */
 export function buildCursorKey(userId: number, scopeId: number, scopeKind: string = 'warehouse'): string {
   return `${userId}:${scopeKind}:${scopeId}`;
+}
+
+/** شناسه کاربر لاگین‌شده از پروفایل ذخیره‌شده (صف/cursor per-user است) */
+export function getStoredCurrentUserId(): number | null {
+  try {
+    const raw = sessionStorage.getItem('wh_user_profile') || localStorage.getItem('wh_user_profile');
+    if (!raw) return null;
+    const id = JSON.parse(raw)?.id;
+    return typeof id === 'number' ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -180,7 +192,23 @@ export class SyncPullService {
           this.network.reportServerReachable();
 
           if (res.status === 401) return { status: 'auth-required' };
-          if (res.status === 403) return { status: 'forbidden' };
+          if (res.status === 403) {
+            // ابطال دسترسی کاربر به این قلمرو — پاکسازی فوری داده‌های محلی جهت جلوگیری از نشت اطلاعات (تسک ۲۱)
+            console.warn(`[SyncPull] ⛔ دسترسی ۴۰۳ برای قلمرو ${scopeKind} (${scopeId}) — پاکسازی داده‌های محلی`);
+            try {
+              if (scopeKind === 'warehouse') {
+                await Promise.all([
+                  warehouseOfflineDb.items.where('warehouse_id').equals(scopeId).delete(),
+                  warehouseOfflineDb.countTasks.where('warehouse_id').equals(scopeId).delete(),
+                  warehouseOfflineDb.docTasks.where('warehouse_id').equals(scopeId).delete(),
+                  warehouseOfflineDb.dynamicFields.where('warehouse_id').equals(scopeId).delete(),
+                ]);
+              }
+            } catch (clearErr) {
+              console.warn('[SyncPull] خطا در پاکسازی داده‌های قلمرو ابطال‌شده:', clearErr);
+            }
+            return { status: 'forbidden' };
+          }
           if (res.status === 404) {
             // اندپوینت در این پروفایل سرور موجود نیست
             return { status: 'completed', upserted: 0, deleted: 0, bytes: 0 };
@@ -278,11 +306,13 @@ export class SyncPullService {
     let upserted = 0;
     let deleted = 0;
 
-    // sync_id هایی که تغییر ارسال‌نشده در صف دارند — رکوردشان پاک نمی‌شود
-    const pendingEntries = await offlineDb.syncQueue
-      .where('status').anyOf(['pending', 'sending', 'failed']).toArray();
+    // sync_id هایی که تغییر ارسال‌نشده در صف هر دو قلمرو دارند — رکوردشان هرگز پاک نمی‌شود (تسک ۲)
+    const [whPending, finPending] = await Promise.all([
+      warehouseOfflineDb.syncQueue.where('status').anyOf(['pending', 'sending', 'failed']).toArray(),
+      financeOfflineDb.syncQueue.where('status').anyOf(['pending', 'sending', 'failed']).toArray(),
+    ]);
     const pendingSyncIds = new Set(
-      pendingEntries.map((e) => e.entitySyncId).filter((s): s is string => !!s)
+      [...whPending, ...finPending].map((e) => e.entitySyncId).filter((s): s is string => !!s)
     );
 
     for (const [modelKey, rows] of Object.entries(results)) {
@@ -336,14 +366,7 @@ export class SyncPullService {
 
   /** شناسه کاربر لاگین‌شده از پروفایل ذخیره‌شده (صف/cursor per-user است) */
   getCurrentUserId(): number | null {
-    try {
-      const raw = sessionStorage.getItem('wh_user_profile') || localStorage.getItem('wh_user_profile');
-      if (!raw) return null;
-      const id = JSON.parse(raw)?.id;
-      return typeof id === 'number' ? id : null;
-    } catch {
-      return null;
-    }
+    return getStoredCurrentUserId();
   }
 
   /** زمان آخرین Pull موفق (server_time) برای نمایش در UI */

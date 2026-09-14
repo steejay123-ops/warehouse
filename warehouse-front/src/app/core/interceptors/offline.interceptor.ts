@@ -93,29 +93,68 @@ export const offlineInterceptor: HttpInterceptorFn = (
       const queueEntries = await syncService.getQueueEntries();
       if (queueEntries.length === 0) return cachedData;
 
-      // استخراج مسیر پایه از URL (بدون query params)
-      const baseUrl = requestUrl.split('?')[0];
+      // استخراج مسیر پایه و کوئری‌پارامترها از requestUrl (تسک ۹ و ۱۰)
+      const parsedUrl = new URL(requestUrl, 'http://localhost');
+      const baseUrl = requestUrl.split('?')[0].replace(/\/+$/, '');
+      const reqWarehouseId = parsedUrl.searchParams.get('warehouse_id') || parsedUrl.searchParams.get('warehouse');
+      const reqPage = parsedUrl.searchParams.get('page');
+      const isFirstPage = !reqPage || reqPage === '1';
+      const reqSearch = parsedUrl.searchParams.get('search')?.trim().toLowerCase();
 
-      // پیدا کردن رکوردهای صف مرتبط با این endpoint
-      const relatedPosts = queueEntries.filter(
-        (e) => e.method === 'POST' && e.url.split('?')[0] === baseUrl
+      // تابع کمکی تطبیق دقیق مسیر برای منبع فرزند مستقیم (نه زیرمنبع‌های تودرتو مانند /photos/ یا /stats/)
+      const matchDirectResource = (targetUrl: string): { matches: boolean; recordId: number | null; syncId: string | null } => {
+        const cleanTarget = targetUrl.split('?')[0].replace(/\/+$/, '');
+        const prefix = baseUrl + '/';
+        if (!cleanTarget.startsWith(prefix)) return { matches: false, recordId: null, syncId: null };
+        const remainder = cleanTarget.slice(prefix.length);
+        if (remainder.includes('/')) return { matches: false, recordId: null, syncId: null }; // زیرمنبع تودرتو است (تسک ۹)
+        const num = parseInt(remainder, 10);
+        return {
+          matches: true,
+          recordId: !isNaN(num) ? num : null,
+          syncId: isNaN(num) ? remainder : null,
+        };
+      };
+
+      // پیدا کردن رکوردهای صف مرتبط با این endpoint با تطبیق دقیق و احترام به فیلترها (تسک ۱۰)
+      const relatedPosts = queueEntries.filter((e) => {
+        if (e.method !== 'POST') return false;
+        const postBase = e.url.split('?')[0].replace(/\/+$/, '');
+        if (postBase !== baseUrl) return false;
+
+        // فقط به صفحه اول اضافه شود
+        if (!isFirstPage) return false;
+        if (reqWarehouseId && e.body && typeof e.body === 'object') {
+          const bodyWh = e.body.warehouse_id || e.body.warehouse;
+          if (bodyWh && String(bodyWh) !== String(reqWarehouseId)) return false;
+        }
+        if (reqSearch && e.body && typeof e.body === 'object') {
+          const text = JSON.stringify(e.body).toLowerCase();
+          if (!text.includes(reqSearch)) return false;
+        }
+        return true;
+      });
+
+      const relatedPatches = queueEntries
+        .filter((e) => e.method === 'PATCH' || e.method === 'PUT')
+        .map((e) => ({ entry: e, match: matchDirectResource(e.url) }))
+        .filter((item) => item.match.matches);
+
+      const relatedDeletes = queueEntries
+        .filter((e) => e.method === 'DELETE')
+        .map((e) => ({ entry: e, match: matchDirectResource(e.url) }))
+        .filter((item) => item.match.matches);
+
+      const deletedIds = new Set(
+        relatedDeletes.map((d) => d.match.recordId).filter((id): id is number => id !== null)
       );
-      const relatedPatches = queueEntries.filter(
-        (e) => (e.method === 'PATCH' || e.method === 'PUT') && e.url.split('?')[0].startsWith(baseUrl)
-      );
-      const relatedDeletes = queueEntries.filter(
-        (e) => e.method === 'DELETE' && e.url.split('?')[0].startsWith(baseUrl)
+      const deletedSyncIds = new Set(
+        relatedDeletes.map((d) => d.match.syncId).filter((s): s is string => s !== null)
       );
 
-      // استخراج ID رکوردهای حذف‌شده آفلاین: /api/items/123/ → 123
-      const deletedIds = relatedDeletes
-        .map((d) => {
-          const parts = d.url.split('?')[0].replace(/\/$/, '').split('/');
-          return parseInt(parts[parts.length - 1], 10);
-        })
-        .filter((id) => !isNaN(id));
-
-      if (relatedPosts.length === 0 && relatedPatches.length === 0 && deletedIds.length === 0) return cachedData;
+      if (relatedPosts.length === 0 && relatedPatches.length === 0 && deletedIds.size === 0 && deletedSyncIds.size === 0) {
+        return cachedData;
+      }
 
       // ──── ادغام: پاسخ Django REST Framework (ساختار paginated) ────
       let mergedData = JSON.parse(JSON.stringify(cachedData)); // deep clone
@@ -126,22 +165,28 @@ export const offlineInterceptor: HttpInterceptorFn = (
           // POST — اضافه کردن رکوردهای جدید به ابتدای لیست
           for (const post of relatedPosts) {
             if (post.body && typeof post.body === 'object') {
+              const postTempId = post.body.id ?? (post.id ? -post.id : -Date.now());
               mergedData.results.unshift({
                 ...post.body,
+                id: postTempId,
+                _tempId: postTempId,
                 _offlineId: post.id,
                 _offlinePending: true,
+                ...(post.entitySyncId ? { sync_id: post.entitySyncId } : {}),
               });
             }
           }
 
-          // PATCH/PUT — به‌روزرسانی رکوردهای موجود
-          for (const patch of relatedPatches) {
-            // استخراج ID از URL: مثلا /api/items/123/ → 123
-            const urlParts = patch.url.replace(/\/$/, '').split('/');
-            const recordId = parseInt(urlParts[urlParts.length - 1], 10);
+          // PATCH/PUT — به‌روزرسانی رکوردهای موجود با تطبیق شناسه عددی یا sync_id
+          for (const patchItem of relatedPatches) {
+            const patch = patchItem.entry;
+            const { recordId, syncId } = patchItem.match;
 
-            if (!isNaN(recordId) && patch.body) {
-              const index = mergedData.results.findIndex((r: any) => r.id === recordId);
+            if (patch.body) {
+              const index = mergedData.results.findIndex((r: any) =>
+                (recordId !== null && r.id === recordId) ||
+                (syncId !== null && (r.sync_id === syncId || String(r.id) === syncId))
+              );
               if (index !== -1) {
                 mergedData.results[index] = {
                   ...mergedData.results[index],
@@ -154,9 +199,11 @@ export const offlineInterceptor: HttpInterceptorFn = (
 
           // DELETE — حذف رکوردهای حذف‌شده آفلاین از لیست
           let removedCount = 0;
-          if (deletedIds.length > 0) {
+          if (deletedIds.size > 0 || deletedSyncIds.size > 0) {
             const before = mergedData.results.length;
-            mergedData.results = mergedData.results.filter((r: any) => !deletedIds.includes(r.id));
+            mergedData.results = mergedData.results.filter(
+              (r: any) => !deletedIds.has(r.id) && !(r.sync_id && deletedSyncIds.has(r.sync_id))
+            );
             removedCount = before - mergedData.results.length;
           }
 
@@ -168,19 +215,26 @@ export const offlineInterceptor: HttpInterceptorFn = (
           // اگر پاسخ مستقیم آرایه باشد (بدون pagination)
           for (const post of relatedPosts) {
             if (post.body && typeof post.body === 'object') {
+              const postTempId = post.body.id ?? (post.id ? -post.id : -Date.now());
               mergedData.unshift({
                 ...post.body,
+                id: postTempId,
+                _tempId: postTempId,
                 _offlineId: post.id,
                 _offlinePending: true,
+                ...(post.entitySyncId ? { sync_id: post.entitySyncId } : {}),
               });
             }
           }
 
-          for (const patch of relatedPatches) {
-            const urlParts = patch.url.replace(/\/$/, '').split('/');
-            const recordId = parseInt(urlParts[urlParts.length - 1], 10);
-            if (!isNaN(recordId) && patch.body) {
-              const index = mergedData.findIndex((r: any) => r.id === recordId);
+          for (const patchItem of relatedPatches) {
+            const patch = patchItem.entry;
+            const { recordId, syncId } = patchItem.match;
+            if (patch.body) {
+              const index = mergedData.findIndex((r: any) =>
+                (recordId !== null && r.id === recordId) ||
+                (syncId !== null && (r.sync_id === syncId || String(r.id) === syncId))
+              );
               if (index !== -1) {
                 mergedData[index] = { ...mergedData[index], ...patch.body, _offlinePending: true };
               }
@@ -188,13 +242,15 @@ export const offlineInterceptor: HttpInterceptorFn = (
           }
 
           // DELETE — حذف رکوردهای حذف‌شده آفلاین از آرایه
-          if (deletedIds.length > 0) {
-            mergedData = mergedData.filter((r: any) => !deletedIds.includes(r.id));
+          if (deletedIds.size > 0 || deletedSyncIds.size > 0) {
+            mergedData = mergedData.filter(
+              (r: any) => !deletedIds.has(r.id) && !(r.sync_id && deletedSyncIds.has(r.sync_id))
+            );
           }
         }
       }
 
-      console.log(`[OfflineInterceptor] 🔀 ادغام: ${relatedPosts.length} POST + ${relatedPatches.length} PATCH/PUT + ${deletedIds.length} DELETE`);
+      console.log(`[OfflineInterceptor] 🔀 ادغام ایمن: ${relatedPosts.length} POST + ${relatedPatches.length} PATCH/PUT + ${relatedDeletes.length} DELETE`);
       return mergedData;
     } catch (error) {
       console.error('[OfflineInterceptor] خطا در ادغام:', error);
@@ -340,17 +396,61 @@ export const offlineInterceptor: HttpInterceptorFn = (
     }
 
     const fullUrl = req.url;
-    return from(syncService.enqueue(req.method, fullUrl, req.body)).pipe(
+
+    // استخراج متادیتای هویتی برای صف و reconciliation (تسک ۳)
+    let entityType: string | undefined = req.headers.get('X-Entity-Type') || undefined;
+    let entitySyncId: string | undefined = req.headers.get('X-Entity-Sync-Id') || undefined;
+    let baseUpdatedAt: string | undefined = req.headers.get('X-Base-Updated-At') || undefined;
+
+    const lowerUrl = fullUrl.toLowerCase();
+    if (!entityType) {
+      if (lowerUrl.includes('/items/')) entityType = 'item';
+      else if (lowerUrl.includes('/count-tasks/') || lowerUrl.includes('/tasks/')) entityType = 'count_task';
+      else if (lowerUrl.includes('/doc-tasks/')) entityType = 'doc_task';
+      else if (lowerUrl.includes('/dynamic-fields/')) entityType = 'dynamic_field';
+      else if (lowerUrl.includes('/attendance/')) entityType = 'daily_attendance';
+    }
+
+    let modifiedBody: any = req.body;
+    if (req.body && typeof req.body === 'object') {
+      const bodyObj = req.body as any;
+      entitySyncId = entitySyncId || bodyObj.sync_id || bodyObj._offlineSyncId;
+      baseUpdatedAt = baseUpdatedAt || bodyObj.base_updated_at || bodyObj.updated_at;
+      if (!entitySyncId && req.method === 'POST') {
+        entitySyncId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `sync_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        modifiedBody = { ...bodyObj, sync_id: entitySyncId };
+      }
+    }
+
+    return from(
+      syncService.enqueue(req.method, fullUrl, modifiedBody, {
+        entityType,
+        entitySyncId,
+        baseUpdatedAt,
+      })
+    ).pipe(
       switchMap((entry) => {
-        console.log(`[OfflineInterceptor] 📥 ذخیره در صف آفلاین: ${req.method} ${fullUrl}`);
-        // پاسخ خوش‌بینانه (Optimistic Response)
+        console.log(`[OfflineInterceptor] 📥 ذخیره در صف آفلاین: ${req.method} ${fullUrl} [${entityType || 'unknown'}]`);
+
+        // تولید شناسه معتبر محلی در پاسخ خوش‌بینانه متد POST (تسک ۸)
+        const hasExistingId = modifiedBody && typeof modifiedBody === 'object' && (modifiedBody as any).id;
+        const tempId = hasExistingId ? (modifiedBody as any).id : (entry.id ? -entry.id : -Date.now());
+
+        const optimisticBody = {
+          ...(typeof modifiedBody === 'object' && modifiedBody !== null ? modifiedBody : {}),
+          id: tempId,
+          _tempId: tempId,
+          _offlineId: entry.id,
+          _offlinePending: true,
+          ...(entitySyncId ? { sync_id: entitySyncId } : {}),
+        };
+
         return of(
           new HttpResponse({
-            body: {
-              ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
-              _offlineId: entry.id,
-              _offlinePending: true,
-            },
+            body: optimisticBody,
             status: 200,
             statusText: 'OK (Queued Offline)',
             url: req.url,

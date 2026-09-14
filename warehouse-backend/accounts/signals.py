@@ -67,7 +67,7 @@ def serialize_login_log_data(instance):
         }
 
 
-def broadcast_audit_log_created(log_id, warehouse_id, log_data, message=None):
+def broadcast_audit_log_created(log_id, warehouse_id, log_data, message=''):
     """
     ارسال بلادرنگ رویداد ایجاد لاگ ممیزی به کانال وب‌سوکت سراسری
     """
@@ -77,7 +77,7 @@ def broadcast_audit_log_created(log_id, warehouse_id, log_data, message=None):
             payload = {
                 'type': 'send_notification',
                 'type_str': 'audit_log_created',
-                'message': message or 'ثبت لاگ ممیزی جدید در سامانه',
+                'message': message or '',
                 'log_id': log_id,
                 'log': log_data,
             }
@@ -92,7 +92,7 @@ def broadcast_audit_log_created(log_id, warehouse_id, log_data, message=None):
         logger.warning(f"[WebSocket] Error broadcasting audit_log_created: {e}")
 
 
-def broadcast_login_log_created(login_id, login_data, message=None):
+def broadcast_login_log_created(login_id, login_data, message=''):
     """
     ارسال بلادرنگ رویداد ثبت ورود/خروج به کانال وب‌سوکت سراسری
     """
@@ -102,7 +102,7 @@ def broadcast_login_log_created(login_id, login_data, message=None):
             payload = {
                 'type': 'send_notification',
                 'type_str': 'login_log_created',
-                'message': message or 'ثبت رویداد ورود کاربر در سامانه',
+                'message': message or '',
                 'login_id': login_id,
                 'login_log': login_data,
             }
@@ -126,16 +126,13 @@ def audit_log_post_save(sender, instance, created, **kwargs):
         log_data = serialize_audit_log_data(instance)
         log_id = instance.id
         wh_id = instance.warehouse_id
-        action_name = instance.get_action_display() if hasattr(instance, 'get_action_display') else instance.action
-        mod_name = instance.get_module_display() if hasattr(instance, 'get_module_display') else instance.module
-        msg = f"ثبت رویداد ممیزی: {action_name} در {mod_name}"
 
         def send_broadcast():
             broadcast_audit_log_created(
                 log_id=log_id,
                 warehouse_id=wh_id,
                 log_data=log_data,
-                message=msg
+                message=''
             )
 
         transaction.on_commit(send_broadcast)
@@ -154,14 +151,12 @@ def login_log_post_save(sender, instance, created, **kwargs):
     try:
         login_data = serialize_login_log_data(instance)
         login_id = instance.id
-        status_name = instance.get_status_display() if hasattr(instance, 'get_status_display') else instance.status
-        msg = f"ثبت لاگ ورود: {instance.username_attempted} ({status_name})"
 
         def send_broadcast():
             broadcast_login_log_created(
                 login_id=login_id,
                 login_data=login_data,
-                message=msg
+                message=''
             )
 
         transaction.on_commit(send_broadcast)

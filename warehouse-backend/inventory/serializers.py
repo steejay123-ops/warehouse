@@ -114,6 +114,7 @@ class ItemPhotoUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 class ItemSerializer(serializers.ModelSerializer):
+    sync_id = serializers.UUIDField(required=False, allow_null=True)
     created_by_name = serializers.SerializerMethodField()
     modified_by_name = serializers.SerializerMethodField()
     warehouse_name = serializers.SerializerMethodField()
@@ -260,6 +261,8 @@ class DocTaskHistorySerializer(serializers.ModelSerializer):
         return None
 
 class DocTaskSerializer(serializers.ModelSerializer):
+    sync_id = serializers.UUIDField(required=False, allow_null=True)
+    warehouse_id = serializers.IntegerField(source='item.warehouse_id', read_only=True)
     doc_worker_name = serializers.SerializerMethodField()
     doc_supervisor_name = serializers.SerializerMethodField()
     assigned_manager_name = serializers.SerializerMethodField()
@@ -269,7 +272,7 @@ class DocTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocTask
         fields = '__all__'
-        read_only_fields = ('created_at', 'updated_at', 'created_by', 'modified_by', 'sync_id')
+        read_only_fields = ('created_at', 'updated_at', 'created_by', 'modified_by')
 
     def get_doc_worker_name(self, obj):
         if obj.doc_worker:

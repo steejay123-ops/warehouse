@@ -179,6 +179,7 @@ def _soft_delete_items_cascade(items_qs):
     )
     soft_delete_queryset(CountTaskHistory.objects.filter(task__item_id__in=item_ids))
     soft_delete_queryset(CountTask.objects.filter(item_id__in=item_ids))
+    soft_delete_queryset(DocTask.objects.filter(item_id__in=item_ids))
     return soft_delete_queryset(Item.objects.filter(id__in=item_ids))
 
 
@@ -445,6 +446,19 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     ordering_fields = '__all__'
     parser_classes = (MultiPartParser, FormParser, *viewsets.ModelViewSet.parser_classes)
 
+    def get_object(self):
+        """
+        زیرساخت سینک: اگر pk عددی نبود، به‌عنوان sync_id تفسیر می‌شود (تسک ۲۲).
+        """
+        pk = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        if pk is not None and not str(pk).isdigit():
+            from django.shortcuts import get_object_or_404
+            queryset = self.filter_queryset(self.get_queryset())
+            obj = get_object_or_404(queryset, sync_id=pk)
+            self.check_object_permissions(self.request, obj)
+            return obj
+        return super().get_object()
+
     def get_queryset(self):
         # photo_prefetch جلوی N+1 عکس‌ها را می‌گیرد: بدون آن هر ردیف یک COUNT و
         # یک SELECT جدا برای بندانگشتی می‌زد (صفحه ۱۰۰ ردیفی = ۲۰۰ کوئری اضافه).
@@ -453,7 +467,17 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         from accounts.audit_utils import log_audit_event
-        # احیای رکورد حذف‌نرم با همان (انبار، کد یکتا) به‌جای INSERT تکراری
+        # ۱. بررسی idempotency بر مبنای sync_id (تسک ۱۴)
+        sync_id = serializer.validated_data.get('sync_id')
+        existing_by_sync = Item.all_objects.filter(sync_id=sync_id).first() if sync_id else None
+        if existing_by_sync:
+            serializer.instance = existing_by_sync
+            instance = serializer.save(is_deleted=False)
+            if existing_by_sync.is_deleted:
+                _restore_item_photos_cascade([instance.id])
+            return
+
+        # ۲. احیای رکورد حذف‌نرم با همان (انبار، کد یکتا) به‌جای INSERT تکراری
         tombstone = Item.all_objects.filter(
             warehouse=serializer.validated_data.get('warehouse'),
             fa_unic_code=serializer.validated_data.get('fa_unic_code'),
@@ -506,6 +530,21 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
+
+        # تشخیص تداخل خوش‌بینانه بر اساس base_updated_at (تسک ۶)
+        base_raw = request.data.get('base_updated_at') or request.data.get('baseUpdatedAt')
+        if base_raw:
+            from django.utils.dateparse import parse_datetime
+            base = parse_datetime(str(base_raw))
+            if base is not None:
+                if timezone.is_naive(base):
+                    base = timezone.make_aware(base)
+                instance = self.get_object()
+                if (instance.updated_at - base).total_seconds() > 0.001:
+                    return Response({
+                        'detail': 'conflict',
+                        'server_record': self.get_serializer(instance).data,
+                    }, status=409)
         
         user = request.user
         if not (user.is_superuser or user.has_perm('accounts.perm_wh_edit')):
@@ -4069,6 +4108,46 @@ class CountTaskViewSet(viewsets.ModelViewSet):
 class DocTaskViewSet(viewsets.ModelViewSet):
     serializer_class = DocTaskSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        """
+        زیرساخت سینک: اگر pk عددی نبود، به‌عنوان sync_id تفسیر می‌شود (تسک ۲۲).
+        """
+        pk = self.kwargs.get(self.lookup_url_kwarg or self.lookup_field)
+        if pk is not None and not str(pk).isdigit():
+            from django.shortcuts import get_object_or_404
+            queryset = self.filter_queryset(self.get_queryset())
+            obj = get_object_or_404(queryset, sync_id=pk)
+            self.check_object_permissions(self.request, obj)
+            return obj
+        return super().get_object()
+
+    def perform_create(self, serializer):
+        # بررسی idempotency بر مبنای sync_id (تسک ۱۴)
+        sync_id = serializer.validated_data.get('sync_id')
+        existing = DocTask.all_objects.filter(sync_id=sync_id).first() if sync_id else None
+        if existing:
+            serializer.instance = existing
+            serializer.save(is_deleted=False)
+            return
+        serializer.save(created_by=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        # تشخیص تداخل خوش‌بینانه بر اساس base_updated_at (تسک ۶)
+        base_raw = request.data.get('base_updated_at') or request.data.get('baseUpdatedAt')
+        if base_raw:
+            from django.utils.dateparse import parse_datetime
+            base = parse_datetime(str(base_raw))
+            if base is not None:
+                if timezone.is_naive(base):
+                    base = timezone.make_aware(base)
+                instance = self.get_object()
+                if (instance.updated_at - base).total_seconds() > 0.001:
+                    return Response({
+                        'detail': 'conflict',
+                        'server_record': self.get_serializer(instance).data,
+                    }, status=409)
+        return super().update(request, *args, **kwargs)
 
     def get_permissions(self):
         from accounts.permissions import HasMenuAccess

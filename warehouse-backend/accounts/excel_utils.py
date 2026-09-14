@@ -6,6 +6,7 @@ import io
 import re
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.defined_name import DefinedName
 from common.excel_utils import (
     styled_cell, apply_header_styles_to_row, set_column_widths, 
     freeze_header_panes, find_data_start_and_mapping, jalali_now_str,
@@ -293,7 +294,8 @@ def generate_id_cards_excel(queryset):
 
 def generate_users_template():
     """
-    تولید فایل قالب نمونه دو سطری با اعتبارسنجی درون اکسل و شیت دوم راهنما
+    تولید فایل قالب نمونه دو سطری پویا با اعتبارسنجی درون اکسل متصل به دیتابیس زنده،
+    شیت دوم راهنما و مقادیر مجاز، و شیت سوم مراجع داده
     """
     wb = Workbook()
     ws = wb.active
@@ -317,37 +319,56 @@ def generate_users_template():
     apply_header_styles_to_row(key_row, is_key_row=True)
     ws.append(key_row)
 
-    sample_role = ''
-    first_group = Group.objects.first()
-    if first_group:
-        cr = getattr(first_group, 'customrole', None)
-        sample_role = cr.title if cr and cr.title else first_group.name
+    # ۱. استخراج داده‌های زنده از پایگاه داده
+    # الف) نقش‌های فعال همراه با گزینه «همه نقش‌ها»
+    roles_qs = CustomRole.objects.all().order_by('title', 'name')
+    role_titles = [r.title or r.name for r in roles_qs if (r.title or r.name)]
+    if not role_titles:
+        role_titles = ['کاربر عادی', 'سرپرست انبار', 'مدیر سیستم']
+    dropdown_roles = ['همه نقش‌ها'] + [r for r in role_titles if r != 'همه نقش‌ها']
 
-    sample_wh = ''
+    # ب) انبارهای فعال همراه با گزینه «همه انبارها»
+    wh_names = []
     WhModel = _warehouse_model()
     if WhModel is not None:
-        first_wh = WhModel.objects.first()
-        if first_wh:
-            sample_wh = first_wh.name
+        wh_names = [w.name for w in WhModel.objects.all().order_by('name') if w.name and w.name.strip()]
+    if not wh_names:
+        wh_names = ['انبار مرکزی']
+    dropdown_warehouses = ['همه انبارها'] + [w for w in wh_names if w != 'همه انبارها']
+
+    # ج) گروه‌های خونی
+    blood_types = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-']
+
+    # د) وضعیت فعال
+    active_statuses = ['بله', 'خیر']
+
+    # ه) شرکت‌های متبوع
+    companies = list(CustomUser.objects.exclude(company__isnull=True).exclude(company__exact='').values_list('company', flat=True).distinct())
+    companies = [c.strip() for c in companies if c and c.strip()]
+    if not companies:
+        companies = ['شرکت اصلی', 'پیمانکار']
+
+    # و) مناطق عملیاتی
+    zones = list(CustomUser.objects.exclude(operational_zone__isnull=True).exclude(operational_zone__exact='').values_list('operational_zone', flat=True).distinct())
+    zones = [z.strip() for z in zones if z and z.strip()]
+    if not zones:
+        zones = ['منطقه ۱ - جنوب', 'منطقه ۲ - مرکز', 'منطقه ۳ - شمال']
+
+    # ۲. درج داده‌های نمونه پویا
+    sample_role_1 = role_titles[0]
+    sample_role_2 = 'همه نقش‌ها'
+    sample_wh_1 = wh_names[0]
+    sample_wh_2 = 'همه انبارها'
 
     sample_data = [
-        ['علی', 'محمدی', 'ali.mohammadi', '1234567890', '09121234567', 'ali@example.com', 'O+', '09129998877', 'منطقه ۱ - جنوب', 'شرکت نفت و گاز', 'تهران، خیابان ولیعصر', sample_role, sample_wh, 'بله'],
-        ['فاطمه', 'احمدی', '', '0987654321', '09351234567', 'fatemeh@example.com', 'A+', '09359998877', 'منطقه ۲ - مرکز', 'پیمانکار فارس عالیش', 'شیراز، بلوار ارم', sample_role, sample_wh, 'بله'],
+        ['علی', 'محمدی', 'ali.mohammadi', '1234567890', '09121234567', 'ali@example.com', 'O+', '09129998877', zones[0], companies[0], 'تهران، خیابان ولیعصر', sample_role_1, sample_wh_1, 'بله'],
+        ['فاطمه', 'احمدی', '', '0987654321', '09351234567', 'fatemeh@example.com', 'A+', '09359998877', zones[1] if len(zones) > 1 else zones[0], companies[1] if len(companies) > 1 else companies[0], 'شیراز، بلوار ارم', sample_role_2, sample_wh_2, 'بله'],
     ]
 
     for row in sample_data:
         ws.append(sanitize_excel_row(row))
 
-    # ۱. اعتبارسنجی درون اکسل (Data Validation Dropdown) برای ستون فعال (N)
-    dv_active = DataValidation(type="list", formula1=chr(34) + "بله,خیر" + chr(34), allow_blank=True)
-    dv_active.error = 'مقدار فیلد فعال باید «بله» یا «خیر» باشد.'
-    dv_active.errorTitle = 'مقدار نامعتبر'
-    dv_active.prompt = 'لطفاً وضعیت حساب را انتخاب کنید'
-    dv_active.promptTitle = 'وضعیت فعال/غیرفعال'
-    ws.add_data_validation(dv_active)
-    dv_active.add("N3:N500")
-
-    # ۲. شیت دوم: راهنما، ضوابط و مقادیر مجاز (Help Sheet)
+    # ۳. شیت دوم: راهنما، ضوابط و مقادیر مجاز (Help Sheet)
     ws_help = wb.create_sheet(title='راهنما و مقادیر مجاز')
     ws_help.sheet_view.rightToLeft = True
 
@@ -375,13 +396,13 @@ def generate_users_template():
         ['کد ملی (national_code)', 'اختیاری / توصیه‌شده', 'دقیقاً ۱۰ رقم عددی بدون خط تیره (جهت تولید شناسه و رمز عبور اولیه)', '1234567890'],
         ['تلفن (phone_number)', 'اختیاری', '۱۱ رقم عددی همراه با ۰۹', '09121234567'],
         ['ایمیل (email)', 'اختیاری', 'آدرس ایمیل معتبر استاندارد', 'ali@example.com'],
-        ['گروه خونی (blood_type)', 'اختیاری', 'گروه خونی با فرمت معتبر مانند O+, A+, B+, AB-', 'O+'],
+        ['گروه خونی (blood_type)', 'اختیاری', 'انتخاب از منوی کشویی: O+, A+, B+, AB-, ...', 'O+'],
         ['تماس اضطراری (emergency_contact)', 'اختیاری', 'شماره تماس بستگان یا رابط اضطراری', '09129998877'],
-        ['منطقه عملیاتی (operational_zone)', 'اختیاری', 'عنوان منطقه یا سایت مربوطه', 'منطقه ۱ - جنوب'],
-        ['شرکت متبوع (company)', 'اختیاری', 'نام شرکت یا واحد سازمانی', 'پیمانکار فارس عالیش'],
+        ['منطقه عملیاتی (operational_zone)', 'اختیاری', 'انتخاب از منوی کشویی یا تایپ عنوان دلخواه', 'منطقه ۱ - جنوب'],
+        ['شرکت متبوع (company)', 'اختیاری', 'انتخاب از منوی کشویی یا تایپ نام شرکت دلخواه', 'پیمانکار فارس عالیش'],
         ['آدرس (address)', 'اختیاری', 'آدرس پستی یا محل سکونت', 'تهران، خیابان ولیعصر'],
-        ['نقش‌ها (roles)', 'اختیاری', 'عنوان یا کد نقش‌ها از جدول زیر (تفکیک با ویرگول فارسی «،»)', 'سرپرست انبار، انبارگردان'],
-        ['انبارها (warehouses)', 'اختیاری', 'کد یا نام انبارها از جدول زیر (تفکیک با «،»)', 'WH-1، انبار مرکزی'],
+        ['نقش‌ها (roles)', 'اختیاری', 'انتخاب از منوی کشویی: «همه نقش‌ها» جهت انتساب کلیه نقش‌ها، یا انتخاب نقش‌های مجزا (تفکیک با «،»)', 'همه نقش‌ها'],
+        ['انبارها (warehouses)', 'اختیاری', 'انتخاب از منوی کشویی: «همه انبارها» جهت دسترسی به تمامی انبارها، یا انتخاب انبار مشخص (تفکیک با «،»)', 'همه انبارها'],
         ['فعال (is_active)', 'الزامی', 'انتخاب از منوی کشویی: بله یا خیر', 'بله'],
     ]
     for r in help_rules:
@@ -390,10 +411,11 @@ def generate_users_template():
     ws_help.append([])
     ws_help.append([])
 
-    # جدول مرجع نقش‌های فعال
+    # جدول مرجع نقش‌های فعال در راهنما
     roles_h = [styled_cell(ws_help, 'عنوان فارسی نقش'), styled_cell(ws_help, 'نام انگلیسی سیستمی'), styled_cell(ws_help, 'توضیحات')]
     apply_header_styles_to_row(roles_h, is_key_row=False)
     ws_help.append(roles_h)
+    ws_help.append(['همه نقش‌ها', 'ALL_ROLES', 'تخصیص کلیه نقش‌های فعال سیستم'])
     for g in Group.objects.all():
         cr = getattr(g, 'customrole', None)
         title = cr.title if cr and cr.title else g.name
@@ -402,14 +424,107 @@ def generate_users_template():
     ws_help.append([])
     ws_help.append([])
 
-    # جدول مرجع انبارهای فعال
+    # جدول مرجع انبارهای فعال در راهنما
     whs_h = [styled_cell(ws_help, 'نام انبار'), styled_cell(ws_help, 'کد انبار'), styled_cell(ws_help, 'وضعیت')]
     apply_header_styles_to_row(whs_h, is_key_row=False)
     ws_help.append(whs_h)
-    WhModel = _warehouse_model()
+    ws_help.append(['همه انبارها', 'ALL_WAREHOUSES', 'دسترسی مجاز به کلیه انبارهای فعال سیستم'])
     if WhModel is not None:
         for wh in WhModel.objects.all():
             ws_help.append([wh.name, wh.code or '', 'فعال'])
+
+    # ۴. شیت سوم: مراجع داده (Data References) - مخفی‌سازی کامل شیت جهت عدم نمایش ستون‌های اضافی به کاربر
+    ws_ref = wb.create_sheet(title='مراجع داده')
+    ws_ref.sheet_state = 'hidden'
+    ws_ref.sheet_view.rightToLeft = True
+
+    REF_HEADERS = ['نقش‌های فعال', 'انبارهای فعال', 'گروه خونی', 'وضعیت فعال', 'شرکت‌های ثبت‌شده', 'مناطق عملیاتی']
+    ref_h_row = [styled_cell(ws_ref, h) for h in REF_HEADERS]
+    apply_header_styles_to_row(ref_h_row, is_key_row=False)
+    ws_ref.append(ref_h_row)
+
+    max_ref_len = max(len(dropdown_roles), len(dropdown_warehouses), len(blood_types), len(active_statuses), len(companies), len(zones))
+    for r_idx in range(max_ref_len):
+        row_vals = [
+            dropdown_roles[r_idx] if r_idx < len(dropdown_roles) else '',
+            dropdown_warehouses[r_idx] if r_idx < len(dropdown_warehouses) else '',
+            blood_types[r_idx] if r_idx < len(blood_types) else '',
+            active_statuses[r_idx] if r_idx < len(active_statuses) else '',
+            companies[r_idx] if r_idx < len(companies) else '',
+            zones[r_idx] if r_idx < len(zones) else ''
+        ]
+        ws_ref.append(row_vals)
+
+    set_column_widths(ws_ref, [
+        {'width': 26},
+        {'width': 26},
+        {'width': 14},
+        {'width': 14},
+        {'width': 26},
+        {'width': 26}
+    ])
+    freeze_header_panes(ws_ref, row=2)
+
+    # تعریف دامنه‌های نام‌گذاری‌شده در ورک‌بوک
+    wb.defined_names['RolesList'] = DefinedName('RolesList', attr_text=f"'مراجع داده'!$A$2:$A${len(dropdown_roles)+1}")
+    wb.defined_names['WarehousesList'] = DefinedName('WarehousesList', attr_text=f"'مراجع داده'!$B$2:$B${len(dropdown_warehouses)+1}")
+    wb.defined_names['BloodTypesList'] = DefinedName('BloodTypesList', attr_text=f"'مراجع داده'!$C$2:$C${len(blood_types)+1}")
+    wb.defined_names['ActiveStatusList'] = DefinedName('ActiveStatusList', attr_text=f"'مراجع داده'!$D$2:$D${len(active_statuses)+1}")
+    wb.defined_names['CompaniesList'] = DefinedName('CompaniesList', attr_text=f"'مراجع داده'!$E$2:$E${len(companies)+1}")
+    wb.defined_names['ZonesList'] = DefinedName('ZonesList', attr_text=f"'مراجع داده'!$F$2:$F${len(zones)+1}")
+
+    # ۵. الصاق اعتبارسنجی‌های کشویی (Data Validations) به شیت اول
+    # گروه خونی (ستون G)
+    dv_blood = DataValidation(type="list", formula1='=BloodTypesList', allow_blank=True)
+    dv_blood.error = 'لطفاً یکی از گروه‌های خونی استاندارد (مانند O+، A+، B- و ...) را انتخاب کنید.'
+    dv_blood.errorTitle = 'گروه خونی نامعتبر'
+    dv_blood.prompt = 'گروه خونی را از منوی کشویی انتخاب کنید'
+    dv_blood.promptTitle = 'گروه خونی'
+    dv_blood.showErrorMessage = True
+    ws.add_data_validation(dv_blood)
+    dv_blood.add("G3:G500")
+
+    # منطقه عملیاتی (ستون I)
+    dv_zone = DataValidation(type="list", formula1='=ZonesList', allow_blank=True)
+    dv_zone.prompt = 'منطقه عملیاتی را از منوی کشویی انتخاب کنید یا عنوان دلخواه وارد نمایید.'
+    dv_zone.promptTitle = 'منطقه عملیاتی'
+    dv_zone.showErrorMessage = False
+    ws.add_data_validation(dv_zone)
+    dv_zone.add("I3:I500")
+
+    # شرکت متبوع (ستون J)
+    dv_comp = DataValidation(type="list", formula1='=CompaniesList', allow_blank=True)
+    dv_comp.prompt = 'شرکت متبوع را از منوی کشویی انتخاب کنید یا عنوان دلخواه وارد نمایید.'
+    dv_comp.promptTitle = 'شرکت متبوع'
+    dv_comp.showErrorMessage = False
+    ws.add_data_validation(dv_comp)
+    dv_comp.add("J3:J500")
+
+    # نقش‌ها (ستون L)
+    dv_roles = DataValidation(type="list", formula1='=RolesList', allow_blank=True)
+    dv_roles.prompt = 'نقش سازمانی را از منوی کشویی انتخاب کنید. برای چند نقش، با ویرگول (،) تفکیک نمایید.'
+    dv_roles.promptTitle = 'نقش سازمانی'
+    dv_roles.showErrorMessage = False
+    ws.add_data_validation(dv_roles)
+    dv_roles.add("L3:L500")
+
+    # انبارها (ستون M)
+    dv_wh = DataValidation(type="list", formula1='=WarehousesList', allow_blank=True)
+    dv_wh.prompt = 'انبار مجاز را از منوی کشویی انتخاب کنید. برای چند انبار، با ویرگول (،) تفکیک نمایید.'
+    dv_wh.promptTitle = 'انبار مجاز'
+    dv_wh.showErrorMessage = False
+    ws.add_data_validation(dv_wh)
+    dv_wh.add("M3:M500")
+
+    # وضعیت فعال (ستون N)
+    dv_active = DataValidation(type="list", formula1='=ActiveStatusList', allow_blank=True)
+    dv_active.error = 'مقدار فیلد فعال باید «بله» یا «خیر» باشد.'
+    dv_active.errorTitle = 'مقدار نامعتبر'
+    dv_active.prompt = 'وضعیت حساب کاربری را انتخاب کنید'
+    dv_active.promptTitle = 'وضعیت فعال/غیرفعال'
+    dv_active.showErrorMessage = True
+    ws.add_data_validation(dv_active)
+    dv_active.add("N3:N500")
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -571,32 +686,46 @@ def parse_users_excel(file, update_existing=False):
             except DjangoValidationError:
                 row_errors.append({'row': row_num, 'field': 'email', 'message': f'فرمت آدرس ایمیل «{email}» نامعتبر است.'})
 
-        # ── تطبیق هوشمند نقش‌ها ──
+        # ── تطبیق هوشمند نقش‌ها (پشتیبانی از گزینه «همه نقش‌ها») ──
+        ALL_ROLES_ALIASES = {'همه نقش‌ها', 'همه نقش ها', 'همه نقشها', 'همه', 'all', 'all roles', 'all_roles'}
+        ALL_WHS_ALIASES = {'همه انبارها', 'همه انبار ها', 'همه انبارها', 'همه', 'all', 'all warehouses', 'all_warehouses'}
+
         resolved_roles = []
         if roles_str:
             role_items = split_items(roles_str)
-            for rname in role_items:
-                matched_role = roles_lookup.get(rname.lower())
-                if not matched_role:
-                    row_errors.append({'row': row_num, 'field': 'roles', 'message': f'نقش «{rname}» در سیستم یافت نشد.'})
-                elif matched_role not in resolved_roles:
-                    resolved_roles.append(matched_role)
+            has_all_roles = any(r.lower().strip() in ALL_ROLES_ALIASES for r in role_items)
+            if has_all_roles:
+                for group in Group.objects.all():
+                    if group not in resolved_roles:
+                        resolved_roles.append(group)
+            else:
+                for rname in role_items:
+                    matched_role = roles_lookup.get(rname.lower())
+                    if not matched_role:
+                        row_errors.append({'row': row_num, 'field': 'roles', 'message': f'نقش «{rname}» در سیستم یافت نشد.'})
+                    elif matched_role not in resolved_roles:
+                        resolved_roles.append(matched_role)
 
-        # ── تطبیق هوشمند انبارها ──
+        # ── تطبیق هوشمند انبارها (پشتیبانی از گزینه «همه انبارها») ──
         resolved_warehouses = []
         if warehouses_str:
             wh_items = split_items(warehouses_str)
-            for witem in wh_items:
-                matched_wh = warehouses_lookup.get(witem.lower())
-                if not matched_wh:
-                    # تلاش با استخراج کد داخل پرانتز اگر وجود داشته باشد
-                    paren_match = re.search(r'\(([^)]+)\)', witem)
-                    if paren_match:
-                        matched_wh = warehouses_lookup.get(paren_match.group(1).lower().strip())
-                if not matched_wh:
-                    row_errors.append({'row': row_num, 'field': 'warehouses', 'message': f'انبار «{witem}» در سیستم یافت نشد.'})
-                elif matched_wh not in resolved_warehouses:
-                    resolved_warehouses.append(matched_wh)
+            has_all_whs = any(w.lower().strip() in ALL_WHS_ALIASES for w in wh_items)
+            if has_all_whs and WhModel is not None:
+                for wh in WhModel.objects.all():
+                    if wh not in resolved_warehouses:
+                        resolved_warehouses.append(wh)
+            else:
+                for witem in wh_items:
+                    matched_wh = warehouses_lookup.get(witem.lower())
+                    if not matched_wh:
+                        paren_match = re.search(r'\(([^)]+)\)', witem)
+                        if paren_match:
+                            matched_wh = warehouses_lookup.get(paren_match.group(1).lower().strip())
+                    if not matched_wh:
+                        row_errors.append({'row': row_num, 'field': 'warehouses', 'message': f'انبار «{witem}» در سیستم یافت نشد.'})
+                    elif matched_wh not in resolved_warehouses:
+                        resolved_warehouses.append(matched_wh)
 
         if row_errors:
             errors.extend(row_errors)

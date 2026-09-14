@@ -5,6 +5,8 @@
 import io
 import re
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.defined_name import DefinedName
 from common.excel_utils import (
     styled_cell, apply_header_styles_to_row, set_column_widths, 
     freeze_header_panes, find_data_start_and_mapping, sanitize_excel_row
@@ -93,9 +95,26 @@ def generate_roles_excel(queryset):
     return response
 
 
+STANDARD_ROLE_COLORS = [
+    ('#4f46e5', 'نیلی / ایندیگو (پیش‌فرض سیستم)'),
+    ('#0284c7', 'آبی آسمانی'),
+    ('#2563eb', 'آبی سلطنتی'),
+    ('#0d9488', 'سبز کله‌غازی / تیال'),
+    ('#0891b2', 'فیروزه‌ای'),
+    ('#059669', 'سبز زمردی'),
+    ('#7c3aed', 'بنفش ویولت'),
+    ('#64748b', 'خاکستری سربی'),
+    ('#3b82f6', 'آبی روشن'),
+    ('#10b981', 'سبز روشن'),
+    ('#8b5cf6', 'یاسی / پرپل'),
+    ('#d97706', 'کهربایی / طلایی'),
+]
+
+
 def generate_roles_template():
     """
-    تولید فایل قالب نمونه دو سطری با نمونه‌های معتبر ۵ ستونه
+    تولید فایل قالب نمونه دو سطری پویا با نمونه‌های معتبر ۵ ستونه،
+    منوهای کشویی درون اکسل (رنگ و نقش والد)، شیت راهنما و مجوزها، و شیت مراجع داده
     """
     wb = Workbook()
     ws = wb.active
@@ -119,13 +138,127 @@ def generate_roles_template():
     apply_header_styles_to_row(key_row, is_key_row=True)
     ws.append(key_row)
 
+    # ۱. استخراج نقش‌های فعال برای والد
+    roles_qs = CustomRole.objects.all().order_by('title', 'name')
+    parent_role_titles = [r.title or r.name for r in roles_qs if (r.title or r.name)]
+    if not parent_role_titles:
+        parent_role_titles = ['مدیر سیستم', 'سرپرست انبار']
+
+    colors_hex = [c[0] for c in STANDARD_ROLE_COLORS]
+
+    # نمونه داده‌های معتبر
+    sample_parent = parent_role_titles[0]
     sample_data = [
-        ['supervisor', 'سرپرست انبار', '#4f46e5', '', 'view_sys_dashboard، view_sys_users، view_wh_docs'],
-        ['counter', 'انبارگردان میدانی', '#10b981', 'سرپرست انبار', 'view_sys_counter، view_wh_docs'],
+        ['warehouse_supervisor', 'سرپرست انبار', '#4f46e5', '', 'view_sys_dashboard، view_sys_users، view_wh_docs'],
+        ['field_counter', 'انبارگردان میدانی', '#10b981', sample_parent, 'view_sys_counter، view_wh_docs'],
     ]
 
     for row in sample_data:
         ws.append(sanitize_excel_row(row))
+
+    # ۲. شیت دوم: راهنما و مقادیر مجاز (Help Sheet)
+    ws_help = wb.create_sheet(title='راهنما و مقادیر مجاز')
+    ws_help.sheet_view.rightToLeft = True
+
+    HELP_COLUMNS = [
+        {'label': 'نام ستون', 'key': 'col_name', 'width': 22, 'type': 'text'},
+        {'label': 'الزامی / اختیاری', 'key': 'required', 'width': 18, 'type': 'text'},
+        {'label': 'فرمت و ضوابط', 'key': 'rules', 'width': 48, 'type': 'text'},
+        {'label': 'نمونه مقدار معتبر', 'key': 'sample', 'width': 25, 'type': 'text'},
+    ]
+    set_column_widths(ws_help, HELP_COLUMNS)
+    freeze_header_panes(ws_help, row=3)
+
+    h_row = [styled_cell(ws_help, c['label']) for c in HELP_COLUMNS]
+    apply_header_styles_to_row(h_row, is_key_row=False)
+    ws_help.append(h_row)
+
+    k_row = [styled_cell(ws_help, c['key']) for c in HELP_COLUMNS]
+    apply_header_styles_to_row(k_row, is_key_row=True)
+    ws_help.append(k_row)
+
+    help_rules = [
+        ['نام یکتا (name)', 'الزامی', 'نام انگلیسی سیستمی بدون فاصله (مجاز: حروف کوچک، اعداد و زیرخط _)', 'warehouse_supervisor'],
+        ['عنوان فارسی (title)', 'الزامی', 'عنوان نمایشی فارسی نقش در تمامی فرم‌ها و منوها', 'سرپرست انبار'],
+        ['رنگ سازمانی (color)', 'اختیاری', 'کد رنگ هگزادسیمال ۷ کاراکتری (انتخاب از منوی کشویی یا جدول پالت زیر)', '#4f46e5'],
+        ['نقش والد (parent)', 'اختیاری', 'عنوان یا نام یکتای نقش بالادستی جهت ارث‌بری دسترسی‌ها', sample_parent],
+        ['مجوزها (permissions)', 'اختیاری', 'کد دسترسی‌ها (codename) یا عناوین فارسی (تفکیک با ویرگول فارسی «،»)', 'view_sys_dashboard، view_wh_docs'],
+    ]
+    for r in help_rules:
+        ws_help.append(r)
+
+    ws_help.append([])
+    ws_help.append([])
+
+    # جدول پالت رنگ‌های استاندارد سازمانی
+    colors_h = [styled_cell(ws_help, 'کد هگز رنگ'), styled_cell(ws_help, 'عنوان رنگ'), styled_cell(ws_help, 'توضیحات')]
+    apply_header_styles_to_row(colors_h, is_key_row=False)
+    ws_help.append(colors_h)
+    for code, desc in STANDARD_ROLE_COLORS:
+        ws_help.append([code, desc, 'پالت رنگ رسمی سازمان'])
+
+    ws_help.append([])
+    ws_help.append([])
+
+    # جدول فهرست مجوزهای فعال سیستم
+    perms_h = [styled_cell(ws_help, 'عنوان فارسی دسترسی'), styled_cell(ws_help, 'کد دسترسی (codename)'), styled_cell(ws_help, 'بخش / ماژول')]
+    apply_header_styles_to_row(perms_h, is_key_row=False)
+    ws_help.append(perms_h)
+
+    all_perms = Permission.objects.all().select_related('content_type').order_by('content_type__app_label', 'codename')
+    for p in all_perms:
+        app_label = p.content_type.app_label if p.content_type else ''
+        ws_help.append([p.name or '', p.codename, app_label])
+
+    # ۳. شیت سوم: مراجع داده (Data References) - مخفی‌سازی کامل شیت جهت عدم نمایش ستون‌های اضافی به کاربر
+    ws_ref = wb.create_sheet(title='مراجع داده')
+    ws_ref.sheet_state = 'hidden'
+    ws_ref.sheet_view.rightToLeft = True
+
+    REF_HEADERS = ['نقش‌های والد موجود', 'رنگ‌های استاندارد']
+    ref_h = [styled_cell(ws_ref, h) for h in REF_HEADERS]
+    apply_header_styles_to_row(ref_h, is_key_row=False)
+    ws_ref.append(ref_h)
+
+    max_ref_len = max(len(parent_role_titles), len(colors_hex))
+    for r_idx in range(max_ref_len):
+        row_vals = [
+            parent_role_titles[r_idx] if r_idx < len(parent_role_titles) else '',
+            colors_hex[r_idx] if r_idx < len(colors_hex) else ''
+        ]
+        ws_ref.append(row_vals)
+
+    set_column_widths(ws_ref, [{'width': 28}, {'width': 20}])
+    freeze_header_panes(ws_ref, row=2)
+
+    # تعریف دامنه‌های نام‌گذاری‌شده در ورک‌بوک
+    wb.defined_names['ParentRolesList'] = DefinedName('ParentRolesList', attr_text=f"'مراجع داده'!$A$2:$A${len(parent_role_titles)+1}")
+    wb.defined_names['ColorsList'] = DefinedName('ColorsList', attr_text=f"'مراجع داده'!$B$2:$B${len(colors_hex)+1}")
+
+    # ۴. الصاق اعتبارسنجی کشویی به شیت اول
+    # رنگ سازمانی (ستون C)
+    dv_color = DataValidation(type="list", formula1='=ColorsList', allow_blank=True)
+    dv_color.prompt = 'کد رنگ سازمانی را از منوی کشویی انتخاب کنید یا کد دلخواه درج نمایید.'
+    dv_color.promptTitle = 'رنگ سازمانی'
+    dv_color.showErrorMessage = False
+    ws.add_data_validation(dv_color)
+    dv_color.add("C3:C500")
+
+    # نقش والد (ستون D)
+    dv_parent = DataValidation(type="list", formula1='=ParentRolesList', allow_blank=True)
+    dv_parent.prompt = 'در صورت نیاز به ارث‌بری، نقش والد را از منوی کشویی انتخاب کنید.'
+    dv_parent.promptTitle = 'نقش والد'
+    dv_parent.showErrorMessage = False
+    ws.add_data_validation(dv_parent)
+    dv_parent.add("D3:D500")
+
+    # مجوزها (ستون E)
+    dv_perms = DataValidation(type="custom", formula1='TRUE', allow_blank=True)
+    dv_perms.prompt = 'کد دسترسی‌ها یا عناوین را با ویرگول (،) وارد کنید. فهرست کامل در شیت «راهنما و مقادیر مجاز» قرار دارد.'
+    dv_perms.promptTitle = 'مجوزهای دسترسی'
+    dv_perms.showInputMessage = True
+    ws.add_data_validation(dv_perms)
+    dv_perms.add("E3:E500")
 
     buffer = io.BytesIO()
     wb.save(buffer)

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from django.contrib.postgres.indexes import GinIndex
 
-from common.sync_models import SyncModelMixin
+from common.sync_models import SyncModelMixin, ActiveManager
 
 
 class ItemFieldDefinition(SyncModelMixin):
@@ -323,6 +323,7 @@ class DocTask(models.Model):
 
     # ─── Local-First sync ───
     sync_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, verbose_name="شناسه سینک")
+    is_deleted = models.BooleanField(default=False, db_index=True, verbose_name="حذف‌شده (نرم)")
 
     # Auditing
     created_at = models.DateTimeField(auto_now_add=True)
@@ -330,8 +331,17 @@ class DocTask(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_doc_tasks')
     modified_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='modified_doc_tasks')
 
+    objects = ActiveManager()
+    all_objects = models.Manager()
+
     class Meta:
         ordering = ['-created_at']
+        base_manager_name = 'all_objects'
+
+    def soft_delete(self, save: bool = True):
+        self.is_deleted = True
+        if save:
+            self.save(update_fields=['is_deleted', 'updated_at'])
 
     def __str__(self):
         return f"DocTask {self.id} for Item {self.item_id}"

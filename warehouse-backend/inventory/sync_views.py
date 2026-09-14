@@ -157,7 +157,7 @@ class SyncPullView(APIView):
             if page_full:
                 rows = rows[:remaining]
 
-            results[model_key] = [self._serialize(model_key, obj, blind, request) for obj in rows]
+            results[model_key] = [self._serialize(model_key, obj, blind, request, full_access=full_access) for obj in rows]
             remaining -= len(rows)
 
             if page_full:
@@ -185,7 +185,9 @@ class SyncPullView(APIView):
 
     def _build_queryset(self, model_key, warehouse_id, user, full_access):
         if model_key == 'dynamic_fields':
-            return ItemFieldDefinition.all_objects.filter(warehouse_id=warehouse_id).select_related('created_by')
+            return ItemFieldDefinition.all_objects.filter(
+                Q(warehouse_id=warehouse_id) | Q(warehouse__isnull=True)
+            ).select_related('created_by')
 
         if model_key == 'items':
             base = Item.all_objects.filter(warehouse_id=warehouse_id).select_related(
@@ -212,11 +214,13 @@ class SyncPullView(APIView):
             )
             if full_access:
                 return base
-            # کارشناس مالی: فقط تسک‌های خودش یا استخر
+            # کارشناس مالی: فقط تسک‌های خودش یا استخر + تسک‌هایی که قبلاً داشته (جهت صدور tombstone)
             return base.filter(
-                Q(doc_worker=user)
+                Q(is_deleted=True)
+                | Q(doc_worker=user)
                 | Q(doc_worker__isnull=True, status='PENDING_DOC')
-            )
+                | Q(history__action_by=user)
+            ).distinct()
 
         # count_tasks
         base = CountTask.all_objects.filter(item__warehouse_id=warehouse_id).select_related(
@@ -232,15 +236,41 @@ class SyncPullView(APIView):
             Q(is_deleted=True)
             | Q(counter=user)
             | Q(counter__isnull=True, status='PENDING_COUNT')
-        )
+            | Q(history__action_by=user)
+        ).distinct()
 
-    def _serialize(self, model_key, obj, blind, request):
+    def _serialize(self, model_key, obj, blind, request, full_access=False):
         if getattr(obj, 'is_deleted', False):
             return {
                 'sync_id': str(obj.sync_id) if getattr(obj, 'sync_id', None) else None,
                 'is_deleted': True,
                 'updated_at': obj.updated_at.isoformat(),
             }
+
+        # تسک شمارش: اگر از کاربر گرفته شده (Unassign/Reassign)، به عنوان tombstone برای این کلاینت ارسال شود (تسک ۱۳)
+        if model_key == 'count_tasks' and not full_access:
+            user = request.user
+            if user and user.is_authenticated:
+                is_user_task = (obj.counter_id == user.id) or (obj.counter_id is None and obj.status == 'PENDING_COUNT')
+                if not is_user_task:
+                    return {
+                        'sync_id': str(obj.sync_id) if getattr(obj, 'sync_id', None) else None,
+                        'is_deleted': True,
+                        'updated_at': obj.updated_at.isoformat(),
+                    }
+
+        # تسک اسناد: اگر از کاربر سلب شده باشد، ارسال به صورت tombstone
+        if model_key == 'doc_tasks' and not full_access:
+            user = request.user
+            if user and user.is_authenticated:
+                is_user_task = (obj.doc_worker_id == user.id) or (obj.doc_worker_id is None and obj.status == 'PENDING_DOC')
+                if not is_user_task:
+                    return {
+                        'sync_id': str(obj.sync_id) if getattr(obj, 'sync_id', None) else None,
+                        'is_deleted': True,
+                        'updated_at': obj.updated_at.isoformat(),
+                    }
+
         # request در context لازم است تا آدرس تصویر شاخص مطلق شود؛ کلاینت همین
         # ردیف را در همان جدول Dexie می‌نویسد که پاسخ REST را می‌نویسد و دو نوع
         # آدرس متفاوت برای یک کالا دردسر می‌شود.

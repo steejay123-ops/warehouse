@@ -25,6 +25,7 @@ from .cartable_views import (
     TreasuryCartableAPIView,
     TreasuryDisketteExportAPIView
 )
+from .sync_views import PersonnelSyncPullView
 
 router = DefaultRouter()
 router.register(r'financial-projects', FinancialProjectViewSet, basename='financial-projects')
@@ -44,6 +45,7 @@ router.register(r'monthly-payroll', MonthlyPayrollViewSet, basename='monthly-pay
 router.register(r'fleet-settlement', FleetSettlementViewSet, basename='fleet-settlement')
 
 urlpatterns = [
+    path('sync/pull/', PersonnelSyncPullView.as_view(), name='personnel-sync-pull'),
     path('cartable/supervisor/', SupervisorCartableAPIView.as_view(), name='supervisor-cartable'),
     path('cartable/accountant/', AccountantCartableAPIView.as_view(), name='accountant-cartable'),
     path('cartable/manager/', ManagerCartableAPIView.as_view(), name='manager-cartable'),

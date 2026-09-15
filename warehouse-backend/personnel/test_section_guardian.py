@@ -218,3 +218,89 @@ class SectionGuardianPhase2APITests(TestCase):
         self.assertEqual(inv_res.status_code, 201)
         self.assertEqual(inv_res.data['status'], 'draft', "فاکتور باید در وضعیت draft ایجاد شود")
 
+    def test_clone_assignments_api(self):
+        """تست اختصاصی تکثیر و کپی چارت سازمانی از بخش مبدأ به مقصد"""
+        proj = FinancialProject.objects.create(code='PRJ-CLONE', name='پروژه تکثیر چارت')
+        sec_source = ProjectSection.objects.create(project=proj, code='SEC-SRC', name='بخش الگو')
+        sec_target = ProjectSection.objects.create(project=proj, code='SEC-TGT', name='بخش مقصد')
+
+        # انتساب کاربر به بخش مبدأ
+        UserSectionAssignment.objects.create(
+            user=self.admin_user,
+            section=sec_source,
+            role='manager',
+            is_active=True
+        )
+        UserSectionAssignment.objects.create(
+            user=self.employee_user,
+            section=sec_source,
+            role='employee',
+            is_active=True
+        )
+
+        # فراخوانی اکشن کپی چارت
+        url = f'/api/personnel/project-sections/{sec_target.id}/clone-assignments/'
+        res = self.client.post(url, {'source_section_id': sec_source.id}, format='json')
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data['success'])
+        self.assertEqual(res.data['copied_count'], 2)
+
+        # بررسی وجود انتساب‌ها در بخش مقصد
+        target_assignments = UserSectionAssignment.objects.filter(section=sec_target)
+        self.assertEqual(target_assignments.count(), 2)
+        roles = set(target_assignments.values_list('role', flat=True))
+        self.assertEqual(roles, {'manager', 'employee'})
+
+        # فراخوانی مجدد (باید انتساب تکراری اضافه نکند)
+        res_duplicate = self.client.post(url, {'source_section_id': sec_source.id}, format='json')
+        self.assertEqual(res_duplicate.status_code, 200)
+        self.assertEqual(res_duplicate.data['copied_count'], 0)
+        self.assertEqual(res_duplicate.data['skipped_count'], 2)
+
+    def test_excel_export_and_template_endpoints(self):
+        """تست اندپوینت‌های صدور و قالب اکسل برای پروژه‌ها، بخش‌ها و انتساب‌ها"""
+        # پروژه‌ها
+        res_prj_exp = self.client.get('/api/personnel/financial-projects/export-excel/')
+        self.assertEqual(res_prj_exp.status_code, 200)
+        self.assertIn('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', res_prj_exp['Content-Type'])
+
+        res_prj_tpl = self.client.get('/api/personnel/financial-projects/download-template/')
+        self.assertEqual(res_prj_tpl.status_code, 200)
+
+        # بخش‌ها
+        res_sec_exp = self.client.get('/api/personnel/project-sections/export-excel/')
+        self.assertEqual(res_sec_exp.status_code, 200)
+
+        res_sec_tpl = self.client.get('/api/personnel/project-sections/download-template/')
+        self.assertEqual(res_sec_tpl.status_code, 200)
+
+        # انتساب‌ها
+        res_asn_exp = self.client.get('/api/personnel/user-section-assignments/export-excel/')
+        self.assertEqual(res_asn_exp.status_code, 200)
+
+        res_asn_tpl = self.client.get('/api/personnel/user-section-assignments/download-template/')
+        self.assertEqual(res_asn_tpl.status_code, 200)
+
+    def test_bulk_assign_api(self):
+        """تست اختصاصی انتساب دسته‌جمعی چند کاربر به یک بخش و نقش"""
+        proj = FinancialProject.objects.create(code='PRJ-BULK', name='پروژه تست گروهی')
+        sec = ProjectSection.objects.create(project=proj, code='SEC-BLK', name='بخش انتساب چندگانه')
+
+        # درخواست انتساب همزمان مدیر و کارمند
+        url = '/api/personnel/user-section-assignments/bulk-assign/'
+        payload = {
+            'section_id': sec.id,
+            'user_ids': [self.admin_user.id, self.employee_user.id],
+            'role': 'accountant'
+        }
+        res = self.client.post(url, payload, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(len(res.data), 2)
+        self.assertTrue(all(a['role'] == 'accountant' for a in res.data))
+        self.assertTrue(all(a['section'] == sec.id for a in res.data))
+
+        # بررسی در دیتابیس
+        count = UserSectionAssignment.objects.filter(section=sec, role='accountant', is_active=True).count()
+        self.assertEqual(count, 2)
+
+

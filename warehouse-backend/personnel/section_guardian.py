@@ -311,17 +311,26 @@ class SectionGuardian:
             if not comp_exists:
                 all_passed = False
 
+            accounting_routes_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'modules', 'accounting', 'accounting.routes.ts')
+            nav_items_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'modules', 'accounting', 'nav-items.ts')
+            
             with open(routes_path, 'r', encoding='utf-8') as f:
                 routes_content = f.read()
+            if os.path.exists(accounting_routes_path):
+                with open(accounting_routes_path, 'r', encoding='utf-8') as f:
+                    routes_content += f.read()
             has_route = 'projects-and-sections' in routes_content and 'ProjectsAndSectionsComponent' in routes_content
-            checks.append(("ثبت مسیر مستقل در app.routes.ts", has_route, "روت /projects-and-sections در سیستم ثبت شده است"))
+            checks.append(("ثبت مسیر مستقل در ساختار روتینگ فرانت‌اند", has_route, "روت /projects-and-sections در سیستم ثبت شده است"))
             if not has_route:
                 all_passed = False
 
             with open(layout_path, 'r', encoding='utf-8') as f:
                 layout_content = f.read()
+            if os.path.exists(nav_items_path):
+                with open(nav_items_path, 'r', encoding='utf-8') as f:
+                    layout_content += f.read()
             has_sidebar_item = 'projects-and-sections' in layout_content and '🏢 پروژه‌ها و بخش‌ها' in layout_content
-            checks.append(("استقرار در سطح اول سایدبار اصلی", has_sidebar_item, "منوی «🏢 پروژه‌ها و بخش‌ها» در سایدبار افزوده شد"))
+            checks.append(("استقرار در سایدبار ناوبری ماژول مالی", has_sidebar_item, "منوی «🏢 پروژه‌ها و بخش‌ها» در سایدبار افزوده شد"))
             if not has_sidebar_item:
                 all_passed = False
 

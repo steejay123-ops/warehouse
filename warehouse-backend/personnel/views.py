@@ -4136,6 +4136,17 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
         from .org_excel_engine import download_org_template
         return download_org_template('projects')
 
+    @action(detail=False, methods=['post'], url_path='import-excel')
+    def import_excel(self, request):
+        from .org_excel_engine import import_projects_from_excel
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+        result = import_projects_from_excel(file_obj)
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('project', 'import', None, 'اکسل پروژه‌ها', None, tab_id, request.user.id)
+        return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
+
 
 class ProjectSectionViewSet(viewsets.ModelViewSet):
     """
@@ -4187,6 +4198,75 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
     def download_template(self, request):
         from .org_excel_engine import download_org_template
         return download_org_template('sections')
+
+    @action(detail=False, methods=['post'], url_path='import-excel')
+    def import_excel(self, request):
+        from .org_excel_engine import import_sections_from_excel
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+        result = import_sections_from_excel(file_obj)
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('section', 'import', None, 'اکسل بخش‌ها', None, tab_id, request.user.id)
+        return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='clone-assignments')
+    def clone_assignments(self, request, pk=None):
+        """
+        کپی دسته‌جمعی پرسنل یک بخش مبدأ به این بخش (مقصد)
+        """
+        target_section = self.get_object()
+        source_section_id = request.data.get('source_section_id')
+        if not source_section_id:
+            return Response({'error': 'شناسه بخش مبدأ الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if int(source_section_id) == target_section.id:
+            return Response({'error': 'بخش مبدأ و مقصد نمی‌توانند یکسان باشند.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        source_section = ProjectSection.objects.filter(id=source_section_id).first()
+        if not source_section:
+            return Response({'error': 'بخش مبدأ یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        source_assignments = UserSectionAssignment.objects.filter(section=source_section, is_active=True)
+        if not source_assignments.exists():
+            return Response({'error': 'هیچ انتساب فعالی در بخش مبدأ جهت کپی وجود ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        copied_count = 0
+        skipped_count = 0
+        with transaction.atomic():
+            for sa in source_assignments:
+                exists = UserSectionAssignment.objects.filter(
+                    user=sa.user,
+                    section=target_section,
+                    role=sa.role
+                ).exists()
+                if not exists:
+                    UserSectionAssignment.objects.create(
+                        user=sa.user,
+                        section=target_section,
+                        role=sa.role,
+                        is_active=True
+                    )
+                    copied_count += 1
+                else:
+                    skipped_count += 1
+
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated(
+            'assignment',
+            'clone',
+            target_section.id,
+            f'کپی چارت از {source_section.name} به {target_section.name}',
+            target_section.project_id,
+            tab_id,
+            request.user.id
+        )
+
+        return Response({
+            'success': True,
+            'message': f'ساختار پرسنلی با موفقیت کپی شد. ({copied_count} انتساب جدید، {skipped_count} تکراری/صرف‌نظر)',
+            'copied_count': copied_count,
+            'skipped_count': skipped_count
+        }, status=status.HTTP_200_OK)
 
 
 class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
@@ -4258,6 +4338,69 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
         instance.delete()
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('assignment', 'delete', instance_id, None, proj_id, tab_id, self.request.user.id)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        from .org_excel_engine import export_assignments_excel
+        project_id = request.query_params.get('project_id')
+        return export_assignments_excel(project_id)
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        from .org_excel_engine import download_org_template
+        return download_org_template('assignments')
+
+    @action(detail=False, methods=['post'], url_path='import-excel')
+    def import_excel(self, request):
+        from .org_excel_engine import import_assignments_from_excel
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+        result = import_assignments_from_excel(file_obj)
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('assignment', 'import', None, 'اکسل انتساب‌ها', None, tab_id, request.user.id)
+        return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='bulk-assign')
+    def bulk_assign(self, request):
+        """
+        انتساب همزمان چند کاربر به یک بخش و سمت سازمانی
+        """
+        section_id = request.data.get('section_id') or request.data.get('section')
+        user_ids = request.data.get('user_ids') or []
+        role = request.data.get('role', 'employee')
+
+        if not section_id:
+            return Response({'error': 'شناسه بخش الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not user_ids or not isinstance(user_ids, list):
+            return Response({'error': 'لیست شناسه‌های کاربران الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        section = ProjectSection.objects.filter(id=section_id).first()
+        if not section:
+            return Response({'error': 'بخش سازمانی مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        created_assignments = []
+        with transaction.atomic():
+            for uid in user_ids:
+                assignment, _ = UserSectionAssignment.objects.get_or_create(
+                    user_id=uid,
+                    section=section,
+                    role=role,
+                    defaults={'is_active': True}
+                )
+                if not assignment.is_active:
+                    assignment.is_active = True
+                    assignment.save(update_fields=['is_active', 'updated_at'])
+                created_assignments.append(assignment)
+
+        tab_id = request.headers.get('X-Client-Tab-Id') or request.data.get('client_tab_id')
+        proj_id = section.project_id
+        broadcast_org_structure_updated('assignment', 'bulk_create', None, f"{len(created_assignments)} کاربر", proj_id, tab_id, request.user.id)
+
+        assign_ids = [a.id for a in created_assignments]
+        qs = UserSectionAssignment.objects.filter(id__in=assign_ids).select_related('user', 'section', 'section__project')
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CounterpartyViewSet(viewsets.ModelViewSet):

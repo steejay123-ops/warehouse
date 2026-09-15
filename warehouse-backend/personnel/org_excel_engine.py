@@ -16,8 +16,11 @@ from django.http import HttpResponse
 from django.db import transaction
 import jdatetime
 
-from .models import FinancialProject, ProjectSection, Counterparty
+from django.contrib.auth import get_user_model
+from .models import FinancialProject, ProjectSection, Counterparty, UserSectionAssignment
 from common.date_utils import normalize_digits
+
+User = get_user_model()
 
 
 def _format_datetime_shamsi(dt):
@@ -219,6 +222,60 @@ def export_counterparties_excel(section_id=None):
 
 
 # -------------------------------------------------------------
+# ۴. انتساب‌های سازمانی (User Section Assignments)
+# -------------------------------------------------------------
+ASSIGNMENT_COLUMNS = [
+    {'title': 'نام کاربری', 'key': 'username', 'width': 18},
+    {'title': 'نام و نام‌خانوادگی', 'key': 'full_name', 'width': 24},
+    {'title': 'کد پروژه', 'key': 'project_code', 'width': 16},
+    {'title': 'کد بخش', 'key': 'section_code', 'width': 16},
+    {'title': 'نقش سازمانی', 'key': 'role', 'width': 18},
+    {'title': 'عنوان نقش', 'key': 'role_display', 'width': 22},
+    {'title': 'وضعیت فعال', 'key': 'is_active', 'width': 14},
+    {'title': 'تاریخ انتساب', 'key': 'created_at', 'width': 22},
+]
+
+def export_assignments_excel(project_id=None):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'ماتریس انتساب‌های سازمانی'
+    _apply_2row_header(ws, ASSIGNMENT_COLUMNS, header_bg='6366F1')
+
+    qs = UserSectionAssignment.objects.select_related('user', 'section', 'section__project').all()
+    if project_id:
+        qs = qs.filter(section__project_id=project_id)
+    qs = qs.order_by('section__project__code', 'section__code', 'role')
+
+    font_data = Font(name='B Nazanin', size=11)
+    align_data = Alignment(horizontal='center', vertical='center')
+    align_text = Alignment(horizontal='right', vertical='center')
+
+    role_map = dict(UserSectionAssignment.ROLE_CHOICES)
+
+    for row_idx, a in enumerate(qs, 3):
+        u = a.user
+        full_name = f"{u.first_name} {u.last_name}".strip() if u else '-'
+        ws.cell(row=row_idx, column=1, value=u.username if u else '-').alignment = align_data
+        ws.cell(row=row_idx, column=2, value=full_name).alignment = align_text
+        ws.cell(row=row_idx, column=3, value=a.section.project.code if a.section and a.section.project else '-').alignment = align_data
+        ws.cell(row=row_idx, column=4, value=a.section.code if a.section else '-').alignment = align_data
+        ws.cell(row=row_idx, column=5, value=a.role).alignment = align_data
+        ws.cell(row=row_idx, column=6, value=role_map.get(a.role, a.role)).alignment = align_data
+        ws.cell(row=row_idx, column=7, value='بله' if a.is_active else 'خیر').alignment = align_data
+        ws.cell(row=row_idx, column=8, value=_format_datetime_shamsi(a.created_at)).alignment = align_data
+
+        for c in range(1, 9):
+            ws.cell(row=row_idx, column=c).font = font_data
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    response = HttpResponse(buf.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="assignments_matrix.xlsx"'
+    return response
+
+
+# -------------------------------------------------------------
 # دانلود قالب‌های آماده برای اکسل (Templates)
 # -------------------------------------------------------------
 def download_org_template(entity_type='counterparties'):
@@ -243,6 +300,16 @@ def download_org_template(entity_type='counterparties'):
         ws.cell(row=3, column=3, value='SEC-101')
         ws.cell(row=3, column=4, value='دپارتمان لجستیک و ترابری')
         filename = 'sections_template.xlsx'
+
+    elif entity_type == 'assignments':
+        ws.title = 'قالب انتساب پرسنل'
+        _apply_2row_header(ws, ASSIGNMENT_COLUMNS[:5], header_bg='6366F1')
+        ws.cell(row=3, column=1, value='admin')
+        ws.cell(row=3, column=2, value='مدیر سیستم')
+        ws.cell(row=3, column=3, value='PRJ-01')
+        ws.cell(row=3, column=4, value='SEC-101')
+        ws.cell(row=3, column=5, value='manager')
+        filename = 'assignments_template.xlsx'
 
     else:
         ws.title = 'قالب طرف‌حساب‌ها'
@@ -325,6 +392,184 @@ def import_counterparties_from_excel(file_obj):
                     updated += 1
         except Exception as e:
             errors.append(f"ردیف {row_idx} ({name}): {str(e)}")
+
+    return {
+        'success': created > 0 or updated > 0 or len(errors) == 0,
+        'summary': {
+            'total_rows': created + updated + len(errors),
+            'created': created,
+            'updated': updated,
+            'skipped': len(errors)
+        },
+        'errors': [{'row': idx, 'message': err} for idx, err in enumerate(errors, 1)]
+    }
+
+
+def import_projects_from_excel(file_obj):
+    """
+    خواندن و ثبت دسته‌جمعی پروژه‌های مالی از اکسل
+    """
+    wb = openpyxl.load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    created = 0
+    updated = 0
+    errors = []
+
+    for row_idx in range(3, ws.max_row + 1):
+        code = ws.cell(row=row_idx, column=1).value
+        if not code or str(code).strip() == '':
+            continue
+        code = str(code).strip().upper()
+        name = str(ws.cell(row=row_idx, column=2).value or '').strip()
+        if not name:
+            errors.append(f"ردیف {row_idx}: نام پروژه الزامی است.")
+            continue
+        desc = str(ws.cell(row=row_idx, column=3).value or '').strip()
+        active_val = str(ws.cell(row=row_idx, column=4).value or 'بله').strip().lower()
+        is_active = active_val not in ['خیر', 'false', '0', 'no']
+
+        try:
+            with transaction.atomic():
+                p, is_new = FinancialProject.objects.update_or_create(
+                    code=code,
+                    defaults={'name': name, 'description': desc or None, 'is_active': is_active}
+                )
+                if is_new:
+                    created += 1
+                else:
+                    updated += 1
+        except Exception as e:
+            errors.append(f"ردیف {row_idx} ({code}): {str(e)}")
+
+    return {
+        'success': created > 0 or updated > 0 or len(errors) == 0,
+        'summary': {
+            'total_rows': created + updated + len(errors),
+            'created': created,
+            'updated': updated,
+            'skipped': len(errors)
+        },
+        'errors': [{'row': idx, 'message': err} for idx, err in enumerate(errors, 1)]
+    }
+
+
+def import_sections_from_excel(file_obj):
+    """
+    خواندن و ثبت دسته‌جمعی بخش‌های پروژه از اکسل
+    """
+    wb = openpyxl.load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    created = 0
+    updated = 0
+    errors = []
+
+    for row_idx in range(3, ws.max_row + 1):
+        proj_code = ws.cell(row=row_idx, column=1).value
+        if not proj_code or str(proj_code).strip() == '':
+            continue
+        proj_code = str(proj_code).strip().upper()
+        proj = FinancialProject.objects.filter(code=proj_code).first()
+        if not proj:
+            errors.append(f"ردیف {row_idx}: پروژه با کد «{proj_code}» یافت نشد.")
+            continue
+
+        code = ws.cell(row=row_idx, column=3).value
+        if not code or str(code).strip() == '':
+            continue
+        code = str(code).strip().upper()
+        name = str(ws.cell(row=row_idx, column=4).value or '').strip()
+        if not name:
+            errors.append(f"ردیف {row_idx}: نام بخش الزامی است.")
+            continue
+
+        try:
+            with transaction.atomic():
+                s, is_new = ProjectSection.objects.update_or_create(
+                    project=proj,
+                    code=code,
+                    defaults={'name': name, 'is_active': True}
+                )
+                if is_new:
+                    created += 1
+                else:
+                    updated += 1
+        except Exception as e:
+            errors.append(f"ردیف {row_idx} ({code}): {str(e)}")
+
+    return {
+        'success': created > 0 or updated > 0 or len(errors) == 0,
+        'summary': {
+            'total_rows': created + updated + len(errors),
+            'created': created,
+            'updated': updated,
+            'skipped': len(errors)
+        },
+        'errors': [{'row': idx, 'message': err} for idx, err in enumerate(errors, 1)]
+    }
+
+
+def import_assignments_from_excel(file_obj):
+    """
+    خواندن و ثبت دسته‌جمعی انتساب کاربران به بخش‌ها از اکسل
+    """
+    wb = openpyxl.load_workbook(file_obj, data_only=True)
+    ws = wb.active
+    created = 0
+    updated = 0
+    errors = []
+
+    role_keys = ['manager', 'accountant', 'supervisor', 'treasury', 'employee']
+    role_fa_map = {
+        'مدیر': 'manager', 'مدیران': 'manager', 'مدیر پروژه': 'manager',
+        'حسابدار': 'accountant', 'حسابداران': 'accountant',
+        'سرپرست': 'supervisor', 'سرپرستان': 'supervisor',
+        'خزانه': 'treasury', 'خزانه‌دار': 'treasury', 'خزانه دار': 'treasury',
+        'کارمند': 'employee', 'کارمندان': 'employee', 'اپراتور': 'employee'
+    }
+
+    for row_idx in range(3, ws.max_row + 1):
+        raw_username = ws.cell(row=row_idx, column=1).value
+        if not raw_username or str(raw_username).strip() == '':
+            continue
+        username = str(raw_username).strip()
+        user = User.objects.filter(username=username).first()
+        if not user:
+            errors.append(f"ردیف {row_idx}: کاربر با نام کاربری «{username}» یافت نشد.")
+            continue
+
+        proj_code = str(ws.cell(row=row_idx, column=3).value or '').strip().upper()
+        sec_code = str(ws.cell(row=row_idx, column=4).value or '').strip().upper()
+        if not sec_code:
+            errors.append(f"ردیف {row_idx}: کد بخش الزامی است.")
+            continue
+
+        sec_qs = ProjectSection.objects.filter(code=sec_code)
+        if proj_code:
+            sec_qs = sec_qs.filter(project__code=proj_code)
+        sec = sec_qs.first()
+        if not sec:
+            errors.append(f"ردیف {row_idx}: بخش با کد «{sec_code}» یافت نشد.")
+            continue
+
+        raw_role = str(ws.cell(row=row_idx, column=5).value or 'employee').strip().lower()
+        role = role_fa_map.get(raw_role, raw_role)
+        if role not in role_keys:
+            role = 'employee'
+
+        try:
+            with transaction.atomic():
+                a, is_new = UserSectionAssignment.objects.update_or_create(
+                    user=user,
+                    section=sec,
+                    role=role,
+                    defaults={'is_active': True}
+                )
+                if is_new:
+                    created += 1
+                else:
+                    updated += 1
+        except Exception as e:
+            errors.append(f"ردیف {row_idx} ({username}): {str(e)}")
 
     return {
         'success': created > 0 or updated > 0 or len(errors) == 0,

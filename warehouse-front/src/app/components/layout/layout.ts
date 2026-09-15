@@ -1283,6 +1283,7 @@ export class Layout implements OnInit, OnDestroy {
       'profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی',
+      'projects-and-sections': 'مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها',
       'finance-audit': 'رهگیری و ممیزی مالی و اداری',
       health: 'مرکز جامع پایش سلامت و تاب‌آوری سامانه',
       'finance-health': 'مرکز جامع پایش سلامت و تاب‌آوری سامانه'

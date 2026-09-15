@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
+import { HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
+import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
 import {
   PersonnelProfile,
   VehicleDriverProfile,
@@ -588,8 +590,20 @@ export class PersonnelApiService {
   }
 
   // --- ساختار سازمانی: انتساب کاربران به بخش‌ها ---
-  getUserSectionAssignments(params?: { section_id?: number; project_id?: number; user_id?: number; role?: string }): Observable<UserSectionAssignment[]> {
-    return this.api.get<UserSectionAssignment[]>(`${this.baseUrl}/user-section-assignments`, params as Record<string, unknown>);
+  getUserSectionAssignments(
+    params?: { section_id?: number; project_id?: number; user_id?: number; role?: string },
+    forceFresh: boolean = false
+  ): Observable<UserSectionAssignment[]> {
+    const context = forceFresh ? new HttpContext().set(SKIP_OFFLINE, true) : undefined;
+    return this.api.get<UserSectionAssignment[]>(
+      `${this.baseUrl}/user-section-assignments`,
+      params as Record<string, unknown>,
+      { context }
+    );
+  }
+
+  bulkAssignUsersToSection(data: { section_id: number; user_ids: number[]; role: string }): Observable<UserSectionAssignment[]> {
+    return this.api.post<UserSectionAssignment[]>(`${this.baseUrl}/user-section-assignments/bulk-assign/`, data);
   }
 
   createUserSectionAssignment(data: Partial<UserSectionAssignment>): Observable<UserSectionAssignment> {
@@ -651,6 +665,12 @@ export class PersonnelApiService {
     return this.api.download(`${this.baseUrl}/financial-projects/download-template/`);
   }
 
+  importFinancialProjectsExcel(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.post<any>(`${this.baseUrl}/financial-projects/import-excel/`, formData);
+  }
+
   exportProjectSectionsExcel(projectId?: number): Observable<Blob> {
     const params = projectId ? { project_id: projectId } : undefined;
     return this.api.download(`${this.baseUrl}/project-sections/export-excel/`, params);
@@ -658,6 +678,33 @@ export class PersonnelApiService {
 
   downloadProjectSectionsTemplate(): Observable<Blob> {
     return this.api.download(`${this.baseUrl}/project-sections/download-template/`);
+  }
+
+  importProjectSectionsExcel(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.post<any>(`${this.baseUrl}/project-sections/import-excel/`, formData);
+  }
+
+  cloneSectionAssignments(targetSectionId: number, sourceSectionId: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/project-sections/${targetSectionId}/clone-assignments/`, {
+      source_section_id: sourceSectionId
+    });
+  }
+
+  exportUserSectionAssignmentsExcel(projectId?: number): Observable<Blob> {
+    const params = projectId ? { project_id: projectId } : undefined;
+    return this.api.download(`${this.baseUrl}/user-section-assignments/export-excel/`, params);
+  }
+
+  downloadUserSectionAssignmentsTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/user-section-assignments/download-template/`);
+  }
+
+  importUserSectionAssignmentsExcel(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.api.post<any>(`${this.baseUrl}/user-section-assignments/import-excel/`, formData);
   }
 
   exportCounterpartiesExcel(sectionId?: number): Observable<Blob> {

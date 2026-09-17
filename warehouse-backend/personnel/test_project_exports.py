@@ -158,3 +158,40 @@ class ProjectScopedExportTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn('application/vnd.openxmlformats', res['Content-Type'])
         self.assertIn(f'Bank_Payment_{self.proj_shiraz.code}', res['Content-Disposition'])
+
+    def test_tax_wh_requires_project_id(self):
+        """صدور فایل مالیاتی WH بدون انتخاب پروژه باید با خطای ۴۰۰ متوقف شود"""
+        res = self.client.get('/api/personnel/monthly-payroll/export-tax-wh/', {
+            'period_id': self.period.id
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('انتخاب پروژه', res.json()['error'])
+
+    def test_tax_wp_requires_project_id(self):
+        """صدور فایل مالیاتی WP بدون انتخاب پروژه باید با خطای ۴۰۰ متوقف شود"""
+        res = self.client.get('/api/personnel/monthly-payroll/export-tax-wp/', {
+            'period_id': self.period.id
+        })
+        self.assertEqual(res.status_code, 400)
+        self.assertIn('انتخاب پروژه', res.json()['error'])
+
+    def test_tax_exports_scoped_to_project(self):
+        """فایل‌های مالیاتی WH و WP باید به نام پروژه و صرفاً برای پرسنل آن پروژه صادر شوند"""
+        res_wh = self.client.get('/api/personnel/monthly-payroll/export-tax-wh/', {
+            'period_id': self.period.id,
+            'project_id': self.proj_shiraz.id
+        })
+        self.assertEqual(res_wh.status_code, 200)
+        self.assertIn(f'WH_{self.proj_shiraz.code}_0504.txt', res_wh['Content-Disposition'])
+
+        res_wp = self.client.get('/api/personnel/monthly-payroll/export-tax-wp/', {
+            'period_id': self.period.id,
+            'project_id': self.proj_shiraz.id
+        })
+        self.assertEqual(res_wp.status_code, 200)
+        self.assertIn(f'WP_{self.proj_shiraz.code}_0504.txt', res_wp['Content-Disposition'])
+        # محتوای متنی باید شامل کد ملی پرسنل شیراز باشد و نه تهرانی
+        content = res_wp.content.decode('utf-8')
+        self.assertIn(self.person_shiraz.national_code, content)
+        self.assertNotIn(self.person_tehran.national_code, content)
+

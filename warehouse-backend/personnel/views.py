@@ -6,6 +6,7 @@ from django.http import HttpResponse
 from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 import io
 import zipfile
 import openpyxl
@@ -13,12 +14,15 @@ from decimal import Decimal
 from common.date_utils import format_to_shamsi_str, normalize_digits
 import jdatetime
 
+User = get_user_model()
+
 from accounts.permissions import (
     CanApprovePersonnelManager,
     CanApprovePersonnelFinance,
     CanApproveFleetManager,
     CanApproveFleetFinance
 )
+from accounts.views import OptionalPageNumberPagination
 
 from .models import (
     FinancialProject,
@@ -71,7 +75,8 @@ from .serializers import (
     BankExportSettingsSerializer,
     MonthlyPayrollRecordSerializer
 )
-from .payroll_engine import calculate_monthly_payroll_for_period
+from .permissions import IsOrgStructureManagerOrReadOnly
+from .payroll_engine import calculate_monthly_payroll_for_period, get_effective_payroll_settings
 from .dbf_generator import generate_dskkar_bytes, generate_dskwor_bytes
 from .tax_bank_exporter import generate_wh_tax_content, generate_wp_tax_content, generate_bank_meli_excel
 from .payroll_excel_exporter import generate_monthly_payroll_excel
@@ -3324,6 +3329,18 @@ class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
 # ── ۷. ویوست تنظیمات جامع سالانه و ۲۰ گروه شغلی ───────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 
+def safe_int(val, default=None):
+    if val is None:
+        return default
+    val_str = str(val).strip().lower()
+    if val_str in ('', 'null', 'undefined', 'nan', 'none'):
+        return default
+    try:
+        return int(val_str)
+    except (ValueError, TypeError):
+        return default
+
+
 class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
     queryset = PayrollYearlySettings.objects.all().prefetch_related(
         'job_grades', 'workshop_insurance', 'tax_settings', 'bank_export_settings', 'project'
@@ -3334,9 +3351,9 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        project_id = self.request.query_params.get('project_id')
-        if project_id:
-            return qs.filter(project_id=project_id)
+        p_id = safe_int(self.request.query_params.get('project_id'))
+        if p_id is not None:
+            return qs.filter(project_id=p_id)
         is_global = self.request.query_params.get('is_global')
         if is_global == 'true':
             return qs.filter(project__isnull=True)
@@ -3345,22 +3362,290 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='active-or-year')
     def get_active_or_year(self, request):
         year = request.query_params.get('year', '1405')
-        project_id = request.query_params.get('project_id')
+        p_id = safe_int(request.query_params.get('project_id'))
+        v_id = safe_int(request.query_params.get('version_id'))
+        effective_from = request.query_params.get('effective_from')
+        if effective_from in ('null', 'undefined', ''):
+            effective_from = None
         
         settings_obj = None
-        if project_id and project_id != 'null':
-            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year, project_id=project_id).first()
+        if v_id:
+            candidate = PayrollYearlySettings.objects.filter(id=v_id).first()
+            if candidate:
+                if p_id is not None:
+                    if candidate.project_id == p_id:
+                        settings_obj = candidate
+                    else:
+                        settings_obj = get_effective_payroll_settings(effective_from or f"{year}/01", p_id)
+                else:
+                    settings_obj = candidate
 
-        # ارث‌بری و Fallback هوشمند به تنظیمات سراسری سازمان در صورت عدم تعریف برای پروژه
         if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year, project__isnull=True).first()
+            if effective_from:
+                settings_obj = get_effective_payroll_settings(effective_from, p_id)
+            else:
+                settings_obj = get_effective_payroll_settings(f"{year}/01", p_id)
+
         if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.filter(is_active=True, project__isnull=True).first()
-        if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.first()
+            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year).first() or PayrollYearlySettings.objects.first()
         if not settings_obj:
             return Response({'error': 'تنظیماتی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(PayrollYearlySettingsSerializer(settings_obj).data)
+
+    @action(detail=False, methods=['get'], url_path='versions')
+    def get_versions(self, request):
+        """
+        دریافت فهرست تمام نسخه‌های احکام در یک سال مالی به تفکیک پروژه
+        """
+        year = request.query_params.get('year', '1405')
+        p_id = safe_int(request.query_params.get('project_id'))
+        qs = PayrollYearlySettings.objects.filter(fiscal_year=year)
+        if p_id is not None:
+            project_qs = qs.filter(project_id=p_id).order_by('effective_from')
+            if project_qs.exists():
+                return Response(PayrollYearlySettingsSerializer(project_qs, many=True).data)
+            # اگر برای پروژه تنظیمات اختصاصی ثبت نشده، نسخه‌های سراسری سازمان بازگردانده می‌شود
+            global_qs = qs.filter(project__isnull=True).order_by('effective_from')
+            return Response(PayrollYearlySettingsSerializer(global_qs, many=True).data)
+        else:
+            qs = qs.filter(project__isnull=True).order_by('effective_from')
+        return Response(PayrollYearlySettingsSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=['get'], url_path='available-years')
+    def get_available_years(self, request):
+        """
+        دریافت فهرست سال‌های مالی تعریف‌شده در سیستم
+        """
+        years = list(PayrollYearlySettings.objects.values_list('fiscal_year', flat=True).distinct())
+        cleaned_years = sorted(list(set([str(y).strip() for y in years if y and str(y).strip()])), reverse=True)
+        if not cleaned_years:
+            cleaned_years = ['1405']
+        return Response({'years': cleaned_years})
+
+    @action(detail=False, methods=['post'], url_path='create-year')
+    def create_fiscal_year(self, request):
+        """
+        ایجاد سال مالی جدید بر اساس کپی اطلاعات و احکام یک سال مالی مبدأ
+        """
+        new_year = request.data.get('year')
+        source_year = request.data.get('source_year')
+        project_id = request.data.get('project_id')
+        p_id = safe_int(project_id)
+
+        if not new_year:
+            return Response({'error': 'تعیین سال مالی جدید الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        new_year = str(new_year).strip()
+        if len(new_year) != 4 or not new_year.isdigit():
+            return Response({'error': 'فرمت سال مالی باید یک عدد ۴ رقمی شمسی (مثلاً ۱۴۰۶) باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # بررسی وجود قبلی
+        existing = PayrollYearlySettings.objects.filter(fiscal_year=new_year, project_id=p_id).first()
+        if existing:
+            return Response({
+                'error': f'سال مالی {new_year} قبلاً در سیستم تعریف شده است.',
+                'settings': PayrollYearlySettingsSerializer(existing).data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        project = FinancialProject.objects.filter(id=p_id).first() if p_id else None
+
+        # پیدا کردن سال مبدأ
+        source = None
+        if source_year:
+            source = get_effective_payroll_settings(f"{source_year}/01", p_id)
+        if not source:
+            source = get_effective_payroll_settings("1405/01", p_id) or PayrollYearlySettings.objects.first()
+
+        effective_from = f"{new_year}/01"
+        version_title = "احکام مصوب فروردین"
+
+        with transaction.atomic():
+            new_settings = PayrollYearlySettings.objects.create(
+                fiscal_year=new_year,
+                effective_from=effective_from,
+                version_title=version_title,
+                project=project,
+                title=f"تنظیمات سال مالی {new_year} ({project.name if project else 'سراسری'})",
+                is_active=True,
+                monthly_food_allowance=source.monthly_food_allowance if source else 22000000,
+                monthly_housing_allowance=source.monthly_housing_allowance if source else 30000000,
+                monthly_spouse_allowance=source.monthly_spouse_allowance if source else 5000000,
+                monthly_child_allowance=source.monthly_child_allowance if source else 16625549,
+                shift_percent=source.shift_percent if source else 0,
+                transport_help_percent=source.transport_help_percent if source else 0,
+                transport_fixed_amount=source.transport_fixed_amount if source else 2388728,
+                specialist_attraction_percent=source.specialist_attraction_percent if source else 0,
+                bad_weather_percent=source.bad_weather_percent if source else 0,
+                remote_hardship_percent=source.remote_hardship_percent if source else 0,
+                south_pars_percent=source.south_pars_percent if source else 0,
+                travel_cost_per_day=source.travel_cost_per_day if source else 8736600,
+                worker_insurance_rate=source.worker_insurance_rate if source else 7.00,
+                employer_insurance_rate=source.employer_insurance_rate if source else 20.00,
+                unemployment_insurance_rate=source.unemployment_insurance_rate if source else 3.00,
+                surplus_overtime_percent=source.surplus_overtime_percent if source else 50.00,
+                attendance_edit_past_days=source.attendance_edit_past_days if source else 3,
+                attendance_edit_future_days=source.attendance_edit_future_days if source else 0,
+            )
+
+            # کپی کارگاه بیمه
+            if source and hasattr(source, 'workshop_insurance'):
+                wi = source.workshop_insurance
+                WorkshopInsuranceSettings.objects.create(
+                    yearly_settings=new_settings,
+                    workshop_code=wi.workshop_code,
+                    workshop_name=wi.workshop_name,
+                    employer_name=wi.employer_name,
+                    workshop_address=wi.workshop_address,
+                    list_type=wi.list_type,
+                    list_number=wi.list_number,
+                    default_dsk_rate=wi.default_dsk_rate,
+                    default_mon_pym=wi.default_mon_pym,
+                )
+
+            # کپی تنظیمات مالیاتی
+            if source and hasattr(source, 'tax_settings'):
+                ts = source.tax_settings
+                TaxRuleSettings.objects.create(
+                    yearly_settings=new_settings,
+                    payment_type=ts.payment_type,
+                    service_location=ts.service_location,
+                    exceptions=ts.exceptions,
+                    currency_type=ts.currency_type,
+                    currency_exchange_rate=ts.currency_exchange_rate,
+                    housing_benefit_type=ts.housing_benefit_type,
+                    vehicle_benefit_type=ts.vehicle_benefit_type,
+                    wh_file_prefix=ts.wh_file_prefix,
+                    wp_file_prefix=ts.wp_file_prefix,
+                )
+
+            # کپی تنظیمات بانکی
+            if source and hasattr(source, 'bank_export_settings'):
+                bs = source.bank_export_settings
+                BankExportSettings.objects.create(
+                    yearly_settings=new_settings,
+                    bank_name=bs.bank_name,
+                    source_account_number=bs.source_account_number,
+                    default_deposit_id=bs.default_deposit_id,
+                    deposit_description_template=bs.deposit_description_template,
+                )
+
+            # کپی ۲۰ گروه شغلی
+            if source:
+                for tier in source.job_grades.all():
+                    JobGradeTier.objects.create(
+                        yearly_settings=new_settings,
+                        grade_number=tier.grade_number,
+                        daily_base_wage=tier.daily_base_wage,
+                        daily_seniority_bonus=tier.daily_seniority_bonus,
+                    )
+
+        return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='create-version')
+    def create_version(self, request):
+        """
+        ایجاد نسخه جدید احکام در میانه سال با کپی از آخرین نسخه و تعیین ماه شروع
+        """
+        project_id = request.data.get('project_id')
+        year = request.data.get('year', '1405')
+        effective_from = request.data.get('effective_from')
+        version_title = request.data.get('version_title') or f"احکام اصلاحیه {effective_from}"
+
+        if not effective_from:
+            return Response({'error': 'ماه شروع اعتبار (effective_from) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        p_id = safe_int(project_id)
+        project = FinancialProject.objects.filter(id=p_id).first() if p_id else None
+
+        existing = PayrollYearlySettings.objects.filter(
+            fiscal_year=year,
+            project=project,
+            effective_from=effective_from
+        ).first()
+        if existing:
+            return Response(PayrollYearlySettingsSerializer(existing).data)
+
+        source = get_effective_payroll_settings(effective_from, p_id)
+        if not source:
+            source = PayrollYearlySettings.objects.first()
+
+        with transaction.atomic():
+            new_settings = PayrollYearlySettings.objects.create(
+                fiscal_year=year,
+                effective_from=effective_from,
+                version_title=version_title,
+                project=project,
+                title=f"{version_title} ({project.name if project else 'سراسری'})",
+                is_active=True,
+                monthly_food_allowance=source.monthly_food_allowance if source else 22000000,
+                monthly_housing_allowance=source.monthly_housing_allowance if source else 30000000,
+                monthly_spouse_allowance=source.monthly_spouse_allowance if source else 5000000,
+                monthly_child_allowance=source.monthly_child_allowance if source else 16625549,
+                shift_percent=source.shift_percent if source else 0,
+                transport_help_percent=source.transport_help_percent if source else 0,
+                transport_fixed_amount=source.transport_fixed_amount if source else 2388728,
+                specialist_attraction_percent=source.specialist_attraction_percent if source else 0,
+                bad_weather_percent=source.bad_weather_percent if source else 0,
+                remote_hardship_percent=source.remote_hardship_percent if source else 0,
+                south_pars_percent=source.south_pars_percent if source else 0,
+                travel_cost_per_day=source.travel_cost_per_day if source else 8736600,
+                worker_insurance_rate=source.worker_insurance_rate if source else 7.00,
+                employer_insurance_rate=source.employer_insurance_rate if source else 20.00,
+                unemployment_insurance_rate=source.unemployment_insurance_rate if source else 3.00,
+                surplus_overtime_percent=source.surplus_overtime_percent if source else 50.00,
+                attendance_edit_past_days=source.attendance_edit_past_days if source else 3,
+                attendance_edit_future_days=source.attendance_edit_future_days if source else 0,
+            )
+
+            if source and hasattr(source, 'workshop_insurance'):
+                wi = source.workshop_insurance
+                WorkshopInsuranceSettings.objects.create(
+                    yearly_settings=new_settings,
+                    workshop_code=wi.workshop_code,
+                    workshop_name=wi.workshop_name,
+                    employer_name=wi.employer_name,
+                    workshop_address=wi.workshop_address,
+                    list_type=wi.list_type,
+                    list_number=wi.list_number,
+                    default_dsk_rate=wi.default_dsk_rate,
+                    default_mon_pym=wi.default_mon_pym,
+                )
+
+            if source and hasattr(source, 'tax_settings'):
+                ts = source.tax_settings
+                TaxRuleSettings.objects.create(
+                    yearly_settings=new_settings,
+                    payment_type=ts.payment_type,
+                    service_location=ts.service_location,
+                    exceptions=ts.exceptions,
+                    currency_type=ts.currency_type,
+                    currency_exchange_rate=ts.currency_exchange_rate,
+                    housing_benefit_type=ts.housing_benefit_type,
+                    vehicle_benefit_type=ts.vehicle_benefit_type,
+                    wh_file_prefix=ts.wh_file_prefix,
+                    wp_file_prefix=ts.wp_file_prefix,
+                )
+
+            if source and hasattr(source, 'bank_export_settings'):
+                bs = source.bank_export_settings
+                BankExportSettings.objects.create(
+                    yearly_settings=new_settings,
+                    bank_name=bs.bank_name,
+                    source_account_number=bs.source_account_number,
+                    default_deposit_id=bs.default_deposit_id,
+                    deposit_description_template=bs.deposit_description_template,
+                )
+
+            if source:
+                for tier in source.job_grades.all():
+                    JobGradeTier.objects.create(
+                        yearly_settings=new_settings,
+                        grade_number=tier.grade_number,
+                        daily_base_wage=tier.daily_base_wage,
+                        daily_seniority_bonus=tier.daily_seniority_bonus,
+                    )
+
+        return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='clone-for-project')
     def clone_for_project(self, request):
@@ -3369,22 +3654,22 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         """
         project_id = request.data.get('project_id')
         year = request.data.get('year', '1405')
+        effective_from = request.data.get('effective_from', f"{year}/01")
 
-        if not project_id:
+        p_id = safe_int(project_id)
+        if not p_id:
             return Response({'error': 'شناسه پروژه (project_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        project = FinancialProject.objects.filter(id=project_id).first()
+        project = FinancialProject.objects.filter(id=p_id).first()
         if not project:
             return Response({'error': 'پروژه مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        existing = PayrollYearlySettings.objects.filter(fiscal_year=year, project=project).first()
+        existing = PayrollYearlySettings.objects.filter(fiscal_year=year, project=project, effective_from=effective_from).first()
         if existing:
             return Response(PayrollYearlySettingsSerializer(existing).data)
 
         # پیدا کردن تنظیمات مادر (سراسری)
-        source = PayrollYearlySettings.objects.filter(fiscal_year=year, project__isnull=True).first()
-        if not source:
-            source = PayrollYearlySettings.objects.filter(is_active=True, project__isnull=True).first()
+        source = get_effective_payroll_settings(effective_from, None)
         if not source:
             source = PayrollYearlySettings.objects.first()
         if not source:
@@ -3393,6 +3678,8 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             new_settings = PayrollYearlySettings.objects.create(
                 fiscal_year=year,
+                effective_from=effective_from,
+                version_title=source.version_title or "احکام مصوب فروردین",
                 project=project,
                 title=f"تنظیمات {project.name} - سال {year}",
                 is_active=True,
@@ -3474,16 +3761,21 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         """
         دریافت خودکار مزد روزانه و پایه سنواتی بر اساس گروه شغلی (۱ تا ۲۰)
         """
-        grade = request.query_params.get('grade', '19')
+        grade = safe_int(request.query_params.get('grade'), default=19)
         year = request.query_params.get('year', '1405')
+        p_id = safe_int(request.query_params.get('project_id'))
         
-        tier = JobGradeTier.objects.filter(
-            yearly_settings__fiscal_year=year,
-            grade_number=int(grade)
-        ).first()
+        settings_obj = get_effective_payroll_settings(f"{year}/01", p_id)
+
+        tier = None
+        if settings_obj:
+            tier = JobGradeTier.objects.filter(
+                yearly_settings=settings_obj,
+                grade_number=grade
+            ).first()
 
         if not tier:
-            tier = JobGradeTier.objects.filter(grade_number=int(grade)).first()
+            tier = JobGradeTier.objects.filter(grade_number=grade).first()
 
         if tier:
             return Response({
@@ -3505,6 +3797,7 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             # 1. Update main fields
             for field in [
+                'fiscal_year', 'version_title', 'effective_from', 'effective_to',
                 'monthly_food_allowance', 'monthly_housing_allowance', 'monthly_spouse_allowance',
                 'monthly_child_allowance', 'shift_percent', 'transport_help_percent',
                 'transport_fixed_amount', 'specialist_attraction_percent', 'bad_weather_percent',
@@ -3669,10 +3962,8 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
         fiscal_year_short = int(year_str[-2:]) # 05
         month_num = int(month_str)
 
-        # استخراج تنظیمات کارگاه به ترتیب: تنظیم اختصاصی پروژه -> تنظیم سراسری سال
-        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project=project).first()
-        if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project__isnull=True).first()
+        # استخراج تنظیمات کارگاه به ترتیب: تنظیم اختصاصی پروژه -> تنظیم سراسری سال در بازه موثر
+        settings_obj = get_effective_payroll_settings(period.year_month, project.id)
         ws_settings = getattr(settings_obj, 'workshop_insurance', None) if settings_obj else None
         if not ws_settings:
             ws_settings = WorkshopInsuranceSettings.objects.first()
@@ -3747,20 +4038,35 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='export-tax-wh')
     def export_tax_wh(self, request):
         """
-        صدور فایل متنی WH مالیات حقوق
+        صدور فایل متنی WH مالیات حقوق به تفکیک اجباری پروژه
         """
         period_id = request.query_params.get('period_id')
-        records = list(MonthlyPayrollRecord.objects.filter(period_id=period_id).select_related('personnel'))
-        if not records:
-            return Response({'error': 'رکوردی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+        project_id = request.query_params.get('project_id')
 
-        settings_obj = PayrollYearlySettings.objects.filter(is_active=True).first()
+        if not period_id:
+            return Response({'error': 'شناسه دوره (period_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not project_id:
+            return Response({'error': 'انتخاب پروژه جهت صدور فایل متنی WH مالیاتی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        period = MonthlyWorkPeriod.objects.filter(id=period_id).first()
+        if not period:
+            return Response({'error': 'دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        project = FinancialProject.objects.filter(id=project_id).first()
+        if not project:
+            return Response({'error': 'پروژه انتخاب‌شده یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        all_records = list(MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel', 'personnel__project'))
+        records = [r for r in all_records if r.personnel.project_id == project.id]
+        if not records:
+            return Response({'error': f'هیچ رکوردی برای پروژه «{project.name}» در این دوره محاسبه نشده است.'}, status=status.HTTP_404_NOT_FOUND)
+
+        settings_obj = get_effective_payroll_settings(period.year_month, project.id)
         tax_settings = getattr(settings_obj, 'tax_settings', None)
 
         content = generate_wh_tax_content(records, tax_settings)
-        period = records[0].period
         month_code = period.year_month.replace('/', '')[2:] if period else '140504'
-        filename = f"WH{month_code}.txt"
+        filename = f"WH_{project.code}_{month_code}.txt"
 
         resp = HttpResponse(content.encode('utf-8'), content_type='text/plain; charset=utf-8')
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -3769,20 +4075,35 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='export-tax-wp')
     def export_tax_wp(self, request):
         """
-        صدور فایل متنی WP پرسنل مالیاتی
+        صدور فایل متنی WP پرسنل مالیاتی به تفکیک اجباری پروژه
         """
         period_id = request.query_params.get('period_id')
-        records = list(MonthlyPayrollRecord.objects.filter(period_id=period_id).select_related('personnel'))
-        if not records:
-            return Response({'error': 'رکوردی یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+        project_id = request.query_params.get('project_id')
 
-        settings_obj = PayrollYearlySettings.objects.filter(is_active=True).first()
+        if not period_id:
+            return Response({'error': 'شناسه دوره (period_id) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not project_id:
+            return Response({'error': 'انتخاب پروژه جهت صدور فایل متنی WP مالیاتی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        period = MonthlyWorkPeriod.objects.filter(id=period_id).first()
+        if not period:
+            return Response({'error': 'دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        project = FinancialProject.objects.filter(id=project_id).first()
+        if not project:
+            return Response({'error': 'پروژه انتخاب‌شده یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+
+        all_records = list(MonthlyPayrollRecord.objects.filter(period=period).select_related('personnel', 'personnel__project'))
+        records = [r for r in all_records if r.personnel.project_id == project.id]
+        if not records:
+            return Response({'error': f'هیچ رکوردی برای پروژه «{project.name}» در این دوره محاسبه نشده است.'}, status=status.HTTP_404_NOT_FOUND)
+
+        settings_obj = get_effective_payroll_settings(period.year_month, project.id)
         tax_settings = getattr(settings_obj, 'tax_settings', None)
 
         content = generate_wp_tax_content(records, tax_settings)
-        period = records[0].period
         month_code = period.year_month.replace('/', '')[2:] if period else '140504'
-        filename = f"WP{month_code}.txt"
+        filename = f"WP_{project.code}_{month_code}.txt"
 
         resp = HttpResponse(content.encode('utf-8'), content_type='text/plain; charset=utf-8')
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -3814,11 +4135,7 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
         if not records:
             return Response({'error': f'رکوردی برای پروژه «{project.name}» در این دوره یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
-        year_str = period.year_month.split('/')[0] if '/' in period.year_month else '1405'
-        settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project=project).first()
-        if not settings_obj:
-            settings_obj = PayrollYearlySettings.objects.filter(fiscal_year=year_str, project__isnull=True).first()
-
+        settings_obj = get_effective_payroll_settings(period.year_month, project.id)
         bank_settings = getattr(settings_obj, 'bank_export_settings', None)
 
         excel_bytes = generate_bank_meli_excel(records, bank_settings, year_month_title=f"{project.name} {period.year_month}")
@@ -4094,10 +4411,10 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
     """
     مدیریت پروژه‌های مالی و عملیاتی (مراکز هزینه مستقل)
     """
-    queryset = FinancialProject.objects.all().prefetch_related('sections')
+    queryset = FinancialProject.objects.all().annotate(sections_count=Count('sections'))
     serializer_class = FinancialProjectSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = None
+    permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -4106,7 +4423,8 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=is_active.lower() == 'true')
         search = self.request.query_params.get('search')
         if search:
-            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+            search_clean = normalize_digits(str(search)).strip()
+            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search_clean))
         return qs.order_by('code')
 
     def perform_create(self, serializer):
@@ -4122,6 +4440,22 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance_id = instance.id
         instance_name = instance.name
+
+        # بررسی محافظت و قوانین عدم حذف زنجیره‌ای (تسک ۱.۲ و ۳۵)
+        has_invoices = ExpenseInvoice.objects.filter(section__project=instance).exists()
+        has_payroll_settings = PayrollYearlySettings.objects.filter(project=instance).exists()
+        has_attendance = DailyAttendance.objects.filter(project=instance).exists()
+        has_trips = VehicleTripLog.objects.filter(project=instance).exists()
+        has_personnel = PersonnelProfile.objects.filter(project=instance).exists()
+
+        if has_invoices or has_payroll_settings or has_attendance or has_trips or has_personnel:
+            # جلوگیری قاطع از حذف فیزیکی جهت حفاظت از اسناد مالی و تبدیل به غیرفعال‌سازی نرم
+            instance.is_active = False
+            instance.save(update_fields=['is_active', 'updated_at'])
+            tab_id = self.request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('project', 'update', instance_id, instance_name, None, tab_id, self.request.user.id)
+            return
+
         instance.delete()
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('project', 'delete', instance_id, instance_name, None, tab_id, self.request.user.id)
@@ -4142,9 +4476,11 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
-        result = import_projects_from_excel(file_obj)
-        tab_id = request.headers.get('X-Client-Tab-Id')
-        broadcast_org_structure_updated('project', 'import', None, 'اکسل پروژه‌ها', None, tab_id, request.user.id)
+        dry_run = request.data.get('dry_run') in ['true', 'True', True]
+        result = import_projects_from_excel(file_obj, dry_run=dry_run)
+        if not dry_run:
+            tab_id = request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('project', 'import', None, 'اکسل پروژه‌ها', None, tab_id, request.user.id)
         return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
 
 
@@ -4154,20 +4490,24 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
     """
     queryset = ProjectSection.objects.all().select_related('project')
     serializer_class = ProjectSectionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = None
+    permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
         project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
         if project_id:
-            qs = qs.filter(project_id=project_id)
+            try:
+                qs = qs.filter(project_id=int(project_id))
+            except (ValueError, TypeError):
+                pass
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
         search = self.request.query_params.get('search')
         if search:
-            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search))
+            search_clean = normalize_digits(str(search)).strip()
+            qs = qs.filter(Q(name__icontains=search) | Q(code__icontains=search_clean))
         return qs.order_by('project__code', 'code')
 
     def perform_create(self, serializer):
@@ -4184,6 +4524,20 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
         instance_id = instance.id
         instance_name = instance.name
         project_id = instance.project_id
+
+        # بررسی محافظت و قوانین عدم حذف زنجیره‌ای (تسک ۱.۲ و ۳۵)
+        has_invoices = ExpenseInvoice.objects.filter(section=instance).exists()
+        has_attendance = DailyAttendance.objects.filter(section=instance).exists()
+        has_trips = VehicleTripLog.objects.filter(section=instance).exists()
+        has_personnel = PersonnelProfile.objects.filter(section=instance).exists()
+
+        if has_invoices or has_attendance or has_trips or has_personnel:
+            instance.is_active = False
+            instance.save(update_fields=['is_active', 'updated_at'])
+            tab_id = self.request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('section', 'update', instance_id, instance_name, project_id, tab_id, self.request.user.id)
+            return
+
         instance.delete()
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('section', 'delete', instance_id, instance_name, project_id, tab_id, self.request.user.id)
@@ -4205,9 +4559,11 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
-        result = import_sections_from_excel(file_obj)
-        tab_id = request.headers.get('X-Client-Tab-Id')
-        broadcast_org_structure_updated('section', 'import', None, 'اکسل بخش‌ها', None, tab_id, request.user.id)
+        dry_run = request.data.get('dry_run') in ['true', 'True', True]
+        result = import_sections_from_excel(file_obj, dry_run=dry_run)
+        if not dry_run:
+            tab_id = request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('section', 'import', None, 'اکسل بخش‌ها', None, tab_id, request.user.id)
         return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'], url_path='clone-assignments')
@@ -4219,10 +4575,15 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
         source_section_id = request.data.get('source_section_id')
         if not source_section_id:
             return Response({'error': 'شناسه بخش مبدأ الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
-        if int(source_section_id) == target_section.id:
+        try:
+            source_sec_id_int = int(source_section_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه بخش مبدأ نامعتبر است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if source_sec_id_int == target_section.id:
             return Response({'error': 'بخش مبدأ و مقصد نمی‌توانند یکسان باشند.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        source_section = ProjectSection.objects.filter(id=source_section_id).first()
+        source_section = ProjectSection.objects.filter(id=source_sec_id_int).first()
         if not source_section:
             return Response({'error': 'بخش مبدأ یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -4234,12 +4595,13 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
         skipped_count = 0
         with transaction.atomic():
             for sa in source_assignments:
-                exists = UserSectionAssignment.objects.filter(
+                existing_assignment = UserSectionAssignment.objects.filter(
                     user=sa.user,
                     section=target_section,
                     role=sa.role
-                ).exists()
-                if not exists:
+                ).first()
+
+                if not existing_assignment:
                     UserSectionAssignment.objects.create(
                         user=sa.user,
                         section=target_section,
@@ -4248,7 +4610,12 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
                     )
                     copied_count += 1
                 else:
-                    skipped_count += 1
+                    if not existing_assignment.is_active:
+                        existing_assignment.is_active = True
+                        existing_assignment.save(update_fields=['is_active', 'updated_at'])
+                        copied_count += 1
+                    else:
+                        skipped_count += 1
 
         tab_id = request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated(
@@ -4263,7 +4630,7 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
 
         return Response({
             'success': True,
-            'message': f'ساختار پرسنلی با موفقیت کپی شد. ({copied_count} انتساب جدید، {skipped_count} تکراری/صرف‌نظر)',
+            'message': f'ساختار پرسنلی با موفقیت کپی شد. ({copied_count} انتساب جدید/فعال‌شده، {skipped_count} بدون تغییر)',
             'copied_count': copied_count,
             'skipped_count': skipped_count
         }, status=status.HTTP_200_OK)
@@ -4275,20 +4642,29 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
     """
     queryset = UserSectionAssignment.objects.all().select_related('user', 'section', 'section__project')
     serializer_class = UserSectionAssignmentSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = None
+    permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
         section_id = self.request.query_params.get('section_id')
         if section_id:
-            qs = qs.filter(section_id=section_id)
+            try:
+                qs = qs.filter(section_id=int(section_id))
+            except (ValueError, TypeError):
+                pass
         project_id = self.request.query_params.get('project_id')
         if project_id:
-            qs = qs.filter(section__project_id=project_id)
+            try:
+                qs = qs.filter(section__project_id=int(project_id))
+            except (ValueError, TypeError):
+                pass
         user_id = self.request.query_params.get('user_id')
         if user_id:
-            qs = qs.filter(user_id=user_id)
+            try:
+                qs = qs.filter(user_id=int(user_id))
+            except (ValueError, TypeError):
+                pass
         role = self.request.query_params.get('role')
         if role:
             qs = qs.filter(role=role)
@@ -4307,18 +4683,51 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
             return Response([], status=status.HTTP_200_OK)
 
         if user.is_superuser or user.is_staff:
-            sections = ProjectSection.objects.filter(is_active=True).select_related('project')
+            sections = ProjectSection.objects.filter(is_active=True, project__is_active=True).select_related('project')
             return Response(ProjectSectionSerializer(sections, many=True).data)
 
         assignments = UserSectionAssignment.objects.filter(
             user=user,
             is_active=True,
-            section__is_active=True
+            section__is_active=True,
+            section__project__is_active=True
         ).select_related('section', 'section__project')
 
         sections = [a.section for a in assignments]
         unique_sections = {s.id: s for s in sections}.values()
         return Response(ProjectSectionSerializer(unique_sections, many=True).data)
+
+    def create(self, request, *args, **kwargs):
+        """
+        ایجاد انتساب یا فعال‌سازی مجدد رکورد غیرفعال قبلی بدون خطای یکتایی دیتابیس
+        """
+        user_id = request.data.get('user')
+        section_id = request.data.get('section')
+        role = request.data.get('role', 'employee')
+
+        try:
+            user_id_int = int(user_id) if user_id else None
+            sec_id_int = int(section_id) if section_id else None
+        except (ValueError, TypeError):
+            user_id_int, sec_id_int = None, None
+
+        if user_id_int and sec_id_int:
+            existing = UserSectionAssignment.objects.filter(
+                user_id=user_id_int,
+                section_id=sec_id_int,
+                role=role
+            ).first()
+            if existing:
+                if not existing.is_active:
+                    existing.is_active = True
+                    existing.save(update_fields=['is_active', 'updated_at'])
+                    tab_id = request.headers.get('X-Client-Tab-Id') or request.data.get('client_tab_id')
+                    proj_id = existing.section.project_id if existing.section else None
+                    broadcast_org_structure_updated('assignment', 'create', existing.id, str(existing.user), proj_id, tab_id, request.user.id)
+                serializer = self.get_serializer(existing)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -4335,7 +4744,9 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance_id = instance.id
         proj_id = instance.section.project_id if instance.section else None
-        instance.delete()
+        # غیرفعال‌سازی نرم جهت حفظ ردپای حسابرسی و انتساب‌های تاریخی
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('assignment', 'delete', instance_id, None, proj_id, tab_id, self.request.user.id)
 
@@ -4343,7 +4754,8 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
     def export_excel(self, request):
         from .org_excel_engine import export_assignments_excel
         project_id = request.query_params.get('project_id')
-        return export_assignments_excel(project_id)
+        role = request.query_params.get('role')
+        return export_assignments_excel(project_id, role)
 
     @action(detail=False, methods=['get'], url_path='download-template')
     def download_template(self, request):
@@ -4356,15 +4768,17 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({'error': 'فایل اکسل بارگذاری نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
-        result = import_assignments_from_excel(file_obj)
-        tab_id = request.headers.get('X-Client-Tab-Id')
-        broadcast_org_structure_updated('assignment', 'import', None, 'اکسل انتساب‌ها', None, tab_id, request.user.id)
+        dry_run = request.data.get('dry_run') in ['true', 'True', True]
+        result = import_assignments_from_excel(file_obj, dry_run=dry_run)
+        if not dry_run:
+            tab_id = request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('assignment', 'import', None, 'اکسل انتساب‌ها', None, tab_id, request.user.id)
         return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='bulk-assign')
     def bulk_assign(self, request):
         """
-        انتساب همزمان چند کاربر به یک بخش و سمت سازمانی
+        انتساب همزمان چند کاربر به یک بخش و سمت سازمانی با اعتبارسنجی کامل ورودی‌ها
         """
         section_id = request.data.get('section_id') or request.data.get('section')
         user_ids = request.data.get('user_ids') or []
@@ -4372,16 +4786,42 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
 
         if not section_id:
             return Response({'error': 'شناسه بخش الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            section_id_int = int(section_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'شناسه بخش باید عددی باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_roles = dict(UserSectionAssignment.ROLE_CHOICES).keys()
+        if role not in valid_roles:
+            return Response({'error': f'نقش ارسالی نامعتبر است. نقش‌های مجاز: {list(valid_roles)}'}, status=status.HTTP_400_BAD_REQUEST)
+
         if not user_ids or not isinstance(user_ids, list):
             return Response({'error': 'لیست شناسه‌های کاربران الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        section = ProjectSection.objects.filter(id=section_id).first()
+        valid_user_ids = []
+        for uid in user_ids:
+            try:
+                valid_user_ids.append(int(uid))
+            except (ValueError, TypeError):
+                pass
+
+        if not valid_user_ids:
+            return Response({'error': 'هیچ شناسه کاربری معتبری ارسال نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        section = ProjectSection.objects.filter(id=section_id_int).first()
         if not section:
             return Response({'error': 'بخش سازمانی مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # اعتبارسنجی وجود کاربران در دیتابیس
+        existing_users = set(User.objects.filter(id__in=valid_user_ids).values_list('id', flat=True))
+        if not existing_users:
+            return Response({'error': 'هیچ یک از کاربران ارسالی در سیستم یافت نشدند.'}, status=status.HTTP_404_NOT_FOUND)
+
         created_assignments = []
         with transaction.atomic():
-            for uid in user_ids:
+            for uid in valid_user_ids:
+                if uid not in existing_users:
+                    continue
                 assignment, _ = UserSectionAssignment.objects.get_or_create(
                     user_id=uid,
                     section=section,
@@ -4407,16 +4847,13 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
     """
     مدیریت طرف‌حساب‌های مالی (رانندگان، تعمیرگاه‌ها، جایگاه سوخت و پیمانکاران)
     """
-    queryset = Counterparty.objects.all().select_related('section', 'section__project')
+    queryset = Counterparty.objects.all()
     serializer_class = CounterpartySerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = None
+    permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         qs = super().get_queryset()
-        section_id = self.request.query_params.get('section_id')
-        if section_id:
-            qs = qs.filter(Q(section_id=section_id) | Q(section__isnull=True))
         c_type = self.request.query_params.get('counterparty_type')
         if c_type:
             qs = qs.filter(counterparty_type=c_type)
@@ -4425,7 +4862,8 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_active=is_active.lower() == 'true')
         search = self.request.query_params.get('search')
         if search:
-            qs = qs.filter(Q(name__icontains=search) | Q(national_id__icontains=search) | Q(phone__icontains=search))
+            search_clean = normalize_digits(str(search)).strip()
+            qs = qs.filter(Q(name__icontains=search) | Q(national_id__icontains=search_clean) | Q(phone__icontains=search_clean) | Q(account_code__icontains=search_clean))
         return qs.order_by('name')
 
     def perform_create(self, serializer):
@@ -4441,6 +4879,15 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance_id = instance.id
         instance_name = instance.name
+
+        # بررسی وجود فاکتور وابسته جهت جلوگیری از حذف مخرب
+        if ExpenseInvoice.objects.filter(counterparty=instance).exists():
+            instance.is_active = False
+            instance.save(update_fields=['is_active', 'updated_at'])
+            tab_id = self.request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('counterparty', 'update', instance_id, instance_name, None, tab_id, self.request.user.id)
+            return
+
         instance.delete()
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('counterparty', 'delete', instance_id, instance_name, None, tab_id, self.request.user.id)
@@ -4462,9 +4909,11 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
         file_obj = request.FILES.get('file')
         if not file_obj:
             return Response({'error': 'فایلی ارسال نشده است'}, status=status.HTTP_400_BAD_REQUEST)
-        res = import_counterparties_from_excel(file_obj)
-        tab_id = request.headers.get('X-Client-Tab-Id')
-        broadcast_org_structure_updated('counterparty', 'import', None, 'Bulk Import', None, tab_id, request.user.id)
+        dry_run = request.data.get('dry_run') in ['true', 'True', True]
+        res = import_counterparties_from_excel(file_obj, dry_run=dry_run)
+        if not dry_run:
+            tab_id = request.headers.get('X-Client-Tab-Id')
+            broadcast_org_structure_updated('counterparty', 'import', None, 'Bulk Import', None, tab_id, request.user.id)
         return Response(res, status=status.HTTP_200_OK if res['success'] else status.HTTP_400_BAD_REQUEST)
 
 

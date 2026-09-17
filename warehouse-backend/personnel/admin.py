@@ -39,9 +39,9 @@ class UserSectionAssignmentAdmin(admin.ModelAdmin):
 
 @admin.register(Counterparty)
 class CounterpartyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'counterparty_type', 'phone', 'national_id', 'section', 'is_active')
-    search_fields = ('name', 'national_id', 'phone', 'sheba_number')
-    list_filter = ('counterparty_type', 'is_active', 'section')
+    list_display = ('name', 'counterparty_type', 'phone', 'national_id', 'account_code', 'is_active')
+    search_fields = ('name', 'national_id', 'phone', 'sheba_number', 'account_code')
+    list_filter = ('counterparty_type', 'is_active')
 
 
 @admin.register(ExpenseInvoice)

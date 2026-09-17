@@ -243,11 +243,11 @@ class PersonnelAppTests(TestCase):
         self.assertGreater(len(res_dsk.content), 1000)
 
         # 3. تست صدور فایل‌های مالیات حقوق (WH و WP)
-        res_wh = self.client.get(f'/api/personnel/monthly-payroll/export-tax-wh/?period_id={period_id}')
+        res_wh = self.client.get(f'/api/personnel/monthly-payroll/export-tax-wh/?period_id={period_id}&project_id={self.project.id}')
         self.assertEqual(res_wh.status_code, 200)
         self.assertTrue(res_wh.content.startswith(b'\xef\xbb\xbf')) # UTF-8 BOM
 
-        res_wp = self.client.get(f'/api/personnel/monthly-payroll/export-tax-wp/?period_id={period_id}')
+        res_wp = self.client.get(f'/api/personnel/monthly-payroll/export-tax-wp/?period_id={period_id}&project_id={self.project.id}')
         self.assertEqual(res_wp.status_code, 200)
         self.assertTrue(res_wp.content.startswith(b'\xef\xbb\xbf')) # UTF-8 BOM
 

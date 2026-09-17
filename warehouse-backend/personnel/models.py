@@ -198,14 +198,6 @@ class Counterparty(models.Model):
         max_length=50, blank=True, null=True, db_index=True,
         verbose_name="کد حساب تفصیلی (رزرو دفتر کل)"
     )
-    section = models.ForeignKey(
-        ProjectSection,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='counterparties',
-        verbose_name="بخش منتسب"
-    )
     is_active = models.BooleanField(default=True, verbose_name="فعال")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -233,13 +225,13 @@ class ExpenseInvoice(models.Model):
     )
     section = models.ForeignKey(
         ProjectSection,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='invoices',
         verbose_name="بخش پروژه"
     )
     counterparty = models.ForeignKey(
         Counterparty,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='invoices',
         verbose_name="طرف‌حساب"
     )
@@ -1597,9 +1589,12 @@ class PayrollYearlySettings(models.Model):
     تنظیمات پایه و مالی سالانه حقوق و دستمزد (قانون کار و بخشنامه‌های سالانه)
     """
     fiscal_year = models.CharField(max_length=4, db_index=True, verbose_name="سال مالی (مثال ۱۴۰۵)")
+    effective_from = models.CharField(max_length=7, default='1405/01', db_index=True, verbose_name="ماه شروع اعتبار (مثال ۱۴۰۵/۰۱)")
+    effective_to = models.CharField(max_length=7, null=True, blank=True, db_index=True, verbose_name="ماه پایان اعتبار (خالی=جاری)")
+    version_title = models.CharField(max_length=150, default="احکام مصوب فروردین", verbose_name="عنوان نسخه احکام")
     project = models.ForeignKey(
         FinancialProject,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='payroll_yearly_settings',
@@ -1640,25 +1635,26 @@ class PayrollYearlySettings(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "تنظیمات سالانه حقوق و دستمزد"
-        verbose_name_plural = "تنظیمات سالانه حقوق و دستمزد"
-        ordering = ['-fiscal_year', 'project']
+        verbose_name = "تنظیمات دوره‌ای حقوق و دستمزد"
+        verbose_name_plural = "تنظیمات دوره‌ای حقوق و دستمزد"
+        ordering = ['-effective_from', 'project']
         constraints = [
             models.UniqueConstraint(
-                fields=['fiscal_year'],
+                fields=['fiscal_year', 'effective_from'],
                 condition=models.Q(project__isnull=True),
-                name='unique_global_fiscal_year_setting'
+                name='unique_global_effective_period_setting'
             ),
             models.UniqueConstraint(
-                fields=['fiscal_year', 'project'],
+                fields=['project', 'fiscal_year', 'effective_from'],
                 condition=models.Q(project__isnull=False),
-                name='unique_project_fiscal_year_setting'
+                name='unique_project_effective_period_setting'
             ),
         ]
 
     def __str__(self):
         proj_str = f" - پروژه {self.project.name}" if self.project else " (سراسری سازمان)"
-        return f"تنظیمات سال {self.fiscal_year}{proj_str} ({'فعال' if self.is_active else 'غیرفعال'})"
+        period_str = f" از {self.effective_from}" + (f" تا {self.effective_to}" if self.effective_to else "")
+        return f"{self.version_title} ({self.fiscal_year}{period_str}){proj_str}"
 
 
 class JobGradeTier(models.Model):

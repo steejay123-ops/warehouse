@@ -119,7 +119,7 @@ class SectionGuardian:
 
             # چک ۵: فیلدهای Counterparty
             cp_fields = [f.name for f in Counterparty._meta.get_fields()]
-            req_cp = ['name', 'counterparty_type', 'national_id', 'phone', 'bank_name', 'sheba_number', 'section', 'is_active']
+            req_cp = ['name', 'counterparty_type', 'national_id', 'phone', 'bank_name', 'sheba_number', 'account_code', 'is_active']
             cp_ok = all(f in cp_fields for f in req_cp)
             checks.append(("فیلدهای Counterparty", cp_ok, f"فیلدها: {req_cp}"))
             if not cp_ok:

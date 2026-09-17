@@ -16,6 +16,44 @@ from .models import (
     DailyAttendance
 )
 
+def get_effective_payroll_settings(year_month: str, project_id: int = None) -> PayrollYearlySettings:
+    """
+    واکشی هوشمند تنظیمات احکام حقوق منطبق بر ماه دوره و پروژه پرسنل:
+    1. ابتدا تطبیق با تنظیمات اختصاصی پروژه در بازه موثر
+    2. در صورت عدم تعریف، ارث‌بری از تنظیمات سراسری سازمان در همان بازه
+    3. در صورت عدم تطبیق، فال‌بک به تنظیمات فعال سال مالی
+    """
+    year_str = year_month.split('/')[0] if '/' in year_month else '1405'
+
+    # 1. تنظیمات اختصاصی پروژه در بازه معتبر
+    if project_id:
+        proj_setting = PayrollYearlySettings.objects.filter(
+            project_id=project_id,
+            effective_from__lte=year_month
+        ).filter(
+            Q(effective_to__gte=year_month) | Q(effective_to__isnull=True)
+        ).order_by('-effective_from').first()
+        if proj_setting:
+            return proj_setting
+
+    # 2. ارث‌بری هوشمند از تنظیمات سراسری سازمان در همان بازه
+    global_setting = PayrollYearlySettings.objects.filter(
+        project__isnull=True,
+        effective_from__lte=year_month
+    ).filter(
+        Q(effective_to__gte=year_month) | Q(effective_to__isnull=True)
+    ).order_by('-effective_from').first()
+    if global_setting:
+        return global_setting
+
+    # 3. فال‌بک نهایی به تنظیمات فعال سال
+    fallback = PayrollYearlySettings.objects.filter(fiscal_year=year_str, is_active=True).first()
+    if not fallback:
+        fallback = PayrollYearlySettings.objects.filter(is_active=True).first()
+    if not fallback:
+        fallback = PayrollYearlySettings.objects.first()
+    return fallback
+
 
 class PayrollCalculationEngine:
     """
@@ -243,31 +281,27 @@ class PayrollCalculationEngine:
 
         continuous_taxable_salary_allowances = base_salary + continuous_taxable_allowances
 
-        # ── 7. Income Tax Logic (حفظ مقدار ایمپورت‌شده یا محاسبه هوشمند) ────
+        # ── 7. Income Tax Logic (حفظ مقدار ایمپورت‌شده از سامانه دارایی یا دستی) ────
         tax_source_type = 'MANUAL'
         tax_exemption_months = 1
         has_multiple_employers = False
         is_tax_imported = False
 
-        if existing_record and existing_record.is_tax_imported:
-            # Preserve uploaded/imported tax from Tax Excel file
+        if existing_record and (existing_record.is_tax_imported or existing_record.tax_source_type == 'IMPORTED_EXCEL'):
+            # Preserve uploaded/imported tax from Tax Administration calculation file
             income_tax = existing_record.income_tax
             tax_source_type = existing_record.tax_source_type or 'IMPORTED_EXCEL'
             tax_exemption_months = existing_record.tax_exemption_months or 1
             has_multiple_employers = existing_record.has_multiple_employers
             is_tax_imported = True
-        elif p.include_in_tax:
-            # Progressive tax brackets (ماده ۸۴ قانون مالیات‌های مستقیم)
-            # Exemption limit e.g. 140,000,000 Rials / month
-            taxable_base = continuous_taxable_salary_allowances + overtime_amount
-            exemption_limit = Decimal(140000000)
-            if taxable_base > exemption_limit:
-                income_tax = Decimal(round((taxable_base - exemption_limit) * Decimal('0.10')))
-            else:
-                income_tax = Decimal(0)
-            tax_source_type = 'CALCULATED_BRACKET'
+        elif existing_record and existing_record.income_tax > 0:
+            # Preserve manually assigned tax
+            income_tax = existing_record.income_tax
+            tax_source_type = existing_record.tax_source_type or 'MANUAL'
         else:
+            # Tax is computed externally by Tax Administration portal via WH/WP export
             income_tax = Decimal(0)
+            tax_source_type = 'MANUAL'
 
         total_deductions = worker_insurance
         net_salary = gross_salary - worker_insurance - income_tax
@@ -347,21 +381,27 @@ class PayrollCalculationEngine:
 
     def calculate_period(self, period: MonthlyWorkPeriod, user=None) -> list:
         """
-        محاسبه کلیه رکوردهای حقوق برای کل پرسنل یک دوره ماهانه
+        محاسبه کلیه رکوردهای حقوق برای کل پرسنل یک دوره ماهانه با تفکیک هوشمند پروژه و بازه احکام
         """
         year_str = period.year_month.split('/')[0] if '/' in period.year_month else '1405'
         month_str = period.year_month.split('/')[1] if '/' in period.year_month else '04'
         month_num = int(month_str)
         month_days = 31 if month_num <= 6 else (30 if month_num <= 11 else 29)
 
-        settings = PayrollYearlySettings.objects.filter(fiscal_year=year_str).first()
-        if not settings:
-            settings = PayrollYearlySettings.objects.filter(is_active=True).first()
+        # کش محلی تنظیمات و جداول ۲۰ گروه شغلی به ازای پروژه برای سرعت بالا
+        resolved_settings_cache = {}
+        job_grades_cache = {}
 
-        job_grades = {}
-        if settings:
-            for jg in settings.job_grades.all():
-                job_grades[str(jg.grade_number)] = (jg.daily_base_wage, jg.daily_seniority_bonus)
+        def get_cached_project_settings(proj_id):
+            if proj_id not in resolved_settings_cache:
+                s = get_effective_payroll_settings(period.year_month, proj_id)
+                resolved_settings_cache[proj_id] = s
+                jg_dict = {}
+                if s:
+                    for jg in s.job_grades.all():
+                        jg_dict[str(jg.grade_number)] = (jg.daily_base_wage, jg.daily_seniority_bonus)
+                job_grades_cache[proj_id] = jg_dict
+            return resolved_settings_cache[proj_id], job_grades_cache[proj_id]
 
         # پرسنل فعال یا پرسنلی که در این دوره کارکرد ثبت‌شده دارند
         personnel_qs = PersonnelProfile.objects.filter(
@@ -385,11 +425,13 @@ class PayrollCalculationEngine:
                     row_idx += 1
                     continue
 
+                emp_settings, emp_job_grades = get_cached_project_settings(p.project_id)
+
                 calc_data = self.calculate_single_employee(
                     personnel=p,
                     period=period,
-                    settings=settings,
-                    job_grades=job_grades,
+                    settings=emp_settings,
+                    job_grades=emp_job_grades,
                     month_days=month_days,
                     existing_record=existing
                 )

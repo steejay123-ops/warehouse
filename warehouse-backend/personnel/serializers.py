@@ -24,6 +24,7 @@ from .models import (
     MonthlyPayrollRecord
 )
 from .sheba_utils import validate_sheba, clean_sheba, get_bank_from_sheba
+from common.date_utils import normalize_digits
 
 
 class VehicleTripAuditLogSerializer(serializers.ModelSerializer):
@@ -532,12 +533,17 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
 # ==============================================================================
 
 class FinancialProjectSerializer(serializers.ModelSerializer):
-    sections_count = serializers.IntegerField(source='sections.count', read_only=True)
+    sections_count = serializers.SerializerMethodField()
 
     class Meta:
         model = FinancialProject
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+    def get_sections_count(self, obj):
+        if hasattr(obj, 'sections_count'):
+            return obj.sections_count
+        return obj.sections.count()
 
 
 class ProjectSectionSerializer(serializers.ModelSerializer):
@@ -572,12 +578,40 @@ class UserSectionAssignmentSerializer(serializers.ModelSerializer):
 
 class CounterpartySerializer(serializers.ModelSerializer):
     counterparty_type_display = serializers.CharField(source='get_counterparty_type_display', read_only=True)
-    section_name = serializers.CharField(source='section.name', read_only=True)
 
     class Meta:
         model = Counterparty
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+    def validate_national_id(self, value):
+        if not value:
+            return value
+        cleaned = normalize_digits(str(value)).strip()
+        if cleaned and not cleaned.isdigit():
+            raise serializers.ValidationError("شناسه/کد ملی باید فقط شامل ارقام عددی باشد.")
+        if cleaned and (len(cleaned) < 10 or len(cleaned) > 11):
+            raise serializers.ValidationError("کد ملی اشخاص حقیقی ۱۰ رقم و شناسه ملی اشخاص حقوقی ۱۱ رقم است.")
+        return cleaned
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+        cleaned = normalize_digits(str(value)).strip()
+        return cleaned
+
+    def validate_sheba_number(self, value):
+        if not value:
+            return ""
+        cleaned = normalize_digits(str(value)).upper().replace("IR", "").strip()
+        if not cleaned:
+            return ""
+        if len(cleaned) != 24:
+            raise serializers.ValidationError("ارقام شماره شبا باید دقیقاً ۲۴ رقم (بدون احتساب IR) باشد.")
+        is_valid, err_msg, _ = validate_sheba("IR" + cleaned)
+        if not is_valid:
+            raise serializers.ValidationError(err_msg or "ساختار شماره شبا نامعتبر است (خطای الگوریتم Mod 97).")
+        return cleaned
 
 
 class ExpenseInvoiceSerializer(serializers.ModelSerializer):

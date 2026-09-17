@@ -14,8 +14,11 @@ class Command(BaseCommand):
         # 1. Create or get Yearly Settings 1405
         settings_1405, created = PayrollYearlySettings.objects.get_or_create(
             fiscal_year='1405',
+            effective_from='1405/01',
+            project=None,
             defaults={
                 'title': 'تنظیمات پایه و قانون کار سال ۱۴۰۵',
+                'version_title': 'احکام مصوب فروردین ۱۴۰۵',
                 'is_active': True,
                 'monthly_food_allowance': 22000000,
                 'monthly_housing_allowance': 30000000,

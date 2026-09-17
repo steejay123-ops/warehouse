@@ -71,23 +71,20 @@ class SectionGuardianPhase1Tests(TestCase):
         self.assertEqual(self.user.section_assignments.count(), 1)
 
     def test_counterparty_creation(self):
-        """تست ایجاد طرف‌حساب و اتصال اختیاری به بخش"""
+        """تست ایجاد طرف‌حساب به عنوان موجودیت مالی سراسری مستقل"""
         cp = Counterparty.objects.create(
             name='تعمیرگاه تخصصی دیزل پارس',
             counterparty_type='repair_shop',
-            phone='09171234567',
-            section=self.section
+            phone='09171234567'
         )
         self.assertEqual(cp.counterparty_type, 'repair_shop')
-        self.assertEqual(cp.section, self.section)
         self.assertIn("تعمیرگاه", str(cp))
 
     def test_expense_invoice_draft_invariant(self):
         """تست الزام وضعیت پیش‌نویس (draft) برای فاکتور جدید"""
         cp = Counterparty.objects.create(
             name='جایگاه سوخت پارسیان',
-            counterparty_type='fuel_station',
-            section=self.section
+            counterparty_type='fuel_station'
         )
         invoice = ExpenseInvoice.objects.create(
             section=self.section,
@@ -199,8 +196,7 @@ class SectionGuardianPhase2APITests(TestCase):
         cp_res = self.client.post('/api/personnel/counterparties/', {
             'name': 'فروشگاه لوازم یدکی سپاهان',
             'counterparty_type': 'repair_shop',
-            'phone': '03131234567',
-            'section': sec.id
+            'phone': '03131234567'
         }, format='json')
         self.assertEqual(cp_res.status_code, 201)
         cp_id = cp_res.data['id']
@@ -302,5 +298,107 @@ class SectionGuardianPhase2APITests(TestCase):
         # بررسی در دیتابیس
         count = UserSectionAssignment.objects.filter(section=sec, role='accountant', is_active=True).count()
         self.assertEqual(count, 2)
+
+    def test_soft_deactivation_on_destroy_with_invoices(self):
+        """تست عدم حذف فیزیکی و تبدیل به غیرفعال‌سازی نرم در صورت وجود فاکتور یا سند مالی"""
+        proj = FinancialProject.objects.create(code='PRJ-SAFE', name='پروژه حفاظت داده')
+        sec = ProjectSection.objects.create(project=proj, code='SEC-SAFE', name='بخش امن')
+        cp = Counterparty.objects.create(name='تأمین‌کننده قطعات امین')
+        ExpenseInvoice.objects.create(
+            section=sec,
+            counterparty=cp,
+            invoice_number='INV-SAFE-01',
+            invoice_date_shamsi='1404/06/01',
+            amount=1000000,
+            category='مصرفی',
+            description='خرید قطعات ضروری'
+        )
+
+        # تلاش برای حذف بخش از طریق API
+        del_sec_res = self.client.delete(f'/api/personnel/project-sections/{sec.id}/')
+        self.assertEqual(del_sec_res.status_code, 204)
+        sec.refresh_from_db()
+        self.assertFalse(sec.is_active, "بخش دارای فاکتور نباید فیزیکی حذف شود بلکه باید is_active=False گردد")
+
+        # تلاش برای حذف طرف‌حساب از طریق API
+        del_cp_res = self.client.delete(f'/api/personnel/counterparties/{cp.id}/')
+        self.assertEqual(del_cp_res.status_code, 204)
+        cp.refresh_from_db()
+        self.assertFalse(cp.is_active, "طرف‌حساب دارای فاکتور نباید فیزیکی حذف شود بلکه باید is_active=False گردد")
+
+        # تلاش برای حذف پروژه از طریق API
+        del_proj_res = self.client.delete(f'/api/personnel/financial-projects/{proj.id}/')
+        self.assertEqual(del_proj_res.status_code, 204)
+        proj.refresh_from_db()
+        self.assertFalse(proj.is_active, "پروژه دارای فاکتور نباید فیزیکی حذف شود بلکه باید is_active=False گردد")
+
+    def test_reactivate_inactive_assignment_without_unique_error(self):
+        """تست فعال‌سازی مجدد رکورد غیرفعال انتساب بدون خطای یکتایی دیتابیس"""
+        proj = FinancialProject.objects.create(code='PRJ-REACT', name='پروژه فعال‌سازی مجدد')
+        sec = ProjectSection.objects.create(project=proj, code='SEC-REACT', name='بخش فعال‌سازی')
+        assignment = UserSectionAssignment.objects.create(
+            user=self.employee_user,
+            section=sec,
+            role='supervisor',
+            is_active=False
+        )
+
+        # ارسال مجدد ایجاد انتساب از طریق API
+        res = self.client.post('/api/personnel/user-section-assignments/', {
+            'user': self.employee_user.id,
+            'section': sec.id,
+            'role': 'supervisor'
+        }, format='json')
+        self.assertEqual(res.status_code, 201)
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.is_active, "انتساب غیرفعال قبلی باید بدون ارور مجدداً فعال شود")
+
+    def test_dry_run_excel_import(self):
+        """تست عملکرد حالت dry_run در متدهای اکسل بدون ذخیره در دیتابیس"""
+        import openpyxl
+        import io
+        from personnel.org_excel_engine import import_projects_from_excel
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=1, column=1, value="کد پروژه")
+        ws.cell(row=2, column=1, value="code")
+        ws.cell(row=3, column=1, value="PRJ-DRY99")
+        ws.cell(row=3, column=2, value="پروژه آزمایشی درای‌ران")
+        ws.cell(row=3, column=3, value="توضیح")
+        ws.cell(row=3, column=4, value="بله")
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        # اجرای dry_run
+        res = import_projects_from_excel(buf, dry_run=True)
+        self.assertTrue(res['success'])
+        self.assertTrue(res['dry_run'])
+        self.assertEqual(res['summary']['created'], 1)
+        # اطمینان از عدم ایجاد در دیتابیس
+        self.assertFalse(FinancialProject.objects.filter(code='PRJ-DRY99').exists())
+
+    def test_counterparty_sheba_validation(self):
+        """تست اعتبارسنجی سریالایزر طرف‌حساب برای شبا و کد ملی"""
+        from personnel.serializers import CounterpartySerializer
+
+        # شبای نامعتبر
+        ser_invalid = CounterpartySerializer(data={
+            'name': 'طرف‌حساب تست شبا',
+            'sheba_number': '123456789012345678901234' # چک‌سام اشتباه
+        })
+        self.assertFalse(ser_invalid.is_valid())
+        self.assertIn('sheba_number', ser_invalid.errors)
+
+        # شبای معتبر بانک ملی
+        ser_valid = CounterpartySerializer(data={
+            'name': 'طرف‌حساب تست شبا معتبر',
+            'sheba_number': '780170000000101111111001',
+            'national_id': '1234567890'
+        })
+        self.assertTrue(ser_valid.is_valid(), ser_valid.errors)
+
 
 

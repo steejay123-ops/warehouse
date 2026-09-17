@@ -1,0 +1,308 @@
+// @vitest-environment jsdom
+import '@angular/compiler';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { Injector, runInInjectionContext, ChangeDetectorRef } from '@angular/core';
+import { of } from 'rxjs';
+import { UserMenuComponent } from './user-menu.component';
+import { AuthService } from '../../../core/auth/auth.service';
+import { AuthStore } from '../../../core/stores/auth.store';
+import { StateService } from '../../../services/state.service';
+import { AccountsHttpService } from '../../../core/http/accounts-http.service';
+import { WarehouseHttpService } from '../../../core/http/warehouse-http.service';
+import { ModuleRegistryService } from '../../../core/modules/module-registry.service';
+import { ToastService } from '../toast/toast.component';
+import { ConfirmDialogService } from '../confirm-dialog/confirm-dialog.component';
+import { PwaUpdateService } from '../../../core/services/pwa-update.service';
+import { Router } from '@angular/router';
+import { OfflineSyncService } from '../../../core/services/offline-sync.service';
+import { AppPersonaService } from '../../../core/services/app-persona.service';
+import { PersonnelApiService } from '../../../core/api/personnel-api.service';
+
+describe('UserMenuComponent Deep Sync Logic & Behavior Tests', () => {
+  let component: UserMenuComponent;
+
+  let mockAuth: any;
+  let mockStore: any;
+  let mockState: any;
+  let mockAccountsService: any;
+  let mockWhService: any;
+  let mockModuleRegistry: any;
+  let mockToast: any;
+  let mockConfirmDialog: any;
+  let mockPwaUpdate: any;
+  let mockRouter: any;
+  let mockSyncService: any;
+  let mockCdr: any;
+  let mockPersona: any;
+  let mockPersonnelApi: any;
+
+  beforeEach(() => {
+    mockAuth = {
+      currentUser: () => ({ id: 1, full_name: 'مدیر سیستم', username: 'admin' }),
+      logout: vi.fn()
+    };
+
+    mockStore = {
+      activeWarehouseId: vi.fn().mockReturnValue('1'),
+      user: () => ({ id: 1, full_name: 'مدیر سیستم', role: 'admin' })
+    };
+
+    mockState = {
+      appState: {
+        projects: [
+          { id: 1, name: 'انبار مرکزی' },
+          { id: 2, name: 'انبار ثانویه' }
+        ]
+      }
+    };
+
+    mockAccountsService = {
+      updateMyAvatar: vi.fn(),
+      deleteMyAvatar: vi.fn()
+    };
+
+    mockWhService = {
+      getAll: vi.fn().mockReturnValue(of([
+        { id: 1, name: 'انبار مرکزی' },
+        { id: 2, name: 'انبار ثانویه' }
+      ]))
+    };
+
+    mockPersonnelApi = {
+      getFinancialProjects: vi.fn().mockReturnValue(of([
+        { id: 10, name: 'پروژه خط ۲ مترو', code: 'PRJ-10', is_active: true },
+        { id: 11, name: 'کارگاه ساختمانی سپهر', code: 'PRJ-11', is_active: true }
+      ]))
+    };
+
+    mockPersona = {
+      activeApp: vi.fn().mockReturnValue('warehouse')
+    };
+
+    mockModuleRegistry = {
+      isModuleInstalled: vi.fn().mockImplementation((m: string) => m === 'warehouse' || m === 'personnel' || m === 'accounting')
+    };
+
+    mockToast = {
+      show: vi.fn()
+    };
+
+    mockConfirmDialog = {
+      open: vi.fn().mockResolvedValue(true)
+    };
+
+    mockPwaUpdate = {
+      isChecking: vi.fn().mockReturnValue(false),
+      checkForUpdateManually: vi.fn()
+    };
+
+    mockRouter = {
+      url: '/app/warehouse/items',
+      navigate: vi.fn()
+    };
+
+    mockCdr = {
+      detectChanges: vi.fn(),
+      markForCheck: vi.fn()
+    };
+
+    mockSyncService = {
+      performDeepUpdate: vi.fn().mockResolvedValue([
+        { warehouseName: 'انبار مرکزی', records: 45, bytes: 10240 }
+      ])
+    };
+    vi.spyOn(OfflineSyncService, 'getInstance').mockReturnValue(mockSyncService);
+
+    try {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload: vi.fn() }
+      });
+    } catch {}
+
+    const injector = Injector.create({
+      providers: [
+        { provide: AuthService, useValue: mockAuth },
+        { provide: AuthStore, useValue: mockStore },
+        { provide: StateService, useValue: mockState },
+        { provide: AccountsHttpService, useValue: mockAccountsService },
+        { provide: WarehouseHttpService, useValue: mockWhService },
+        { provide: ModuleRegistryService, useValue: mockModuleRegistry },
+        { provide: ToastService, useValue: mockToast },
+        { provide: ConfirmDialogService, useValue: mockConfirmDialog },
+        { provide: PwaUpdateService, useValue: mockPwaUpdate },
+        { provide: Router, useValue: mockRouter },
+        { provide: ChangeDetectorRef, useValue: mockCdr },
+        { provide: AppPersonaService, useValue: mockPersona },
+        { provide: PersonnelApiService, useValue: mockPersonnelApi }
+      ]
+    });
+
+    runInInjectionContext(injector, () => {
+      component = new UserMenuComponent();
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should instantiate successfully with default closed state', () => {
+    expect(component).toBeTruthy();
+    expect(component.isDeepSyncModalOpen).toBe(false);
+  });
+
+  it('should prevent deep update and show toast if user is offline', async () => {
+    component.isOffline = true;
+    await component.onDeepUpdate();
+
+    expect(mockToast.show).toHaveBeenCalledWith('error', 'برای بروزرسانی عمیق باید به اینترنت متصل باشید.');
+    expect(component.isDeepSyncModalOpen).toBe(false);
+  });
+
+  it('should prevent deep update and show toast if there are pending unsynced changes', async () => {
+    component.isOffline = false;
+    component.pendingCount = 3;
+    await component.onDeepUpdate();
+
+    expect(mockToast.show).toHaveBeenCalledWith(
+      'error',
+      'ابتدا باید تغییرات ذخیره‌نشده خود را همگام‌سازی (Sync) کنید تا از دست نروند.'
+    );
+    expect(component.isDeepSyncModalOpen).toBe(false);
+  });
+
+  it('should detect warehouse context mode from warehouse URL and load warehouses', async () => {
+    mockRouter.url = '/app/warehouse/counting';
+    expect(component.currentScopeContext).toBe('warehouse');
+
+    component.isOffline = false;
+    component.pendingCount = 0;
+    await component.onDeepUpdate();
+
+    expect(component.isDeepSyncModalOpen).toBe(true);
+    expect(component.deepSyncWarehouses.length).toBe(2);
+    expect(component.deepSyncProjects.length).toBe(0);
+    expect(component.deepSyncPreselectWarehouseId).toBe(1);
+  });
+
+  it('should detect finance context mode from finance URL and load financial projects', async () => {
+    mockRouter.url = '/app/finance/cartable';
+    expect(component.currentScopeContext).toBe('finance');
+
+    component.isOffline = false;
+    component.pendingCount = 0;
+    await component.onDeepUpdate();
+
+    expect(component.isDeepSyncModalOpen).toBe(true);
+    expect(component.deepSyncWarehouses.length).toBe(0);
+    expect(component.deepSyncProjects.length).toBe(2);
+    expect(mockPersonnelApi.getFinancialProjects).toHaveBeenCalledWith({ is_active: true });
+  });
+
+  it('should detect operations context mode from operations URL and load both warehouses and projects', async () => {
+    mockRouter.url = '/app/operations/governance';
+    expect(component.currentScopeContext).toBe('operations');
+
+    component.isOffline = false;
+    component.pendingCount = 0;
+    await component.onDeepUpdate();
+
+    expect(component.isDeepSyncModalOpen).toBe(true);
+    expect(component.deepSyncWarehouses.length).toBe(2);
+    expect(component.deepSyncProjects.length).toBe(2);
+    expect(mockWhService.getAll).toHaveBeenCalled();
+    expect(mockPersonnelApi.getFinancialProjects).toHaveBeenCalled();
+  });
+
+  it('should pass scopeKind = "warehouse" when syncing warehouseIds', async () => {
+    mockRouter.url = '/app/warehouse';
+    component.deepSyncWarehouses = [{ id: 1, name: 'انبار مرکزی' }];
+
+    await component.startDeepSync([1]);
+
+    expect(mockSyncService.performDeepUpdate).toHaveBeenCalledWith(
+      [1],
+      { 1: 'انبار مرکزی' },
+      'warehouse'
+    );
+    expect(mockConfirmDialog.open).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'گزارش بروزرسانی عمیق',
+        confirmText: 'بارگذاری مجدد و اعمال',
+        cancelText: 'ادامه در همین صفحه',
+        showCancel: true
+      })
+    );
+  });
+
+  it('should pass scopeKind = "finance" when syncing in finance context', async () => {
+    mockRouter.url = '/app/finance';
+    component.deepSyncProjects = [{ id: 10, name: 'پروژه مترو' }];
+    mockSyncService.performDeepUpdate.mockResolvedValue([
+      { warehouseName: 'پروژه مترو', records: 20, bytes: 5000 }
+    ]);
+
+    await component.startDeepSync([10]);
+
+    expect(mockSyncService.performDeepUpdate).toHaveBeenCalledWith(
+      [10],
+      { 10: 'پروژه مترو' },
+      'finance'
+    );
+
+    const dialogArg = mockConfirmDialog.open.mock.calls[0][0];
+    expect(dialogArg.message).toContain('پروژه / کارگاه');
+    expect(dialogArg.message).toContain('پروژه مترو');
+  });
+
+  it('should execute dual-scope deep sync and aggregate report in operations mode', async () => {
+    mockRouter.url = '/app/operations';
+    component.deepSyncWarehouses = [{ id: 1, name: 'انبار مرکزی' }];
+    component.deepSyncProjects = [{ id: 10, name: 'پروژه کارگاه شمال' }];
+
+    mockSyncService.performDeepUpdate
+      .mockResolvedValueOnce([
+        { warehouseName: 'انبار مرکزی', records: 50, bytes: 10000 }
+      ])
+      .mockResolvedValueOnce([
+        { warehouseName: 'پروژه کارگاه شمال', records: 25, bytes: 5000 }
+      ]);
+
+    await component.startDeepSync({ warehouseIds: [1], projectIds: [10] });
+
+    expect(mockSyncService.performDeepUpdate).toHaveBeenNthCalledWith(
+      1,
+      [1],
+      { 1: 'انبار مرکزی' },
+      'warehouse'
+    );
+    expect(mockSyncService.performDeepUpdate).toHaveBeenNthCalledWith(
+      2,
+      [10],
+      { 10: 'پروژه کارگاه شمال' },
+      'finance'
+    );
+
+    const dialogArg = mockConfirmDialog.open.mock.calls[0][0];
+    expect(dialogArg.title).toBe('گزارش بروزرسانی یکپارچه سازمان');
+    expect(dialogArg.message).toContain('📦 انبارداری');
+    expect(dialogArg.message).toContain('💳 مالی');
+    expect(dialogArg.message).toContain('مجموع کل');
+    expect(dialogArg.message).toContain('75'); // 50 + 25
+  });
+
+  it('should sanitize names in the deep sync summary HTML to prevent XSS', async () => {
+    mockRouter.url = '/app/warehouse';
+    component.deepSyncWarehouses = [{ id: 1, name: '<script>alert("xss")</script>' }];
+    mockSyncService.performDeepUpdate.mockResolvedValue([
+      { warehouseName: '<script>alert("xss")</script>', records: 10, bytes: 2048 }
+    ]);
+
+    await component.startDeepSync([1]);
+
+    const dialogArg = mockConfirmDialog.open.mock.calls[0][0];
+    expect(dialogArg.message).not.toContain('<script>');
+    expect(dialogArg.message).toContain('&lt;script&gt;');
+  });
+});

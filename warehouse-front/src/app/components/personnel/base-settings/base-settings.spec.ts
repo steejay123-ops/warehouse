@@ -24,9 +24,19 @@ describe('BaseSettings Unit Tests', () => {
     };
 
     mockPersonnelApi = {
+      getFinancialProjects: vi.fn().mockReturnValue(of([
+        { id: 1, name: 'پروژه تست', code: 'PRJ-01' }
+      ])),
+      getSettingsVersions: vi.fn().mockReturnValue(of([
+        { id: 1, fiscal_year: '1405', effective_from: '1405/01', version_title: 'نسخه فروردین', is_active: true }
+      ])),
+      createSettingsVersion: vi.fn().mockReturnValue(of({
+        id: 2, fiscal_year: '1405', effective_from: '1405/07', version_title: 'اصلاحیه نیمه دوم', is_active: true
+      })),
       getYearlySettings: vi.fn().mockReturnValue(of({
         id: 1,
         fiscal_year: '1405',
+        effective_from: '1405/01',
         monthly_housing_allowance: 30000000,
         monthly_food_allowance: 22000000,
         attendance_edit_past_days: 3,
@@ -42,6 +52,21 @@ describe('BaseSettings Unit Tests', () => {
       updateAllSettingsTabs: vi.fn().mockReturnValue(of({
         message: 'تنظیمات با موفقیت ذخیره شد',
         settings: { id: 1, fiscal_year: '1405' }
+      })),
+      cloneSettingsForProject: vi.fn().mockReturnValue(of({
+        id: 99,
+        fiscal_year: '1405',
+        project: 1,
+        project_name: 'پروژه تست'
+      })),
+      getAvailableFiscalYears: vi.fn().mockReturnValue(of({
+        years: ['1405']
+      })),
+      createFiscalYear: vi.fn().mockReturnValue(of({
+        id: 101,
+        fiscal_year: '1406',
+        effective_from: '1406/01',
+        version_title: 'احکام مصوب فروردین'
       }))
     };
 
@@ -72,17 +97,19 @@ describe('BaseSettings Unit Tests', () => {
     );
   });
 
-  it('should initialize and load yearly settings', () => {
+  it('should initialize and load yearly settings with versions', () => {
     component.ngOnInit();
     expect(component.activeTab).toBe('grades');
-    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405');
+    expect(mockPersonnelApi.getSettingsVersions).toHaveBeenCalledWith('1405', null);
+    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 1);
     expect(component.yearlySettings).toBeDefined();
     expect(component.canManageSettings).toBe(true);
+    expect(component.versions.length).toBe(1);
   });
 
   it('should switch tabs and sync query parameters', () => {
-    component.setTab('calendar_attendance');
-    expect(component.activeTab).toBe('calendar_attendance');
+    component.setTab('labor');
+    expect(component.activeTab).toBe('labor');
     expect(mockRouter.navigate).toHaveBeenCalled();
   });
 
@@ -98,5 +125,108 @@ describe('BaseSettings Unit Tests', () => {
     component.saveYearlySettings();
     expect(mockPersonnelApi.updateYearlySettings).toHaveBeenCalledWith('1405', expect.any(Object));
     expect(mockToast.show).toHaveBeenCalledWith('success', expect.any(String));
+  });
+
+  it('should switch versions and reload settings for that version', () => {
+    component.ngOnInit();
+    component.onVersionChange(2);
+    expect(component.selectedVersionId).toBe(2);
+    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 2);
+  });
+
+  it('should open create version modal and submit new mid-year version', () => {
+    component.ngOnInit();
+    mockPersonnelApi.getSettingsVersions.mockReturnValue(of([
+      { id: 1, fiscal_year: '1405', effective_from: '1405/01', version_title: 'نسخه فروردین', is_active: false },
+      { id: 2, fiscal_year: '1405', effective_from: '1405/07', version_title: 'اصلاحیه نیمه دوم سال', is_active: true }
+    ]));
+    component.openCreateVersionModal();
+    expect(component.showCreateVersionModal).toBe(true);
+
+    component.newVersionEffectiveFrom = '1405/07';
+    component.newVersionTitle = 'اصلاحیه نیمه دوم سال';
+    component.submitCreateVersion();
+
+    expect(mockPersonnelApi.createSettingsVersion).toHaveBeenCalledWith(expect.objectContaining({
+      year: '1405',
+      effective_from: '1405/07',
+      version_title: 'اصلاحیه نیمه دوم سال'
+    }));
+    expect(component.showCreateVersionModal).toBe(false);
+    expect(component.selectedVersionId).toBe(2);
+  });
+
+  it('should update selectedProjectId when switching project and reload versions', () => {
+    component.ngOnInit();
+    component.onProjectChange(1);
+    expect(component.selectedProjectId).toBe(1);
+    expect(mockPersonnelApi.getSettingsVersions).toHaveBeenCalledWith('1405', 1);
+  });
+
+  it('should auto-clone settings for project when saving if settings were inherited', () => {
+    component.ngOnInit();
+    component.selectedProjectId = 1;
+    // yearlySettings has project: null (inherited from global)
+    component.yearlySettings = {
+      id: 1,
+      fiscal_year: '1405',
+      project: null,
+      monthly_housing_allowance: 35000000
+    } as any;
+
+    expect(component.isCurrentSettingSpecificToProject).toBe(false);
+    component.saveYearlySettings();
+
+    expect(mockPersonnelApi.cloneSettingsForProject).toHaveBeenCalledWith(1, '1405');
+    expect(mockPersonnelApi.updateYearlySettings).toHaveBeenCalledWith('1405', expect.objectContaining({
+      id: 99,
+      project: 1
+    }));
+  });
+
+  it('should safely parse null and undefined query parameters without producing NaN', () => {
+    mockRoute.queryParams = of({ project_id: 'null', version_id: 'undefined', year: '1407' });
+    component.ngOnInit();
+    expect(component.selectedProjectId).toBeNull();
+    expect(component.selectedVersionId).not.toBeNaN();
+    expect(component.fiscalYear).toBe('1407');
+  });
+
+  it('should load available fiscal years and allow switching via onYearChange', () => {
+    mockPersonnelApi.getAvailableFiscalYears.mockReturnValue(of({ years: ['1405', '1406'] }));
+    component.ngOnInit();
+    expect(component.availableYears).toEqual(['1405', '1406']);
+
+    component.onYearChange('1406');
+    expect(component.fiscalYear).toBe('1406');
+    expect(mockPersonnelApi.getSettingsVersions).toHaveBeenCalledWith('1406', null);
+  });
+
+  it('should open create year modal and submit new fiscal year with confirmation', () => {
+    component.ngOnInit();
+    component.openCreateYearModal();
+    expect(component.showCreateYearModal).toBe(true);
+    expect(component.newFiscalYear).toBe('1406');
+
+    component.newFiscalYear = '1406';
+    component.newYearSourceYear = '1405';
+    component.submitCreateYear();
+
+    expect(mockPersonnelApi.createFiscalYear).toHaveBeenCalledWith(expect.objectContaining({
+      year: '1406',
+      source_year: '1405'
+    }));
+    expect(component.showCreateYearModal).toBe(false);
+    expect(component.fiscalYear).toBe('1406');
+    expect(component.selectedVersionId).toBeTruthy();
+  });
+
+  it('should validate 4-digit format when creating a new fiscal year', () => {
+    component.ngOnInit();
+    component.openCreateYearModal();
+    component.newFiscalYear = '14';
+    component.submitCreateYear();
+    expect(mockToast.show).toHaveBeenCalledWith('warning', expect.any(String));
+    expect(mockPersonnelApi.createFiscalYear).not.toHaveBeenCalled();
   });
 });

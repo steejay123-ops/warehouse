@@ -71,7 +71,9 @@ describe('FinanceCartable Unit Tests', () => {
       lockPeriod: vi.fn().mockReturnValue(of({ message: 'دوره قفل شد' })),
       unlockPeriod: vi.fn().mockReturnValue(of({ message: 'دوره بازگشایی شد' })),
       getMonthlyExcelDownloadUrl: vi.fn().mockReturnValue('/download/excel'),
-      getDskZipDownloadUrl: vi.fn().mockReturnValue('/download/dsk')
+      getDskZipDownloadUrl: vi.fn().mockReturnValue('/download/dsk'),
+      getTaxWhDownloadUrl: vi.fn().mockReturnValue('/download/tax-wh'),
+      getTaxWpDownloadUrl: vi.fn().mockReturnValue('/download/tax-wp')
     };
 
     mockWhService = {
@@ -137,5 +139,31 @@ describe('FinanceCartable Unit Tests', () => {
     component.loadFleetSettlement();
     expect(mockPersonnelApi.calculateFleetSettlement).toHaveBeenCalled();
     expect(component.fleetSettlementRecords.length).toBe(1);
+  });
+
+  it('should require project selection for Tax WH and Tax WP downloads', () => {
+    component.currentPeriodId = 10;
+    component.selectedProjectId = null;
+    const windowSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    // Without project -> warning toast
+    component.downloadTaxWh();
+    expect(mockToast.show).toHaveBeenCalledWith('warning', expect.stringContaining('انتخاب پروژه'));
+    expect(windowSpy).not.toHaveBeenCalled();
+
+    component.downloadTaxWp();
+    expect(mockToast.show).toHaveBeenCalledWith('warning', expect.stringContaining('انتخاب پروژه'));
+    expect(windowSpy).not.toHaveBeenCalled();
+
+    // With project -> open URL with project_id
+    component.selectedProjectId = 5;
+    component.downloadTaxWh();
+    expect(mockPersonnelApi.getTaxWhDownloadUrl).toHaveBeenCalledWith(10, 5);
+    expect(windowSpy).toHaveBeenCalled();
+
+    component.downloadTaxWp();
+    expect(mockPersonnelApi.getTaxWpDownloadUrl).toHaveBeenCalledWith(10, 5);
+
+    windowSpy.mockRestore();
   });
 });

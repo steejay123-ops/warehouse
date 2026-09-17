@@ -260,11 +260,16 @@ export class OfflineDatabase extends Dexie {
         syncErrors: '++id, failedAt, dismissed, userId, appScope',
         docTasks: 'sync_id, id, warehouse_id, status, updated_at',
         syncCursors: 'key, userId, warehouseId',
-        attendanceRecords: 'id, date, status, updated_at',
+        attendanceRecords: 'id, project_id, sync_id, personnel_id, date, status, updated_at',
         countTasks: 'sync_id, id, warehouse_id, status, updated_at',
         items: 'sync_id, id, warehouse_id, fa_unic_code, updated_at',
         dynamicFields: 'sync_id, id, warehouse_id, updated_at',
         photoQueue: '++id, status, createdAt, userId, itemId, syncId',
+      });
+
+      // نسخه ۲ — ارتقای پایگاه داده‌های موجود برای اضافه شدن ایندکس project_id به attendanceRecords
+      this.version(2).stores({
+        attendanceRecords: 'id, project_id, sync_id, personnel_id, date, status, updated_at',
       });
     } else {
       // نسخه ۱ تا ۵ برای حفظ سازگاری کامل پایگاه داده انبارداری
@@ -323,7 +328,12 @@ export class OfflineDatabase extends Dexie {
         syncCursors: 'key, userId, warehouseId',
         docTasks: 'sync_id, id, warehouse_id, status, updated_at',
         photoQueue: '++id, status, createdAt, userId, itemId, syncId',
-        attendanceRecords: 'id, date, status, updated_at',
+        attendanceRecords: 'id, project_id, sync_id, personnel_id, date, status, updated_at',
+      });
+
+      // نسخه ۷ — ارتقای پایگاه داده انبارداری موجود برای اضافه شدن ایندکس project_id
+      this.version(7).stores({
+        attendanceRecords: 'id, project_id, sync_id, personnel_id, date, status, updated_at',
       });
     }
   }

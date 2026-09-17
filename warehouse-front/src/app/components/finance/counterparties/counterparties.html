@@ -1,0 +1,724 @@
+<div class="p-4 md:p-6 space-y-4 bg-slate-50 min-h-screen dir-rtl text-right font-sans">
+
+  <!-- ── کانتینر چسبان هدر، تب‌ها و ابزارهای اکشن (Unified Sticky Command Center) ── -->
+  <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2 transition-all">
+    <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <!-- لیست تب‌های دسته‌بندی طرف‌حساب‌ها (سمت راست در RTL) -->
+      <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
+        <!-- همه طرف‌حساب‌ها -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('all')"
+          [ngClass]="typeFilter === 'all' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>🤝</span>
+          <span>همه</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'all' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ totalCount }}
+          </span>
+        </button>
+
+        <!-- رانندگان و ترابری -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('driver')"
+          [ngClass]="typeFilter === 'driver' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>🚚</span>
+          <span>رانندگان</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'driver' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ driversCount }}
+          </span>
+        </button>
+
+        <!-- تعمیرگاه و قطعات -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('repair_shop')"
+          [ngClass]="typeFilter === 'repair_shop' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>🔧</span>
+          <span>تعمیرگاه‌ها</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'repair_shop' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ repairShopsCount }}
+          </span>
+        </button>
+
+        <!-- جایگاه‌های سوخت -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('fuel_station')"
+          [ngClass]="typeFilter === 'fuel_station' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>⛽</span>
+          <span>جایگاه‌های سوخت</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'fuel_station' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ fuelStationsCount }}
+          </span>
+        </button>
+
+        <!-- پیمانکاران -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('contractor')"
+          [ngClass]="typeFilter === 'contractor' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>🏗️</span>
+          <span>پیمانکاران</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'contractor' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ contractorsCount }}
+          </span>
+        </button>
+
+        <!-- سایر طرف‌حساب‌ها -->
+        <button
+          type="button"
+          (click)="onTypeFilterChange('other')"
+          [ngClass]="typeFilter === 'other' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex-1 md:flex-none px-3.5 md:px-4 py-1.5 md:py-2 text-xs rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 whitespace-nowrap"
+        >
+          <span>🏢</span>
+          <span>سایر</span>
+          <span
+            class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+            [ngClass]="typeFilter === 'other' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'"
+          >
+            {{ othersCount }}
+          </span>
+        </button>
+      </div>
+
+      <!-- دکمه‌های اکشن ۳گانه استاندارد (سمت چپ در RTL) -->
+      <div class="flex items-center gap-1.5 md:gap-2 justify-end">
+        <!-- ۱. خروجی و دانلود اکسل (زمردی / سبز) -->
+        <button
+          type="button"
+          (click)="exportExcel()"
+          [disabled]="isLoading"
+          class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+          title="دانلود خروجی اکسل طرف‌حساب‌ها"
+          aria-label="خروجی اکسل"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+
+        <!-- ۲. ورودی و آپلود اکسل (نیلی / آبی) -->
+        <button
+          type="button"
+          (click)="openImportModal()"
+          class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95"
+          title="ورود دسته‌جمعی طرف‌حساب‌ها از اکسل"
+          aria-label="ورودی اکسل"
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+        </button>
+
+        <!-- ۳. بروزرسانی زنده اطلاعات (اسلیت / خنثی) -->
+        <button
+          type="button"
+          [disabled]="isRefreshing || isLoading"
+          (click)="refreshCounterparties(true)"
+          class="w-9 h-9 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
+          title="بروزرسانی زنده اطلاعات"
+          aria-label="بروزرسانی"
+        >
+          <svg
+            [class.animate-spin]="isRefreshing || isLoading"
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── فرم ثبت و ویرایش طرف‌حساب مالی (مطابق ساختار و عرض‌های استاندارد پروژه‌ها و بخش‌ها) ── -->
+  <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+    <!-- نوار وضعیت ویرایش (تنها در صورت فعال بودن حالت ویرایش نمایش داده می‌شود) -->
+    <div *ngIf="editingCounterparty" class="flex items-center justify-between bg-amber-50 border border-amber-200 p-2.5 rounded-2xl text-xs font-bold text-amber-800 animate-in fade-in">
+      <div class="flex items-center gap-2">
+        <span>✏️</span>
+        <span>در حال ویرایش طرف‌حساب: <strong>{{ editingCounterparty.name }}</strong></span>
+      </div>
+      <button
+        type="button"
+        (click)="cancelEdit()"
+        class="text-xs font-bold text-rose-600 hover:text-rose-700 bg-white hover:bg-rose-50 px-3 py-1 rounded-xl transition-colors cursor-pointer border border-rose-200 shadow-2xs"
+      >
+        انصراف از ویرایش
+      </button>
+    </div>
+
+    <!-- فرم با گرید متوازن ۴ستونه کاملاً منطبق بر صفحه پروژه‌ها و بخش‌ها -->
+    <form (ngSubmit)="saveCounterparty()" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <!-- ۱. نام شخص یا شرکت -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">
+          نام شخص یا شرکت: <span class="text-rose-500">*</span>
+        </label>
+        <input
+          type="text"
+          [(ngModel)]="newCounterparty.name"
+          name="name"
+          placeholder="مثلاً شرکت حمل‌ونقل تیزرو"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
+          required
+        />
+      </div>
+
+      <!-- ۲. نوع طرف‌حساب -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">
+          نوع طرف‌حساب: <span class="text-rose-500">*</span>
+        </label>
+        <select
+          [(ngModel)]="newCounterparty.counterparty_type"
+          name="counterparty_type"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors cursor-pointer"
+        >
+          <option *ngFor="let opt of typeOptions" [value]="opt.key">
+            {{ opt.icon }} {{ opt.label }}
+          </option>
+        </select>
+      </div>
+
+      <!-- ۳. تلفن تماس / همراه -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">تلفن تماس / همراه:</label>
+        <input
+          type="text"
+          [(ngModel)]="newCounterparty.phone"
+          name="phone"
+          placeholder="مثلاً ۰۹۱۲۱۲۳۴۵۶۷"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
+        />
+      </div>
+
+      <!-- ۴. کد ملی / شناسه اقتصادی -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">کد ملی / شناسه اقتصادی:</label>
+        <input
+          type="text"
+          [(ngModel)]="newCounterparty.national_id"
+          name="national_id"
+          placeholder="۱۰ یا ۱۱ رقم عددی..."
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
+        />
+      </div>
+
+      <!-- ۵. شماره شبا (۲۴ رقم بدون IR) -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <label class="text-xs font-bold text-slate-600">شماره شبا (۲۴ رقم):</label>
+          <span
+            *ngIf="shebaValidationResult"
+            [ngClass]="shebaValidationResult.isValid ? 'text-emerald-600' : 'text-rose-500'"
+            class="text-[10px] font-bold flex items-center gap-0.5"
+          >
+            <span>{{ shebaValidationResult.isValid ? '✓ معتبر' : '✕ نامعتبر' }}</span>
+          </span>
+        </div>
+        <div class="relative flex items-center">
+          <input
+            type="text"
+            dir="ltr"
+            [value]="shebaDigitsDisplay"
+            (input)="onShebaInput($event)"
+            placeholder="000000000000000000000000"
+            maxlength="32"
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors pl-14 text-left"
+            [ngClass]="shebaValidationResult?.isValid ? 'border-emerald-300' : (shebaValidationResult ? 'border-rose-300' : '')"
+          />
+          <span class="absolute left-2.5 text-xs font-mono font-black text-slate-400 select-none">IR-</span>
+          <button
+            *ngIf="newCounterparty.sheba_number"
+            type="button"
+            (click)="copyShebaToClipboard()"
+            class="absolute left-8 text-slate-400 hover:text-indigo-600 p-0.5 text-xs cursor-pointer transition-colors"
+            title="کپی شماره شبا (بدون IR)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ۶. بانک عامل -->
+      <div class="relative">
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">بانک عامل:</label>
+        <div
+          (click)="toggleBankDropdown($event)"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold flex items-center justify-between cursor-pointer hover:bg-white transition-colors"
+        >
+          <span [class.text-slate-400]="!newCounterparty.bank_name" class="truncate">
+            {{ newCounterparty.bank_name || 'انتخاب بانک عامل...' }}
+          </span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400 shrink-0">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </div>
+
+        <!-- منوی بازشونده بانک‌ها -->
+        <div
+          *ngIf="isBankDropdownOpen"
+          class="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-56 overflow-y-auto p-2 space-y-1"
+        >
+          <input
+            type="text"
+            [(ngModel)]="bankSearchQuery"
+            name="bankSearchQuery"
+            (click)="$event.stopPropagation()"
+            placeholder="جستجوی نام یا کد بانک..."
+            class="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold focus:bg-white focus:outline-none mb-1"
+          />
+          <div
+            *ngFor="let b of filteredBanks"
+            (click)="selectBank(b, $event)"
+            class="px-2.5 py-1.5 rounded-lg hover:bg-indigo-50 cursor-pointer text-xs font-bold flex items-center justify-between transition-colors"
+          >
+            <span>{{ b.name }}</span>
+            <span class="text-[10px] text-slate-400 font-mono">{{ b.code }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ۷. شماره حساب بانکی -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره حساب بانکی:</label>
+        <div class="relative flex items-center">
+          <input
+            type="text"
+            dir="ltr"
+            [value]="newCounterparty.account_number || ''"
+            (input)="onAccountNumberInput($event)"
+            placeholder="شماره حساب..."
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors pl-7 text-left"
+          />
+          <button
+            *ngIf="newCounterparty.account_number"
+            type="button"
+            (click)="copyAccountNumberToClipboard()"
+            class="absolute left-2 text-slate-400 hover:text-indigo-600 p-0.5 text-xs cursor-pointer transition-colors"
+            title="کپی شماره حساب"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- ۸. کد حساب تفصیلی (دفتر کل) -->
+      <div>
+        <label class="block text-xs font-bold text-slate-600 mb-1.5">کد حساب تفصیلی:</label>
+        <input
+          type="text"
+          [(ngModel)]="newCounterparty.account_code"
+          name="account_code"
+          placeholder="مثلاً ۱۰۱۰۲۰۳"
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold font-mono focus:bg-white focus:border-indigo-500 focus:outline-none transition-colors"
+        />
+      </div>
+
+      <!-- برچسب اعتبارسنجی زنده شبا در صورت وجود -->
+      <div *ngIf="shebaValidationResult" class="col-span-1 md:col-span-4 -mt-2">
+        <span
+          *ngIf="shebaValidationResult.isValid"
+          class="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200"
+        >
+          <span>{{ shebaValidationResult.bank?.icon || '🏦' }}</span>
+          <span>شبا معتبر: {{ shebaValidationResult.bank?.name }}</span>
+          <span class="text-slate-400">|</span>
+          <span class="font-mono dir-ltr font-bold text-[10px]">حساب: {{ shebaValidationResult.accountNumber }}</span>
+          <span class="font-black">✓</span>
+        </span>
+        <span
+          *ngIf="!shebaValidationResult.isValid"
+          class="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-xl border border-rose-200"
+        >
+          <span>✕</span>
+          <span>{{ shebaValidationResult.errorMessage || 'شماره شبا نامعتبر است' }}</span>
+        </span>
+      </div>
+
+      <!-- وضعیت فعال و دکمه‌های عملیات (مطابق پروژه‌ها و بخش‌ها) -->
+      <div class="col-span-1 md:col-span-4 flex items-center justify-between pt-3 border-t border-slate-100">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            [(ngModel)]="newCounterparty.is_active"
+            name="is_active"
+            class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+          />
+          <span class="text-xs font-bold text-slate-700">طرف‌حساب در وضعیت فعال قرار دارد</span>
+        </label>
+
+        <div class="flex items-center gap-2">
+          <button
+            *ngIf="editingCounterparty"
+            type="button"
+            (click)="cancelEdit()"
+            class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+          >
+            انصراف
+          </button>
+
+          <button
+            type="submit"
+            class="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2 px-5 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span>{{ editingCounterparty ? 'بروزرسانی طرف‌حساب' : 'ثبت طرف‌حساب' }}</span>
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── جدول و ابزارهای جستجو و فیلتر (مطابق استاندارد پروژه‌ها و بخش‌ها) ── -->
+  <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <!-- نوار بالای جدول: عنوان، فیلتر وضعیت، سوییچر نما و باکس جستجوی درجا -->
+    <div class="p-3.5 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3">
+      <!-- سمت راست: عنوان و فیلترها -->
+      <div class="flex items-center flex-wrap gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-black text-slate-700">فهرست طرف‌حساب‌های مالی</span>
+          <span class="text-[11px] text-slate-500 font-mono bg-slate-200/70 px-2 py-0.5 rounded-md font-bold">
+            تعداد: {{ filteredCounterparties.length }}
+          </span>
+        </div>
+
+        <!-- فیلتر وضعیت -->
+        <div class="min-w-[120px]">
+          <select
+            [ngModel]="statusFilter"
+            (ngModelChange)="onStatusFilterChange($event)"
+            class="bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-700 focus:border-indigo-500 focus:outline-none"
+          >
+            <option value="all">همه وضعیت‌ها</option>
+            <option value="active">فقط فعال‌ها</option>
+            <option value="inactive">فقط غیرفعال‌ها</option>
+          </select>
+        </div>
+
+        <!-- سوییچر نمای جدولی / کارتی -->
+        <div class="inline-flex bg-slate-200/70 p-0.5 rounded-xl border border-slate-200/80">
+          <button
+            type="button"
+            (click)="onViewModeChange('table')"
+            [ngClass]="viewMode === 'table' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1"
+            title="نمای جدولی"
+          >
+            <span>📋</span>
+            <span>جدول</span>
+          </button>
+          <button
+            type="button"
+            (click)="onViewModeChange('cards')"
+            [ngClass]="viewMode === 'cards' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all cursor-pointer flex items-center gap-1"
+            title="نمای کارتی"
+          >
+            <span>🗂️</span>
+            <span>کارت‌ها</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- سمت چپ: باکس جستجوی درجا -->
+      <div class="relative w-full sm:w-72">
+        <input
+          type="text"
+          [ngModel]="searchQuery"
+          (ngModelChange)="onSearchChange($event)"
+          placeholder="🔍 جستجو در نام، تلفن، کد ملی، شبا..."
+          class="w-full bg-white border border-slate-200 rounded-xl pr-3 pl-8 py-1.5 text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 placeholder:text-slate-400"
+        />
+        <button
+          *ngIf="searchQuery"
+          (click)="onSearchChange('')"
+          class="absolute left-2.5 top-2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer font-bold"
+          title="پاک کردن جستجو"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- ── نمای ۱: جدول تفصیلی طرف‌حساب‌های مالی ── -->
+    <div *ngIf="viewMode === 'table'" class="overflow-x-auto">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-100/70 text-slate-600 font-bold border-b border-slate-200">
+          <tr>
+            <th class="p-3 w-10 text-center">#</th>
+            <th class="p-3">نام شخص یا شرکت</th>
+            <th class="p-3">نوع طرف‌حساب</th>
+            <th class="p-3">کد ملی / شناسه</th>
+            <th class="p-3">تلفن تماس</th>
+            <th class="p-3">شماره شبا (IR)</th>
+            <th class="p-3">بانک و شماره حساب</th>
+            <th class="p-3">کد حساب تفصیلی</th>
+            <th class="p-3 text-center w-24">وضعیت</th>
+            <th class="p-3 text-center w-36">عملیات</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 font-medium">
+          <tr
+            *ngFor="let cp of filteredCounterparties; let i = index"
+            class="hover:bg-slate-50/60 transition-colors"
+            [class.opacity-60]="!cp.is_active"
+          >
+            <td class="p-3 text-center text-slate-400 font-mono">{{ i + 1 }}</td>
+            <td class="p-3">
+              <span class="font-bold text-slate-800 block">{{ cp.name }}</span>
+            </td>
+            <td class="p-3">
+              <span [ngClass]="getTypeOption(cp.counterparty_type).badgeClass" class="px-2 py-0.5 rounded-full border text-[10px] font-black inline-flex items-center gap-1">
+                <span>{{ getTypeOption(cp.counterparty_type).icon }}</span>
+                <span>{{ getTypeOption(cp.counterparty_type).label }}</span>
+              </span>
+            </td>
+            <td class="p-3 font-mono text-slate-600">{{ cp.national_id || '-' }}</td>
+            <td class="p-3 font-mono text-slate-600">{{ cp.phone || '-' }}</td>
+            <!-- ستون شبا با برجستگی و کلید کپی سریع -->
+            <td class="p-3">
+              <div *ngIf="cp.sheba_number" class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/80 px-2 py-1 rounded-lg group hover:border-indigo-300 transition-colors">
+                <span class="font-mono text-slate-800 text-[11px] font-bold dir-ltr select-all">IR{{ cp.sheba_number }}</span>
+                <button
+                  type="button"
+                  (click)="copyShebaToClipboard(cp.sheba_number, $event)"
+                  class="text-slate-400 hover:text-indigo-600 text-[11px] cursor-pointer"
+                  title="کپی شماره شبا (بدون IR)"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              <span *ngIf="!cp.sheba_number" class="text-slate-400">-</span>
+            </td>
+            <!-- بانک و شماره حساب -->
+            <td class="p-3">
+              <div *ngIf="cp.bank_name || cp.account_number" class="space-y-0.5">
+                <span class="text-slate-800 block font-bold">{{ cp.bank_name || 'بانک نامشخص' }}</span>
+                <span class="text-[10px] font-mono text-slate-400 block">{{ cp.account_number }}</span>
+              </div>
+              <span *ngIf="!cp.bank_name && !cp.account_number" class="text-slate-400">-</span>
+            </td>
+            <td class="p-3">
+              <span *ngIf="cp.account_code" class="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 font-bold">
+                {{ cp.account_code }}
+              </span>
+              <span *ngIf="!cp.account_code" class="text-slate-400">-</span>
+            </td>
+            <td class="p-3 text-center">
+              <button
+                type="button"
+                (click)="toggleCounterpartyStatus(cp, $event)"
+                [ngClass]="cp.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'"
+                class="px-2.5 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer hover:shadow-2xs transition-all"
+                [title]="cp.is_active ? 'کلیک جهت غیرفعال‌سازی' : 'کلیک جهت فعال‌سازی'"
+              >
+                {{ cp.is_active ? 'فعال' : 'غیرفعال' }}
+              </button>
+            </td>
+            <td class="p-3 text-center">
+              <div class="flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  (click)="editCounterparty(cp)"
+                  class="px-2.5 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold"
+                >
+                  ویرایش
+                </button>
+                <button
+                  type="button"
+                  (click)="deleteCounterparty(cp, $event)"
+                  class="px-2.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer text-[11px] font-bold"
+                >
+                  حذف
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="filteredCounterparties.length === 0">
+            <td colspan="10" class="p-8 text-center text-slate-400 text-xs">
+              {{ searchQuery ? 'هیچ طرف‌حسابی مطابق با عبارت جستجو یافت نشد.' : 'هیچ طرف‌حسابی در این دسته یافت نشد.' }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── نمای ۲: کارت‌های تفصیلی طرف‌حساب‌ها ── -->
+    <div *ngIf="viewMode === 'cards'" class="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div
+        *ngFor="let cp of filteredCounterparties"
+        class="bg-slate-50/70 rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-3 hover:border-indigo-200 transition-colors"
+        [class.opacity-65]="!cp.is_active"
+      >
+        <!-- هدر کارت -->
+        <div class="flex items-start justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+          <div>
+            <h3 class="text-xs font-black text-slate-800">{{ cp.name }}</h3>
+            <span [ngClass]="getTypeOption(cp.counterparty_type).badgeClass" class="px-2 py-0.5 rounded-full border text-[9px] font-black inline-flex items-center gap-1 mt-1">
+              <span>{{ getTypeOption(cp.counterparty_type).icon }}</span>
+              <span>{{ getTypeOption(cp.counterparty_type).label }}</span>
+            </span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              (click)="toggleCounterpartyStatus(cp, $event)"
+              [ngClass]="cp.is_active ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-slate-500 bg-slate-100 border-slate-200'"
+              class="px-2 py-0.5 rounded-full border text-[10px] font-bold cursor-pointer"
+            >
+              {{ cp.is_active ? 'فعال' : 'غیرفعال' }}
+            </button>
+            <button
+              type="button"
+              (click)="editCounterparty(cp)"
+              class="px-2 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+              title="ویرایش"
+            >
+              ویرایش
+            </button>
+            <button
+              type="button"
+              (click)="deleteCounterparty(cp, $event)"
+              class="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-bold cursor-pointer transition-colors"
+              title="حذف"
+            >
+              حذف
+            </button>
+          </div>
+        </div>
+
+        <!-- شماره شبا (برجسته در نمای کارت) -->
+        <div *ngIf="cp.sheba_number" class="bg-white p-2.5 rounded-xl border border-indigo-100 shadow-2xs flex items-center justify-between text-[11px] font-mono">
+          <span class="text-slate-800 dir-ltr font-black">IR{{ cp.sheba_number }}</span>
+          <button
+            type="button"
+            (click)="copyShebaToClipboard(cp.sheba_number, $event)"
+            class="text-indigo-600 hover:text-indigo-800 text-[10px] font-sans font-bold cursor-pointer flex items-center gap-1"
+            title="کپی شماره شبا (بدون IR)"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>کپی شبا</span>
+          </button>
+        </div>
+
+        <!-- جزئیات کارت -->
+        <div class="grid grid-cols-2 gap-2 text-[11px] font-bold">
+          <div>
+            <span class="text-slate-400 block text-[10px]">تلفن تماس:</span>
+            <span class="font-mono text-slate-700">{{ cp.phone || '-' }}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px]">کد ملی / شناسه:</span>
+            <span class="font-mono text-slate-700">{{ cp.national_id || '-' }}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px]">بانک و حساب:</span>
+            <span class="text-slate-700">{{ cp.bank_name || '-' }}</span>
+            <span *ngIf="cp.account_number" class="text-[9px] font-mono text-slate-400 block">{{ cp.account_number }}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px]">کد تفصیلی:</span>
+            <span class="font-mono text-slate-700">{{ cp.account_code || '-' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── مودال ایمپورت اکسل با پیش‌نمایش واقعی ── -->
+  <app-excel-import-modal
+    *ngIf="isExcelModalOpen"
+    [title]="excelModalTitle"
+    [importFn]="excelImportFn"
+    [templateDownloadFn]="excelTemplateFn"
+    (closed)="closeExcelModal()"
+    (imported)="onExcelImported($event)"
+  ></app-excel-import-modal>
+
+  <!-- ── مدال تایید اختصاصی ── -->
+  <div *ngIf="confirmModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+    <div class="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full border border-slate-100 space-y-4 text-center">
+      <div class="w-12 h-12 rounded-full mx-auto flex items-center justify-center text-2xl" [ngClass]="confirmModal.isDanger ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'">
+        {{ confirmModal.isDanger ? '⚠️' : 'ℹ️' }}
+      </div>
+      <div>
+        <h3 class="text-sm font-black text-slate-800">{{ confirmModal.title }}</h3>
+        <p class="text-xs text-slate-500 font-bold mt-1.5 leading-relaxed">{{ confirmModal.message }}</p>
+      </div>
+      <div class="flex items-center justify-center gap-2 pt-2 border-t border-slate-100">
+        <button
+          type="button"
+          (click)="executeConfirmDialog()"
+          class="px-4 py-2 text-xs font-black text-white rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+          [ngClass]="confirmModal.isDanger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'"
+        >
+          {{ confirmModal.confirmText }}
+        </button>
+        <button
+          type="button"
+          (click)="closeConfirmDialog()"
+          class="px-4 py-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+        >
+          {{ confirmModal.cancelText }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

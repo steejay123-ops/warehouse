@@ -8,6 +8,7 @@ import { TreasuryCartable } from '../../components/personnel/treasury-cartable/t
 import { PersonnelProfilesHub } from '../../components/personnel/personnel-profiles/personnel-profiles';
 import { BaseSettings } from '../../components/personnel/base-settings/base-settings';
 import { ProjectsAndSectionsComponent } from '../../components/organization/projects-and-sections/projects-and-sections';
+import { CounterpartiesComponent } from '../../components/finance/counterparties/counterparties';
 import { Audit } from '../../components/audit/audit';
 import { HealthDashboardComponent } from '../../components/health-dashboard/health-dashboard';
 
@@ -25,6 +26,7 @@ export const ACCOUNTING_ROUTES: Routes = [
   { path: 'personnel-profiles', component: PersonnelProfilesHub, data: { reuse: true } },
   { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
   { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
+  { path: 'counterparties', component: CounterpartiesComponent, data: { reuse: true } },
   { path: 'audit', component: Audit, data: { appScope: 'finance', reuse: true } },
   { path: 'health', component: HealthDashboardComponent, data: { appScope: 'finance', reuse: false } },
   { path: 'finance-audit', redirectTo: 'audit', pathMatch: 'full' },

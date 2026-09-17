@@ -79,6 +79,28 @@ export class ExcelImportModal {
     this.runValidation(file);
   }
 
+  normalizeSummary(res: ImportResult): ImportResult {
+    if (!res) return res;
+    if (!res.summary) {
+      res.summary = { total_rows: 0, created: 0, updated: 0, skipped: 0, valid_count: 0, error_count: 0 };
+    }
+    const created = res.summary.created || 0;
+    const updated = res.summary.updated || 0;
+    const skipped = res.summary.skipped || 0;
+    const errLen = res.errors ? res.errors.length : 0;
+
+    if (res.summary.valid_count === undefined || res.summary.valid_count === null) {
+      res.summary.valid_count = created + updated;
+    }
+    if (res.summary.error_count === undefined || res.summary.error_count === null) {
+      res.summary.error_count = skipped > 0 ? skipped : errLen;
+    }
+    if (!res.summary.total_rows && res.summary.total_rows !== 0) {
+      res.summary.total_rows = res.summary.valid_count + res.summary.error_count;
+    }
+    return res;
+  }
+
   runValidation(file: File) {
     if (!this.importFn) return;
     this.isAnalyzing = true;
@@ -88,14 +110,14 @@ export class ExcelImportModal {
     this.importFn(file, this.updateExisting, true).subscribe({
       next: (res) => {
         this.isAnalyzing = false;
-        this.previewResult = res;
+        this.previewResult = this.normalizeSummary(res);
         this.step = 'preview';
         this.cdr.detectChanges();
       },
       error: (err) => {
         this.isAnalyzing = false;
         if (err.error && err.error.errors) {
-          this.previewResult = err.error;
+          this.previewResult = this.normalizeSummary(err.error);
           this.step = 'preview';
         } else {
           this.fileError = err.error?.message || 'خطا در خوانش و اعتبارسنجی اولیه فایل اکسل.';
@@ -148,9 +170,9 @@ export class ExcelImportModal {
         clearInterval(progressInterval);
         this.uploadProgress = 100;
         this.isUploading = false;
-        this.result = res;
+        this.result = this.normalizeSummary(res);
         this.step = 'result';
-        this.imported.emit(res);
+        this.imported.emit(this.result);
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -159,7 +181,7 @@ export class ExcelImportModal {
         this.uploadProgress = 0;
 
         if (err.error && err.error.errors) {
-          this.result = err.error;
+          this.result = this.normalizeSummary(err.error);
           this.step = 'result';
         } else {
           this.fileError = 'خطا در ثبت نهایی فایل. لطفاً مجدداً تلاش کنید.';

@@ -1,14 +1,11 @@
-import { Component, signal, effect, inject, ApplicationRef } from '@angular/core';
+import { Component, signal, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { ToastContainerComponent } from './shared/components/toast/toast.component';
-import { ConfirmDialogComponent, ConfirmDialogService } from './shared/components/confirm-dialog/confirm-dialog.component';
+import { ConfirmDialogComponent } from './shared/components/confirm-dialog/confirm-dialog.component';
 import { AuthService } from './core/auth/auth.service';
 import { WebSocketService } from './core/http/websocket.service';
 import { ClientTelemetryService } from './core/services/client-telemetry.service';
-import { NetworkStatusService } from './core/services/network-status.service';
-import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
-import { interval, concat, fromEvent } from 'rxjs';
-import { first, filter } from 'rxjs/operators';
+import { PwaUpdateService } from './core/services/pwa-update.service';
 
 @Component({
   selector: 'app-root',
@@ -22,9 +19,7 @@ export class App {
   private auth = inject(AuthService);
   private ws = inject(WebSocketService);
   private telemetry = inject(ClientTelemetryService);
-  private swUpdate = inject(SwUpdate);
-  private confirmDialog = inject(ConfirmDialogService);
-  private appRef = inject(ApplicationRef);
+  private pwaUpdate = inject(PwaUpdateService);
 
   constructor() {
     // پشتیبانی از لینک‌های دارای هش استعلام
@@ -48,57 +43,7 @@ export class App {
       }
     });
 
-    this.setupPwaUpdate();
-  }
-
-  private setupPwaUpdate() {
-    if (!this.swUpdate.isEnabled) return;
-
-    // Listen to the version ready event to prompt the user
-    this.swUpdate.versionUpdates
-      .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
-      .subscribe(async (evt) => {
-        const confirmed = await this.confirmDialog.open({
-          title: 'بروزرسانی برنامه',
-          message: 'نسخه جدیدی از برنامه دریافت شده است. آیا می‌خواهید برای اعمال تغییرات، برنامه را هم‌اکنون بروزرسانی کنید؟',
-          confirmText: 'بروزرسانی',
-          type: 'info'
-        });
-
-        if (confirmed) {
-          await this.swUpdate.activateUpdate();
-          document.location.reload();
-        }
-      });
-
-    // Check for updates every 1 hour (3600000 ms) after the app is stable
-    const appIsStable$ = this.appRef.isStable.pipe(first(isStable => isStable === true));
-    const everyHour$ = interval(60 * 60 * 1000);
-    const everyHourOnceAppIsStable$ = concat(appIsStable$, everyHour$);
-
-    everyHourOnceAppIsStable$.subscribe(async () => {
-      try {
-        const net = NetworkStatusService.getInstance();
-        if (net.isBrowserOnline && !net.isServerUnreachable) {
-          await this.swUpdate.checkForUpdate();
-        }
-      } catch (err) {
-        console.warn('Failed to check for updates', err);
-      }
-    });
-
-    // Check for updates when the browser comes online
-    if (typeof window !== 'undefined') {
-      fromEvent(window, 'online').subscribe(async () => {
-        try {
-          const net = NetworkStatusService.getInstance();
-          if (net.isBrowserOnline && !net.isServerUnreachable) {
-            await this.swUpdate.checkForUpdate();
-          }
-        } catch (err) {
-          console.warn('Failed to check for updates on online event', err);
-        }
-      });
-    }
+    this.pwaUpdate.init();
   }
 }
+

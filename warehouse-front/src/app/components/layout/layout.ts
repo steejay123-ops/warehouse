@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterOutlet, Router, NavigationEnd } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { filter, Subscription } from 'rxjs';
-import { SwUpdate } from '@angular/service-worker';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthStore } from '../../core/stores/auth.store';
 import { StateService } from '../../services/state.service';
@@ -357,9 +356,6 @@ export class Layout implements OnInit, OnDestroy {
     currentWarehouseName: string;
   } | null = null;
   private syncSuccessTimer: any = null;
-  isDeepSyncModalOpen = false;
-  deepSyncWarehouses: {id: number; name: string}[] = [];
-  deepSyncPreselectId: number | null = null;
   private baseTitle = document.title;
   private offlineSubs: Subscription[] = [];
 
@@ -377,80 +373,6 @@ export class Layout implements OnInit, OnDestroy {
   closeUserMenu() {
     this.isUserMenuOpen = false;
     this.cdr.detectChanges();
-  }
-
-  private swUpdate = inject(SwUpdate);
-  isCheckingAppUpdate = false;
-
-  /**
-   * بروزرسانی دستی نسخه برنامه (فرانت‌اند / PWA)
-   * استعلام آنی از سرویس‌ورکر، فعال‌سازی فوری نسخه و رفرش تمیز صفحه
-   */
-  async onManualAppUpdate() {
-    if (this.isCheckingAppUpdate) return;
-
-    const network = NetworkStatusService.getInstance();
-    if (!network.isBrowserOnline || network.isServerUnreachable) {
-      this.toast.show(
-        'warning',
-        'سامانه در حالت آفلاین / عدم دسترسی به سرور است. امکان دریافت بروزرسانی در این وضعیت وجود ندارد.'
-      );
-      return;
-    }
-
-    this.isCheckingAppUpdate = true;
-    this.cdr.detectChanges();
-
-    try {
-      this.toast.show('info', 'در حال استعلام آخرین نسخه برنامه از سرور...');
-
-      if (this.swUpdate.isEnabled) {
-        const updateFound = await this.swUpdate.checkForUpdate();
-        if (updateFound) {
-          this.toast.show('success', 'نسخه جدید دریافت شد! در حال بارگذاری مجدد...');
-          await this.swUpdate.activateUpdate();
-          setTimeout(() => {
-            window.location.reload();
-          }, 600);
-          return;
-        }
-      }
-
-      // بروزرسانی دستی ثبتی‌های سرویس‌ورکر مرورگر در صورت وجود
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for (const reg of regs) {
-          await reg.update();
-        }
-      }
-
-      this.toast.show('success', 'شما در حال استفاده از آخرین نسخه برنامه هستید.');
-    } catch (err: any) {
-      console.warn('Manual app update failed', err);
-      const errMsg = String(err?.message || err || '');
-
-      if (
-        errMsg.includes('530') ||
-        errMsg.includes('502') ||
-        errMsg.includes('503') ||
-        errMsg.includes('504') ||
-        errMsg.includes('Failed to update a ServiceWorker') ||
-        errMsg.includes('bad HTTP response code') ||
-        errMsg.includes('Failed to fetch') ||
-        errMsg.includes('NetworkError')
-      ) {
-        network.reportServerUnreachable();
-        this.toast.show(
-          'warning',
-          'سرور اصلی در دسترس نیست (کد ۵۳۰ یا خطای شبکه). نسخه محلی برنامه فعال و پایدار است.'
-        );
-      } else {
-        this.toast.show('error', 'عدم امکان بررسی نسخه جدید: ' + (err?.message || 'سرور پاسخگو نیست'));
-      }
-    } finally {
-      this.isCheckingAppUpdate = false;
-      this.cdr.detectChanges();
-    }
   }
 
   isAvatarModalOpen = false;
@@ -605,7 +527,6 @@ export class Layout implements OnInit, OnDestroy {
   private handleWarehousesLoaded(data: any[]): void {
     const warehouseList = Array.isArray(data) ? data : [];
     this.state.appState.projects = warehouseList;
-    this.deepSyncWarehouses = warehouseList;
 
     // خودترمیمی انبار فعال در صورتی که انبار قبلی حذف یا نامعتبر شده باشد
     this.store.sanitizeActiveWarehouse(warehouseList);
@@ -854,118 +775,6 @@ export class Layout implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * بروزرسانی عمیق (Full Resync)
-   * برای پاکسازی رکوردهای روح (Ghosts) و دریافت مجدد کل اطلاعات
-   */
-  async onDeepUpdate() {
-    if (this.isSyncing) return;
-
-    if (this.isOffline) {
-      this.toast.show('error', 'برای بروزرسانی عمیق باید به اینترنت متصل باشید.');
-      return;
-    }
-
-    // گارد وجود تغییرات ارسال نشده در صف
-    if (this.pendingCount > 0) {
-      this.toast.show('error', 'ابتدا باید تغییرات ذخیره‌نشده خود را همگام‌سازی (Sync) کنید تا از دست نروند.');
-      return;
-    }
-
-    const currentId = this.store.activeWarehouseId();
-    this.deepSyncWarehouses = this.state.appState.projects || [];
-    this.deepSyncPreselectId = currentId && currentId !== 'ALL' ? Number(currentId) : null;
-    this.isDeepSyncModalOpen = true;
-    this.cdr.detectChanges();
-
-    // اعتبارسنجی مجدد و رفرش زنده انبارها پیش از آغاز بروزرسانی عمیق
-    if (this.moduleRegistry.isModuleInstalled('warehouse')) {
-      this.whService.getAll().subscribe({
-        next: (data) => {
-          this.handleWarehousesLoaded(data);
-          this.deepSyncWarehouses = data || [];
-          const refreshedId = this.store.activeWarehouseId();
-          this.deepSyncPreselectId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
-          this.cdr.detectChanges();
-        },
-        error: () => {}
-      });
-    }
-  }
-
-  async startDeepSync(warehouseIds: number[]) {
-    this.isDeepSyncModalOpen = false;
-    
-    try {
-      this.isSyncing = true;
-      this.cdr.detectChanges();
-      
-      const syncService = OfflineSyncService.getInstance();
-      
-      // Pass the warehouse list so the service can get names
-      const warehousesMap: Record<number, string> = {};
-      this.deepSyncWarehouses.forEach(w => warehousesMap[w.id] = w.name);
-      
-      const summaries = await syncService.performDeepUpdate(warehouseIds, warehousesMap);
-      
-      let totalRecords = 0;
-      let totalBytes = 0;
-      let tableRows = '';
-      
-      summaries.forEach(s => {
-        totalRecords += s.records;
-        totalBytes += s.bytes;
-        tableRows += `
-          <tr class="border-b border-slate-200 last:border-0">
-            <td class="py-2 px-2 text-right">${s.warehouseName}</td>
-            <td class="py-2 px-2 text-center" dir="ltr">${s.records.toLocaleString()}</td>
-            <td class="py-2 px-2 text-left" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
-          </tr>
-        `;
-      });
-      
-      const htmlContent = `
-        <div class="mt-4 bg-slate-50 rounded-lg overflow-hidden border border-slate-200">
-          <table class="w-full text-xs">
-            <thead class="bg-slate-50 text-slate-500">
-              <tr>
-                <th class="py-2 px-2 text-right">انبار</th>
-                <th class="py-2 px-2 text-center">رکوردها</th>
-                <th class="py-2 px-2 text-left">حجم</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-            <tfoot class="bg-slate-200/50 font-bold text-slate-800 border-t border-slate-200">
-              <tr>
-                <td class="py-2 px-2 text-right">جمع کل</td>
-                <td class="py-2 px-2 text-center" dir="ltr">${totalRecords.toLocaleString()}</td>
-                <td class="py-2 px-2 text-left" dir="ltr">${(totalBytes / 1024).toFixed(1)} KB</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      `;
-
-      await this.confirmDialog.open({
-        title: 'گزارش بروزرسانی عمیق',
-        message: 'دریافت اطلاعات با موفقیت به پایان رسید. جزئیات به شرح زیر است:' + htmlContent,
-        confirmText: 'تایید',
-        showCancel: false,
-        type: 'info'
-      });
-      
-      window.location.reload();
-    } catch (err: any) {
-      console.error('[DeepUpdate] Error:', err);
-      this.toast.show('error', 'خطا در بروزرسانی عمیق: ' + (err.message || 'خطای ناشناخته'));
-    } finally {
-      this.isSyncing = false;
-      this.cdr.detectChanges();
-    }
-  }
-
   openSyncErrorsFromBadge() {
     this.isSyncErrorsOpen = true;
     this.loadSyncErrors();
@@ -1137,7 +946,8 @@ export class Layout implements OnInit, OnDestroy {
     const accountingTabs = [
       'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
-      'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement'
+      'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement',
+      'counterparties'
     ];
     if (accountingTabs.includes(tabId)) {
       this.router.navigate(['/app/finance/' + tabId]);
@@ -1284,6 +1094,7 @@ export class Layout implements OnInit, OnDestroy {
       'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی',
       'projects-and-sections': 'مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها',
+      'counterparties': 'مدیریت طرف‌حساب‌های مالی و تجاری',
       'finance-audit': 'رهگیری و ممیزی مالی و اداری',
       health: 'مرکز جامع پایش سلامت و تاب‌آوری سامانه',
       'finance-health': 'مرکز جامع پایش سلامت و تاب‌آوری سامانه'

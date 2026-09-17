@@ -1,0 +1,4 @@
+/* Counterparties Management Styles - Clean Tailwind Host */
+:host {
+  display: block;
+}

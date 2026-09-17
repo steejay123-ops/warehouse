@@ -544,8 +544,8 @@
           🏢
         </div>
         <div>
-          <span class="text-xs font-black text-slate-800">پروژه هدف صدور دیسکت‌های بیمه و پرداخت بانک ملی:</span>
-          <p class="text-[11px] text-slate-500 font-medium mt-0.5">بر اساس قوانین تأمین اجتماعی و استانداردهای پایا، دیسکت‌های بیمه و فایل پرداخت بانک ملی باید به تفکیک کارگاه هر پروژه صادر شوند.</p>
+          <span class="text-xs font-black text-slate-800">پروژه هدف صدور دیسکت‌های بیمه، فایل‌های مالیاتی و پرداخت بانک ملی:</span>
+          <p class="text-[11px] text-slate-500 font-medium mt-0.5">بر اساس قوانین سازمان امور مالیاتی، تأمین اجتماعی و استانداردهای پایا، فایل‌های مالیاتی WH و WP، دیسکت‌های بیمه و فایل پرداخت بانک ملی به تفکیک کارگاه و کد پرونده هر پروژه صادر می‌شوند.</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -553,6 +553,30 @@
         <select [(ngModel)]="selectedProjectId" class="bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer min-w-[200px]">
           <option *ngFor="let p of projects" [value]="p.id">🏢 {{ p.name }} ({{ p.code }})</option>
         </select>
+      </div>
+    </div>
+
+    <!-- راهنمای گردش‌کار ۳ مرحله‌ای مالیات حقوق -->
+    <div class="bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-teal-200/80 rounded-2xl p-4 shadow-xs">
+      <div class="flex items-start gap-3 text-xs">
+        <span class="text-xl shrink-0">🏛️</span>
+        <div class="space-y-1.5 w-full">
+          <h4 class="font-black text-teal-950">گردش‌کار استاندارد محاسبه مالیات حقوق بر اساس سامانه سازمان امور مالیاتی کشور:</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-teal-900 mt-2">
+            <div class="bg-white/80 border border-teal-100 rounded-xl p-2.5">
+              <span class="font-black text-teal-700 block mb-1">گام ۱: دریافت فایل‌های پروژه</span>
+              <span>پروژه را انتخاب کرده و دو فایل متنی <strong>WH</strong> (خلاصه) و <strong>WP</strong> (پرسنل) را دانلود کنید.</span>
+            </div>
+            <div class="bg-white/80 border border-teal-100 rounded-xl p-2.5">
+              <span class="font-black text-teal-700 block mb-1">گام ۲: بارگذاری در سامانه دارایی</span>
+              <span>فایل‌ها را در سامانه مالیات حقوق بارگذاری نمایید تا محاسبات قانونی، سقف معافیت‌ها و مالیات قطعی توسط خود سامانه دارایی انجام شود.</span>
+            </div>
+            <div class="bg-white/80 border border-teal-100 rounded-xl p-2.5">
+              <span class="font-black text-teal-700 block mb-1">گام ۳: درون‌ریزی اکسل نتیجه</span>
+              <span>فایل اکسل خروجی سامانه دارایی را با دکمه <strong>«ایمپورت اکسل مالیات»</strong> بارگذاری نمایید تا ستون مالیات هر پرسنل دقیقاً منطبق شود.</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -581,7 +605,7 @@
           <p class="text-xs text-emerald-200 mt-2 leading-relaxed">فایل ۳۹ فیلدی خلاصه حقوق ماهانه سامانه سازمان امور مالیاتی کشور با انکودینگ UTF-8</p>
         </div>
         <button (click)="downloadTaxWh()" class="mt-6 w-full py-2.5 bg-white text-emerald-900 hover:bg-emerald-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
-          <span>دانلود فایل WH1405xx.txt</span>
+          <span>دانلود فایل WH پروژه (.txt)</span>
         </button>
       </div>
 
@@ -595,7 +619,7 @@
           <p class="text-xs text-cyan-200 mt-2 leading-relaxed">مشخصات هویتی، استخدامی و شغلی پرسنل مالیاتی با انکودینگ استاندارد UTF-8 BOM</p>
         </div>
         <button (click)="downloadTaxWp()" class="mt-6 w-full py-2.5 bg-white text-cyan-950 hover:bg-cyan-50 font-black text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md">
-          <span>دانلود فایل WP1405xx.txt</span>
+          <span>دانلود فایل WP پروژه (.txt)</span>
         </button>
       </div>
 

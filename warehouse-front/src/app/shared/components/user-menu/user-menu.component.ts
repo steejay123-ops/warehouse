@@ -2,13 +2,13 @@ import { Component, Input, OnInit, OnDestroy, ChangeDetectorRef, HostListener, i
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { SwUpdate } from '@angular/service-worker';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
 import { AuthStore } from '../../../core/stores/auth.store';
 import { NetworkStatusService } from '../../../core/services/network-status.service';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
+import { PwaUpdateService } from '../../../core/services/pwa-update.service';
 import { AccountsHttpService } from '../../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../../core/http/warehouse-http.service';
 import { StateService } from '../../../services/state.service';
@@ -16,7 +16,9 @@ import { ModuleRegistryService } from '../../../core/modules/module-registry.ser
 import { ToastService } from '../toast/toast.component';
 import { ConfirmDialogService } from '../confirm-dialog/confirm-dialog.component';
 import { AvatarCropperModal } from '../avatar-cropper-modal/avatar-cropper-modal';
-import { DeepSyncModalComponent } from '../deep-sync-modal/deep-sync-modal.component';
+import { DeepSyncContextMode, DeepSyncModalComponent } from '../deep-sync-modal/deep-sync-modal.component';
+import { AppPersonaService } from '../../../core/services/app-persona.service';
+import { PersonnelApiService } from '../../../core/api/personnel-api.service';
 
 @Component({
   selector: 'app-user-menu',
@@ -41,21 +43,91 @@ export class UserMenuComponent implements OnInit, OnDestroy {
   private moduleRegistry = inject(ModuleRegistryService);
   private toast = inject(ToastService);
   private confirmDialog = inject(ConfirmDialogService);
-  private swUpdate = inject(SwUpdate);
+  public pwaUpdate = inject(PwaUpdateService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+  private personaService = inject(AppPersonaService, { optional: true });
+  private personnelApi = inject(PersonnelApiService, { optional: true });
 
   public isUserMenuOpen = false;
   public isAvatarModalOpen = false;
   public isSavingAvatar = false;
-  public isCheckingAppUpdate = false;
+  public get isCheckingAppUpdate(): boolean {
+    return this.pwaUpdate.isChecking();
+  }
 
   public isOffline = false;
   public isSyncing = false;
   public pendingCount = 0;
   public isDeepSyncModalOpen = false;
   public deepSyncWarehouses: any[] = [];
-  public deepSyncPreselectId: number | null = null;
+  public deepSyncProjects: any[] = [];
+  public deepSyncPreselectWarehouseId: number | null = null;
+  public deepSyncPreselectProjectId: number | null = null;
+
+  public get deepSyncPreselectId(): number | null {
+    return this.currentScopeContext === 'finance' ? this.deepSyncPreselectProjectId : this.deepSyncPreselectWarehouseId;
+  }
+  public set deepSyncPreselectId(val: number | null) {
+    this.deepSyncPreselectWarehouseId = val;
+    this.deepSyncPreselectProjectId = val;
+  }
+
+  public get currentScopeContext(): DeepSyncContextMode {
+    const rawUrl = (this.router?.url && this.router.url !== '/')
+      ? this.router.url
+      : (typeof window !== 'undefined' && window.location ? window.location.pathname : '');
+    const url = (rawUrl || '').split('?')[0];
+
+    // ۱. بررسی بر اساس مسیر جاری ناوبری کاربر
+    if (url.startsWith('/app/operations')) {
+      return 'operations';
+    }
+    if (
+      url.startsWith('/app/finance') ||
+      url.startsWith('/app/personnel') ||
+      url.startsWith('/app/payroll') ||
+      url.startsWith('/app/treasury') ||
+      url.startsWith('/app/projects')
+    ) {
+      return 'finance';
+    }
+    if (
+      url.startsWith('/app/warehouse') ||
+      url.startsWith('/app/inventory') ||
+      url.startsWith('/app/counting') ||
+      url.startsWith('/app/items') ||
+      url.startsWith('/app/tag-templates')
+    ) {
+      return 'warehouse';
+    }
+
+    // ۲. بررسی بر اساس پرسونا / ماژول فعال در تب جاری
+    const activeApp = this.personaService?.activeApp?.();
+    if (activeApp === 'operations') {
+      return 'operations';
+    }
+    if (activeApp === 'personnel' || activeApp === 'accounting' || activeApp === 'finance') {
+      return 'finance';
+    }
+    if (activeApp === 'warehouse') {
+      return 'warehouse';
+    }
+
+    // ۳. بررسی بر اساس ماژول‌های فعال نصب‌شده
+    const hasWarehouse = this.moduleRegistry.isModuleInstalled('warehouse');
+    const hasPersonnel = this.moduleRegistry.isModuleInstalled('accounting') || this.moduleRegistry.isModuleInstalled('personnel');
+
+    if (hasWarehouse && !hasPersonnel) {
+      return 'warehouse';
+    }
+    if (!hasWarehouse && hasPersonnel) {
+      return 'finance';
+    }
+
+    return 'warehouse';
+  }
+
   private subs: Subscription[] = [];
 
   // Shortcuts modal
@@ -376,65 +448,10 @@ export class UserMenuComponent implements OnInit, OnDestroy {
   }
 
   public async onManualAppUpdate(): Promise<void> {
-    const network = NetworkStatusService.getInstance();
-    if (!network.isBrowserOnline || network.isServerUnreachable) {
-      this.toast.show(
-        'warning',
-        'سامانه در حالت آفلاین / عدم دسترسی به سرور است. امکان دریافت بروزرسانی در این وضعیت وجود ندارد.'
-      );
-      return;
-    }
-
-    this.isCheckingAppUpdate = true;
-    this.cdr.detectChanges();
-
     try {
-      this.toast.show('info', 'در حال استعلام آخرین نسخه برنامه از سرور...');
-
-      if (this.swUpdate.isEnabled) {
-        const updateFound = await this.swUpdate.checkForUpdate();
-        if (updateFound) {
-          this.toast.show('success', 'نسخه جدید دریافت شد! در حال بارگذاری مجدد...');
-          await this.swUpdate.activateUpdate();
-          setTimeout(() => {
-            window.location.reload();
-          }, 600);
-          return;
-        }
-      }
-
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for (const reg of regs) {
-          await reg.update();
-        }
-      }
-
-      this.toast.show('success', 'شما در حال استفاده از آخرین نسخه برنامه هستید.');
-    } catch (err: any) {
-      console.warn('Manual app update failed', err);
-      const errMsg = String(err?.message || err || '');
-
-      if (
-        errMsg.includes('530') ||
-        errMsg.includes('502') ||
-        errMsg.includes('503') ||
-        errMsg.includes('504') ||
-        errMsg.includes('Failed to update a ServiceWorker') ||
-        errMsg.includes('bad HTTP response code') ||
-        errMsg.includes('Failed to fetch') ||
-        errMsg.includes('NetworkError')
-      ) {
-        network.reportServerUnreachable();
-        this.toast.show(
-          'warning',
-          'سرور اصلی در دسترس نیست (کد ۵۳۰ یا خطای شبکه). نسخه محلی برنامه فعال و پایدار است.'
-        );
-      } else {
-        this.toast.show('error', 'عدم امکان بررسی نسخه جدید: ' + (err?.message || 'سرور پاسخگو نیست'));
-      }
+      await this.pwaUpdate.checkAndApplyManualUpdate({ pendingCount: this.pendingCount });
     } finally {
-      this.isCheckingAppUpdate = false;
+      this.closeUserMenu();
       this.cdr.detectChanges();
     }
   }
@@ -452,81 +469,217 @@ export class UserMenuComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const currentId = this.store.activeWarehouseId();
-    this.deepSyncWarehouses = this.state.appState.projects || [];
-    this.deepSyncPreselectId = currentId && currentId !== 'ALL' ? Number(currentId) : null;
+    const context = this.currentScopeContext;
+    const currentWhId = this.store.activeWarehouseId();
+    this.deepSyncPreselectWarehouseId = currentWhId && currentWhId !== 'ALL' ? Number(currentWhId) : null;
+    this.deepSyncPreselectProjectId = null;
+
+    // ۱. آماده‌سازی لیست‌های پیش‌فرض
+    if (context === 'warehouse' || context === 'operations') {
+      this.deepSyncWarehouses = this.state.appState.projects || [];
+    } else {
+      this.deepSyncWarehouses = [];
+    }
+    this.deepSyncProjects = [];
+
+    // ۲. باز کردن فوری مودال برای پاسخ‌دهی سریع رابط کاربری
     this.isDeepSyncModalOpen = true;
     this.cdr.detectChanges();
 
-    if (this.moduleRegistry.isModuleInstalled('warehouse')) {
-      this.whService.getAll().subscribe({
-        next: (data) => {
-          this.deepSyncWarehouses = data || [];
-          const refreshedId = this.store.activeWarehouseId();
-          this.deepSyncPreselectId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
-          this.cdr.detectChanges();
-        },
-        error: () => {}
-      });
+    // ۳. واکشی داده‌های زنده و تازه‌سازی فهرست‌ها متناسب با قلمرو فعال
+    const fetchPromises: Promise<any>[] = [];
+
+    if ((context === 'warehouse' || context === 'operations') && this.moduleRegistry.isModuleInstalled('warehouse')) {
+      fetchPromises.push(
+        firstValueFrom(this.whService.getAll())
+          .then((data) => {
+            this.deepSyncWarehouses = data || [];
+            const refreshedId = this.store.activeWarehouseId();
+            this.deepSyncPreselectWarehouseId = refreshedId && refreshedId !== 'ALL' ? Number(refreshedId) : null;
+            this.cdr.detectChanges();
+          })
+          .catch((err) => {
+            console.warn('[UserMenu] خطا در دریافت لیست انبارها برای بروزرسانی عمیق:', err);
+          })
+      );
     }
+
+    if ((context === 'finance' || context === 'operations') && this.personnelApi) {
+      fetchPromises.push(
+        firstValueFrom(this.personnelApi.getFinancialProjects({ is_active: true }))
+          .then((projects) => {
+            this.deepSyncProjects = projects || [];
+            this.cdr.detectChanges();
+          })
+          .catch((err) => {
+            console.warn('[UserMenu] خطا در دریافت لیست پروژه‌های مالی برای بروزرسانی عمیق:', err);
+          })
+      );
+    }
+
+    await Promise.allSettled(fetchPromises);
+    this.cdr.detectChanges();
   }
 
-  public async startDeepSync(warehouseIds: number[]): Promise<void> {
+  public async startDeepSync(payload: any): Promise<void> {
+    if (this.isSyncing) return;
     this.isDeepSyncModalOpen = false;
-    
+
+    let targetWarehouseIds: number[] = [];
+    let targetProjectIds: number[] = [];
+
+    if (Array.isArray(payload)) {
+      if (this.currentScopeContext === 'finance') {
+        targetProjectIds = payload;
+      } else {
+        targetWarehouseIds = payload;
+      }
+    } else if (payload && typeof payload === 'object') {
+      targetWarehouseIds = Array.isArray(payload.warehouseIds) ? payload.warehouseIds : [];
+      targetProjectIds = Array.isArray(payload.projectIds) ? payload.projectIds : [];
+    }
+
+    if (targetWarehouseIds.length === 0 && targetProjectIds.length === 0) {
+      return;
+    }
+
     try {
       this.isSyncing = true;
       this.cdr.detectChanges();
-      
+
       const syncService = OfflineSyncService.getInstance();
       const warehousesMap: Record<number, string> = {};
       this.deepSyncWarehouses.forEach(w => warehousesMap[w.id] = w.name);
-      
-      const summaries = await syncService.performDeepUpdate(warehouseIds, warehousesMap);
-      
+
+      const projectsMap: Record<number, string> = {};
+      this.deepSyncProjects.forEach(p => projectsMap[p.id] = p.name);
+
+      interface SummaryItem {
+        scopeKind: 'warehouse' | 'finance';
+        name: string;
+        records: number;
+        bytes: number;
+      }
+
+      const allSummaries: SummaryItem[] = [];
+
+      // ۱. اجرای بروزرسانی عمیق انبارها (در صورت وجود شناسه‌های هدف)
+      if (targetWarehouseIds.length > 0) {
+        const whSummaries = await syncService.performDeepUpdate(targetWarehouseIds, warehousesMap, 'warehouse');
+        whSummaries.forEach(s => {
+          allSummaries.push({
+            scopeKind: 'warehouse',
+            name: s.warehouseName,
+            records: s.records,
+            bytes: s.bytes
+          });
+        });
+      }
+
+      // ۲. اجرای بروزرسانی عمیق پروژه‌ها و کارگاه‌های مالی (در صورت وجود شناسه‌های هدف)
+      if (targetProjectIds.length > 0) {
+        const finSummaries = await syncService.performDeepUpdate(targetProjectIds, projectsMap, 'finance');
+        finSummaries.forEach(s => {
+          allSummaries.push({
+            scopeKind: 'finance',
+            name: s.warehouseName,
+            records: s.records,
+            bytes: s.bytes
+          });
+        });
+      }
+
       let totalRecords = 0;
       let totalBytes = 0;
       let tableRows = '';
-      
-      summaries.forEach(s => {
+
+      const isOperationsContext = this.currentScopeContext === 'operations' || (targetWarehouseIds.length > 0 && targetProjectIds.length > 0);
+
+      allSummaries.forEach(s => {
         totalRecords += s.records;
         totalBytes += s.bytes;
-        tableRows += `
-          <tr class="border-b border-slate-200 last:border-0">
-            <td class="py-2 px-2 text-right">${s.warehouseName}</td>
-            <td class="py-2 px-2 text-center" dir="ltr">${s.records.toLocaleString()}</td>
-            <td class="py-2 px-2 text-left" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
+        const safeName = (s.name || '').replace(/[&<>"']/g, (m) => ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+        }[m] || m));
+
+        const badgeHtml = s.scopeKind === 'warehouse'
+          ? '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200">📦 انبارداری</span>'
+          : '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">💳 مالی</span>';
+
+        if (isOperationsContext) {
+          tableRows += `
+            <tr class="border-b border-slate-200 last:border-0 hover:bg-white/60 transition-colors">
+              <td class="py-2.5 px-3 text-right">${badgeHtml}</td>
+              <td class="py-2.5 px-3 text-right font-medium text-slate-800">${safeName}</td>
+              <td class="py-2.5 px-3 text-center font-mono font-bold" dir="ltr">${s.records.toLocaleString()}</td>
+              <td class="py-2.5 px-3 text-left font-mono text-slate-600" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
+            </tr>
+          `;
+        } else {
+          tableRows += `
+            <tr class="border-b border-slate-200 last:border-0 hover:bg-white/60 transition-colors">
+              <td class="py-2.5 px-3 text-right font-medium text-slate-800">${safeName}</td>
+              <td class="py-2.5 px-3 text-center font-mono font-bold" dir="ltr">${s.records.toLocaleString()}</td>
+              <td class="py-2.5 px-3 text-left font-mono text-slate-600" dir="ltr">${(s.bytes / 1024).toFixed(1)} KB</td>
+            </tr>
+          `;
+        }
+      });
+
+      const tableHeaderHtml = isOperationsContext
+        ? `
+          <tr>
+            <th class="py-2.5 px-3 text-right font-black">سامانه</th>
+            <th class="py-2.5 px-3 text-right font-black">مجموعه هدف</th>
+            <th class="py-2.5 px-3 text-center font-black">رکوردها</th>
+            <th class="py-2.5 px-3 text-left font-black">حجم</th>
+          </tr>
+        `
+        : `
+          <tr>
+            <th class="py-2.5 px-3 text-right font-black">${this.currentScopeContext === 'finance' ? 'پروژه / کارگاه' : 'انبار'}</th>
+            <th class="py-2.5 px-3 text-center font-black">رکوردها</th>
+            <th class="py-2.5 px-3 text-left font-black">حجم</th>
           </tr>
         `;
-      });
-      
+
+      const colspanTotal = isOperationsContext ? 2 : 1;
+
       const htmlContent = `
-        <div class="mt-4 bg-slate-50 rounded-lg overflow-hidden border border-slate-200">
+        <div class="mt-4 bg-slate-50 rounded-xl overflow-hidden border border-slate-200 shadow-2xs">
           <table class="w-full text-xs">
-            <thead class="bg-slate-50 text-slate-500">
-              <tr>
-                <th class="py-2 px-2 text-right">انبار</th>
-                <th class="py-2 px-2 text-center">رکوردها</th>
-                <th class="py-2 px-2 text-left">حجم</th>
-              </tr>
+            <thead class="bg-slate-100/90 text-slate-600 border-b border-slate-200">
+              ${tableHeaderHtml}
             </thead>
             <tbody>
               ${tableRows}
             </tbody>
+            <tfoot class="bg-slate-100/80 font-black border-t border-slate-200 text-slate-800">
+              <tr>
+                <td class="py-2.5 px-3 text-right" colspan="${colspanTotal}">مجموع کل</td>
+                <td class="py-2.5 px-3 text-center font-mono" dir="ltr">${totalRecords.toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-left font-mono" dir="ltr">${(totalBytes / 1024).toFixed(1)} KB</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       `;
-      
-      await this.confirmDialog.open({
-        title: 'گزارش بروزرسانی عمیق',
-        message: 'دریافت اطلاعات با موفقیت به پایان رسید. جزئیات به شرح زیر است:' + htmlContent,
-        confirmText: 'تایید',
-        showCancel: false,
+
+      const shouldReload = await this.confirmDialog.open({
+        title: isOperationsContext ? 'گزارش بروزرسانی یکپارچه سازمان' : 'گزارش بروزرسانی عمیق',
+        message: 'دریافت اطلاعات با موفقیت به پایان رسید. جزئیات همگام‌سازی به شرح زیر است:' + htmlContent,
+        confirmText: 'بارگذاری مجدد و اعمال',
+        cancelText: 'ادامه در همین صفحه',
+        showCancel: true,
         type: 'info'
       });
-      
-      window.location.reload();
-      
+
+      if (shouldReload) {
+        window.location.reload();
+      } else {
+        this.toast.show('success', 'اطلاعات با موفقیت نوسازی شد.');
+      }
+
     } catch (err: any) {
       console.error('Deep update error:', err);
       this.toast.show('error', 'خطا در بروزرسانی عمیق: ' + (err.message || 'مشکل ناشناخته'));

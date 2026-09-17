@@ -909,21 +909,24 @@ export class PersonnelProfilesHub implements OnInit {
 
   onShebaCopy(event: ClipboardEvent): void {
     const rawSheba = this.editingVehicle?.sheba_number || '';
-    if (rawSheba && event.clipboardData) {
+    const cleanSheba = rawSheba.toString().trim().toUpperCase().replace(/^IR/i, '');
+    if (cleanSheba && event.clipboardData) {
       event.preventDefault();
-      event.clipboardData.setData('text/plain', rawSheba);
+      event.clipboardData.setData('text/plain', cleanSheba);
       this.isShebaCopied = true;
+      this.toast.show('success', 'شماره شبا (بدون IR) کپی شد: ' + cleanSheba);
       setTimeout(() => { this.isShebaCopied = false; this.cdr.detectChanges(); }, 2000);
       this.cdr.detectChanges();
     }
   }
 
   copyShebaToClipboard(): void {
-    const sheba = this.editingVehicle?.sheba_number;
+    const rawSheba = this.editingVehicle?.sheba_number;
+    const sheba = rawSheba ? rawSheba.toString().trim().toUpperCase().replace(/^IR/i, '') : '';
     if (sheba) {
       navigator.clipboard.writeText(sheba).then(() => {
         this.isShebaCopied = true;
-        this.toast.show('success', 'شماره شبا به صورت یکپارچه و بدون فاصله کپی شد: ' + sheba);
+        this.toast.show('success', 'شماره شبا (بدون IR) کپی شد: ' + sheba);
         setTimeout(() => { this.isShebaCopied = false; this.cdr.detectChanges(); }, 2500);
         this.cdr.detectChanges();
       }).catch(() => {

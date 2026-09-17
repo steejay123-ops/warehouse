@@ -467,14 +467,22 @@ export class FinanceCartable implements OnInit, OnDestroy {
   }
 
   downloadTaxWh(): void {
+    if (!this.selectedProjectId) {
+      this.toast.show('warning', 'جهت صدور فایل متنی WH مالیات، انتخاب پروژه الزامی است.');
+      return;
+    }
     if (this.currentPeriodId) {
-      window.open(this.api.getTaxWhDownloadUrl(this.currentPeriodId), '_blank');
+      window.open(this.api.getTaxWhDownloadUrl(this.currentPeriodId, this.selectedProjectId), '_blank');
     }
   }
 
   downloadTaxWp(): void {
+    if (!this.selectedProjectId) {
+      this.toast.show('warning', 'جهت صدور فایل متنی WP مالیات، انتخاب پروژه الزامی است.');
+      return;
+    }
     if (this.currentPeriodId) {
-      window.open(this.api.getTaxWpDownloadUrl(this.currentPeriodId), '_blank');
+      window.open(this.api.getTaxWpDownloadUrl(this.currentPeriodId, this.selectedProjectId), '_blank');
     }
   }
 

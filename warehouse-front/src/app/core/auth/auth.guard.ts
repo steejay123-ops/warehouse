@@ -58,7 +58,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   'treasury': ['view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'admin_all'],
   'profiles': ['view_sys_personnel', 'view_sys_payroll', 'admin_all'],
   'personnel-profiles': ['view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'base-settings': ['view_sys_personnel', 'view_sys_settings', 'view_sys_payroll', 'admin_all']
+  'base-settings': ['view_sys_personnel', 'view_sys_settings', 'view_sys_payroll', 'admin_all'],
+  'projects-and-sections': ['view_sys_projects', 'view_sys_personnel', 'view_sys_payroll', 'admin_all'],
+  'counterparties': ['view_sys_payroll', 'view_sys_personnel', 'view_sys_projects', 'admin_all']
 };
 
 const WAREHOUSE_PERMISSIONS = [
@@ -74,7 +76,7 @@ const WAREHOUSE_PERMISSIONS = [
 ];
 
 const PERSONNEL_PERMISSIONS = [
-  'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+  'view_sys_projects', 'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
   'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
   'perm_lock_work_period', 'perm_approve_personnel_supervisor', 'perm_approve_personnel_manager',
   'perm_approve_personnel_finance', 'perm_approve_fleet_supervisor', 'perm_approve_fleet_manager',
@@ -91,7 +93,7 @@ const WAREHOUSE_ROUTE_KEYS = new Set([
 const FINANCE_ROUTE_KEYS = new Set([
   'personnel', 'payroll', 'fleet-settlement', 'attendance', 'fleet', 'fleet-attendance',
   'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles',
-  'personnel-profiles', 'base-settings', 'projects-and-sections'
+  'personnel-profiles', 'base-settings', 'projects-and-sections', 'counterparties'
 ]);
 
 export const AuthGuard: CanActivateFn = (route, state) => {

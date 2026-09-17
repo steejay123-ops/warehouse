@@ -1594,7 +1594,7 @@
               <!-- Internal Status Icon & Copy Button on Right inside Sheba Input Box -->
               <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 <!-- 1-Click Copy Sheba Button (Icon-Only) -->
-                <button *ngIf="selectedVehicleProfile.sheba_number" type="button" (click)="copyShebaToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isShebaCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white/90 hover:bg-white text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره شبا به صورت یکپارچه و بدون فاصله">
+                <button *ngIf="selectedVehicleProfile.sheba_number" type="button" (click)="copyShebaToClipboard()" class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs" [ngClass]="isShebaCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white/90 hover:bg-white text-slate-600 border-slate-200 shadow-2xs'" title="کپی شماره شبا (۲۴ رقم بدون IR)">
                   <span>{{ isShebaCopied ? '✓' : '📋' }}</span>
                 </button>
 

@@ -3,49 +3,57 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۱. هدر اصلی تنظیمات پایه (Base Settings Header) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-    <div class="flex items-center gap-3.5">
-      <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md shadow-indigo-500/20 shrink-0" style="background: linear-gradient(135deg, #4338ca, #6366f1)">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </div>
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="text-lg font-black text-slate-800 tracking-tight">تنظیمات پایه و فرمول‌های محاسباتی</h1>
-          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            سال مالی {{ fiscalYear }}
-          </span>
-        </div>
-        <p class="text-xs text-slate-500 font-medium mt-0.5">جدول ۲۰ گروه شغلی قانون کار، ضرایب ناخالص، پنجره مجاز ثبت کارکرد و تنظیمات فایل‌های قانونی</p>
-      </div>
-    </div>
-
-    <!-- Fiscal Year, Project Scope & Save Button -->
+  <div class="bg-white rounded-2xl p-3 md:p-4 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3 flex-wrap">
+    <!-- راست: کنترل‌های دامنه، سال و نسخه -->
     <div class="flex items-center gap-2.5 flex-wrap">
       <!-- انتخاب دامنه پروژه -->
       <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
         <label class="text-xs font-bold text-slate-600">دامنه تنظیمات:</label>
         <select [ngModel]="selectedProjectId" (ngModelChange)="onProjectChange($event)" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
           <option [ngValue]="null">🌐 سراسری سازمان (پیش‌فرض شرکت)</option>
-          <option *ngFor="let p of projects" [value]="p.id">🏢 {{ p.name }} ({{ p.code }})</option>
+          <option *ngFor="let p of projects" [ngValue]="p.id">🏢 {{ p.name }} ({{ p.code }})</option>
         </select>
       </div>
 
-      <!-- سال مالی -->
+      <!-- سال مالی (منوی کشویی بدون امکان تایپ مستقیم همراه با دکمه ایجاد سال جدید) -->
       <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
         <label class="text-xs font-bold text-slate-600">سال مالی:</label>
-        <input type="text" [(ngModel)]="fiscalYear" (change)="onYearChange()" class="w-16 text-center font-mono font-bold text-xs bg-white border border-slate-300 rounded-lg py-1 text-indigo-800 focus:ring-2 focus:ring-indigo-500" />
+        <select [ngModel]="fiscalYear" (ngModelChange)="onYearChange($event)" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <option *ngFor="let y of availableYears" [value]="y">سال {{ y }}</option>
+        </select>
+        <button *ngIf="canManageSettings" (click)="openCreateYearModal()" class="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs" title="ایجاد و تعریف سال مالی جدید با تایید نهایی">
+          <span>➕</span>
+          <span>سال جدید</span>
+        </button>
       </div>
 
+      <!-- سلکتور نسخه‌های احکام در طول سال -->
+      <div *ngIf="versions.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+        <label class="text-xs font-bold text-slate-600">نسخه احکام:</label>
+        <select [ngModel]="selectedVersionId" (ngModelChange)="onVersionChange($event)" class="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+          <option *ngFor="let v of versions" [ngValue]="v.id">
+            {{ v.version_title || ('نسخه ' + v.effective_from) }} (از {{ v.effective_from }}{{ v.effective_to ? ' تا ' + v.effective_to : ' به بعد' }})
+          </option>
+        </select>
+      </div>
+    </div>
+
+    <!-- چپ: دکمه‌های عملیاتی -->
+    <div class="flex items-center gap-2.5 flex-wrap">
+      <!-- دکمه ثبت اصلاحیه میانه سال -->
+      <button *ngIf="canManageSettings" (click)="openCreateVersionModal()" class="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="ثبت نسخه و مبالغ جدید احکام از یک ماه مشخص">
+        <span>➕</span>
+        <span>ثبت اصلاحیه میانه سال</span>
+      </button>
+
       <!-- دکمه کپی برای پروژه در صورت ارث‌بری -->
-      <button *ngIf="selectedProjectId && !isCurrentSettingSpecificToProject" (click)="cloneForSelectedProject()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs" title="کپی اطلاعات تنظیمات عمومی برای این پروژه">
+      <button *ngIf="selectedProjectId && !isCurrentSettingSpecificToProject" (click)="cloneForSelectedProject()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="کپی اطلاعات تنظیمات عمومی برای این پروژه">
         <span>📋</span>
         <span>ایجاد نسخه اختصاصی پروژه</span>
       </button>
 
-      <button (click)="saveYearlySettings()" [disabled]="isSaving || !canManageSettings" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+      <!-- دکمه ذخیره تنظیمات -->
+      <button (click)="saveYearlySettings()" [disabled]="isSaving || !canManageSettings" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
         <span *ngIf="!isSaving">ذخیره تنظیمات</span>
         <span *ngIf="isSaving">در حال ذخیره...</span>
@@ -377,5 +385,106 @@
     </div>
   </div>
 
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۹. مودال ثبت نسخه جدید در میانه سال (Mid-Year Version Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="showCreateVersionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2 text-purple-700">
+          <span class="text-lg">➕</span>
+          <h3 class="text-sm font-black text-slate-800">ثبت نسخه جدید احکام در میانه سال</h3>
+        </div>
+        <button (click)="closeCreateVersionModal()" class="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-500 leading-relaxed">
+        با ثبت نسخه جدید، کلیه مقادیر فعلی کپی شده و مبنای محاسبات حقوق از ماه تعیین‌شده تغییر می‌کند. ماه‌های قبل از این تاریخ بدون تغییر با احکام قبلی محاسبه می‌شوند.
+      </p>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">دامنه اعمال نسخه:</label>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-800">
+            <span *ngIf="selectedProjectId">🏢 اختصاصی پروژه انتخابی ({{ yearlySettings?.project_name || 'پروژه جاری' }})</span>
+            <span *ngIf="!selectedProjectId">🌐 سراسری کل سازمان (پیش‌فرض شرکت)</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">ماه آغاز اعتبار و اجرا (فرمت سال/ماه):</label>
+          <input type="text" [(ngModel)]="newVersionEffectiveFrom" placeholder="مثلاً 1405/07" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">عنوان نسخه:</label>
+          <input type="text" [(ngModel)]="newVersionTitle" placeholder="مثلاً اصلاحیه احکام و دستمزد نیمه دوم سال" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+        <button (click)="closeCreateVersionModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer">
+          انصراف
+        </button>
+        <button (click)="submitCreateVersion()" [disabled]="isCreatingVersion" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-purple-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+          <span *ngIf="!isCreatingVersion">ایجاد و فعال‌سازی نسخه</span>
+          <span *ngIf="isCreatingVersion">در حال ایجاد...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۱۰. مودال ایجاد سال مالی جدید (Create Fiscal Year Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="showCreateYearModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2 text-indigo-700">
+          <span class="text-lg">➕</span>
+          <h3 class="text-sm font-black text-slate-800">ایجاد و تعریف سال مالی جدید</h3>
+        </div>
+        <button (click)="closeCreateYearModal()" class="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-500 leading-relaxed">
+        با تعریف سال مالی جدید، کلیه فرمول‌ها، ضرایب ناخالص، جدول ۲۰ گروه شغلی و فایل‌های قانونی از سال مبدأ کپی شده و به صورت مستقل برای سال جدید آماده‌سازی می‌گردند.
+      </p>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">عدد سال مالی جدید (شمسی ۴ رقمی):</label>
+          <input type="text" [(ngModel)]="newFiscalYear" placeholder="مثلاً 1406" maxlength="4" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500 text-center text-sm" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">سال مبدأ جهت کپی اطلاعات و احکام پایه:</label>
+          <select [(ngModel)]="newYearSourceYear" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <option *ngFor="let y of availableYears" [value]="y">کپی از تنظیمات و احکام سال {{ y }}</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">دامنه اعمال:</label>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 font-bold text-slate-800">
+            <span *ngIf="selectedProjectId">🏢 اختصاصی پروژه انتخابی ({{ yearlySettings?.project_name || 'پروژه جاری' }})</span>
+            <span *ngIf="!selectedProjectId">🌐 سراسری کل سازمان (پیش‌فرض شرکت)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+        <button (click)="closeCreateYearModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer">
+          انصراف
+        </button>
+        <button (click)="submitCreateYear()" [disabled]="isCreatingYear" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50">
+          <span *ngIf="!isCreatingYear">ایجاد و ثبت سال مالی</span>
+          <span *ngIf="isCreatingYear">در حال ایجاد...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
+
 

@@ -105,11 +105,11 @@
         </div>
         <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 10px; text-align: center;">
           <span style="font-size: 10px; color: #047857; display: block; font-weight: bold;">رکوردهای سالم و قابل ثبت</span>
-          <span style="font-size: 18px; font-weight: 900; color: #059669;">{{ previewResult.summary.valid_count || 0 }}</span>
+          <span style="font-size: 18px; font-weight: 900; color: #059669;">{{ previewResult.summary.valid_count ?? ((previewResult.summary.created || 0) + (previewResult.summary.updated || 0)) }}</span>
         </div>
         <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 10px; text-align: center;">
           <span style="font-size: 10px; color: #b91c1c; display: block; font-weight: bold;">سطرهای دارای خطا</span>
-          <span style="font-size: 18px; font-weight: 900; color: #dc2626;">{{ previewResult.summary.error_count || 0 }}</span>
+          <span style="font-size: 18px; font-weight: 900; color: #dc2626;">{{ previewResult.summary.error_count ?? (previewResult.summary.skipped || (previewResult.errors ? previewResult.errors.length : 0)) }}</span>
         </div>
       </div>
 
@@ -275,11 +275,11 @@
     </button>
     <button
       class="btn btn-primary"
-      [disabled]="(previewResult.summary.valid_count === 0) || isUploading"
+      [disabled]="((previewResult.summary.valid_count ?? ((previewResult.summary.created || 0) + (previewResult.summary.updated || 0))) === 0) || isUploading"
       (click)="commitUpload()"
       style="background: linear-gradient(135deg, #4f46e5, #059669); border: none;"
     >
-      <span *ngIf="!isUploading">تایید و ثبت نهایی ({{ previewResult.summary.valid_count || 0 }} رکورد)</span>
+      <span *ngIf="!isUploading">تایید و ثبت نهایی ({{ previewResult.summary.valid_count ?? ((previewResult.summary.created || 0) + (previewResult.summary.updated || 0)) }} رکورد)</span>
       <span *ngIf="isUploading">در حال ثبت...</span>
     </button>
   </div>

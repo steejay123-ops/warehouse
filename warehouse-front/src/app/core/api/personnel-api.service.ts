@@ -391,16 +391,52 @@ export class PersonnelApiService {
   }
 
   // --- تنظیمات پایه سالانه و ۲۰ گروه شغلی ---
-  getYearlySettings(year = '1405', projectId?: number | null): Observable<any> {
+  getYearlySettings(year = '1405', projectId?: number | null, versionId?: number | null, effectiveFrom?: string | null): Observable<any> {
     const params: any = { year };
     if (projectId) {
       params.project_id = projectId;
     }
+    if (versionId) {
+      params.version_id = versionId;
+    }
+    if (effectiveFrom) {
+      params.effective_from = effectiveFrom;
+    }
     return this.api.get<any>(`${this.baseUrl}/settings/active-or-year/`, params);
+  }
+
+  getSettingsVersions(year = '1405', projectId?: number | null): Observable<any[]> {
+    const params: any = { year };
+    if (projectId) {
+      params.project_id = projectId;
+    }
+    return this.api.get<any[]>(`${this.baseUrl}/settings/versions/`, params);
+  }
+
+  createSettingsVersion(payload: {
+    year: string;
+    effective_from: string;
+    version_title?: string;
+    project_id?: number | null;
+    source_setting_id?: number | null;
+  }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/settings/create-version/`, payload);
   }
 
   cloneSettingsForProject(projectId: number, year = '1405'): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/settings/clone-for-project/`, { project_id: projectId, year });
+  }
+
+  getAvailableFiscalYears(): Observable<{ years: string[] }> {
+    return this.api.get<{ years: string[] }>(`${this.baseUrl}/settings/available-years/`);
+  }
+
+  createFiscalYear(payload: {
+    year: string;
+    source_year?: string;
+    project_id?: number | null;
+  }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/settings/create-year/`, payload);
   }
 
   getJobGradeRate(grade: string, year = '1405'): Observable<{
@@ -472,12 +508,14 @@ export class PersonnelApiService {
     return `/api/personnel/monthly-payroll/export-bimeh-diskettes/?period_id=${periodId}${projParam}`;
   }
 
-  getTaxWhDownloadUrl(periodId: number): string {
-    return `/api/personnel/monthly-payroll/export-tax-wh/?period_id=${periodId}`;
+  getTaxWhDownloadUrl(periodId: number, projectId?: number): string {
+    const projParam = projectId ? `&project_id=${projectId}` : '';
+    return `/api/personnel/monthly-payroll/export-tax-wh/?period_id=${periodId}${projParam}`;
   }
 
-  getTaxWpDownloadUrl(periodId: number): string {
-    return `/api/personnel/monthly-payroll/export-tax-wp/?period_id=${periodId}`;
+  getTaxWpDownloadUrl(periodId: number, projectId?: number): string {
+    const projParam = projectId ? `&project_id=${projectId}` : '';
+    return `/api/personnel/monthly-payroll/export-tax-wp/?period_id=${periodId}${projParam}`;
   }
 
   getBankExcelDownloadUrl(periodId: number, projectId?: number): string {
@@ -623,7 +661,7 @@ export class PersonnelApiService {
   }
 
   // --- طرف‌حساب‌های مالی ---
-  getCounterparties(params?: { section_id?: number; counterparty_type?: string; search?: string }): Observable<Counterparty[]> {
+  getCounterparties(params?: { counterparty_type?: string; search?: string }): Observable<Counterparty[]> {
     return this.api.get<Counterparty[]>(`${this.baseUrl}/counterparties`, params as Record<string, unknown>);
   }
 
@@ -665,9 +703,10 @@ export class PersonnelApiService {
     return this.api.download(`${this.baseUrl}/financial-projects/download-template/`);
   }
 
-  importFinancialProjectsExcel(file: File): Observable<any> {
+  importFinancialProjectsExcel(file: File, dryRun: boolean = false): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
+    if (dryRun) formData.append('dry_run', 'true');
     return this.api.post<any>(`${this.baseUrl}/financial-projects/import-excel/`, formData);
   }
 
@@ -680,9 +719,10 @@ export class PersonnelApiService {
     return this.api.download(`${this.baseUrl}/project-sections/download-template/`);
   }
 
-  importProjectSectionsExcel(file: File): Observable<any> {
+  importProjectSectionsExcel(file: File, dryRun: boolean = false): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
+    if (dryRun) formData.append('dry_run', 'true');
     return this.api.post<any>(`${this.baseUrl}/project-sections/import-excel/`, formData);
   }
 
@@ -692,33 +732,36 @@ export class PersonnelApiService {
     });
   }
 
-  exportUserSectionAssignmentsExcel(projectId?: number): Observable<Blob> {
-    const params = projectId ? { project_id: projectId } : undefined;
-    return this.api.download(`${this.baseUrl}/user-section-assignments/export-excel/`, params);
+  exportUserSectionAssignmentsExcel(projectId?: number, role?: string): Observable<Blob> {
+    const params: Record<string, unknown> = {};
+    if (projectId) params['project_id'] = projectId;
+    if (role && role !== 'all') params['role'] = role;
+    return this.api.download(`${this.baseUrl}/user-section-assignments/export-excel/`, Object.keys(params).length ? params : undefined);
   }
 
   downloadUserSectionAssignmentsTemplate(): Observable<Blob> {
     return this.api.download(`${this.baseUrl}/user-section-assignments/download-template/`);
   }
 
-  importUserSectionAssignmentsExcel(file: File): Observable<any> {
+  importUserSectionAssignmentsExcel(file: File, dryRun: boolean = false): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
+    if (dryRun) formData.append('dry_run', 'true');
     return this.api.post<any>(`${this.baseUrl}/user-section-assignments/import-excel/`, formData);
   }
 
-  exportCounterpartiesExcel(sectionId?: number): Observable<Blob> {
-    const params = sectionId ? { section_id: sectionId } : undefined;
-    return this.api.download(`${this.baseUrl}/counterparties/export-excel/`, params);
+  exportCounterpartiesExcel(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/counterparties/export-excel/`);
   }
 
   downloadCounterpartiesTemplate(): Observable<Blob> {
     return this.api.download(`${this.baseUrl}/counterparties/download-template/`);
   }
 
-  importCounterpartiesExcel(file: File): Observable<any> {
+  importCounterpartiesExcel(file: File, dryRun: boolean = false): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
+    if (dryRun) formData.append('dry_run', 'true');
     return this.api.post<any>(`${this.baseUrl}/counterparties/import-excel/`, formData);
   }
 }

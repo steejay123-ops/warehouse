@@ -33,7 +33,7 @@
       <div class="h-px bg-slate-100 my-1"></div>
 
       <!-- بروزرسانی نسخه برنامه (PWA) -->
-      <button (click)="onManualAppUpdate(); closeUserMenu()" [disabled]="isCheckingAppUpdate" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-emerald-600 hover:bg-emerald-50 active:scale-95 cursor-pointer" title="استعلام و دریافت فوری آخرین نسخه فرانت‌اند">
+      <button (click)="onManualAppUpdate()" [disabled]="isCheckingAppUpdate" class="w-full text-right py-2.5 px-3 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 text-emerald-600 hover:bg-emerald-50 active:scale-95 cursor-pointer" title="استعلام و دریافت فوری آخرین نسخه فرانت‌اند">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.animate-spin]="isCheckingAppUpdate"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
         <span class="flex-1">بروزرسانی نسخه برنامه</span>
         <span class="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold font-mono">PWA</span>
@@ -82,11 +82,13 @@
 <!-- Deep Sync Modal -->
 <app-deep-sync-modal
   [isOpen]="isDeepSyncModalOpen"
+  [contextMode]="currentScopeContext"
   [warehouses]="deepSyncWarehouses"
-  [preselectId]="deepSyncPreselectId"
-  [isWarehouseScope]="isWarehouseInstalled"
+  [projects]="deepSyncProjects"
+  [preselectWarehouseId]="deepSyncPreselectWarehouseId"
+  [preselectProjectId]="deepSyncPreselectProjectId"
   (closed)="isDeepSyncModalOpen = false"
-  (startSync)="startDeepSync($event)">
+  (startSyncMulti)="startDeepSync($event)">
 </app-deep-sync-modal>
 
 <!-- User Profile Avatar Cropper Modal -->

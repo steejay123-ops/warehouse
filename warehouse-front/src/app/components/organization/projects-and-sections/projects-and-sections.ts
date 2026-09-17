@@ -14,18 +14,8 @@ import { ExcelImportModal } from '../../../shared/components/excel-import-modal/
 import {
   FinancialProject,
   ProjectSection,
-  UserSectionAssignment,
-  Counterparty
+  UserSectionAssignment
 } from '../../../core/models/personnel.model';
-import {
-  IRANIAN_BANKS,
-  IranianBankInfo,
-  validateSheba,
-  ShebaValidationResult,
-  extractShebaDigits,
-  generateShebaFromAccount,
-  validateAccountNumber
-} from '../../../core/utils/sheba-utils';
 
 export interface RoleDefinition {
   key: 'manager' | 'accountant' | 'supervisor' | 'treasury' | 'employee';
@@ -56,13 +46,11 @@ export interface SectionGroupedAssignments {
   styleUrl: './projects-and-sections.css'
 })
 export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
-  activeSubTab: 'projects' | 'sections' | 'assignments' | 'counterparties' = 'projects';
+  activeSubTab: 'projects' | 'sections' | 'assignments' = 'projects';
 
   financialProjects: FinancialProject[] = [];
-  allProjectSections: ProjectSection[] = [];
   projectSections: ProjectSection[] = [];
   userAssignments: UserSectionAssignment[] = [];
-  counterparties: Counterparty[] = [];
   systemUsers: User[] = [];
   selectedProjectId: number | null = null;
   isLoading = false;
@@ -77,12 +65,16 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     sourceProjectId: number | null;
     sourceSectionId: number | null;
     isSubmitting: boolean;
+    availableSourceSections: (ProjectSection & { assignmentCount: number })[];
+    sourceStats: { total: number; roleCounts: { [key: string]: number } };
   } = {
     isOpen: false,
     targetSection: null,
     sourceProjectId: null,
     sourceSectionId: null,
-    isSubmitting: false
+    isSubmitting: false,
+    availableSourceSections: [],
+    sourceStats: { total: 0, roleCounts: {} }
   };
 
   // مدال تایید اختصاصی (جایگزین کامل confirm مرورگر)
@@ -107,7 +99,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   // فیلترهای جستجوی سریع درجا برای جداول
   projectSearchQuery: string = '';
   sectionSearchQuery: string = '';
-  counterpartySearchQuery: string = '';
   assignmentSearchQuery: string = '';
   assignmentProjectFilter: number | null = null;
   assignmentRoleFilter: string = 'all';
@@ -210,34 +201,19 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   } = { project: null, code: '', name: '', is_active: true };
   editingSection: ProjectSection | null = null;
 
-  newAssignment: { user: number | null; section: number | null; role: 'employee' | 'supervisor' | 'accountant' | 'manager' | 'treasury' } = {
-    user: null,
-    section: null,
-    role: 'employee'
+  editAssignmentModal: {
+    isOpen: boolean;
+    assignment: UserSectionAssignment | null;
+    role: 'employee' | 'supervisor' | 'accountant' | 'manager' | 'treasury';
+    is_active: boolean;
+    isSubmitting: boolean;
+  } = {
+    isOpen: false,
+    assignment: null,
+    role: 'employee',
+    is_active: true,
+    isSubmitting: false
   };
-
-  newCounterparty: Partial<Counterparty> = {
-    name: '',
-    counterparty_type: 'driver',
-    phone: '',
-    national_id: '',
-    bank_name: '',
-    account_number: '',
-    sheba_number: '',
-    section: null,
-    is_active: true
-  };
-  editingCounterparty: Counterparty | null = null;
-
-  // سیستم استاندارد و هوشمند شبا و بانک عامل مشابه با تعریف خودرو
-  iranianBanks: IranianBankInfo[] = IRANIAN_BANKS;
-  shebaValidationResult: ShebaValidationResult | null = null;
-  shebaDigitsDisplay: string = '';
-  isBankDropdownOpen: boolean = false;
-  bankSearchQuery: string = '';
-  isShebaCopied: boolean = false;
-  isAccountCopied: boolean = false;
-  private _isSyncingBank = false;
 
   private subs: Subscription[] = [];
   private offlineSync = OfflineSyncService.getInstance();
@@ -267,7 +243,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       this.route.queryParams.subscribe(params => {
         if (params['tab']) {
           const tab = params['tab'] as any;
-          if (['projects', 'sections', 'assignments', 'counterparties'].includes(tab)) {
+          if (['projects', 'sections', 'assignments'].includes(tab)) {
             this.activeSubTab = tab;
           }
         }
@@ -287,20 +263,34 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
           }
         } else if (this.activeSubTab === 'assignments') {
           this.assignmentSearchQuery = q;
+          let filterChanged = false;
           if (params['project_id'] !== undefined) {
             const pId = Number(params['project_id']);
-            this.assignmentProjectFilter = (!isNaN(pId) && pId > 0) ? pId : null;
-          } else {
+            const newPid = (!isNaN(pId) && pId > 0) ? pId : null;
+            if (this.assignmentProjectFilter !== newPid) {
+              this.assignmentProjectFilter = newPid;
+              filterChanged = true;
+            }
+          } else if (this.assignmentProjectFilter !== null) {
             this.assignmentProjectFilter = null;
+            filterChanged = true;
           }
           if (params['role'] !== undefined) {
-            this.assignmentRoleFilter = params['role'] || 'all';
+            const newRole = params['role'] || 'all';
+            if (this.assignmentRoleFilter !== newRole) {
+              this.assignmentRoleFilter = newRole;
+              filterChanged = true;
+            }
+          } else if (this.assignmentRoleFilter !== 'all') {
+            this.assignmentRoleFilter = 'all';
+            filterChanged = true;
           }
           if (params['view'] !== undefined) {
             this.assignmentViewMode = params['view'] === 'table' ? 'table' : 'matrix';
           }
-        } else if (this.activeSubTab === 'counterparties') {
-          this.counterpartySearchQuery = q;
+          if (filterChanged) {
+            this.loadAssignments();
+          }
         }
 
         this.cdr.detectChanges();
@@ -316,7 +306,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  switchSubTab(tab: 'projects' | 'sections' | 'assignments' | 'counterparties'): void {
+  switchSubTab(tab: 'projects' | 'sections' | 'assignments'): void {
     this.activeSubTab = tab;
     const queryParams: any = { tab };
     if (tab === 'projects') {
@@ -334,13 +324,9 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       queryParams['role'] = this.assignmentRoleFilter !== 'all' ? this.assignmentRoleFilter : null;
       queryParams['view'] = this.assignmentViewMode === 'table' ? 'table' : null;
       queryParams['q'] = this.assignmentSearchQuery || null;
-    } else if (tab === 'counterparties') {
-      queryParams['project_id'] = null;
-      queryParams['role'] = null;
-      queryParams['view'] = null;
-      queryParams['q'] = this.counterpartySearchQuery || null;
+      this.loadAssignments();
     }
-    this.router.navigate([], { queryParams, replaceUrl: true });
+    this.router.navigate([], { queryParams, replaceUrl: false });
     this.cdr.detectChanges();
   }
 
@@ -359,6 +345,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.assignmentProjectFilter = pId;
     this.invalidateAssignmentsCache();
     this.updateQueryParams({ project_id: pId || null });
+    this.loadAssignments();
     this.cdr.detectChanges();
   }
 
@@ -366,6 +353,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.assignmentRoleFilter = role || 'all';
     this.invalidateAssignmentsCache();
     this.updateQueryParams({ role: role !== 'all' ? role : null });
+    this.loadAssignments();
     this.cdr.detectChanges();
   }
 
@@ -375,7 +363,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  onSearchQueryChange(tab: 'projects' | 'sections' | 'assignments' | 'counterparties', query: string): void {
+  onSearchQueryChange(tab: 'projects' | 'sections' | 'assignments', query: string): void {
     const q = query?.trim() || null;
     if (tab === 'projects') this.projectSearchQuery = query;
     else if (tab === 'sections') this.sectionSearchQuery = query;
@@ -383,7 +371,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       this.assignmentSearchQuery = query;
       this.invalidateAssignmentsCache();
     }
-    else if (tab === 'counterparties') this.counterpartySearchQuery = query;
     this.updateQueryParams({ q });
     this.cdr.detectChanges();
   }
@@ -414,8 +401,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
             this.loadProjects();
           } else if (msg.entity_type === 'section') {
             this.loadSections();
-          } else if (msg.entity_type === 'counterparty') {
-            this.loadCounterparties();
           } else if (msg.entity_type === 'assignment') {
             this.loadAssignments(true);
           }
@@ -442,195 +427,9 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
             this.userAssignments = data;
             this.cdr.detectChanges();
           }
-        } else if (url.includes('/counterparties/')) {
-          if (Array.isArray(data)) {
-            this.counterparties = data;
-            this.cdr.detectChanges();
-          }
         }
       })
     );
-  }
-
-  // --- سیستم فیلتر و انتخاب بانک شبا ---
-  get filteredBanks(): IranianBankInfo[] {
-    if (!this.bankSearchQuery || !this.bankSearchQuery.trim()) {
-      return this.iranianBanks;
-    }
-    const q = this.bankSearchQuery.trim().toLowerCase();
-    return this.iranianBanks.filter(b => 
-      b.name.toLowerCase().includes(q) || 
-      b.shortName.toLowerCase().includes(q) || 
-      b.code.includes(q)
-    );
-  }
-
-  selectBankFromDropdown(bank: IranianBankInfo, event?: MouseEvent): void {
-    if (event) event.stopPropagation();
-    this.onBankSelect(bank.name);
-    this.isBankDropdownOpen = false;
-    this.bankSearchQuery = '';
-  }
-
-  onBankSelect(bankName: string): void {
-    this.newCounterparty.bank_name = bankName;
-    const accValidation = validateAccountNumber(this.newCounterparty.account_number);
-    if (accValidation.isValid && bankName) {
-      const generated = generateShebaFromAccount(bankName, this.newCounterparty.account_number);
-      if (generated) {
-        this._isSyncingBank = true;
-        try {
-          const res = validateSheba(generated);
-          this.shebaValidationResult = res;
-          this.shebaDigitsDisplay = res.formattedDigits;
-          this.newCounterparty.sheba_number = res.rawSheba?.replace(/^IR/i, '') || '';
-        } finally {
-          this._isSyncingBank = false;
-        }
-      }
-    } else if (this.newCounterparty.sheba_number) {
-      this.onShebaInput(this.newCounterparty.sheba_number);
-    }
-    this.cdr.detectChanges();
-  }
-
-  onShebaInput(event: any): void {
-    if (this._isSyncingBank) return;
-    this._isSyncingBank = true;
-    try {
-      const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
-      const digits = extractShebaDigits(rawVal);
-      const res = validateSheba(digits);
-      this.shebaValidationResult = res;
-      this.shebaDigitsDisplay = res.formattedDigits || digits;
-      this.newCounterparty.sheba_number = digits;
-      if (res.bank) {
-        this.newCounterparty.bank_name = res.bank.name;
-      }
-      if (res.accountNumber) {
-        this.newCounterparty.account_number = res.accountNumber;
-      }
-      if (event?.target) {
-        event.target.value = this.shebaDigitsDisplay;
-      }
-    } finally {
-      this._isSyncingBank = false;
-    }
-    this.cdr.detectChanges();
-  }
-
-  onShebaPaste(event: ClipboardEvent): void {
-    event.preventDefault();
-    const pasted = event.clipboardData?.getData('text') || '';
-    this.onShebaInput(pasted);
-  }
-
-  onShebaCopy(event: ClipboardEvent): void {
-    if (!this.newCounterparty.sheba_number) return;
-    event.preventDefault();
-    const full = 'IR' + this.newCounterparty.sheba_number;
-    event.clipboardData?.setData('text/plain', full);
-    this.toast.show('info', `شماره شبا ${full} کپی شد.`);
-  }
-
-  copyShebaToClipboard(): void {
-    if (!this.newCounterparty.sheba_number) return;
-    const full = 'IR' + this.newCounterparty.sheba_number;
-    navigator.clipboard.writeText(full).then(() => {
-      this.isShebaCopied = true;
-      this.toast.show('success', `شماره شبا ${full} در کلیپ‌بورد کپی شد.`);
-      setTimeout(() => {
-        this.isShebaCopied = false;
-        this.cdr.detectChanges();
-      }, 2000);
-      this.cdr.detectChanges();
-    });
-  }
-
-  // --- متدهای مدیریت شماره حساب و تبدیل به شبا ---
-  onAccountNumberInput(event: any): void {
-    if (this._isSyncingBank) return;
-    const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
-    const cleanAcc = rawVal.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-                           .replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
-                           .replace(/\D/g, '')
-                           .substring(0, 18);
-    this.newCounterparty.account_number = cleanAcc;
-    if (event?.target) {
-      event.target.value = cleanAcc;
-    }
-    
-    // تبدیل خودکار شماره حساب و بانک به شماره شبا
-    const accValidation = validateAccountNumber(cleanAcc);
-    if (accValidation.isValid && this.newCounterparty.bank_name) {
-      const generated = generateShebaFromAccount(this.newCounterparty.bank_name, cleanAcc);
-      if (generated) {
-        this._isSyncingBank = true;
-        try {
-          const res = validateSheba(generated);
-          this.shebaValidationResult = res;
-          this.shebaDigitsDisplay = res.formattedDigits;
-          this.newCounterparty.sheba_number = res.rawSheba?.replace(/^IR/i, '') || '';
-        } finally {
-          this._isSyncingBank = false;
-        }
-      }
-    }
-    this.cdr.detectChanges();
-  }
-
-  onAccountNumberPaste(event: ClipboardEvent): void {
-    event.preventDefault();
-    const pasted = event.clipboardData?.getData('text') || '';
-    this.onAccountNumberInput(pasted);
-    const target = event.target as HTMLInputElement;
-    if (target) {
-      target.value = this.newCounterparty.account_number || '';
-    }
-  }
-
-  onAccountNumberCopy(event: ClipboardEvent): void {
-    const acc = this.newCounterparty.account_number || '';
-    if (acc && event.clipboardData) {
-      event.preventDefault();
-      event.clipboardData.setData('text/plain', acc);
-      this.isAccountCopied = true;
-      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
-      this.cdr.detectChanges();
-    }
-  }
-
-  copyAccountNumberToClipboard(): void {
-    const acc = this.newCounterparty.account_number || '';
-    if (!acc) return;
-    navigator.clipboard.writeText(acc).then(() => {
-      this.isAccountCopied = true;
-      this.toast.show('success', `شماره حساب ${acc} کپی شد.`);
-      setTimeout(() => {
-        this.isAccountCopied = false;
-        this.cdr.detectChanges();
-      }, 2000);
-      this.cdr.detectChanges();
-    });
-  }
-
-  convertAccountToShebaNow(): void {
-    if (!this.newCounterparty.bank_name) {
-      this.toast.show('warning', 'لطفاً ابتدا بانک عامل را انتخاب نمایید.');
-      return;
-    }
-    const accValidation = validateAccountNumber(this.newCounterparty.account_number);
-    if (!accValidation.isValid) {
-      this.toast.show('warning', accValidation.errorMessage || 'لطفاً یک شماره حساب معتبر وارد نمایید.');
-      return;
-    }
-    const generated = generateShebaFromAccount(this.newCounterparty.bank_name, this.newCounterparty.account_number);
-    if (generated) {
-      this.onShebaInput(generated);
-      this.toast.show('success', `شماره شبا بر اساس شماره حساب و بانک «${this.newCounterparty.bank_name}» تولید شد.`);
-    } else {
-      this.toast.show('error', 'امکان تبدیل خودکار شماره حساب این بانک به شبا فراهم نیست. لطفاً شبا را مستقیماً وارد کنید.');
-    }
   }
 
   // --- بارگذاری داده‌ها ---
@@ -638,7 +437,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     this.loadProjects();
     this.loadAssignments();
-    this.loadCounterparties();
     this.loadUsers();
   }
 
@@ -693,7 +491,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   }
 
   get filteredSections(): ProjectSection[] {
-    let list = this.allProjectSections.length > 0 ? this.allProjectSections : this.projectSections;
+    let list = this.projectSections;
     if (this.selectedProjectId) {
       list = list.filter(s => s.project === this.selectedProjectId);
     }
@@ -703,20 +501,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       (s.name && s.name.toLowerCase().includes(q)) ||
       (s.code && s.code.toLowerCase().includes(q)) ||
       (s.project_name && s.project_name.toLowerCase().includes(q))
-    );
-  }
-
-  get filteredCounterparties(): Counterparty[] {
-    if (!this.counterpartySearchQuery?.trim()) return this.counterparties;
-    const q = this.counterpartySearchQuery.trim().toLowerCase();
-    return this.counterparties.filter(c =>
-      (c.name && c.name.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.includes(q)) ||
-      (c.national_id && c.national_id.includes(q)) ||
-      (c.account_number && c.account_number.includes(q)) ||
-      (c.sheba_number && c.sheba_number.includes(q)) ||
-      (c.section_name && c.section_name.toLowerCase().includes(q)) ||
-      (c.bank_name && c.bank_name.toLowerCase().includes(q))
     );
   }
 
@@ -733,8 +517,9 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this._lastQuickAssignStateKey = '';
   }
 
-  trackBySectionId(index: number, group: SectionGroupedAssignments): number | string {
-    return group.section.id || index;
+  trackBySectionId(index: number, group: SectionGroupedAssignments | ProjectSection): number | string {
+    const sec = 'section' in group ? group.section : group;
+    return sec.id || index;
   }
 
   trackByRoleKey(index: number, r: any): string {
@@ -758,8 +543,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     if (pFilter) {
       list = list.filter(a => {
         if (a.project_id) return Number(a.project_id) === pFilter;
-        const allSecs = this.allProjectSections.length > 0 ? this.allProjectSections : this.projectSections;
-        const sec = allSecs.find(s => s.id === a.section);
+        const sec = this.projectSections.find(s => s.id === a.section);
         return sec ? Number(sec.project) === pFilter : false;
       });
     }
@@ -784,7 +568,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     if (this._cachedGroupedAssignments) {
       return this._cachedGroupedAssignments;
     }
-    let sections = [...(this.allProjectSections.length > 0 ? this.allProjectSections : this.projectSections)];
+    let sections = [...this.projectSections];
     const pFilter = this.assignmentProjectFilter ? Number(this.assignmentProjectFilter) : null;
     if (pFilter) {
       sections = sections.filter(s => Number(s.project) === pFilter);
@@ -855,7 +639,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
         })
         .map(a => Number(typeof a.user === 'object' ? (a.user as any)?.id : a.user))
     );
-    let users = this.systemUsers.filter(u => !existingUserIds.has(Number(u.id)));
+    let users = this.systemUsers.filter(u => u.is_active !== false && !existingUserIds.has(Number(u.id)));
     if (q) {
       users = users.filter(u =>
         (u.first_name && u.first_name.toLowerCase().includes(q)) ||
@@ -909,7 +693,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
         }
       });
     } else if (this.activeSubTab === 'assignments') {
-      this.api.exportUserSectionAssignmentsExcel(this.selectedProjectId || undefined).subscribe({
+      this.api.exportUserSectionAssignmentsExcel(this.assignmentProjectFilter || undefined, this.assignmentRoleFilter).subscribe({
         next: (blob) => {
           this.triggerDownloadBlob(blob, 'user_assignments.xlsx');
           this.toast.show('success', 'فایل اکسل انتساب پرسنل و نقش‌ها با موفقیت دانلود شد.');
@@ -918,20 +702,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
         },
         error: () => {
           this.toast.show('error', 'خطا در دانلود فایل اکسل انتساب پرسنل');
-          this.isLoading = false;
-          this.cdr.detectChanges();
-        }
-      });
-    } else if (this.activeSubTab === 'counterparties') {
-      this.api.exportCounterpartiesExcel().subscribe({
-        next: (blob) => {
-          this.triggerDownloadBlob(blob, 'counterparties.xlsx');
-          this.toast.show('success', 'فایل اکسل طرف‌حساب‌های مالی با موفقیت دانلود شد.');
-          this.isLoading = false;
-          this.cdr.detectChanges();
-        },
-        error: () => {
-          this.toast.show('error', 'خطا در دانلود فایل اکسل طرف‌حساب‌ها');
           this.isLoading = false;
           this.cdr.detectChanges();
         }
@@ -958,7 +728,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       case 'projects': return 'خروجی اکسل پروژه‌های مالی';
       case 'sections': return 'خروجی اکسل بخش‌ها و دپارتمان‌ها';
       case 'assignments': return 'خروجی اکسل ماتریس انتساب کاربران و نقش‌ها';
-      case 'counterparties': return 'خروجی اکسل طرف‌حساب‌های مالی';
       default: return 'خروجی فایل اکسل';
     }
   }
@@ -968,7 +737,6 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       case 'projects': return 'ورودی و ثبت پروژه‌ها از فایل اکسل';
       case 'sections': return 'ورودی و ثبت بخش‌ها از فایل اکسل';
       case 'assignments': return 'ورودی و ثبت انتساب پرسنل از فایل اکسل';
-      case 'counterparties': return 'ورودی و ثبت طرف‌حساب‌ها از فایل اکسل';
       default: return 'ورودی فایل اکسل';
     }
   }
@@ -976,20 +744,16 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   openImportModal(): void {
     if (this.activeSubTab === 'projects') {
       this.excelModalTitle = 'آپلود و ثبت دسته‌جمعی پروژه‌ها از اکسل';
-      this.excelImportFn = (file: File) => this.api.importFinancialProjectsExcel(file);
+      this.excelImportFn = (file: File, updateExisting: boolean, dryRun?: boolean) => this.api.importFinancialProjectsExcel(file, dryRun);
       this.excelTemplateFn = () => this.downloadProjectsTemplate();
     } else if (this.activeSubTab === 'sections') {
       this.excelModalTitle = 'آپلود و ثبت دسته‌جمعی بخش‌های پروژه از اکسل';
-      this.excelImportFn = (file: File) => this.api.importProjectSectionsExcel(file);
+      this.excelImportFn = (file: File, updateExisting: boolean, dryRun?: boolean) => this.api.importProjectSectionsExcel(file, dryRun);
       this.excelTemplateFn = () => this.downloadSectionsTemplate();
-    } else if (this.activeSubTab === 'assignments') {
-      this.excelModalTitle = 'آپلود و ثبت دسته‌جمعی انتساب پرسنل و نقش‌ها از اکسل';
-      this.excelImportFn = (file: File) => this.api.importUserSectionAssignmentsExcel(file);
-      this.excelTemplateFn = () => this.downloadAssignmentsTemplate();
     } else {
-      this.excelModalTitle = 'آپلود و ثبت دسته‌جمعی طرف‌حساب‌های مالی از اکسل';
-      this.excelImportFn = (file: File) => this.api.importCounterpartiesExcel(file);
-      this.excelTemplateFn = () => this.downloadCounterpartyTemplate();
+      this.excelModalTitle = 'آپلود و ثبت دسته‌جمعی انتساب پرسنل و نقش‌ها از اکسل';
+      this.excelImportFn = (file: File, updateExisting: boolean, dryRun?: boolean) => this.api.importUserSectionAssignmentsExcel(file, dryRun);
+      this.excelTemplateFn = () => this.downloadAssignmentsTemplate();
     }
     this.isExcelModalOpen = true;
     this.cdr.detectChanges();
@@ -1025,21 +789,11 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  downloadCounterpartyTemplate(): void {
-    this.api.downloadCounterpartiesTemplate().subscribe({
-      next: (blob) => {
-        this.triggerDownloadBlob(blob, 'counterparties_template.xlsx');
-        this.toast.show('success', 'قالب اکسل طرف‌حساب‌ها با موفقیت دانلود شد.');
-      },
-      error: () => this.toast.show('error', 'خطا در دریافت قالب اکسل')
-    });
-  }
-
   onExcelImported(result: any): void {
     if (result?.success) {
-      this.toast.show('success', 'اطلاعات اکسل با موفقیت بارگذاری و اعمال شد.');
+      this.toast.show('success', 'اطلاعات اکسل با موفقیت اعمال شد.');
       this.loadAllData();
-      this.closeExcelModal();
+      // مودال باز می‌ماند تا کاربر گزارش سطور و خطاها را ببیند و خودش دکمه بستن را بزند
     }
   }
 
@@ -1048,44 +802,55 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  normalizeInput(val?: string | null): string {
+    if (!val) return '';
+    return val
+      .toString()
+      .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+      .trim();
+  }
+
   loadSections(): void {
     this.api.getProjectSections().subscribe({
       next: (sections) => {
-        this.allProjectSections = sections;
         this.projectSections = sections;
+        this.pruneCollapsedSectionsState();
+        this.invalidateAssignmentsCache();
         this.isLoading = false;
         this.cdr.detectChanges();
       },
-      error: () => {
+      error: (err) => {
         this.isLoading = false;
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در دریافت لیست بخش‌ها'));
         this.cdr.detectChanges();
       }
     });
   }
 
-  loadAssignments(forceFresh: boolean = false): void {
-    this.api.getUserSectionAssignments(undefined, forceFresh).subscribe({
+  loadAssignments(
+    forceFresh: boolean = false,
+    customParams?: { section_id?: number; project_id?: number; user_id?: number; role?: string }
+  ): void {
+    let params: { section_id?: number; project_id?: number; user_id?: number; role?: string } | undefined = customParams;
+    if (!params && this.activeSubTab === 'assignments') {
+      const pId = this.assignmentProjectFilter ? Number(this.assignmentProjectFilter) : undefined;
+      const role = (this.assignmentRoleFilter && this.assignmentRoleFilter !== 'all') ? this.assignmentRoleFilter : undefined;
+      if (pId || role) {
+        params = {};
+        if (pId) params.project_id = pId;
+        if (role) params.role = role;
+      }
+    }
+
+    this.api.getUserSectionAssignments(params, forceFresh).subscribe({
       next: (assignments) => {
         this.userAssignments = assignments;
         this.invalidateAssignmentsCache();
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.userAssignments = [];
-        this.invalidateAssignmentsCache();
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  loadCounterparties(): void {
-    this.api.getCounterparties().subscribe({
-      next: (cp) => {
-        this.counterparties = cp;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.counterparties = [];
+      error: (err) => {
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در دریافت لیست انتساب‌ها'));
         this.cdr.detectChanges();
       }
     });
@@ -1095,10 +860,11 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.accountsHttp.getUsers().subscribe({
       next: (users) => {
         this.systemUsers = users;
+        this.invalidateAssignmentsCache();
         this.cdr.detectChanges();
       },
-      error: () => {
-        this.systemUsers = [];
+      error: (err) => {
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در دریافت لیست کاربران'));
         this.cdr.detectChanges();
       }
     });
@@ -1111,40 +877,50 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
 
   // --- عملیات پروژه (Project CRUD) ---
   saveProject(): void {
-    if (!this.newProject.code?.trim() || !this.newProject.name?.trim()) {
+    const code = this.normalizeInput(this.newProject.code).toUpperCase();
+    const name = this.newProject.name?.trim() || '';
+    if (!code || !name) {
       this.toast.show('warning', 'لطفاً کد و نام پروژه را وارد نمایید.');
       return;
     }
 
+    const payload = {
+      ...this.newProject,
+      code,
+      name,
+      description: this.newProject.description?.trim() || ''
+    };
+
     if (this.editingProject?.id) {
       const editId = this.editingProject.id;
-      this.api.updateFinancialProject(editId, this.newProject).subscribe({
+      this.api.updateFinancialProject(editId, payload).subscribe({
         next: (updated) => {
           this.toast.show('success', `پروژه «${updated.name}» بروزرسانی شد.`);
           this.editingProject = null;
           this.newProject = { code: '', name: '', description: '', is_active: true };
           this.financialProjects = this.financialProjects.map(p => p.id === editId ? updated : p);
+          this.offlineSync.invalidateCache('financial-projects');
           this.loadProjects();
           this.cdr.detectChanges();
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ویرایش پروژه');
+          this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در ویرایش پروژه'));
           this.cdr.detectChanges();
         }
       });
     } else {
-      this.api.createFinancialProject(this.newProject).subscribe({
+      this.api.createFinancialProject(payload).subscribe({
         next: (created) => {
           this.toast.show('success', `پروژه «${created.name}» با موفقیت ایجاد شد.`);
           this.newProject = { code: '', name: '', description: '', is_active: true };
-          // بروزرسانی آنی آرایه در فرانت‌اند و انتخاب پروژه تازه ایجاد شده
           this.financialProjects = [created, ...this.financialProjects.filter(p => p.id !== created.id)];
           this.selectedProjectId = created.id!;
+          this.offlineSync.invalidateCache('financial-projects');
           this.loadSections();
           this.cdr.detectChanges();
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ایجاد پروژه');
+          this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در ایجاد پروژه'));
           this.cdr.detectChanges();
         }
       });
@@ -1154,6 +930,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   editProject(proj: FinancialProject): void {
     this.editingProject = proj;
     this.newProject = { ...proj };
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   cancelEditProject(): void {
@@ -1171,15 +948,19 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       onConfirm: () => {
         this.api.deleteFinancialProject(id).subscribe({
           next: () => {
-            this.toast.show('success', 'پروژه با موفقیت حذف شد.');
+            this.toast.show('success', 'پروژه با موفقیت حذف یا غیرفعال شد.');
             this.financialProjects = this.financialProjects.filter(p => p.id !== id);
+            this.projectSections = this.projectSections.filter(s => Number(s.project) !== id);
+            this.userAssignments = this.userAssignments.filter(a => a.project_id !== id);
+            this.invalidateAssignmentsCache();
             if (this.selectedProjectId === id) {
               this.selectedProjectId = this.financialProjects.length > 0 ? this.financialProjects[0].id! : null;
             }
+            this.offlineSync.invalidateCache('financial-projects');
             this.loadSections();
             this.cdr.detectChanges();
           },
-          error: () => this.toast.show('error', 'خطا در حذف پروژه')
+          error: (err) => this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در حذف پروژه'))
         });
       }
     });
@@ -1192,14 +973,16 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       this.toast.show('warning', 'لطفاً ابتدا پروژه والد را انتخاب کنید.');
       return;
     }
-    if (!this.newSection.code?.trim() || !this.newSection.name?.trim()) {
+    const code = this.normalizeInput(this.newSection.code).toUpperCase();
+    const name = this.newSection.name?.trim() || '';
+    if (!code || !name) {
       this.toast.show('warning', 'لطفاً کد و نام بخش را وارد نمایید.');
       return;
     }
 
     const payload = {
-      code: this.newSection.code.trim(),
-      name: this.newSection.name.trim(),
+      code,
+      name,
       is_active: this.newSection.is_active !== false,
       project: targetProjectId
     };
@@ -1212,11 +995,12 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
           this.editingSection = null;
           this.newSection = { project: this.selectedProjectId, code: '', name: '', is_active: true };
           this.projectSections = this.projectSections.map(s => s.id === editId ? updated : s);
+          this.offlineSync.invalidateCache('project-sections');
           this.loadSections();
           this.cdr.detectChanges();
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ویرایش بخش');
+          this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در ویرایش بخش'));
           this.cdr.detectChanges();
         }
       });
@@ -1225,13 +1009,13 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
         next: (created) => {
           this.toast.show('success', `بخش «${created.name}» با موفقیت ایجاد شد.`);
           this.newSection = { project: targetProjectId, code: '', name: '', is_active: true };
-          // اضافه کردن فوری به لیست بخش‌ها و رفرش زنده
           this.projectSections = [created, ...this.projectSections.filter(s => s.id !== created.id)];
+          this.offlineSync.invalidateCache('project-sections');
           this.loadSections();
           this.cdr.detectChanges();
         },
         error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ایجاد بخش');
+          this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در ایجاد بخش'));
           this.cdr.detectChanges();
         }
       });
@@ -1247,6 +1031,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       name: sec.name,
       is_active: sec.is_active !== false
     };
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   cancelEditSection(): void {
@@ -1264,40 +1049,67 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       onConfirm: () => {
         this.api.deleteProjectSection(id).subscribe({
           next: () => {
-            this.toast.show('success', 'بخش با موفقیت حذف شد.');
-            this.allProjectSections = this.allProjectSections.filter(s => s.id !== id);
+            this.toast.show('success', 'بخش با موفقیت حذف یا غیرفعال شد.');
             this.projectSections = this.projectSections.filter(s => s.id !== id);
+            this.userAssignments = this.userAssignments.filter(a => {
+              const secId = typeof a.section === 'object' ? (a.section as any)?.id : a.section;
+              return Number(secId) !== id;
+            });
+            if (this.expandedSectionIds.has(id)) {
+              this.expandedSectionIds.delete(id);
+              this.saveCollapsedSectionsState();
+            }
+            this.invalidateAssignmentsCache();
+            this.offlineSync.invalidateCache('project-sections');
             this.loadSections();
             this.cdr.detectChanges();
           },
-          error: () => this.toast.show('error', 'خطا در حذف بخش')
+          error: (err) => this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در حذف بخش'))
         });
       }
     });
   }
 
   // --- عملیات انتساب کاربران (Assignment CRUD) ---
-  saveAssignment(): void {
-    if (!this.newAssignment.user || !this.newAssignment.section) {
-      this.toast.show('warning', 'لطفاً کاربر و بخش را انتخاب کنید.');
-      return;
-    }
+  openEditAssignmentModal(assignment: UserSectionAssignment, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.editAssignmentModal = {
+      isOpen: true,
+      assignment,
+      role: assignment.role,
+      is_active: assignment.is_active !== false,
+      isSubmitting: false
+    };
+    this.cdr.detectChanges();
+  }
 
-    this.api.createUserSectionAssignment({
-      user: this.newAssignment.user,
-      section: this.newAssignment.section,
-      role: this.newAssignment.role,
-      is_active: true
-    }).subscribe({
-      next: (created) => {
-        this.toast.show('success', 'انتساب کاربر با موفقیت ثبت شد.');
-        this.newAssignment = { user: null, section: null, role: 'employee' };
-        this.userAssignments = [created, ...this.userAssignments.filter(a => a.id !== created.id)];
-        this.loadAssignments();
+  closeEditAssignmentModal(): void {
+    this.editAssignmentModal.isOpen = false;
+    this.editAssignmentModal.assignment = null;
+    this.editAssignmentModal.isSubmitting = false;
+    this.cdr.detectChanges();
+  }
+
+  submitEditAssignment(): void {
+    if (!this.editAssignmentModal.assignment?.id) return;
+    this.editAssignmentModal.isSubmitting = true;
+    const id = this.editAssignmentModal.assignment.id;
+    const payload = {
+      role: this.editAssignmentModal.role,
+      is_active: this.editAssignmentModal.is_active
+    };
+    this.api.updateUserSectionAssignment(id, payload).subscribe({
+      next: (updated) => {
+        this.toast.show('success', 'انتساب با موفقیت ویرایش شد.');
+        this.userAssignments = this.userAssignments.map(a => a.id === id ? { ...a, ...updated } : a);
+        this.invalidateAssignmentsCache();
+        this.closeEditAssignmentModal();
+        this.offlineSync.invalidateCache('user-section-assignments');
         this.cdr.detectChanges();
       },
       error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در انتساب کاربر');
+        this.editAssignmentModal.isSubmitting = false;
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در ویرایش انتساب'));
         this.cdr.detectChanges();
       }
     });
@@ -1440,116 +1252,8 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.quickAssignState.isSubmitting = false;
-        this.toast.show('error', err?.error?.error || 'خطا در انتساب کاربران');
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در انتساب کاربران'));
         this.cdr.detectChanges();
-      }
-    });
-  }
-
-  // --- عملیات طرف‌حساب‌های مالی (Counterparty CRUD) ---
-  saveCounterparty(): void {
-    if (!this.newCounterparty.name?.trim()) {
-      this.toast.show('warning', 'نام طرف‌حساب الزامی است.');
-      return;
-    }
-
-    if (this.newCounterparty.sheba_number && !this.shebaValidationResult?.isValid) {
-      this.toast.show('warning', 'شماره شبا وارد شده نامعتبر است. لطفاً شماره ۲۴ رقمی استاندارد وارد کنید.');
-      return;
-    }
-
-    const payload: Partial<Counterparty> = {
-      ...this.newCounterparty,
-      sheba_number: this.newCounterparty.sheba_number || ''
-    };
-
-    if (this.editingCounterparty?.id) {
-      const editId = this.editingCounterparty.id;
-      this.api.updateCounterparty(editId, payload).subscribe({
-        next: (updated) => {
-          this.toast.show('success', `طرف‌حساب «${updated.name}» بروزرسانی شد.`);
-          this.editingCounterparty = null;
-          this.resetCounterpartyForm();
-          this.counterparties = this.counterparties.map(c => c.id === editId ? updated : c);
-          this.loadCounterparties();
-          this.cdr.detectChanges();
-        },
-        error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ویرایش طرف‌حساب');
-          this.cdr.detectChanges();
-        }
-      });
-    } else {
-      this.api.createCounterparty(payload).subscribe({
-        next: (created) => {
-          this.toast.show('success', `طرف‌حساب «${created.name}» با موفقیت ایجاد شد.`);
-          this.resetCounterpartyForm();
-          this.counterparties = [created, ...this.counterparties.filter(c => c.id !== created.id)];
-          this.loadCounterparties();
-          this.cdr.detectChanges();
-        },
-        error: (err) => {
-          this.toast.show('error', err?.error?.error || 'خطا در ایجاد طرف‌حساب');
-          this.cdr.detectChanges();
-        }
-      });
-    }
-  }
-
-  editCounterparty(cp: Counterparty): void {
-    this.editingCounterparty = cp;
-    this.newCounterparty = { ...cp };
-    if (cp.sheba_number) {
-      this.onShebaInput(cp.sheba_number);
-    } else {
-      this.shebaValidationResult = null;
-      this.shebaDigitsDisplay = '';
-    }
-    this.cdr.detectChanges();
-  }
-
-  cancelEditCounterparty(): void {
-    this.editingCounterparty = null;
-    this.resetCounterpartyForm();
-    this.cdr.detectChanges();
-  }
-
-  resetCounterpartyForm(): void {
-    this.newCounterparty = {
-      name: '',
-      counterparty_type: 'driver',
-      phone: '',
-      national_id: '',
-      bank_name: '',
-      account_number: '',
-      sheba_number: '',
-      section: null,
-      is_active: true
-    };
-    this.shebaValidationResult = null;
-    this.shebaDigitsDisplay = '';
-    this.isBankDropdownOpen = false;
-    this.bankSearchQuery = '';
-    this.isAccountCopied = false;
-  }
-
-  deleteCounterparty(id: number, name: string): void {
-    this.openConfirmDialog({
-      title: 'حذف طرف‌حساب مالی',
-      message: `آیا از حذف طرف‌حساب مالی «${name}» اطمینان دارید؟`,
-      confirmText: 'بله، حذف شود',
-      cancelText: 'انصراف',
-      isDanger: true,
-      onConfirm: () => {
-        this.api.deleteCounterparty(id).subscribe({
-          next: () => {
-            this.toast.show('success', 'طرف‌حساب با موفقیت حذف شد.');
-            this.counterparties = this.counterparties.filter(c => c.id !== id);
-            this.loadCounterparties();
-            this.cdr.detectChanges();
-          },
-          error: () => this.toast.show('error', 'خطا در حذف طرف‌حساب')
-        });
       }
     });
   }
@@ -1612,6 +1316,21 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     }
   }
 
+  pruneCollapsedSectionsState(): void {
+    if (!this.projectSections || this.projectSections.length === 0) return;
+    const validIds = new Set(this.projectSections.map(s => s.id).filter((id): id is number => typeof id === 'number'));
+    let changed = false;
+    for (const id of Array.from(this.expandedSectionIds)) {
+      if (!validIds.has(id)) {
+        this.expandedSectionIds.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.saveCollapsedSectionsState();
+    }
+  }
+
   toggleSectionCollapse(sectionId: number, event?: Event): void {
     event?.stopPropagation();
     if (this.expandedSectionIds.has(sectionId)) {
@@ -1628,8 +1347,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   }
 
   expandAllSections(): void {
-    const allSecs = this.allProjectSections.length > 0 ? this.allProjectSections : this.projectSections;
-    const validIds = allSecs.map(s => s.id).filter((id): id is number => typeof id === 'number');
+    const validIds = this.projectSections.map(s => s.id).filter((id): id is number => typeof id === 'number');
     this.expandedSectionIds = new Set<number>(validIds);
     this.saveCollapsedSectionsState();
     this.cdr.detectChanges();
@@ -1642,8 +1360,11 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
   }
 
   hasManagerAssigned(sGroup: SectionGroupedAssignments): boolean {
-    const managerRole = sGroup.roles.find(r => r.roleDef.key === 'manager');
-    return (managerRole?.assignments?.length || 0) > 0;
+    const secId = Number(sGroup.section.id);
+    return this.userAssignments.some(a => {
+      const aSecId = typeof a.section === 'object' ? (a.section as any)?.id : a.section;
+      return Number(aSecId) === secId && a.role === 'manager' && a.is_active !== false;
+    });
   }
 
   // --- مدیریت تکثیر و کپی ساختار پرسنلی (Clone Assignments) ---
@@ -1654,41 +1375,79 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       targetSection,
       sourceProjectId: null,
       sourceSectionId: null,
-      isSubmitting: false
+      isSubmitting: false,
+      availableSourceSections: [],
+      sourceStats: { total: 0, roleCounts: {} }
     };
+    if (this.assignmentProjectFilter || (this.assignmentRoleFilter && this.assignmentRoleFilter !== 'all')) {
+      this.api.getUserSectionAssignments().subscribe(allAssignments => {
+        this.userAssignments = allAssignments;
+        this.updateCloneAvailableSections();
+        this.cdr.detectChanges();
+      });
+    } else {
+      this.updateCloneAvailableSections();
+    }
     this.cdr.detectChanges();
   }
 
   closeCloneModal(): void {
     this.cloneModal.isOpen = false;
     this.cloneModal.targetSection = null;
+    this.cloneModal.sourceProjectId = null;
     this.cloneModal.sourceSectionId = null;
     this.cloneModal.isSubmitting = false;
+    this.cloneModal.availableSourceSections = [];
+    this.cloneModal.sourceStats = { total: 0, roleCounts: {} };
     this.cdr.detectChanges();
   }
 
-  getAvailableSourceSectionsForClone(): ProjectSection[] {
+  onCloneSourceProjectChange(projectId: any): void {
+    const pId = projectId ? Number(projectId) : null;
+    this.cloneModal.sourceProjectId = pId;
+    this.cloneModal.sourceSectionId = null;
+    this.updateCloneAvailableSections();
+    this.updateCloneSourceStats();
+    this.cdr.detectChanges();
+  }
+
+  onCloneSourceSectionChange(sectionId: any): void {
+    const sId = sectionId ? Number(sectionId) : null;
+    this.cloneModal.sourceSectionId = sId;
+    this.updateCloneSourceStats();
+    this.cdr.detectChanges();
+  }
+
+  private updateCloneAvailableSections(): void {
     const targetId = this.cloneModal.targetSection?.id;
-    let list = this.allProjectSections.length > 0 ? this.allProjectSections : this.projectSections;
-    list = list.filter(s => s.id !== targetId);
+    let list = this.projectSections.filter(s => s.id !== targetId);
     if (this.cloneModal.sourceProjectId) {
-      list = list.filter(s => s.project === this.cloneModal.sourceProjectId);
+      list = list.filter(s => Number(s.project) === this.cloneModal.sourceProjectId);
     }
-    return list;
+    this.cloneModal.availableSourceSections = list.map(s => ({
+      ...s,
+      assignmentCount: this.userAssignments.filter(a => {
+        const aSecId = typeof a.section === 'object' ? (a.section as any)?.id : a.section;
+        return Number(aSecId) === Number(s.id) && a.is_active !== false;
+      }).length
+    }));
   }
 
-  getSourceSectionAssignmentCount(sectionId: number): number {
-    return this.userAssignments.filter(a => a.section === sectionId && a.is_active).length;
-  }
-
-  getSelectedSourceSectionDetails(): { total: number; roleCounts: { [key: string]: number } } {
-    if (!this.cloneModal.sourceSectionId) return { total: 0, roleCounts: {} };
-    const assignments = this.userAssignments.filter(a => a.section === this.cloneModal.sourceSectionId && a.is_active);
+  private updateCloneSourceStats(): void {
+    if (!this.cloneModal.sourceSectionId) {
+      this.cloneModal.sourceStats = { total: 0, roleCounts: {} };
+      return;
+    }
+    const secId = Number(this.cloneModal.sourceSectionId);
+    const assignments = this.userAssignments.filter(a => {
+      const aSecId = typeof a.section === 'object' ? (a.section as any)?.id : a.section;
+      return Number(aSecId) === secId && a.is_active !== false;
+    });
     const roleCounts: { [key: string]: number } = {};
     for (const a of assignments) {
       roleCounts[a.role] = (roleCounts[a.role] || 0) + 1;
     }
-    return { total: assignments.length, roleCounts };
+    this.cloneModal.sourceStats = { total: assignments.length, roleCounts };
   }
 
   executeCloneAssignments(): void {
@@ -1702,7 +1461,8 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.api.cloneSectionAssignments(targetId, this.cloneModal.sourceSectionId).subscribe({
       next: (res) => {
         this.toast.show('success', res?.message || 'ساختار پرسنلی با موفقیت کپی شد.');
-        this.loadAssignments();
+        this.loadAssignments(true);
+        this.offlineSync.invalidateCache('user-section-assignments');
         // باز کردن کارت بخش مقصد تا کاربر نتیجه را بلافاصله ببیند
         this.expandedSectionIds.add(targetId);
         this.saveCollapsedSectionsState();
@@ -1711,9 +1471,45 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.cloneModal.isSubmitting = false;
-        this.toast.show('error', err?.error?.error || 'خطا در کپی ساختار پرسنلی');
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در کپی ساختار پرسنلی'));
         this.cdr.detectChanges();
       }
     });
+  }
+
+  toggleAssignmentStatus(assignment: UserSectionAssignment): void {
+    if (!assignment.id) return;
+    const newStatus = !assignment.is_active;
+    this.api.updateUserSectionAssignment(assignment.id, { is_active: newStatus }).subscribe({
+      next: (updated) => {
+        assignment.is_active = updated.is_active;
+        this.invalidateAssignmentsCache();
+        this.toast.show('success', `وضعیت انتساب «${assignment.user_full_name || assignment.username}» به ${newStatus ? 'فعال' : 'غیرفعال'} تغییر یافت.`);
+        this.offlineSync.invalidateCache('user-section-assignments');
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.toast.show('error', this.extractApiErrorMessage(err, 'خطا در تغییر وضعیت انتساب'));
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  extractApiErrorMessage(err: any, fallback: string): string {
+    if (!err?.error) return fallback;
+    if (typeof err.error === 'string') return err.error;
+    if (err.error.error && typeof err.error.error === 'string') return err.error.error;
+    if (err.error.message && typeof err.error.message === 'string') return err.error.message;
+    if (err.error.detail && typeof err.error.detail === 'string') return err.error.detail;
+    if (typeof err.error === 'object') {
+      const messages: string[] = [];
+      for (const [key, val] of Object.entries(err.error)) {
+        if (key === 'success' || key === 'status') continue;
+        const text = Array.isArray(val) ? val.join('، ') : String(val);
+        messages.push(`${key}: ${text}`);
+      }
+      if (messages.length > 0) return messages.join(' | ');
+    }
+    return fallback;
   }
 }

@@ -12,7 +12,7 @@ import {
   SyncQueueEntry,
   SyncErrorEntry,
 } from './offline-db';
-import { SyncPullService, getStoredCurrentUserId } from './sync-pull.service';
+import { SyncPullService, getStoredCurrentUserId, buildCursorKey } from './sync-pull.service';
 import { NetworkStatusService } from './network-status.service';
 import { PhotoUploadQueueService, PhotoFlushOutcome } from './photo-upload-queue.service';
 import { isServerUnreachable } from './server-reachability';
@@ -1344,24 +1344,31 @@ export class OfflineSyncService {
 
   /** 
    * بروزرسانی عمیق (Full Resync): 
-   * پاک کردن کامل دیتابیس لوکال و دانلود مجدد داده‌های سرور
+   * پاک کردن کامل و اتمیک داده‌های محلی هر انبار/پروژه و دانلود مجدد داده‌های سرور
    */
-  async performDeepUpdate(warehouseIds: number[], warehousesMap: Record<number, string>): Promise<DeepUpdateSummary[]> {
-    console.log(`[OfflineSync] 🚨 شروع بروزرسانی عمیق برای انبارهای:`, warehouseIds);
+  async performDeepUpdate(
+    warehouseIds: number[],
+    warehousesMap: Record<number, string>,
+    scopeKind: 'warehouse' | 'finance' = 'warehouse'
+  ): Promise<DeepUpdateSummary[]> {
+    console.log(`[OfflineSync] 🚨 شروع بروزرسانی عمیق برای قلمرو ${scopeKind}، شناسه‌های:`, warehouseIds);
     
     if (warehouseIds.length === 0) return [];
 
-    // ۱. گارد اطمینان از سلامت سرور پیش از پاکسازی داده‌ها
+    // ۱. گارد اطمینان از سلامت سرور پیش از پاکسازی داده‌ها متناسب با قلمرو فعال
     const token = sessionStorage.getItem('wh_access_token') || localStorage.getItem('wh_access_token');
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
     try {
-      // ارسال یک ریکوئست سبک فقط برای بررسی بالا بودن سرور و اعتبار نشست
       const testId = warehouseIds[0];
-      const res = await fetch(`${environment.apiUrl}/inventory/sync/pull/?warehouse_id=${testId}&limit=1`, { headers });
+      const probeEndpoint = scopeKind === 'finance'
+        ? `${environment.apiUrl}/personnel/sync/pull/?project_id=${testId}&limit=1`
+        : `${environment.apiUrl}/inventory/sync/pull/?warehouse_id=${testId}&limit=1`;
+
+      const res = await fetch(probeEndpoint, { headers });
       if (!res.ok) {
-        throw new Error(res.status === 401 || res.status === 403 ? 'auth-required' : 'server-unreachable');
+        throw new Error(res.status === 401 ? 'auth-required' : 'server-unreachable');
       }
     } catch (err: any) {
       console.error(`[OfflineSync] ❌ سرور برای بروزرسانی عمیق در دسترس نیست.`);
@@ -1369,19 +1376,10 @@ export class OfflineSyncService {
       throw new Error(status === 'auth-required' ? 'نشست شما منقضی شده است. لطفا وارد شوید.' : 'سرور در دسترس نیست');
     }
 
-    // ۲. پاکسازی جداول داده و نشانگرها (Cursor) فقط برای انبارهای انتخاب‌شده
-    const deletePromises = [];
-    for (const id of warehouseIds) {
-      deletePromises.push(offlineDb.items.where('warehouse_id').equals(id).delete());
-      deletePromises.push(offlineDb.docTasks.where('warehouse_id').equals(id).delete());
-      deletePromises.push(offlineDb.countTasks.where('warehouse_id').equals(id).delete());
-      deletePromises.push(offlineDb.syncCursors.where('warehouseId').equals(id).delete());
-    }
-    await Promise.all(deletePromises);
-    
-    // ۳. دریافت و دانلود مجدد داده‌ها
+    // ۲. دریافت و دانلود مجدد داده‌ها به صورت اتمیک و مرحله‌ای (انبار به انبار / پروژه به پروژه)
     const { SyncPullService } = await import('./sync-pull.service');
     const pullService = SyncPullService.getInstance();
+    const userId = getStoredCurrentUserId();
     
     try {
       const summaries: DeepUpdateSummary[] = [];
@@ -1392,15 +1390,66 @@ export class OfflineSyncService {
 
       for (let i = 0; i < warehouseIds.length; i++) {
         const id = warehouseIds[i];
-        const wName = warehousesMap[id] || `انبار ${id}`;
-        this._deepUpdateState$.next({ ...this._deepUpdateState$.value!, currentIndex: i + 1, currentWarehouseName: wName });
+        const defaultName = scopeKind === 'finance' ? `پروژه ${id}` : `انبار ${id}`;
+        const targetName = warehousesMap[id] || defaultName;
+        this._deepUpdateState$.next({ ...this._deepUpdateState$.value!, currentIndex: i + 1, currentWarehouseName: targetName });
+
+        // پاکسازی اتمیک دقیقاً قبل از دانلود همان قلمرو جهت پیشگیری از نابودی کل داده‌ها در قطعی شبکه
+        if (scopeKind === 'finance') {
+          const deleteProjectAttendance = async () => {
+            try {
+              if (financeOfflineDb.attendanceRecords) {
+                // اگر ایندکس در ساختار دیتابیس موجود باشد با ایندکس پاکسازی می‌شود
+                const hasIndex = (financeOfflineDb.attendanceRecords.schema as any)?.indexes?.some(
+                  (idx: any) => idx.name === 'project_id'
+                );
+                if (hasIndex) {
+                  await financeOfflineDb.attendanceRecords.where('project_id').equals(id).delete();
+                } else {
+                  await financeOfflineDb.attendanceRecords.filter((entry: any) => entry?.project_id === id).delete();
+                }
+              }
+            } catch (err) {
+              // در صورت بروز هرگونه خطای اسکیما یا ایندکس، fallback به filter مانع قطع شدن بروزرسانی می‌شود
+              try {
+                await financeOfflineDb.attendanceRecords.filter((entry: any) => entry?.project_id === id).delete();
+              } catch (fallbackErr) {
+                console.warn('[OfflineSync] عدم امکان پاکسازی محلی attendanceRecords:', fallbackErr);
+              }
+            }
+          };
+
+          await Promise.all([
+            deleteProjectAttendance(),
+            financeOfflineDb.syncCursors.where('warehouseId').equals(id).delete(),
+            userId ? financeOfflineDb.syncCursors.delete(buildCursorKey(userId, id, 'finance')) : Promise.resolve(),
+            userId ? financeOfflineDb.syncCursors.delete(`${userId}:${id}`) : Promise.resolve()
+          ]);
+          try {
+            await financeOfflineDb.apiCache.filter((entry) => entry.url.includes(`project_id=${id}`)).delete();
+          } catch {}
+        } else {
+          await Promise.all([
+            warehouseOfflineDb.items.where('warehouse_id').equals(id).delete(),
+            warehouseOfflineDb.docTasks.where('warehouse_id').equals(id).delete(),
+            warehouseOfflineDb.countTasks.where('warehouse_id').equals(id).delete(),
+            warehouseOfflineDb.dynamicFields.where('warehouse_id').equals(id).delete(),
+            warehouseOfflineDb.syncCursors.where('warehouseId').equals(id).delete(),
+            userId ? warehouseOfflineDb.syncCursors.delete(buildCursorKey(userId, id, 'warehouse')) : Promise.resolve(),
+            userId ? warehouseOfflineDb.syncCursors.delete(`${userId}:${id}`) : Promise.resolve()
+          ]);
+          try {
+            await warehouseOfflineDb.apiCache.filter((entry) => entry.url.includes(`warehouse_id=${id}`)).delete();
+          } catch {}
+        }
         
-        const outcome = await pullService.pullChanges(id, true);
+        // فراخوانی دانلود دلتا با مشخص کردن صریح نوع قلمرو
+        const outcome = await pullService.pullChanges(id, scopeKind);
         
         if (outcome.status === 'completed') {
-          summaries.push({ warehouseName: wName, records: outcome.upserted, bytes: outcome.bytes });
+          summaries.push({ warehouseName: targetName, records: outcome.upserted, bytes: outcome.bytes });
         } else {
-          console.error(`[OfflineSync] ❌ بروزرسانی عمیق برای انبار ${id} شکست خورد:`, outcome);
+          console.error(`[OfflineSync] ❌ بروزرسانی عمیق برای ${scopeKind} ${id} شکست خورد:`, outcome);
           throw new Error(outcome.status === 'server-unreachable' ? 'سرور در دسترس نیست' : outcome.status);
         }
       }

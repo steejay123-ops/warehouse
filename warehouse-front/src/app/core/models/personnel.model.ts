@@ -400,6 +400,9 @@ export interface PayrollYearlySettings {
   project?: number | null;
   project_name?: string | null;
   title?: string;
+  version_title?: string;
+  effective_from?: string;
+  effective_to?: string | null;
   is_active: boolean;
   notes?: string;
 
@@ -631,8 +634,7 @@ export interface Counterparty {
   bank_name?: string;
   account_number?: string;
   sheba_number?: string;
-  section?: number | null;
-  section_name?: string;
+  account_code?: string;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;

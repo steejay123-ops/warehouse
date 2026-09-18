@@ -1,5 +1,16 @@
-<div class="p-4 md:p-6 space-y-6 max-w-7xl mx-auto pb-28" dir="rtl">
-  
+<div class="p-4 md:p-6 space-y-6 max-w-7xl mx-auto pb-28 relative" dir="rtl">
+
+  <!-- لودینگ سراسری در زمان ارسال و دریافت شبکه -->
+  <div *ngIf="isLoading" class="fixed inset-0 z-40 bg-white/60 backdrop-blur-[2px] flex items-center justify-center">
+    <div class="bg-white p-5 rounded-2xl shadow-xl border border-slate-200 flex items-center gap-3 text-xs font-bold text-slate-700">
+      <svg class="animate-spin h-5 w-5 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>در حال بارگذاری اطلاعات...</span>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۱. هدر اصلی تنظیمات پایه (Base Settings Header) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -40,8 +51,13 @@
 
     <!-- چپ: دکمه‌های عملیاتی -->
     <div class="flex items-center gap-2.5 flex-wrap">
+      <!-- نشانگر تغییرات ذخیره‌نشده -->
+      <span *ngIf="isDirty" class="px-2.5 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-[11px] font-bold animate-pulse">
+        ⚠️ تغییرات ذخیره‌نشده
+      </span>
+
       <!-- دکمه ثبت اصلاحیه میانه سال -->
-      <button *ngIf="canManageSettings" (click)="openCreateVersionModal()" class="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="ثبت نسخه و مبالغ جدید احکام از یک ماه مشخص">
+      <button *ngIf="canManageSettings" (click)="openCreateVersionModal()" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="ثبت نسخه و مبالغ جدید احکام از یک ماه مشخص">
         <span>➕</span>
         <span>ثبت اصلاحیه میانه سال</span>
       </button>
@@ -50,6 +66,12 @@
       <button *ngIf="selectedProjectId && !isCurrentSettingSpecificToProject" (click)="cloneForSelectedProject()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="کپی اطلاعات تنظیمات عمومی برای این پروژه">
         <span>📋</span>
         <span>ایجاد نسخه اختصاصی پروژه</span>
+      </button>
+
+      <!-- دکمه بازگشت به تنظیمات سراسری سازمان برای پروژه اختصاصی -->
+      <button *ngIf="isCurrentSettingSpecificToProject && canManageSettings" (click)="revertToGlobal()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95" title="حذف تنظیمات اختصاصی این پروژه و بازگشت به ارث‌بری از سراسری">
+        <span>↩️</span>
+        <span>بازگشت به سراسری</span>
       </button>
 
       <!-- دکمه ذخیره تنظیمات -->
@@ -79,7 +101,12 @@
       <span>تنظیمات اختصاصی پروژه فعال است: <strong>{{ yearlySettings?.project_name }}</strong></span>
       <span class="text-slate-500 font-normal text-[11px]">(تغییرات در کارگاه بیمه و بانک صرفاً برای این پروژه اعمال می‌شود)</span>
     </div>
-    <span class="px-2.5 py-1 bg-white rounded-lg border border-indigo-200 text-indigo-700 font-mono text-[11px]">پروژه‌محور</span>
+    <div class="flex items-center gap-2">
+      <span class="px-2.5 py-1 bg-white rounded-lg border border-indigo-200 text-indigo-700 font-mono text-[11px]">پروژه‌محور</span>
+      <button *ngIf="canManageSettings" (click)="revertToGlobal()" class="px-2.5 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-[11px] font-bold cursor-pointer transition-all">
+        لغو اختصاصی و بازگشت به سراسری
+      </button>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -122,9 +149,23 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="activeTab === 'grades' && yearlySettings" class="space-y-6">
     <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
-        <span class="text-xs font-black text-slate-700">جدول ۲۰ گروه شغلی سال {{ fiscalYear }} (مزد روزانه پایه و پایه سنواتی)</span>
-        <span class="text-[11px] text-slate-500 font-mono">نرخ ساعتی = مزد روزانه ÷ ۱۰ ساعت پایه روزانه</span>
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <span class="text-xs font-black text-slate-700 block">جدول ۲۰ گروه شغلی سال {{ fiscalYear }} (مزد روزانه پایه و پایه سنواتی)</span>
+          <span class="text-[11px] text-slate-500 font-mono">نرخ ساعتی = مزد روزانه ÷ {{ yearlySettings.standard_daily_hours || 10 }} ساعت کار روزانه</span>
+        </div>
+        <!-- نوار ابزار اکسل برای جدول ۲۰ گروه -->
+        <div class="flex items-center gap-2">
+          <button type="button" (click)="exportJobGradesCsv()" class="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs">
+            <span>📥</span>
+            <span>خروجی اکسل / CSV</span>
+          </button>
+          <label *ngIf="canManageSettings" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs">
+            <span>📤</span>
+            <span>ورود از اکسل / CSV</span>
+            <input type="file" (change)="importJobGradesCsv($event)" accept=".csv" class="hidden" />
+          </label>
+        </div>
       </div>
       <div class="overflow-x-auto max-h-[550px] overflow-y-auto">
         <table class="w-full text-right text-xs">
@@ -133,20 +174,22 @@
               <th class="p-3 text-center w-28">گروه شغلی</th>
               <th class="p-3">مزد روزانه پایه (ریال)</th>
               <th class="p-3">پایه سنواتی روزانه (ریال)</th>
-              <th class="p-3 text-center">نرخ هر ساعت کارکرد (۱۰ ساعته)</th>
+              <th class="p-3 text-center">نرخ هر ساعت کارکرد ({{ yearlySettings.standard_daily_hours || 10 }} ساعته)</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 font-medium">
             <tr *ngFor="let jg of yearlySettings.job_grades" class="hover:bg-slate-50/60">
               <td class="p-3 text-center font-black text-indigo-700 bg-indigo-50/30">گروه {{ jg.grade_number }}</td>
               <td class="p-3">
-                <input type="number" [(ngModel)]="jg.daily_base_wage" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+                <input type="number" [(ngModel)]="jg.daily_base_wage" (ngModelChange)="markDirty()" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+                <span class="block text-[10px] text-slate-400 mt-0.5 font-mono">{{ toToman(jg.daily_base_wage) }}</span>
               </td>
               <td class="p-3">
-                <input type="number" [(ngModel)]="jg.daily_seniority_bonus" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+                <input type="number" [(ngModel)]="jg.daily_seniority_bonus" (ngModelChange)="markDirty()" class="w-56 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-mono text-xs focus:ring-2 focus:ring-indigo-500" />
+                <span class="block text-[10px] text-slate-400 mt-0.5 font-mono">{{ toToman(jg.daily_seniority_bonus) }}</span>
               </td>
               <td class="p-3 text-center font-mono font-bold text-slate-700">
-                {{ (jg.daily_base_wage / 10) | number:'1.0-0' }} ریال
+                {{ formatRial(jg.daily_base_wage / (yearlySettings.standard_daily_hours || 10)) }}
               </td>
             </tr>
           </tbody>
@@ -164,52 +207,66 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">بن خواربار ماهانه (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.monthly_food_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.monthly_food_allowance" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.monthly_food_allowance) }}</span>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">حق مسکن ماهانه (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.monthly_housing_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.monthly_housing_allowance" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.monthly_housing_allowance) }}</span>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">حق تاهل ماهانه (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.monthly_spouse_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.monthly_spouse_allowance" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.monthly_spouse_allowance) }}</span>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">حق اولاد هر فرزند ماهانه (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.monthly_child_allowance" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.monthly_child_allowance" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.monthly_child_allowance) }}</span>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">هزینه سفر و ماموریت روزانه (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.travel_cost_per_day" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.travel_cost_per_day" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.travel_cost_per_day) }}</span>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">مبلغ ثابت ایاب و ذهاب (ریال):</label>
-          <input type="number" [(ngModel)]="yearlySettings.transport_fixed_amount" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.transport_fixed_amount" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.transport_fixed_amount) }}</span>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-600 mb-1.5">ضریب کمک هزینه ایاب و ذهاب:</label>
-          <input type="number" [(ngModel)]="yearlySettings.transport_help_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">ضریب کمک هزینه ایاب و ذهاب (درصد):</label>
+          <input type="number" [(ngModel)]="yearlySettings.transport_help_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="مثلاً ۰.۰۰ یا ۱۰" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد نوبت‌کاری (شیفت):</label>
+          <input type="number" [(ngModel)]="yearlySettings.shift_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="۰.۰۰" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد جذب بازار کارشناسان:</label>
-          <input type="number" [(ngModel)]="yearlySettings.specialist_attraction_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.specialist_attraction_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد بدی آب و هوا:</label>
-          <input type="number" [(ngModel)]="yearlySettings.bad_weather_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.bad_weather_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد دوری از خانواده:</label>
-          <input type="number" [(ngModel)]="yearlySettings.remote_hardship_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.remote_hardship_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">درصد مناطق پارسیان و عسلویه:</label>
-          <input type="number" [(ngModel)]="yearlySettings.south_pars_percent" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.south_pars_percent" (ngModelChange)="markDirty()" step="0.01" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">ساعت کار استاندارد روزانه (پیش‌فرض ۱۰):</label>
+          <input type="number" [(ngModel)]="yearlySettings.standard_daily_hours" (ngModelChange)="markDirty()" step="0.5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-900" placeholder="10.00" />
         </div>
         <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-200/70 md:col-span-2">
           <label class="block text-xs font-black text-indigo-900 mb-1.5">درصد تخصیص مازاد ناخالص به اضافه‌کار (پیش‌فرض ۵۰٪):</label>
           <div class="flex items-center gap-3">
-            <input type="number" [(ngModel)]="yearlySettings.surplus_overtime_percent" step="1" min="0" max="100" class="w-36 bg-white border border-indigo-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-800" />
+            <input type="number" [(ngModel)]="yearlySettings.surplus_overtime_percent" (ngModelChange)="markDirty()" step="1" min="0" max="100" class="w-36 bg-white border border-indigo-300 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-800" />
             <span class="text-[11px] text-indigo-700 font-medium">مابقی مازاد ({{ 100 - (yearlySettings.surplus_overtime_percent || 50) }}٪) به صورت وزنی بین هزینه سفر و حق مأموریت تسهیم می‌گردد.</span>
           </div>
         </div>
@@ -263,7 +320,7 @@
             {{ yearlySettings.attendance_edit_past_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_past_days === 0 ? 'فقط امروز' : yearlySettings.attendance_edit_past_days + ' روز') }}
           </span>
         </div>
-        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_past_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۳" />
+        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_past_days" (ngModelChange)="markDirty()" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۳" />
         <p class="text-[11px] text-slate-500 leading-relaxed">
           • عدد <b class="text-indigo-600">۰</b>: فقط روز جاری قابل ویرایش است.<br/>
           • عدد <b class="text-indigo-600">مثبت (مثلاً ۳)</b>: حداکثر تا ۳ روز قبل از امروز امکان ویرایش وجود دارد.<br/>
@@ -278,7 +335,7 @@
             {{ yearlySettings.attendance_edit_future_days === -1 ? 'نامحدود' : (yearlySettings.attendance_edit_future_days === 0 ? 'ممنوع' : yearlySettings.attendance_edit_future_days + ' روز') }}
           </span>
         </div>
-        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_future_days" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۰" />
+        <input type="number" [(ngModel)]="yearlySettings.attendance_edit_future_days" (ngModelChange)="markDirty()" class="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="۰" />
         <p class="text-[11px] text-slate-500 leading-relaxed">
           • عدد <b class="text-indigo-600">۰</b>: ثبت کارکرد برای روزهای آینده کاملاً مسدود است.<br/>
           • عدد <b class="text-indigo-600">مثبت (مثلاً ۷)</b>: پیش‌ثبت کارکرد تا سقف ۷ روز آینده مجاز است.<br/>
@@ -297,27 +354,60 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">کد کارگاه ۱۰ رقمی (DSK_ID):</label>
-          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_code" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_code" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارگاه (DSK_NAME):</label>
-          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_name" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نام کارفرما (DSK_FARM):</label>
-          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.employer_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.employer_name" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نشانی کارگاه (DSK_ADRS):</label>
-          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_address" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.workshop_address" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع لیست (DSK_KIND):</label>
+          <select [(ngModel)]="yearlySettings.workshop_insurance.list_type" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="0">۰ - لیست عادی ماهانه</option>
+            <option value="1">۱ - لیست متمم / اصلاحیه</option>
+            <option value="2">۲ - لیست پیمانکاری</option>
+          </select>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره لیست (DSK_RAD):</label>
-          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.list_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.list_number" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-600 mb-1.5">نرخ حق بیمه (DSK_RATE):</label>
-          <input type="number" [(ngModel)]="yearlySettings.workshop_insurance.default_dsk_rate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">کد ردیف پیمان (MON_PYM):</label>
+          <input type="text" [(ngModel)]="yearlySettings.workshop_insurance.default_mon_pym" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="024" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">نرخ حق بیمه کارگاه (DSK_RATE):</label>
+          <input type="number" [(ngModel)]="yearlySettings.workshop_insurance.default_dsk_rate" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+        </div>
+      </div>
+
+      <h4 class="text-xs font-black text-slate-700 border-t border-slate-100 pt-4 mt-2">نرخ‌های تفکیکی کسر بیمه تامین اجتماعی و سقف دستمزد</h4>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">سهم کارگر (درصد):</label>
+          <input type="number" [(ngModel)]="yearlySettings.worker_insurance_rate" (ngModelChange)="markDirty()" step="0.5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">سهم کارفرما (درصد):</label>
+          <input type="number" [(ngModel)]="yearlySettings.employer_insurance_rate" (ngModelChange)="markDirty()" step="0.5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">بیمه بیکاری (درصد):</label>
+          <input type="number" [(ngModel)]="yearlySettings.unemployment_insurance_rate" (ngModelChange)="markDirty()" step="0.5" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-600 mb-1">سقف دستی دستمزد روزانه مشمول:</label>
+          <input type="number" [(ngModel)]="yearlySettings.max_insurable_daily_wage" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" placeholder="خالی = ۷ برابر گروه ۱" />
+          <span class="text-[10px] text-slate-400 mt-0.5 block font-mono">{{ toToman(yearlySettings.max_insurable_daily_wage) }}</span>
         </div>
       </div>
     </div>
@@ -332,27 +422,42 @@
       <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع پرداختی مالیات:</label>
-          <input type="text" [(ngModel)]="yearlySettings.tax_settings.payment_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          <select [(ngModel)]="yearlySettings.tax_settings.payment_type" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="1">۱ - ریالی (پیش‌فرض)</option>
+            <option value="2">۲ - ارزی</option>
+            <option value="3">۳ - توأمان ریالی و ارزی</option>
+          </select>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">محل خدمت مالیاتی:</label>
-          <input type="text" [(ngModel)]="yearlySettings.tax_settings.service_location" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          <select [(ngModel)]="yearlySettings.tax_settings.service_location" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="1">۱ - دفتر مرکزی / عادی</option>
+            <option value="2">۲ - شعبه / کارگاه</option>
+          </select>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">استثنائات ماده ۸۴:</label>
-          <input type="text" [(ngModel)]="yearlySettings.tax_settings.exceptions" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          <select [(ngModel)]="yearlySettings.tax_settings.exceptions" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="1">۱ - عادی (بدون استثناء)</option>
+            <option value="2">۲ - ۵۰٪ بخشودگی مناطق کمتر توسعه یافته</option>
+            <option value="3">۳ - ۱۰۰٪ معافیت مناطق آزاد تجاری</option>
+          </select>
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">کد نوع ارز دارایی:</label>
-          <input type="text" [(ngModel)]="yearlySettings.tax_settings.currency_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="text" [(ngModel)]="yearlySettings.tax_settings.currency_type" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="84 (ریال ایران)" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نرخ تسعیر ارز:</label>
-          <input type="number" [(ngModel)]="yearlySettings.tax_settings.currency_exchange_rate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <input type="number" [(ngModel)]="yearlySettings.tax_settings.currency_exchange_rate" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نوع تسهیلات مسکن:</label>
-          <input type="text" [(ngModel)]="yearlySettings.tax_settings.housing_benefit_type" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono" />
+          <select [(ngModel)]="yearlySettings.tax_settings.housing_benefit_type" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold">
+            <option value="1">۱ - عدم استفاده</option>
+            <option value="2">۲ - مسکن با اثاثیه</option>
+            <option value="3">۳ - مسکن بدون اثاثیه</option>
+          </select>
         </div>
       </div>
     </div>
@@ -367,29 +472,45 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">نام بانک پیش‌فرض پرداخت:</label>
-          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.bank_name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.bank_name" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره حساب مبدأ شرکت:</label>
-          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.source_account_number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.source_account_number" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شماره شبا مبدأ شرکت (IR):</label>
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.source_sheba_number" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold dir-ltr text-right" placeholder="IR..." />
         </div>
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">شناسه واریز پیش‌فرض:</label>
-          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.default_deposit_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold dir-ltr text-right" placeholder="شناسه واریز" />
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.default_deposit_id" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold dir-ltr text-right" placeholder="شناسه واریز" />
         </div>
-        <div>
+        <div class="md:col-span-2">
           <label class="block text-xs font-bold text-slate-600 mb-1.5">الگوی شرح واریز پایا:</label>
-          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.deposit_description_template" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="حقوق و دستمزد ماه..." />
+          <input type="text" [(ngModel)]="yearlySettings.bank_export_settings.deposit_description_template" (ngModelChange)="markDirty()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="انبارداری حقوق {month_name} {fiscal_year}" />
+          <span class="text-[11px] text-slate-400 mt-1 block">پلیس‌هولدرهای معتبر: {{ '{month_name}' }} و {{ '{fiscal_year}' }}</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- فوتر متادیتای ممیزی و تغییرات -->
+  <div *ngIf="yearlySettings" class="text-[11px] text-slate-400 flex items-center justify-between px-2 pt-2 border-t border-slate-100">
+    <div>
+      <span *ngIf="yearlySettings.created_by_name">ایجادکننده: <strong>{{ yearlySettings.created_by_name }}</strong></span>
+      <span *ngIf="yearlySettings.updated_by_name" class="mr-4">آخرین ویرایش‌کننده: <strong>{{ yearlySettings.updated_by_name }}</strong></span>
+    </div>
+    <div>
+      <span>شناسه نسخه: #{{ yearlySettings.id }}</span>
     </div>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۹. مودال ثبت نسخه جدید در میانه سال (Mid-Year Version Modal) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="showCreateVersionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-    <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
+  <div *ngIf="showCreateVersionModal" (click)="closeCreateVersionModal()" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div (click)="$event.stopPropagation()" class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center gap-2 text-purple-700">
           <span class="text-lg">➕</span>
@@ -437,8 +558,8 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ۱۰. مودال ایجاد سال مالی جدید (Create Fiscal Year Modal) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div *ngIf="showCreateYearModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-    <div class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
+  <div *ngIf="showCreateYearModal" (click)="closeCreateYearModal()" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div (click)="$event.stopPropagation()" class="bg-white rounded-3xl p-6 border border-slate-200 shadow-xl max-w-md w-full space-y-5" dir="rtl">
       <div class="flex items-center justify-between border-b border-slate-100 pb-3">
         <div class="flex items-center gap-2 text-indigo-700">
           <span class="text-lg">➕</span>
@@ -486,5 +607,3 @@
   </div>
 
 </div>
-
-

@@ -452,6 +452,10 @@ export class PersonnelApiService {
     return this.api.post<any>(`${this.baseUrl}/settings/${settingsId}/update-all/`, payload);
   }
 
+  revertSettingsToGlobal(settingsId: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/settings/${settingsId}/revert-to-global/`, {});
+  }
+
   updateYearlySettings(year: string, payload: any): Observable<any> {
     if (payload && payload.id) {
       return this.updateAllSettingsTabs(payload.id, payload);

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -45,6 +45,7 @@ export class BaseSettings implements OnInit, OnDestroy {
 
   isLoading = false;
   isSaving = false;
+  isDirty = false;
 
   private querySub!: Subscription;
 
@@ -58,28 +59,54 @@ export class BaseSettings implements OnInit, OnDestroy {
     private router: Router
   ) {}
 
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.showCreateVersionModal) this.closeCreateVersionModal();
+    if (this.showCreateYearModal) this.closeCreateYearModal();
+  }
+
   get canManageSettings(): boolean {
-    const p = this.auth.userPermissions();
-    return p.includes('perm_settings_personnel') || p.includes('admin_all') || !!this.auth.user()?.is_superuser;
+    const p = this.auth.userPermissions() || [];
+    return p.includes('perm_sys_settings') || p.includes('admin_all') || !!this.auth.user()?.is_superuser;
   }
 
   get isCurrentSettingSpecificToProject(): boolean {
     return !!(this.selectedProjectId && this.yearlySettings?.project === this.selectedProjectId);
   }
 
+  markDirty(): void {
+    this.isDirty = true;
+  }
+
+  toToman(val: number | string | null | undefined): string {
+    if (val === null || val === undefined || val === '') return '';
+    const num = Number(val);
+    if (isNaN(num) || num === 0) return '';
+    const toman = Math.floor(num / 10);
+    return new Intl.NumberFormat('fa-IR').format(toman) + ' تومان';
+  }
+
+  formatRial(val: number | string | null | undefined): string {
+    if (val === null || val === undefined || val === '') return '۰ ریال';
+    const num = Number(val);
+    if (isNaN(num)) return '۰ ریال';
+    return new Intl.NumberFormat('fa-IR').format(num) + ' ریال';
+  }
+
   ngOnInit(): void {
-    // بارگذاری لیست سال‌های مالی تعریف‌شده
     this.loadAvailableYears();
 
     // بارگذاری لیست پروژه‌ها جهت سلکتور دامنه تنظیمات
     this.api.getFinancialProjects().subscribe({
       next: (projs) => {
-        this.projects = projs;
+        this.projects = projs || [];
         this.cdr.detectChanges();
       }
     });
 
     this.querySub = this.route.queryParams.subscribe(params => {
+      let shouldReload = false;
+
       if (params['tab']) {
         const t = params['tab'];
         if (['grades', 'labor', 'attendance_window', 'dsk', 'tax', 'bank'].includes(t)) {
@@ -92,24 +119,39 @@ export class BaseSettings implements OnInit, OnDestroy {
           this.activeTab = 'dsk';
         }
       }
-      if (params['year']) {
+
+      if (params['year'] && params['year'] !== this.fiscalYear) {
         this.fiscalYear = params['year'];
+        shouldReload = true;
       }
+
       const rawPid = params['project_id'];
+      let parsedPid: number | null = null;
       if (rawPid !== undefined && rawPid !== null && rawPid !== '' && rawPid !== 'null' && rawPid !== 'undefined') {
         const num = Number(rawPid);
-        this.selectedProjectId = !isNaN(num) ? num : null;
-      } else {
-        this.selectedProjectId = null;
+        parsedPid = !isNaN(num) ? num : null;
       }
+      if (parsedPid !== this.selectedProjectId) {
+        this.selectedProjectId = parsedPid;
+        shouldReload = true;
+      }
+
       const rawVid = params['version_id'];
+      let parsedVid: number | null = null;
       if (rawVid !== undefined && rawVid !== null && rawVid !== '' && rawVid !== 'null' && rawVid !== 'undefined') {
         const num = Number(rawVid);
-        this.selectedVersionId = !isNaN(num) ? num : null;
-      } else {
-        this.selectedVersionId = null;
+        parsedVid = !isNaN(num) ? num : null;
       }
-      this.loadVersionsAndSettings();
+      if (parsedVid !== this.selectedVersionId) {
+        this.selectedVersionId = parsedVid;
+        shouldReload = true;
+      }
+
+      // فقط در صورتی که پارامترهای اصلی تغییر کرده باشند یا تنظیماتی در حافظه نباشد کوئری شبکه اجرا شود
+      // تغییر صرف تب نباید دیتای ویرایش شده کاربر را از بین ببرد
+      if (shouldReload || !this.yearlySettings) {
+        this.loadVersionsAndSettings();
+      }
     });
   }
 
@@ -166,6 +208,7 @@ export class BaseSettings implements OnInit, OnDestroy {
   }
 
   loadVersionsAndSettings(): void {
+    this.isLoading = true;
     this.api.getSettingsVersions(this.fiscalYear, this.selectedProjectId).subscribe({
       next: (vers) => {
         this.versions = vers || [];
@@ -186,13 +229,20 @@ export class BaseSettings implements OnInit, OnDestroy {
 
   loadYearlySettings(): void {
     this.isLoading = true;
-    this.api.getYearlySettings(this.fiscalYear, this.selectedProjectId, this.selectedVersionId).subscribe({
+    let eff: string | null = null;
+    if (this.selectedVersionId && this.versions.length > 0) {
+      const match = this.versions.find(v => v.id === this.selectedVersionId);
+      if (match?.effective_from) eff = match.effective_from;
+    }
+
+    this.api.getYearlySettings(this.fiscalYear, this.selectedProjectId, this.selectedVersionId, eff).subscribe({
       next: (res: any) => {
         this.yearlySettings = res;
         if (res && res.id && !this.selectedVersionId) {
           this.selectedVersionId = res.id;
         }
         this.isLoading = false;
+        this.isDirty = false;
         this.cdr.detectChanges();
       },
       error: () => {
@@ -205,7 +255,7 @@ export class BaseSettings implements OnInit, OnDestroy {
 
   openCreateVersionModal(): void {
     this.newVersionEffectiveFrom = `${this.fiscalYear}/07`;
-    this.newVersionTitle = `اصلاحیه احکام و دستمزد میانه سال ${this.fiscalYear}`;
+    this.newVersionTitle = `اصلاحیه احکام و دستمزد نیمه دوم سال ${this.fiscalYear}`;
     this.showCreateVersionModal = true;
     this.cdr.detectChanges();
   }
@@ -216,14 +266,15 @@ export class BaseSettings implements OnInit, OnDestroy {
   }
 
   submitCreateVersion(): void {
-    if (!this.newVersionEffectiveFrom) {
-      this.toast.show('warning', 'تعیین ماه شروع اجرا (مثلاً 1405/07) الزامی است.');
+    const trimmed = (this.newVersionEffectiveFrom || '').trim();
+    if (!trimmed || !/^\d{4}\/(0[1-9]|1[0-2])$/.test(trimmed)) {
+      this.toast.show('warning', 'لطفاً فرمت معتبر سال و ماه شمسی (مثلاً 1405/07) را وارد نمایید.');
       return;
     }
     this.isCreatingVersion = true;
     this.api.createSettingsVersion({
       year: this.fiscalYear,
-      effective_from: this.newVersionEffectiveFrom,
+      effective_from: trimmed,
       version_title: this.newVersionTitle,
       project_id: this.selectedProjectId,
       source_setting_id: this.yearlySettings?.id
@@ -233,6 +284,7 @@ export class BaseSettings implements OnInit, OnDestroy {
         this.showCreateVersionModal = false;
         this.toast.show('success', `نسخه جدید احکام («${created.version_title || created.effective_from}») با موفقیت ثبت شد.`);
         this.selectedVersionId = created.id;
+        this.isDirty = false;
         this.updateQueryParams();
         this.loadVersionsAndSettings();
       },
@@ -252,12 +304,34 @@ export class BaseSettings implements OnInit, OnDestroy {
         this.yearlySettings = cloned;
         this.selectedVersionId = cloned.id;
         this.isLoading = false;
+        this.isDirty = false;
         this.toast.show('success', `تنظیمات اختصاصی برای پروژه «${cloned.project_name || ''}» با موفقیت ایجاد شد.`);
         this.loadVersionsAndSettings();
       },
       error: (err) => {
         this.isLoading = false;
         this.toast.show('error', err?.error?.error || 'خطا در کپی تنظیمات برای پروژه');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  revertToGlobal(): void {
+    if (!this.yearlySettings?.id || !this.selectedProjectId) return;
+    if (!confirm(`آیا از حذف تنظیمات اختصاصی پروژه «${this.yearlySettings.project_name || 'جاری'}» و بازگشت به تنظیمات سراسری سازمان اطمینان دارید؟`)) {
+      return;
+    }
+    this.isLoading = true;
+    this.api.revertSettingsToGlobal(this.yearlySettings.id).subscribe({
+      next: (res: any) => {
+        this.isLoading = false;
+        this.toast.show('success', res?.message || 'تنظیمات اختصاصی پروژه حذف شد و به سراسری بازگشت.');
+        this.isDirty = false;
+        this.loadVersionsAndSettings();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.show('error', err?.error?.error || 'خطا در بازگشت به تنظیمات سراسری');
         this.cdr.detectChanges();
       }
     });
@@ -285,6 +359,7 @@ export class BaseSettings implements OnInit, OnDestroy {
           this.api.updateYearlySettings(this.fiscalYear, payload).subscribe({
             next: (res: any) => {
               this.isSaving = false;
+              this.isDirty = false;
               this.yearlySettings = res?.settings || payload;
               this.selectedVersionId = cloned.id;
               this.toast.show('success', `تنظیمات اختصاصی پروژه با موفقیت ذخیره شد.`);
@@ -310,6 +385,7 @@ export class BaseSettings implements OnInit, OnDestroy {
     this.api.updateYearlySettings(this.fiscalYear, this.yearlySettings).subscribe({
       next: (res: any) => {
         this.isSaving = false;
+        this.isDirty = false;
         if (res?.settings) {
           this.yearlySettings = res.settings;
         }
@@ -328,7 +404,8 @@ export class BaseSettings implements OnInit, OnDestroy {
     if (!this.yearlySettings) return;
     this.yearlySettings.attendance_edit_past_days = pastDays;
     this.yearlySettings.attendance_edit_future_days = futureDays;
-    this.toast.show('info', `الگوی انتخابی: ${pastDays} روز قبل، ${futureDays} روز بعد`);
+    this.markDirty();
+    this.toast.show('info', `الگوی انتخابی: ${pastDays === -1 ? 'نامحدود' : pastDays} روز قبل، ${futureDays === -1 ? 'نامحدود' : futureDays} روز بعد`);
     this.cdr.detectChanges();
   }
 
@@ -397,6 +474,7 @@ export class BaseSettings implements OnInit, OnDestroy {
         this.availableYears = [trimmed, ...this.availableYears.filter(y => y !== trimmed)];
         this.fiscalYear = trimmed;
         this.selectedVersionId = created.id;
+        this.isDirty = false;
         this.updateQueryParams();
         this.loadAvailableYears(trimmed);
         this.loadVersionsAndSettings();
@@ -407,5 +485,71 @@ export class BaseSettings implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  exportJobGradesCsv(): void {
+    if (!this.yearlySettings?.job_grades || this.yearlySettings.job_grades.length === 0) {
+      this.toast.show('warning', 'جدول گروه‌های شغلی برای استخراج خالی است.');
+      return;
+    }
+    const headers = ['گروه شغلی', 'مزد روزانه پایه (ریال)', 'پایه سنواتی روزانه (ریال)', 'نرخ هر ساعت کارکرد (ریال)'];
+    const rows = this.yearlySettings.job_grades.map(jg => [
+      jg.grade_number,
+      jg.daily_base_wage,
+      jg.daily_seniority_bonus,
+      Math.round(jg.daily_base_wage / (this.yearlySettings?.standard_daily_hours || 10))
+    ]);
+    const csvContent = '﻿' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `job_grades_${this.fiscalYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    this.toast.show('success', 'فایل اکسل/CSV جدول ۲۰ گروه شغلی دانلود شد.');
+  }
+
+  importJobGradesCsv(event: any): void {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const text = e.target.result as string;
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length < 2) {
+          this.toast.show('warning', 'فایل معتبری برای گروه‌های شغلی یافت نشد.');
+          return;
+        }
+        let updatedCount = 0;
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(',').map(p => p.trim().replace(/"/g, ''));
+          if (parts.length >= 2) {
+            const gNum = Number(parts[0]);
+            const wage = Number(parts[1]);
+            const sen = parts[2] ? Number(parts[2]) : 0;
+            if (!isNaN(gNum) && !isNaN(wage) && this.yearlySettings?.job_grades) {
+              const item = this.yearlySettings.job_grades.find(j => j.grade_number === gNum);
+              if (item) {
+                item.daily_base_wage = wage;
+                if (!isNaN(sen)) item.daily_seniority_bonus = sen;
+                updatedCount++;
+              }
+            }
+          }
+        }
+        if (updatedCount > 0) {
+          this.markDirty();
+          this.toast.show('success', `${updatedCount} گروه شغلی با موفقیت از فایل به‌روزرسانی شد. جهت ثبت دکمه ذخیره را بزنید.`);
+          this.cdr.detectChanges();
+        }
+      } catch {
+        this.toast.show('error', 'خطا در پردازش فایل اکسل/CSV');
+      } finally {
+        if (event.target) event.target.value = '';
+      }
+    };
+    reader.readAsText(file, 'utf-8');
   }
 }

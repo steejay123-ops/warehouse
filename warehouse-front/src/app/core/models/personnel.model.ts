@@ -369,7 +369,7 @@ export interface WorkshopInsuranceSettings {
   workshop_name: string;
   employer_name: string;
   workshop_address: string;
-  list_type: number;
+  list_type: string | number;
   list_number: string;
   default_dsk_rate: number;
   default_mon_pym: string;
@@ -383,13 +383,16 @@ export interface TaxRuleSettings {
   currency_type: string;
   currency_exchange_rate: number;
   housing_benefit_type: string;
-  vehicle_benefit_type: string;
+  vehicle_benefit_type?: string;
+  wh_file_prefix?: string;
+  wp_file_prefix?: string;
 }
 
 export interface BankExportSettings {
   id?: number;
   bank_name: string;
   source_account_number: string;
+  source_sheba_number?: string;
   default_deposit_id: string;
   deposit_description_template: string;
 }
@@ -405,6 +408,8 @@ export interface PayrollYearlySettings {
   effective_to?: string | null;
   is_active: boolean;
   notes?: string;
+  created_by_name?: string;
+  updated_by_name?: string;
 
   // قانون کار
   monthly_food_allowance: number;
@@ -421,6 +426,16 @@ export interface PayrollYearlySettings {
   remote_hardship_percent: number;
   south_pars_percent: number;
   travel_cost_per_day: number;
+
+  // ساعات کار استاندارد و ضرایب مصوب اکسل شرکت
+  standard_daily_hours?: number;
+  bonus_daily_coefficient?: number;
+  seniority_monthly_coefficient?: number;
+  overtime_rate_multiplier?: number;
+  friday_work_rate_multiplier?: number;
+
+  // سقف دستی بیمه
+  max_insurable_daily_wage?: number | null;
 
   // بیمه
   worker_insurance_rate: number;

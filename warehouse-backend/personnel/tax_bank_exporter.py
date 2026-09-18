@@ -183,7 +183,16 @@ def generate_bank_meli_excel(payroll_records, bank_settings, year_month_title="Ø
             continue
         
         acc_no = (p.account_number or p.sheba_number or '').strip()
-        desc = deposit_desc_tpl.format(month_name=year_month_title, fiscal_year="")
+        f_year = year_month_title.split()[0] if year_month_title else ""
+        try:
+            desc = deposit_desc_tpl.format(
+                month_name=year_month_title,
+                fiscal_year=f_year,
+                full_name=p.full_name,
+                national_code=p.national_code
+            )
+        except Exception:
+            desc = deposit_desc_tpl.replace("{month_name}", year_month_title).replace("{fiscal_year}", f_year)
         
         ws.append([
             row_idx,

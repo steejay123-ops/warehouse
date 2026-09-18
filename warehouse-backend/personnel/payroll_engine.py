@@ -90,11 +90,14 @@ class PayrollCalculationEngine:
         contract_salary = Decimal(p.contract_base_salary or 0)
 
         # ── 2. Attendance Aggregation ─────────────────────────────
-        attendances = DailyAttendance.objects.filter(
-            personnel=p,
-            date_shamsi__startswith=period.year_month,
-            is_deleted=False
-        )
+        if getattr(p, 'id', None):
+            attendances = DailyAttendance.objects.filter(
+                personnel=p,
+                date_shamsi__startswith=period.year_month,
+                is_deleted=False
+            )
+        else:
+            attendances = DailyAttendance.objects.none()
 
         if attendances.exists():
             worked_hours = sum(Decimal(a.effective_hours or 0) for a in attendances)
@@ -126,12 +129,25 @@ class PayrollCalculationEngine:
         monthly_child = Decimal(settings.monthly_child_allowance if settings else 16625549)
         travel_cost_day = Decimal(settings.travel_cost_per_day if settings else 8736600)
         transport_fixed = Decimal(settings.transport_fixed_amount if settings else 2388728)
-        transport_help_pct = Decimal(settings.transport_help_percent if settings else 0)
-        attraction_pct = Decimal(settings.specialist_attraction_percent if settings else 0)
-        bad_weather_pct = Decimal(settings.bad_weather_percent if settings else 0)
-        remote_hardship_pct = Decimal(settings.remote_hardship_percent if settings else 0)
-        south_pars_pct = Decimal(settings.south_pars_percent if settings else 0)
+
+        # درصدها: نرمال‌سازی خودکار مقادیر درصد ورودی (مثلاً عدد ۱۰ به ۰.۱۰)
+        def _to_fraction(val):
+            d = Decimal(val or 0)
+            return d / Decimal(100.0) if d > Decimal(1.0) else d
+
+        transport_help_pct = _to_fraction(settings.transport_help_percent if settings else 0)
+        attraction_pct = _to_fraction(settings.specialist_attraction_percent if settings else 0)
+        bad_weather_pct = _to_fraction(settings.bad_weather_percent if settings else 0)
+        remote_hardship_pct = _to_fraction(settings.remote_hardship_percent if settings else 0)
+        south_pars_pct = _to_fraction(settings.south_pars_percent if settings else 0)
         surplus_overtime_pct = (Decimal(settings.surplus_overtime_percent if settings else 50.00) / Decimal(100.0))
+
+        # ساعات کار استاندارد روزانه و ضرایب مصوب اکسل مرجع شرکت
+        std_daily_hours = Decimal(settings.standard_daily_hours if settings and settings.standard_daily_hours else 10.00)
+        bonus_coeff = Decimal(settings.bonus_daily_coefficient if settings and settings.bonus_daily_coefficient else 5.00)
+        sen_coeff = Decimal(settings.seniority_monthly_coefficient if settings and settings.seniority_monthly_coefficient else 2.50)
+        ot_multiplier = Decimal(settings.overtime_rate_multiplier if settings and settings.overtime_rate_multiplier else 1.40)
+        fri_multiplier = Decimal(settings.friday_work_rate_multiplier if settings and settings.friday_work_rate_multiplier else 0.40)
 
         is_married = p.marital_status == 'married'
         children_count = p.children_count or 0
@@ -150,16 +166,16 @@ class PayrollCalculationEngine:
             bw_all = Decimal(round(bad_weather_pct * daily_wage * Decimal(days)))
             rh_all = Decimal(round(remote_hardship_pct * daily_wage * Decimal(days)))
             sp_all = Decimal(round(south_pars_pct * daily_wage * Decimal(days)))
-            bon_all = Decimal(round(Decimal(5) * base_daily_rate * d_ratio))
-            
+            bon_all = Decimal(round(bonus_coeff * base_daily_rate * d_ratio))
+
             s_base_weather = bw_all + rh_all + sp_all + b_sal
-            sen_all = Decimal(round((Decimal('2.5') * s_base_weather) / Decimal(month_days)))
-            
+            sen_all = Decimal(round((sen_coeff * s_base_weather) / Decimal(month_days)))
+
             if days > 0 and friday_work_days > 0:
-                fri_all = Decimal(round(((Decimal('0.4') * s_base_weather) / Decimal(days)) * Decimal(friday_work_days)))
+                fri_all = Decimal(round(((fri_multiplier * s_base_weather) / Decimal(days)) * Decimal(friday_work_days)))
             else:
                 fri_all = Decimal(0)
-                
+
             total_stat = b_sal + f_all + h_all + m_all + c_all + t_all + mkt_all + bw_all + rh_all + sp_all + bon_all + sen_all + fri_all
             return {
                 'days': days,
@@ -220,9 +236,9 @@ class PayrollCalculationEngine:
             surplus_travel_mission = surplus - surplus_overtime
             overtime_amount = surplus_overtime
 
-            hourly_rate = base_daily_rate / Decimal(10)
+            hourly_rate = base_daily_rate / (std_daily_hours if std_daily_hours > 0 else Decimal(10))
             if hourly_rate > 0:
-                overtime_hours = Decimal(round(overtime_amount / (hourly_rate * Decimal('1.4')), 2))
+                overtime_hours = Decimal(round(overtime_amount / (hourly_rate * ot_multiplier), 2))
             else:
                 overtime_hours = manual_overtime_hours
 
@@ -264,15 +280,32 @@ class PayrollCalculationEngine:
 
         total_seniority_accumulated = Decimal(round(Decimal(insurance_days) * daily_seniority * Decimal(years_exp)))
 
-        # Insurance calculations (7% worker, 20% employer, 3% unemployment)
+        # Insurance calculations (7% worker, 20% employer, 3% unemployment) with smart statutory ceiling
         if p.include_in_insurance:
             total_insurable_salary_allowances = base_salary + total_taxable_allowances
+            # سقف قانونی حق بیمه: معادل ۷ برابر حداقل دستمزد روزانه گروه ۱ یا سقف دستی تعیین‌شده
+            daily_ceiling = Decimal(0)
+            if settings and getattr(settings, 'max_insurable_daily_wage', None):
+                daily_ceiling = Decimal(settings.max_insurable_daily_wage)
+            else:
+                g1_data = job_grades.get('1') or job_grades.get(1)
+                g1_rate = Decimal(g1_data[0]) if g1_data else Decimal(0)
+                if g1_rate > 0:
+                    daily_ceiling = g1_rate * Decimal(7)
+                elif settings:
+                    tier1 = settings.job_grades.filter(grade_number=1).first()
+                    if tier1 and tier1.daily_base_wage:
+                        daily_ceiling = Decimal(tier1.daily_base_wage) * Decimal(7)
+
+            if daily_ceiling > 0 and insurance_days > 0:
+                monthly_max_insurable = daily_ceiling * Decimal(insurance_days)
+                total_insurable_salary_allowances = min(total_insurable_salary_allowances, monthly_max_insurable)
         else:
             total_insurable_salary_allowances = Decimal(0)
 
-        w_rate = (settings.worker_insurance_rate if settings else Decimal('7.00')) / Decimal(100.0)
-        e_rate = (settings.employer_insurance_rate if settings else Decimal('20.00')) / Decimal(100.0)
-        u_rate = (settings.unemployment_insurance_rate if settings else Decimal('3.00')) / Decimal(100.0)
+        w_rate = Decimal(str(settings.worker_insurance_rate if settings else '7.00')) / Decimal('100.0')
+        e_rate = Decimal(str(settings.employer_insurance_rate if settings else '20.00')) / Decimal('100.0')
+        u_rate = Decimal(str(settings.unemployment_insurance_rate if settings else '3.00')) / Decimal('100.0')
 
         worker_insurance = Decimal(round(total_insurable_salary_allowances * w_rate))
         employer_insurance = Decimal(round(total_insurable_salary_allowances * e_rate))

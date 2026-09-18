@@ -1626,11 +1626,40 @@ class PayrollYearlySettings(models.Model):
     
     # تسهیم مازاد ناخالص به اضافه‌کار و سفر/ماموریت
     surplus_overtime_percent = models.DecimalField(max_digits=5, decimal_places=2, default=50.00, verbose_name="درصد تخصیص مازاد به اضافه‌کار (پیش‌فرض ۵۰٪)")
-    
+
+    # ساعت کار استاندارد روزانه (پیش‌فرض ۱۰.۰۰ ساعت مطابق اصل ۶ و اکسل مرجع انبارداری)
+    standard_daily_hours = models.DecimalField(max_digits=4, decimal_places=2, default=10.00, verbose_name="ساعت کار استاندارد روزانه")
+
+    # ضرایب محاسباتی مصوب اکسل مرجع شرکت
+    bonus_daily_coefficient = models.DecimalField(max_digits=6, decimal_places=2, default=5.00, verbose_name="ضریب روزانه عیدی و پاداش")
+    seniority_monthly_coefficient = models.DecimalField(max_digits=6, decimal_places=2, default=2.50, verbose_name="ضریب ماهانه سنوات")
+    overtime_rate_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.40, verbose_name="ضریب نرخ اضافه‌کار")
+    friday_work_rate_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=0.40, verbose_name="ضریب نرخ جمعه‌کاری")
+
+    # سقف اختیاری دستی دستمزد مشمول بیمه (در صورت خالی بودن، خودکار معادل ۷ برابر گروه ۱ محاسبه می‌شود)
+    max_insurable_daily_wage = models.DecimalField(max_digits=14, decimal_places=0, null=True, blank=True, verbose_name="سقف دستی دستمزد روزانه مشمول بیمه (خالی = ۷ برابر گروه ۱)")
+
     # محدودیت بازه زمانی ویرایش کارکرد روزانه توسط مدیر (-۱ به معنای نامحدود، ۰ به معنای فقط امروز)
     attendance_edit_past_days = models.IntegerField(default=3, verbose_name="حداکثر روزهای گذشته مجاز برای ویرایش کارکرد")
     attendance_edit_future_days = models.IntegerField(default=0, verbose_name="حداکثر روزهای آینده مجاز برای ثبت کارکرد")
-    
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_payroll_settings',
+        verbose_name="ایجادکننده"
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_payroll_settings',
+        verbose_name="ویرایش‌کننده"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1750,6 +1779,7 @@ class BankExportSettings(models.Model):
     )
     bank_name = models.CharField(max_length=100, default='بانک ملی', verbose_name="نام بانک پرداخت‌کننده")
     source_account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب مبدا")
+    source_sheba_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="شماره شبا مبدا (IR)")
     default_deposit_id = models.CharField(max_length=50, blank=True, null=True, verbose_name="شناسه واریز پیش‌فرض")
     deposit_description_template = models.CharField(
         max_length=200,

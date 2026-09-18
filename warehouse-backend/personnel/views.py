@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.db import transaction
+from django.apps import apps
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -75,7 +76,7 @@ from .serializers import (
     BankExportSettingsSerializer,
     MonthlyPayrollRecordSerializer
 )
-from .permissions import IsOrgStructureManagerOrReadOnly
+from .permissions import IsOrgStructureManagerOrReadOnly, IsPayrollSettingsManagerOrReadOnly
 from .payroll_engine import calculate_monthly_payroll_for_period, get_effective_payroll_settings
 from .dbf_generator import generate_dskkar_bytes, generate_dskwor_bytes
 from .tax_bank_exporter import generate_wh_tax_content, generate_wp_tax_content, generate_bank_meli_excel
@@ -807,7 +808,7 @@ def normalize_attendance_date(date_str: str) -> str:
     return date_str
 
 
-def validate_attendance_date_window(date_shamsi: str, user=None, allow_override: bool = False, warehouse_id=None):
+def validate_attendance_date_window(date_shamsi: str, user=None, allow_override: bool = False, warehouse_id=None, project_id=None):
     """
     اعتبارسنجی بازه مجاز ثبت و ویرایش کارکرد بر مبنای تنظیمات سالانه حقوق
     -1 به معنای نامحدود، 0 به معنای فقط امروز، اعداد مثبت به معنای سقف روز مجاز
@@ -836,17 +837,14 @@ def validate_attendance_date_window(date_shamsi: str, user=None, allow_override:
     today = jdatetime.date.today()
     delta_days = (target_date - today).days
 
-    fiscal_year = str(parts[0])
-    settings = PayrollYearlySettings.objects.filter(fiscal_year=fiscal_year, is_active=True).first()
-    if not settings:
-        settings = PayrollYearlySettings.objects.filter(is_active=True).first()
+    year_month = f"{parts[0]:04d}/{parts[1]:02d}"
+    settings = get_effective_payroll_settings(year_month, project_id)
 
     past_limit = settings.attendance_edit_past_days if settings else 3
     future_limit = settings.attendance_edit_future_days if settings else 0
 
     # بررسی روزهای گذشته
     if delta_days < 0:
-        year_month = f"{parts[0]:04d}/{parts[1]:02d}"
         rej_period_qs = MonthlyWorkPeriod.objects.filter(year_month=year_month, status='REJECTED')
         if warehouse_id:
             rej_period_qs = rej_period_qs.filter(warehouse_id=warehouse_id)
@@ -1053,6 +1051,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         
         raw_wh = serializer.validated_data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        project_id = serializer.validated_data.get('project_id')
         raw_date = serializer.validated_data['date_shamsi']
         date_shamsi = normalize_attendance_date(raw_date)
         items = serializer.validated_data['items']
@@ -1062,7 +1061,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         # اعتبارسنجی بازه زمانی مجاز بر مبنای تنظیمات مدیر
         try:
-            validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id)
+            validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id, project_id=project_id)
         except Exception as e:
             err_msg = getattr(e, 'detail', str(e))
             if isinstance(err_msg, list):
@@ -1263,12 +1262,13 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         raw_wh = request.data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        project_id = safe_int(request.data.get('project_id'))
         personnel_ids = request.data.get('personnel_ids')
 
         # اعتبارسنجی بازه مجاز ویرایش تاریخ
         is_admin_override = request.user.is_superuser or (request.user.role and request.user.role.name in ['Admin', 'Manager']) or request.user.has_perm('personnel.can_override_attendance_lock')
         if not is_admin_override:
-            validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id)
+            validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id, project_id=project_id)
 
         qs = DailyAttendance.objects.filter(date_shamsi=date_shamsi, is_deleted=False)
         if warehouse_id:
@@ -1319,6 +1319,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         import jdatetime
         raw_wh = request.query_params.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        project_id = safe_int(request.query_params.get('project_id'))
         raw_year_month = request.query_params.get('year_month')
         if not raw_year_month:
             return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1359,10 +1360,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 period_status = period_obj.status
                 is_locked = period_obj.status in ['LOCKED', 'SUBMITTED', 'FINALIZED']
 
-        # واکشی تنظیمات بازه ویرایش
-        settings = PayrollYearlySettings.objects.filter(fiscal_year=str(y), is_active=True).first()
-        if not settings:
-            settings = PayrollYearlySettings.objects.filter(is_active=True).first()
+        # واکشی تنظیمات بازه ویرایش متناسب با سال، ماه و پروژه
+        settings = get_effective_payroll_settings(year_month, project_id)
         past_limit = settings.attendance_edit_past_days if settings else 3
         future_limit = settings.attendance_edit_future_days if settings else 0
 
@@ -1645,7 +1644,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
             if is_changed and not is_admin_override:
                 try:
-                    validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id)
+                    validate_attendance_date_window(date_shamsi, user=request.user, allow_override=is_admin_override, warehouse_id=warehouse_id, project_id=project_id)
                 except Exception as e:
                     err_msg = getattr(e, 'detail', str(e))
                     if isinstance(err_msg, list):
@@ -2200,11 +2199,13 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
                     if is_changed and not is_admin_override:
                         try:
+                            target_pid = getattr(p_obj, 'project_id', None)
                             validate_attendance_date_window(
                                 date_shamsi=date_shamsi,
                                 user=request.user,
                                 allow_override=is_admin_override,
-                                warehouse_id=target_wh
+                                warehouse_id=target_wh,
+                                project_id=target_pid
                             )
                         except Exception as e:
                             err_msg = getattr(e, 'detail', str(e))
@@ -3341,12 +3342,70 @@ def safe_int(val, default=None):
         return default
 
 
+def _copy_payroll_submodels(source, target):
+    """کپی ایمن و همه‌جانبه مدل‌های تابعه (کارگاه، مالیات، بانک و ۲۰ گروه شغلی)"""
+    if not source:
+        return
+    if hasattr(source, 'workshop_insurance'):
+        wi = source.workshop_insurance
+        WorkshopInsuranceSettings.objects.update_or_create(
+            yearly_settings=target,
+            defaults={
+                'workshop_code': wi.workshop_code,
+                'workshop_name': wi.workshop_name,
+                'employer_name': wi.employer_name,
+                'workshop_address': wi.workshop_address,
+                'list_type': wi.list_type,
+                'list_number': wi.list_number,
+                'default_dsk_rate': wi.default_dsk_rate,
+                'default_mon_pym': wi.default_mon_pym,
+            }
+        )
+    if hasattr(source, 'tax_settings'):
+        ts = source.tax_settings
+        TaxRuleSettings.objects.update_or_create(
+            yearly_settings=target,
+            defaults={
+                'payment_type': ts.payment_type,
+                'service_location': ts.service_location,
+                'exceptions': ts.exceptions,
+                'currency_type': ts.currency_type,
+                'currency_exchange_rate': ts.currency_exchange_rate,
+                'housing_benefit_type': ts.housing_benefit_type,
+                'vehicle_benefit_type': ts.vehicle_benefit_type,
+                'wh_file_prefix': ts.wh_file_prefix,
+                'wp_file_prefix': ts.wp_file_prefix,
+            }
+        )
+    if hasattr(source, 'bank_export_settings'):
+        bs = source.bank_export_settings
+        BankExportSettings.objects.update_or_create(
+            yearly_settings=target,
+            defaults={
+                'bank_name': bs.bank_name,
+                'source_account_number': bs.source_account_number,
+                'source_sheba_number': getattr(bs, 'source_sheba_number', None),
+                'default_deposit_id': bs.default_deposit_id,
+                'deposit_description_template': bs.deposit_description_template,
+            }
+        )
+    for tier in source.job_grades.all():
+        JobGradeTier.objects.update_or_create(
+            yearly_settings=target,
+            grade_number=tier.grade_number,
+            defaults={
+                'daily_base_wage': tier.daily_base_wage,
+                'daily_seniority_bonus': tier.daily_seniority_bonus,
+            }
+        )
+
+
 class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
     queryset = PayrollYearlySettings.objects.all().prefetch_related(
         'job_grades', 'workshop_insurance', 'tax_settings', 'bank_export_settings', 'project'
     )
     serializer_class = PayrollYearlySettingsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsPayrollSettingsManagerOrReadOnly]
     pagination_class = None
 
     def get_queryset(self):
@@ -3359,15 +3418,22 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
             return qs.filter(project__isnull=True)
         return qs
 
-    @action(detail=False, methods=['get'], url_path='active-or-year')
+    @action(detail=False, methods=['get', 'post'], url_path='active-or-year')
     def get_active_or_year(self, request):
+        if request.method == 'POST':
+            pk = request.data.get('id')
+            if pk:
+                settings_obj = PayrollYearlySettings.objects.filter(id=pk).first()
+                if settings_obj:
+                    return self.update_all_tabs(request, pk=pk)
+
         year = request.query_params.get('year', '1405')
         p_id = safe_int(request.query_params.get('project_id'))
         v_id = safe_int(request.query_params.get('version_id'))
         effective_from = request.query_params.get('effective_from')
         if effective_from in ('null', 'undefined', ''):
             effective_from = None
-        
+
         settings_obj = None
         if v_id:
             candidate = PayrollYearlySettings.objects.filter(id=v_id).first()
@@ -3376,7 +3442,8 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
                     if candidate.project_id == p_id:
                         settings_obj = candidate
                     else:
-                        settings_obj = get_effective_payroll_settings(effective_from or f"{year}/01", p_id)
+                        # اگر کاندید برای سراسری است و پروژه تنظیمی ندارد، همان نسخه کاندید را نمایش بده
+                        settings_obj = candidate
                 else:
                     settings_obj = candidate
 
@@ -3434,16 +3501,16 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
 
         if not new_year:
             return Response({'error': 'تعیین سال مالی جدید الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         new_year = str(new_year).strip()
         if len(new_year) != 4 or not new_year.isdigit():
             return Response({'error': 'فرمت سال مالی باید یک عدد ۴ رقمی شمسی (مثلاً ۱۴۰۶) باشد.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # بررسی وجود قبلی
+        # بررسی وجود قبلی در دامنه انتخابی
         existing = PayrollYearlySettings.objects.filter(fiscal_year=new_year, project_id=p_id).first()
         if existing:
             return Response({
-                'error': f'سال مالی {new_year} قبلاً در سیستم تعریف شده است.',
+                'error': f'سال مالی {new_year} قبلاً در این دامنه تعریف شده است.',
                 'settings': PayrollYearlySettingsSerializer(existing).data
             }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3460,12 +3527,51 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         version_title = "احکام مصوب فروردین"
 
         with transaction.atomic():
+            # اگر پروژه انتخاب شده باشد، ابتدا مطمئن می‌شویم رکورد پایه سراسری سازمان برای سال جدید وجود دارد
+            if project and not PayrollYearlySettings.objects.filter(fiscal_year=new_year, project__isnull=True).exists():
+                global_source = get_effective_payroll_settings(f"{source_year or '1405'}/01", None) or source
+                global_settings = PayrollYearlySettings.objects.create(
+                    fiscal_year=new_year,
+                    effective_from=effective_from,
+                    version_title=version_title,
+                    project=None,
+                    title=f"تنظیمات سال مالی {new_year} (سراسری سازمان)",
+                    is_active=True,
+                    monthly_food_allowance=global_source.monthly_food_allowance if global_source else 22000000,
+                    monthly_housing_allowance=global_source.monthly_housing_allowance if global_source else 30000000,
+                    monthly_spouse_allowance=global_source.monthly_spouse_allowance if global_source else 5000000,
+                    monthly_child_allowance=global_source.monthly_child_allowance if global_source else 16625549,
+                    shift_percent=global_source.shift_percent if global_source else 0,
+                    transport_help_percent=global_source.transport_help_percent if global_source else 0,
+                    transport_fixed_amount=global_source.transport_fixed_amount if global_source else 2388728,
+                    specialist_attraction_percent=global_source.specialist_attraction_percent if global_source else 0,
+                    bad_weather_percent=global_source.bad_weather_percent if global_source else 0,
+                    remote_hardship_percent=global_source.remote_hardship_percent if global_source else 0,
+                    south_pars_percent=global_source.south_pars_percent if global_source else 0,
+                    travel_cost_per_day=global_source.travel_cost_per_day if global_source else 8736600,
+                    worker_insurance_rate=global_source.worker_insurance_rate if global_source else 7.00,
+                    employer_insurance_rate=global_source.employer_insurance_rate if global_source else 20.00,
+                    unemployment_insurance_rate=global_source.unemployment_insurance_rate if global_source else 3.00,
+                    surplus_overtime_percent=global_source.surplus_overtime_percent if global_source else 50.00,
+                    standard_daily_hours=getattr(global_source, 'standard_daily_hours', 10.00) or 10.00,
+                    bonus_daily_coefficient=getattr(global_source, 'bonus_daily_coefficient', 5.00) or 5.00,
+                    seniority_monthly_coefficient=getattr(global_source, 'seniority_monthly_coefficient', 2.50) or 2.50,
+                    overtime_rate_multiplier=getattr(global_source, 'overtime_rate_multiplier', 1.40) or 1.40,
+                    friday_work_rate_multiplier=getattr(global_source, 'friday_work_rate_multiplier', 0.40) or 0.40,
+                    max_insurable_daily_wage=getattr(global_source, 'max_insurable_daily_wage', None),
+                    attendance_edit_past_days=global_source.attendance_edit_past_days if global_source else 3,
+                    attendance_edit_future_days=global_source.attendance_edit_future_days if global_source else 0,
+                    created_by=request.user,
+                    updated_by=request.user
+                )
+                _copy_payroll_submodels(global_source, global_settings)
+
             new_settings = PayrollYearlySettings.objects.create(
                 fiscal_year=new_year,
                 effective_from=effective_from,
                 version_title=version_title,
                 project=project,
-                title=f"تنظیمات سال مالی {new_year} ({project.name if project else 'سراسری'})",
+                title=f"تنظیمات سال مالی {new_year} ({project.name if project else 'سراسری سازمان'})",
                 is_active=True,
                 monthly_food_allowance=source.monthly_food_allowance if source else 22000000,
                 monthly_housing_allowance=source.monthly_housing_allowance if source else 30000000,
@@ -3483,61 +3589,40 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
                 employer_insurance_rate=source.employer_insurance_rate if source else 20.00,
                 unemployment_insurance_rate=source.unemployment_insurance_rate if source else 3.00,
                 surplus_overtime_percent=source.surplus_overtime_percent if source else 50.00,
+                standard_daily_hours=getattr(source, 'standard_daily_hours', 10.00) or 10.00,
+                bonus_daily_coefficient=getattr(source, 'bonus_daily_coefficient', 5.00) or 5.00,
+                seniority_monthly_coefficient=getattr(source, 'seniority_monthly_coefficient', 2.50) or 2.50,
+                overtime_rate_multiplier=getattr(source, 'overtime_rate_multiplier', 1.40) or 1.40,
+                friday_work_rate_multiplier=getattr(source, 'friday_work_rate_multiplier', 0.40) or 0.40,
+                max_insurable_daily_wage=getattr(source, 'max_insurable_daily_wage', None),
                 attendance_edit_past_days=source.attendance_edit_past_days if source else 3,
                 attendance_edit_future_days=source.attendance_edit_future_days if source else 0,
+                created_by=request.user,
+                updated_by=request.user
             )
+            _copy_payroll_submodels(source, new_settings)
 
-            # کپی کارگاه بیمه
-            if source and hasattr(source, 'workshop_insurance'):
-                wi = source.workshop_insurance
-                WorkshopInsuranceSettings.objects.create(
-                    yearly_settings=new_settings,
-                    workshop_code=wi.workshop_code,
-                    workshop_name=wi.workshop_name,
-                    employer_name=wi.employer_name,
-                    workshop_address=wi.workshop_address,
-                    list_type=wi.list_type,
-                    list_number=wi.list_number,
-                    default_dsk_rate=wi.default_dsk_rate,
-                    default_mon_pym=wi.default_mon_pym,
+            try:
+                AuditLog = apps.get_model('accounts', 'AuditLog')
+                AuditLog.objects.create(
+                    user=request.user,
+                    actor_username=request.user.username,
+                    actor_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    module='settings',
+                    action='CREATE',
+                    severity='warning',
+                    target_model='PayrollYearlySettings',
+                    target_object_id=str(new_settings.id),
+                    target_repr=str(new_settings),
+                    details={
+                        'action': 'create_fiscal_year',
+                        'fiscal_year': new_year,
+                        'source_year': source_year,
+                        'project_id': p_id
+                    }
                 )
-
-            # کپی تنظیمات مالیاتی
-            if source and hasattr(source, 'tax_settings'):
-                ts = source.tax_settings
-                TaxRuleSettings.objects.create(
-                    yearly_settings=new_settings,
-                    payment_type=ts.payment_type,
-                    service_location=ts.service_location,
-                    exceptions=ts.exceptions,
-                    currency_type=ts.currency_type,
-                    currency_exchange_rate=ts.currency_exchange_rate,
-                    housing_benefit_type=ts.housing_benefit_type,
-                    vehicle_benefit_type=ts.vehicle_benefit_type,
-                    wh_file_prefix=ts.wh_file_prefix,
-                    wp_file_prefix=ts.wp_file_prefix,
-                )
-
-            # کپی تنظیمات بانکی
-            if source and hasattr(source, 'bank_export_settings'):
-                bs = source.bank_export_settings
-                BankExportSettings.objects.create(
-                    yearly_settings=new_settings,
-                    bank_name=bs.bank_name,
-                    source_account_number=bs.source_account_number,
-                    default_deposit_id=bs.default_deposit_id,
-                    deposit_description_template=bs.deposit_description_template,
-                )
-
-            # کپی ۲۰ گروه شغلی
-            if source:
-                for tier in source.job_grades.all():
-                    JobGradeTier.objects.create(
-                        yearly_settings=new_settings,
-                        grade_number=tier.grade_number,
-                        daily_base_wage=tier.daily_base_wage,
-                        daily_seniority_bonus=tier.daily_seniority_bonus,
-                    )
+            except Exception:
+                pass
 
         return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
 
@@ -3546,6 +3631,7 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         """
         ایجاد نسخه جدید احکام در میانه سال با کپی از آخرین نسخه و تعیین ماه شروع
         """
+        import re
         project_id = request.data.get('project_id')
         year = request.data.get('year', '1405')
         effective_from = request.data.get('effective_from')
@@ -3553,6 +3639,10 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
 
         if not effective_from:
             return Response({'error': 'ماه شروع اعتبار (effective_from) الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        effective_from = str(effective_from).strip()
+        if not re.match(r'^\d{4}/(0[1-9]|1[0-2])$', effective_from):
+            return Response({'error': 'فرمت ماه شروع اعتبار باید YYYY/MM باشد (مثال: 1405/07).'}, status=status.HTTP_400_BAD_REQUEST)
 
         p_id = safe_int(project_id)
         project = FinancialProject.objects.filter(id=p_id).first() if p_id else None
@@ -3563,19 +3653,35 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
             effective_from=effective_from
         ).first()
         if existing:
-            return Response(PayrollYearlySettingsSerializer(existing).data)
+            return Response({
+                'error': f'نسخه احکام با تاریخ شروع {effective_from} قبلاً در این دامنه ایجاد شده است.',
+                'settings': PayrollYearlySettingsSerializer(existing).data
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         source = get_effective_payroll_settings(effective_from, p_id)
         if not source:
             source = PayrollYearlySettings.objects.first()
 
         with transaction.atomic():
+            # به‌روزرسانی خودکار ماه پایان نسخه قبلی
+            year_str, month_str = effective_from.split('/')
+            m_int = int(month_str)
+            if m_int > 1:
+                prior_effective_to = f"{year_str}/{m_int - 1:02d}"
+                PayrollYearlySettings.objects.filter(
+                    fiscal_year=year,
+                    project=project,
+                    effective_from__lt=effective_from
+                ).filter(
+                    Q(effective_to__isnull=True) | Q(effective_to__gte=effective_from)
+                ).update(effective_to=prior_effective_to)
+
             new_settings = PayrollYearlySettings.objects.create(
                 fiscal_year=year,
                 effective_from=effective_from,
                 version_title=version_title,
                 project=project,
-                title=f"{version_title} ({project.name if project else 'سراسری'})",
+                title=f"{version_title} ({project.name if project else 'سراسری سازمان'})",
                 is_active=True,
                 monthly_food_allowance=source.monthly_food_allowance if source else 22000000,
                 monthly_housing_allowance=source.monthly_housing_allowance if source else 30000000,
@@ -3593,57 +3699,41 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
                 employer_insurance_rate=source.employer_insurance_rate if source else 20.00,
                 unemployment_insurance_rate=source.unemployment_insurance_rate if source else 3.00,
                 surplus_overtime_percent=source.surplus_overtime_percent if source else 50.00,
+                standard_daily_hours=getattr(source, 'standard_daily_hours', 10.00) or 10.00,
+                bonus_daily_coefficient=getattr(source, 'bonus_daily_coefficient', 5.00) or 5.00,
+                seniority_monthly_coefficient=getattr(source, 'seniority_monthly_coefficient', 2.50) or 2.50,
+                overtime_rate_multiplier=getattr(source, 'overtime_rate_multiplier', 1.40) or 1.40,
+                friday_work_rate_multiplier=getattr(source, 'friday_work_rate_multiplier', 0.40) or 0.40,
+                max_insurable_daily_wage=getattr(source, 'max_insurable_daily_wage', None),
                 attendance_edit_past_days=source.attendance_edit_past_days if source else 3,
                 attendance_edit_future_days=source.attendance_edit_future_days if source else 0,
+                created_by=request.user,
+                updated_by=request.user
             )
+            _copy_payroll_submodels(source, new_settings)
 
-            if source and hasattr(source, 'workshop_insurance'):
-                wi = source.workshop_insurance
-                WorkshopInsuranceSettings.objects.create(
-                    yearly_settings=new_settings,
-                    workshop_code=wi.workshop_code,
-                    workshop_name=wi.workshop_name,
-                    employer_name=wi.employer_name,
-                    workshop_address=wi.workshop_address,
-                    list_type=wi.list_type,
-                    list_number=wi.list_number,
-                    default_dsk_rate=wi.default_dsk_rate,
-                    default_mon_pym=wi.default_mon_pym,
+            try:
+                AuditLog = apps.get_model('accounts', 'AuditLog')
+                AuditLog.objects.create(
+                    user=request.user,
+                    actor_username=request.user.username,
+                    actor_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    module='settings',
+                    action='CREATE',
+                    severity='warning',
+                    target_model='PayrollYearlySettings',
+                    target_object_id=str(new_settings.id),
+                    target_repr=str(new_settings),
+                    details={
+                        'action': 'create_version',
+                        'fiscal_year': year,
+                        'effective_from': effective_from,
+                        'version_title': version_title,
+                        'project_id': p_id
+                    }
                 )
-
-            if source and hasattr(source, 'tax_settings'):
-                ts = source.tax_settings
-                TaxRuleSettings.objects.create(
-                    yearly_settings=new_settings,
-                    payment_type=ts.payment_type,
-                    service_location=ts.service_location,
-                    exceptions=ts.exceptions,
-                    currency_type=ts.currency_type,
-                    currency_exchange_rate=ts.currency_exchange_rate,
-                    housing_benefit_type=ts.housing_benefit_type,
-                    vehicle_benefit_type=ts.vehicle_benefit_type,
-                    wh_file_prefix=ts.wh_file_prefix,
-                    wp_file_prefix=ts.wp_file_prefix,
-                )
-
-            if source and hasattr(source, 'bank_export_settings'):
-                bs = source.bank_export_settings
-                BankExportSettings.objects.create(
-                    yearly_settings=new_settings,
-                    bank_name=bs.bank_name,
-                    source_account_number=bs.source_account_number,
-                    default_deposit_id=bs.default_deposit_id,
-                    deposit_description_template=bs.deposit_description_template,
-                )
-
-            if source:
-                for tier in source.job_grades.all():
-                    JobGradeTier.objects.create(
-                        yearly_settings=new_settings,
-                        grade_number=tier.grade_number,
-                        daily_base_wage=tier.daily_base_wage,
-                        daily_seniority_bonus=tier.daily_seniority_bonus,
-                    )
+            except Exception:
+                pass
 
         return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
 
@@ -3699,62 +3789,86 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
                 employer_insurance_rate=source.employer_insurance_rate,
                 unemployment_insurance_rate=source.unemployment_insurance_rate,
                 surplus_overtime_percent=source.surplus_overtime_percent,
+                standard_daily_hours=getattr(source, 'standard_daily_hours', 10.00) or 10.00,
+                bonus_daily_coefficient=getattr(source, 'bonus_daily_coefficient', 5.00) or 5.00,
+                seniority_monthly_coefficient=getattr(source, 'seniority_monthly_coefficient', 2.50) or 2.50,
+                overtime_rate_multiplier=getattr(source, 'overtime_rate_multiplier', 1.40) or 1.40,
+                friday_work_rate_multiplier=getattr(source, 'friday_work_rate_multiplier', 0.40) or 0.40,
+                max_insurable_daily_wage=getattr(source, 'max_insurable_daily_wage', None),
                 attendance_edit_past_days=source.attendance_edit_past_days,
                 attendance_edit_future_days=source.attendance_edit_future_days,
+                created_by=request.user,
+                updated_by=request.user
             )
+            _copy_payroll_submodels(source, new_settings)
 
-            # کپی کارگاه بیمه
-            if hasattr(source, 'workshop_insurance'):
-                wi = source.workshop_insurance
-                WorkshopInsuranceSettings.objects.create(
-                    yearly_settings=new_settings,
-                    workshop_code=wi.workshop_code,
-                    workshop_name=f"{project.name} - {wi.workshop_name}",
-                    employer_name=wi.employer_name,
-                    workshop_address=wi.workshop_address,
-                    list_type=wi.list_type,
-                    list_number=wi.list_number,
-                    default_dsk_rate=wi.default_dsk_rate,
-                    default_mon_pym=wi.default_mon_pym,
+            try:
+                AuditLog = apps.get_model('accounts', 'AuditLog')
+                AuditLog.objects.create(
+                    user=request.user,
+                    actor_username=request.user.username,
+                    actor_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    module='settings',
+                    action='CREATE',
+                    severity='info',
+                    target_model='PayrollYearlySettings',
+                    target_object_id=str(new_settings.id),
+                    target_repr=str(new_settings),
+                    details={
+                        'action': 'clone_for_project',
+                        'fiscal_year': year,
+                        'effective_from': effective_from,
+                        'project_id': p_id,
+                        'project_name': project.name
+                    }
                 )
-
-            # کپی تنظیمات مالیاتی
-            if hasattr(source, 'tax_settings'):
-                ts = source.tax_settings
-                TaxRuleSettings.objects.create(
-                    yearly_settings=new_settings,
-                    payment_type=ts.payment_type,
-                    service_location=ts.service_location,
-                    exceptions=ts.exceptions,
-                    currency_type=ts.currency_type,
-                    currency_exchange_rate=ts.currency_exchange_rate,
-                    housing_benefit_type=ts.housing_benefit_type,
-                    vehicle_benefit_type=ts.vehicle_benefit_type,
-                    wh_file_prefix=ts.wh_file_prefix,
-                    wp_file_prefix=ts.wp_file_prefix,
-                )
-
-            # کپی تنظیمات بانکی
-            if hasattr(source, 'bank_export_settings'):
-                bs = source.bank_export_settings
-                BankExportSettings.objects.create(
-                    yearly_settings=new_settings,
-                    bank_name=bs.bank_name,
-                    source_account_number=bs.source_account_number,
-                    default_deposit_id=bs.default_deposit_id,
-                    deposit_description_template=f"{project.name} - " + bs.deposit_description_template,
-                )
-
-            # کپی ۲۰ گروه شغلی
-            for tier in source.job_grades.all():
-                JobGradeTier.objects.create(
-                    yearly_settings=new_settings,
-                    grade_number=tier.grade_number,
-                    daily_base_wage=tier.daily_base_wage,
-                    daily_seniority_bonus=tier.daily_seniority_bonus,
-                )
+            except Exception:
+                pass
 
         return Response(PayrollYearlySettingsSerializer(new_settings).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='revert-to-global')
+    def revert_to_global(self, request, pk=None):
+        """
+        حذف تنظیمات اختصاصی پروژه و بازگشت به ارث‌بری از تنظیمات سراسری سازمان
+        """
+        settings_obj = self.get_object()
+        if not settings_obj.project:
+            return Response({'error': 'تنظیمات سراسری سازمان قابل حذف یا بازگشت به ارث‌بری نیست.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        project_name = settings_obj.project.name
+        project_id = settings_obj.project.id
+        fiscal_year = settings_obj.fiscal_year
+
+        with transaction.atomic():
+            try:
+                AuditLog = apps.get_model('accounts', 'AuditLog')
+                AuditLog.objects.create(
+                    user=request.user,
+                    actor_username=request.user.username,
+                    actor_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    module='settings',
+                    action='DELETE',
+                    severity='warning',
+                    target_model='PayrollYearlySettings',
+                    target_object_id=str(settings_obj.id),
+                    target_repr=str(settings_obj),
+                    details={
+                        'action': 'revert_to_global',
+                        'fiscal_year': fiscal_year,
+                        'project_id': project_id,
+                        'project_name': project_name
+                    }
+                )
+            except Exception:
+                pass
+
+            settings_obj.delete()
+
+        return Response({
+            'message': f'تنظیمات اختصاصی پروژه «{project_name}» با موفقیت حذف شد و به تنظیمات سراسری سازمان بازگشت.',
+            'fiscal_year': fiscal_year
+        })
 
     @action(detail=False, methods=['get'], url_path='job-grade-rate')
     def get_job_grade_rate(self, request):
@@ -3764,7 +3878,7 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
         grade = safe_int(request.query_params.get('grade'), default=19)
         year = request.query_params.get('year', '1405')
         p_id = safe_int(request.query_params.get('project_id'))
-        
+
         settings_obj = get_effective_payroll_settings(f"{year}/01", p_id)
 
         tier = None
@@ -3778,81 +3892,55 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
             tier = JobGradeTier.objects.filter(grade_number=grade).first()
 
         if tier:
+            std_h = float(getattr(settings_obj, 'standard_daily_hours', 10.00) or 10.00)
             return Response({
                 'grade_number': tier.grade_number,
                 'daily_base_wage': float(tier.daily_base_wage),
                 'daily_seniority_bonus': float(tier.daily_seniority_bonus),
-                'hourly_rate': round(float(tier.daily_base_wage) / 10.0, 2)
+                'hourly_rate': round(float(tier.daily_base_wage) / (std_h if std_h > 0 else 10.0), 2)
             })
         return Response({'error': 'گروه شغلی در جدول تنظیمات یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'], url_path='update-all')
     def update_all_tabs(self, request, pk=None):
         """
-        به‌روزرسانی یکپارچه هر ۵ تب تنظیمات توسط حسابدار
+        به‌روزرسانی یکپارچه هر ۵ تب تنظیمات با استفاده از سریالایزر جامع Writable Nested
         """
         settings_obj = self.get_object()
         data = request.data
 
+        serializer = PayrollYearlySettingsSerializer(settings_obj, data=data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
-            # 1. Update main fields
-            for field in [
-                'fiscal_year', 'version_title', 'effective_from', 'effective_to',
-                'monthly_food_allowance', 'monthly_housing_allowance', 'monthly_spouse_allowance',
-                'monthly_child_allowance', 'shift_percent', 'transport_help_percent',
-                'transport_fixed_amount', 'specialist_attraction_percent', 'bad_weather_percent',
-                'remote_hardship_percent', 'south_pars_percent', 'travel_cost_per_day',
-                'worker_insurance_rate', 'employer_insurance_rate', 'unemployment_insurance_rate',
-                'surplus_overtime_percent', 'attendance_edit_past_days', 'attendance_edit_future_days'
-            ]:
-                if field in data:
-                    setattr(settings_obj, field, data[field])
-            settings_obj.save()
+            updated_instance = serializer.save(updated_by=request.user)
 
-            # 2. Update Workshop Insurance
-            ws_data = data.get('workshop_insurance')
-            if ws_data and hasattr(settings_obj, 'workshop_insurance'):
-                ws = settings_obj.workshop_insurance
-                for f in ['workshop_code', 'workshop_name', 'employer_name', 'workshop_address', 'list_type', 'list_number', 'default_dsk_rate', 'default_mon_pym']:
-                    if f in ws_data:
-                        setattr(ws, f, ws_data[f])
-                ws.save()
-
-            # 3. Update Tax Settings
-            tax_data = data.get('tax_settings')
-            if tax_data and hasattr(settings_obj, 'tax_settings'):
-                ts = settings_obj.tax_settings
-                for f in ['payment_type', 'service_location', 'exceptions', 'currency_type', 'currency_exchange_rate', 'housing_benefit_type', 'vehicle_benefit_type']:
-                    if f in tax_data:
-                        setattr(ts, f, tax_data[f])
-                ts.save()
-
-            # 4. Update Bank Settings
-            bank_data = data.get('bank_export_settings')
-            if bank_data and hasattr(settings_obj, 'bank_export_settings'):
-                bs = settings_obj.bank_export_settings
-                for f in ['bank_name', 'source_account_number', 'default_deposit_id', 'deposit_description_template']:
-                    if f in bank_data:
-                        setattr(bs, f, bank_data[f])
-                bs.save()
-
-            # 5. Update Job Grades
-            jg_list = data.get('job_grades', [])
-            for jg_item in jg_list:
-                grade_num = jg_item.get('grade_number')
-                if grade_num:
-                    JobGradeTier.objects.update_or_create(
-                        yearly_settings=settings_obj,
-                        grade_number=int(grade_num),
-                        defaults={
-                            'daily_base_wage': jg_item.get('daily_base_wage', 0),
-                            'daily_seniority_bonus': jg_item.get('daily_seniority_bonus', 0),
-                        }
-                    )
+            try:
+                AuditLog = apps.get_model('accounts', 'AuditLog')
+                AuditLog.objects.create(
+                    user=request.user,
+                    actor_username=request.user.username,
+                    actor_name=f"{request.user.first_name} {request.user.last_name}".strip() or request.user.username,
+                    module='settings',
+                    action='UPDATE',
+                    severity='info',
+                    target_model='PayrollYearlySettings',
+                    target_object_id=str(updated_instance.id),
+                    target_repr=str(updated_instance),
+                    details={
+                        'action': 'update_all_tabs',
+                        'fiscal_year': updated_instance.fiscal_year,
+                        'version_title': updated_instance.version_title,
+                        'project_id': updated_instance.project_id
+                    }
+                )
+            except Exception:
+                pass
 
         return Response({
             'message': 'تنظیمات پایه حقوق و دستمزد با موفقیت به‌روزرسانی شد.',
-            'settings': PayrollYearlySettingsSerializer(settings_obj).data
+            'settings': PayrollYearlySettingsSerializer(updated_instance).data
         })
 
 

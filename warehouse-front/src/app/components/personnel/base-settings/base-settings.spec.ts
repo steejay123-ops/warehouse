@@ -20,7 +20,7 @@ describe('BaseSettings Unit Tests', () => {
     };
 
     mockAuth = {
-      userPermissions: vi.fn().mockReturnValue(['perm_settings_personnel', 'admin_all'])
+      userPermissions: vi.fn().mockReturnValue(['perm_sys_settings', 'admin_all'])
     };
 
     mockPersonnelApi = {
@@ -41,6 +41,7 @@ describe('BaseSettings Unit Tests', () => {
         monthly_food_allowance: 22000000,
         attendance_edit_past_days: 3,
         attendance_edit_future_days: 0,
+        standard_daily_hours: 10,
         job_grades: [
           { grade_number: 1, daily_base_wage: 2000000, daily_seniority_bonus: 50000 }
         ]
@@ -58,6 +59,10 @@ describe('BaseSettings Unit Tests', () => {
         fiscal_year: '1405',
         project: 1,
         project_name: 'پروژه تست'
+      })),
+      revertSettingsToGlobal: vi.fn().mockReturnValue(of({
+        message: 'تنظیمات با موفقیت به سراسری بازگشت',
+        fiscal_year: '1405'
       })),
       getAvailableFiscalYears: vi.fn().mockReturnValue(of({
         years: ['1405']
@@ -101,7 +106,7 @@ describe('BaseSettings Unit Tests', () => {
     component.ngOnInit();
     expect(component.activeTab).toBe('grades');
     expect(mockPersonnelApi.getSettingsVersions).toHaveBeenCalledWith('1405', null);
-    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 1);
+    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 1, '1405/01');
     expect(component.yearlySettings).toBeDefined();
     expect(component.canManageSettings).toBe(true);
     expect(component.versions.length).toBe(1);
@@ -131,7 +136,7 @@ describe('BaseSettings Unit Tests', () => {
     component.ngOnInit();
     component.onVersionChange(2);
     expect(component.selectedVersionId).toBe(2);
-    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 2);
+    expect(mockPersonnelApi.getYearlySettings).toHaveBeenCalledWith('1405', null, 2, null);
   });
 
   it('should open create version modal and submit new mid-year version', () => {
@@ -228,5 +233,39 @@ describe('BaseSettings Unit Tests', () => {
     component.submitCreateYear();
     expect(mockToast.show).toHaveBeenCalledWith('warning', expect.any(String));
     expect(mockPersonnelApi.createFiscalYear).not.toHaveBeenCalled();
+  });
+
+  it('should convert Rials to Toman properly', () => {
+    expect(component.toToman(20000000)).toContain('۲٬۰۰۰٬۰۰۰');
+    expect(component.toToman(0)).toBe('');
+    expect(component.toToman(null)).toBe('');
+  });
+
+  it('should format Rials properly', () => {
+    expect(component.formatRial(5000000)).toContain('۵٬۰۰۰٬۰۰۰');
+    expect(component.formatRial(null)).toBe('۰ ریال');
+  });
+
+  it('should close modals on Escape key press', () => {
+    component.showCreateVersionModal = true;
+    component.showCreateYearModal = true;
+    component.onEscape();
+    expect(component.showCreateVersionModal).toBe(false);
+    expect(component.showCreateYearModal).toBe(false);
+  });
+
+  it('should call revertToGlobal when confirmed for a project setting', () => {
+    component.ngOnInit();
+    component.selectedProjectId = 1;
+    component.yearlySettings = {
+      id: 99,
+      project: 1,
+      project_name: 'پروژه تست'
+    } as any;
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    component.revertToGlobal();
+    expect(mockPersonnelApi.revertSettingsToGlobal).toHaveBeenCalledWith(99);
+    expect(mockToast.show).toHaveBeenCalledWith('success', expect.any(String));
   });
 });

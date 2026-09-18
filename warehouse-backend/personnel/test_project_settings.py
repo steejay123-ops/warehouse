@@ -26,36 +26,45 @@ class ProjectScopedSettingsTestCase(TestCase):
         self.client.force_authenticate(user=self.user)
 
         # Global 1405 Settings
-        self.global_settings = PayrollYearlySettings.objects.create(
+        self.global_settings, _ = PayrollYearlySettings.objects.get_or_create(
             fiscal_year='1405',
             project=None,
-            title='تنظیمات سراسری سازمان ۱۴۰۵',
-            is_active=True,
-            monthly_food_allowance=22000000,
-            monthly_housing_allowance=30000000
+            effective_from='1405/01',
+            defaults={
+                'title': 'تنظیمات سراسری سازمان ۱۴۰۵',
+                'is_active': True,
+                'monthly_food_allowance': 22000000,
+                'monthly_housing_allowance': 30000000
+            }
         )
-        self.global_workshop = WorkshopInsuranceSettings.objects.create(
+        self.global_workshop, _ = WorkshopInsuranceSettings.objects.get_or_create(
             yearly_settings=self.global_settings,
-            workshop_code='4894290013',
-            workshop_name='دفتر مرکزی شرکت',
-            employer_name='شرکت مادر'
+            defaults={
+                'workshop_code': '4894290013',
+                'workshop_name': 'دفتر مرکزی شرکت',
+                'employer_name': 'شرکت مادر'
+            }
         )
-        self.global_bank = BankExportSettings.objects.create(
+        self.global_bank, _ = BankExportSettings.objects.get_or_create(
             yearly_settings=self.global_settings,
-            bank_name='بانک ملی',
-            source_account_number='0100000000001'
+            defaults={
+                'bank_name': 'بانک ملی',
+                'source_account_number': '0100000000001'
+            }
         )
-        self.tier19 = JobGradeTier.objects.create(
+        self.tier19, _ = JobGradeTier.objects.get_or_create(
             yearly_settings=self.global_settings,
             grade_number=19,
-            daily_base_wage=5000000,
-            daily_seniority_bonus=200000
+            defaults={
+                'daily_base_wage': 5000000,
+                'daily_seniority_bonus': 200000
+            }
         )
 
         # Project 1: Shiraz
-        self.proj_shiraz = FinancialProject.objects.create(
+        self.proj_shiraz, _ = FinancialProject.objects.get_or_create(
             code='PRJ-SHIRAZ',
-            name='پروژه انبار شیراز'
+            defaults={'name': 'پروژه انبار شیراز'}
         )
 
     def test_fallback_to_global_when_project_has_no_override(self):

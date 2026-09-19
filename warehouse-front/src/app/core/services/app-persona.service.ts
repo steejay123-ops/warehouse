@@ -242,36 +242,59 @@ export class AppPersonaService {
     }
 
     const perms = this.auth.userPermissions() || [];
+    const userRoles = (this.auth.user()?.roles || []).map(r => String(r).toLowerCase());
     const roles: RolePersona[] = [];
 
     if (app === 'personnel') {
-      if (perms.includes('view_sys_personnel_attendance') || perms.includes('view_sys_personnel')) {
-        roles.push(ALL_APP_ROLES.find(r => r.code === 'operator')!);
+      // کارمند: صراحتاً در نقش‌های کاربر یا دارای مجوز ثبت کارکرد (بدون تحمیل به حسابدار/سرپرست/مدیر/خزانه‌دار)
+      const hasOperatorRole = userRoles.includes('operator') || perms.includes('can_act_as_operator');
+      const hasOperatorPerm = perms.includes('view_sys_personnel_attendance');
+      const isOtherExplicitRole = userRoles.some(r => ['accountant', 'supervisor', 'manager', 'treasury'].includes(r)) ||
+        perms.includes('can_act_as_workshop_supervisor') ||
+        perms.includes('can_act_as_accountant') ||
+        perms.includes('can_act_as_company_manager') ||
+        perms.includes('perm_treasury_disburse_action') ||
+        perms.includes('perm_approve_personnel_supervisor');
+      if (hasOperatorRole || (hasOperatorPerm && !isOtherExplicitRole)) {
+        const op = ALL_APP_ROLES.find(r => r.code === 'operator');
+        if (op) roles.push(op);
       }
-      if (perms.includes('perm_approve_personnel_supervisor') || perms.includes('perm_approve_fleet_supervisor')) {
-        roles.push(ALL_APP_ROLES.find(r => r.code === 'supervisor')!);
+
+      // سرپرست کارگاه
+      if (userRoles.includes('supervisor') || perms.includes('can_act_as_workshop_supervisor') || perms.includes('perm_approve_personnel_supervisor') || perms.includes('perm_approve_fleet_supervisor')) {
+        const sp = ALL_APP_ROLES.find(r => r.code === 'supervisor');
+        if (sp) roles.push(sp);
       }
-      if (perms.includes('perm_approve_personnel_finance') || perms.includes('perm_approve_fleet_finance') || perms.includes('view_sys_payroll')) {
-        roles.push(ALL_APP_ROLES.find(r => r.code === 'accountant')!);
+
+      // حسابدار
+      if (userRoles.includes('accountant') || perms.includes('can_act_as_accountant') || perms.includes('perm_approve_personnel_finance') || perms.includes('perm_approve_fleet_finance')) {
+        const acc = ALL_APP_ROLES.find(r => r.code === 'accountant');
+        if (acc) roles.push(acc);
       }
-      if (perms.includes('perm_manager_payment_authorize') || perms.includes('can_act_as_manager') || perms.includes('perm_approve_personnel_manager')) {
-        roles.push(ALL_APP_ROLES.find(r => r.code === 'manager')!);
+
+      // مدیر شرکت
+      if (userRoles.includes('manager') || perms.includes('can_act_as_company_manager') || perms.includes('perm_manager_payment_authorize') || perms.includes('perm_approve_personnel_manager')) {
+        const mg = ALL_APP_ROLES.find(r => r.code === 'manager');
+        if (mg) roles.push(mg);
       }
-      if (perms.includes('perm_treasury_disburse_action') || perms.includes('view_sys_treasury')) {
-        roles.push(ALL_APP_ROLES.find(r => r.code === 'treasury')!);
+
+      // خزانه‌دار
+      if (userRoles.includes('treasury') || userRoles.includes('treasurer') || perms.includes('perm_treasury_disburse_action') || perms.includes('view_sys_treasury')) {
+        const tr = ALL_APP_ROLES.find(r => r.code === 'treasury');
+        if (tr) roles.push(tr);
       }
     } else if (app === 'warehouse') {
       // Warehouse App
-      if (perms.includes('view_sys_counter') || perms.includes('view_wh_dispatch')) {
+      if (userRoles.includes('counter') || perms.includes('view_sys_counter') || perms.includes('can_act_as_counter') || perms.includes('view_wh_dispatch')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'counter')!);
       }
-      if (perms.includes('view_sys_supervisor') || perms.includes('view_wh_doc_approvals')) {
+      if (userRoles.includes('warehouse_supervisor') || perms.includes('can_act_as_wh_supervisor') || (perms.includes('view_sys_supervisor') && !perms.includes('can_act_as_workshop_supervisor')) || perms.includes('view_wh_doc_approvals')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'warehouse_supervisor')!);
       }
-      if (perms.includes('view_wh_docs') || perms.includes('perm_doc_approve_action')) {
+      if (userRoles.includes('docs_specialist') || perms.includes('view_wh_docs') || perms.includes('can_act_as_doc_worker') || perms.includes('perm_doc_approve_action')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'docs_specialist')!);
       }
-      if (perms.includes('view_sys_manager_review') || perms.includes('perm_inventory_finalize')) {
+      if (userRoles.includes('manager_review') || perms.includes('can_act_as_wh_manager') || perms.includes('view_sys_manager_review') || perms.includes('perm_inventory_finalize')) {
         roles.push(ALL_APP_ROLES.find(r => r.code === 'manager_review')!);
       }
     } else if (app === 'operations') {
@@ -394,22 +417,42 @@ export class AppPersonaService {
       this.switchRole(roles[0].code, false);
     }
 
-    // ریدایرکت خودکار به صفحه پیش‌فرض اپلیکیشن مقصد
+    // ریدایرکت خودکار به صفحه پیش‌فرض اپلیکیشن و نقش مقصد
     if (app === 'warehouse') {
       this.router.navigate(['/app/warehouse/dashboard']);
     } else if (app === 'operations') {
       this.router.navigate(['/app/operations/cockpit']);
     } else {
-      const perms = this.auth.userPermissions() || [];
-      if (perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
-        this.router.navigate(['/app/finance/finance-cartable']);
-      } else if (perms.includes('view_sys_treasury') || perms.includes('perm_treasury_disburse_action')) {
-        this.router.navigate(['/app/finance/treasury-cartable']);
-      } else if (perms.includes('perm_approve_personnel_manager')) {
-        this.router.navigate(['/app/finance/manager-approvals']);
-      } else {
-        this.router.navigate(['/app/finance/attendance']);
-      }
+      this.router.navigate([this.getDefaultRouteForRole()]);
+    }
+  }
+
+  public getDefaultRouteForRole(roleCode?: string): string {
+    const role = roleCode || this.activeRole();
+    switch (role) {
+      case 'operator':
+        return '/app/finance/employee-attendance';
+      case 'supervisor':
+        return '/app/finance/supervisor-attendance';
+      case 'accountant':
+        return '/app/finance/accountant-payroll';
+      case 'manager':
+        return '/app/finance/manager-dashboard';
+      case 'treasury':
+      case 'treasurer':
+        return '/app/finance/treasurer-disbursements';
+      case 'counter':
+        return '/app/warehouse/counter';
+      case 'warehouse_supervisor':
+        return '/app/warehouse/supervisor';
+      case 'docs_specialist':
+        return '/app/warehouse/docs';
+      case 'manager_review':
+        return '/app/warehouse/dashboard';
+      case 'ops_commander':
+        return '/app/operations/cockpit';
+      default:
+        return this.activeApp() === 'warehouse' ? '/app/warehouse/dashboard' : '/app/finance/accountant-payroll';
     }
   }
 
@@ -431,7 +474,7 @@ export class AppPersonaService {
     if (redirectIfUnauthorized) {
       const currentUrl = this.router.url.split('?')[0];
       if (!this.canAccessRoute(currentUrl)) {
-        const fallback = this.activeApp() === 'warehouse' ? '/app/warehouse/dashboard' : '/app/finance/attendance';
+        const fallback = this.getDefaultRouteForRole(roleCode);
         this.router.navigate([fallback]);
       }
     }
@@ -442,10 +485,50 @@ export class AppPersonaService {
     const cleanRoute = routePath.split('?')[0];
     const role = this.activeRole();
 
-    // مسیرهای مالی اختصاصی
-    if (cleanRoute.includes('finance-cartable') && role === 'operator') return false;
-    if (cleanRoute.includes('treasury-cartable') && !['treasury', 'manager', 'superuser'].includes(role)) return false;
-    if (cleanRoute.includes('manager-approvals') && !['manager', 'superuser'].includes(role)) return false;
+    // بررسی قلمرو کلان اپلیکیشن‌ها
+    if (cleanRoute.startsWith('/app/warehouse') && !this.hasWarehouseAccess()) return false;
+    if (cleanRoute.startsWith('/app/finance') && !this.hasPersonnelAccess()) return false;
+    if (cleanRoute.startsWith('/app/operations') && !this.hasOperationsAccess()) return false;
+
+    // ایزولاسیون صددرصدی نقش فعال در سامانه مالی و کارکرد (Strict RBAC & SoD)
+    if (role === 'accountant') {
+      // حسابدار نباید به صفحات کارمند، سرپرست کارگاه، مدیر، خزانه‌دار دسترسی داشته باشد
+      if (cleanRoute.includes('/employee-') || cleanRoute.includes('/supervisor-') || cleanRoute.includes('/manager-') || cleanRoute.includes('/treasurer-')) {
+        return false;
+      }
+      if (cleanRoute.includes('treasury-cartable') || cleanRoute.includes('manager-approvals') || cleanRoute.includes('/attendance') || cleanRoute.includes('/fleet')) {
+        return false;
+      }
+    } else if (role === 'operator') {
+      // کارمند نباید به کارتابل‌های سرپرست، حسابدار، مدیر یا خزانه‌دار دسترسی داشته باشد
+      if (cleanRoute.includes('/supervisor-') || cleanRoute.includes('/accountant-') || cleanRoute.includes('/manager-') || cleanRoute.includes('/treasurer-')) {
+        return false;
+      }
+      if (cleanRoute.includes('finance-cartable') || cleanRoute.includes('treasury-cartable') || cleanRoute.includes('manager-approvals')) {
+        return false;
+      }
+    } else if (role === 'supervisor') {
+      // سرپرست نباید به منوی کارمند، حسابدار، مدیر یا خزانه‌دار دسترسی داشته باشد
+      if (cleanRoute.includes('/employee-') || cleanRoute.includes('/accountant-') || cleanRoute.includes('/manager-') || cleanRoute.includes('/treasurer-')) {
+        return false;
+      }
+      if (cleanRoute.includes('finance-cartable') || cleanRoute.includes('treasury-cartable')) {
+        return false;
+      }
+    } else if (role === 'manager') {
+      // مدیر نباید به ثبت خام کارمند یا سرپرست یا محاسبات خام حسابدار دسترسی مستقیم داشته باشد
+      if (cleanRoute.includes('/employee-') || cleanRoute.includes('/supervisor-') || cleanRoute.includes('/accountant-') || cleanRoute.includes('/treasurer-')) {
+        return false;
+      }
+    } else if (role === 'treasury') {
+      // خزانه‌دار فقط به امور پرداخت و بانک دسترسی دارد
+      if (cleanRoute.includes('/employee-') || cleanRoute.includes('/supervisor-') || cleanRoute.includes('/accountant-') || cleanRoute.includes('/manager-')) {
+        return false;
+      }
+      if (cleanRoute.includes('finance-cartable') || cleanRoute.includes('manager-approvals')) {
+        return false;
+      }
+    }
 
     return true;
   }

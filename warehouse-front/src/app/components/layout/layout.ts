@@ -26,7 +26,7 @@ import { AppRoleSwitcherComponent } from '../../shared/components/app-role-switc
 import { environment } from '../../../environments/environment';
 
 import { WAREHOUSE_SYSTEM_NAV_ITEMS, WAREHOUSE_CONTEXT_NAV_ITEMS } from '../../modules/warehouse/nav-items';
-import { ACCOUNTING_NAV_ITEMS } from '../../modules/accounting/nav-items';
+import { ACCOUNTING_NAV_ITEMS, EMPLOYEE_NAV_ITEMS, SUPERVISOR_NAV_ITEMS, ACCOUNTANT_NAV_ITEMS, MANAGER_NAV_ITEMS, TREASURER_NAV_ITEMS } from '../../modules/accounting/nav-items';
 import { ModuleRegistryService } from '../../core/modules/module-registry.service';
 
 @Component({
@@ -458,6 +458,51 @@ export class Layout implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  isEmployeeMenuOpen = localStorage.getItem('isEmployeeMenuOpen') !== 'false';
+
+  toggleEmployeeMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isEmployeeMenuOpen = !this.isEmployeeMenuOpen;
+    localStorage.setItem('isEmployeeMenuOpen', String(this.isEmployeeMenuOpen));
+    this.cdr.detectChanges();
+  }
+
+  isSupervisorMenuOpen = localStorage.getItem('isSupervisorMenuOpen') !== 'false';
+
+  toggleSupervisorMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isSupervisorMenuOpen = !this.isSupervisorMenuOpen;
+    localStorage.setItem('isSupervisorMenuOpen', String(this.isSupervisorMenuOpen));
+    this.cdr.detectChanges();
+  }
+
+  isAccountantMenuOpen = localStorage.getItem('isAccountantMenuOpen') !== 'false';
+
+  toggleAccountantMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isAccountantMenuOpen = !this.isAccountantMenuOpen;
+    localStorage.setItem('isAccountantMenuOpen', String(this.isAccountantMenuOpen));
+    this.cdr.detectChanges();
+  }
+
+  isManagerMenuOpen = localStorage.getItem('isManagerMenuOpen') !== 'false';
+
+  toggleManagerMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isManagerMenuOpen = !this.isManagerMenuOpen;
+    localStorage.setItem('isManagerMenuOpen', String(this.isManagerMenuOpen));
+    this.cdr.detectChanges();
+  }
+
+  isTreasurerMenuOpen = localStorage.getItem('isTreasurerMenuOpen') !== 'false';
+
+  toggleTreasurerMenu(event?: Event) {
+    if (event) event.stopPropagation();
+    this.isTreasurerMenuOpen = !this.isTreasurerMenuOpen;
+    localStorage.setItem('isTreasurerMenuOpen', String(this.isTreasurerMenuOpen));
+    this.cdr.detectChanges();
+  }
+
   private SYSTEM_NAV_ITEMS: any[] = [
     ...WAREHOUSE_SYSTEM_NAV_ITEMS,
     ...ACCOUNTING_NAV_ITEMS
@@ -507,9 +552,30 @@ export class Layout implements OnInit, OnDestroy {
 
     const initialTab = parseTabFromUrl(this.router.url);
     this.store.setCurrentTab(initialTab);
-    this.updateTitle(initialTab);
-    if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'finance-audit'].includes(initialTab)) {
+    const employeeTabs = ['employee-portal', 'employee-attendance', 'employee-fleet', 'employee-invoices', 'employee-petty-cash', 'employee-new-vehicle', 'employee-new-personnel'];
+    const supervisorTabs = ['supervisor-attendance', 'supervisor-fleet', 'supervisor-invoices', 'supervisor-petty-cash', 'supervisor-new-profiles', 'supervisor-period-lock'];
+    const accountantTabs = ['accountant-payroll', 'accountant-fleet', 'accountant-invoices', 'accountant-petty-cash', 'accountant-diskettes', 'accountant-counterparties'];
+    const managerTabs = ['manager-dashboard', 'manager-approvals', 'manager-budget', 'manager-contracts', 'manager-reports'];
+    const treasurerTabs = ['treasurer-disbursements', 'treasurer-invoices', 'treasurer-bank-accounts', 'treasurer-cheques', 'treasurer-reconciliation'];
+    const allAccountingTabs = ['employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'counterparties', 'finance-audit', ...employeeTabs, ...supervisorTabs, ...accountantTabs, ...managerTabs, ...treasurerTabs];
+
+    if (allAccountingTabs.includes(initialTab)) {
       this.isAccountingMenuOpen = true;
+      if (employeeTabs.includes(initialTab)) {
+        this.isEmployeeMenuOpen = true;
+      }
+      if (supervisorTabs.includes(initialTab)) {
+        this.isSupervisorMenuOpen = true;
+      }
+      if (accountantTabs.includes(initialTab)) {
+        this.isAccountantMenuOpen = true;
+      }
+      if (managerTabs.includes(initialTab)) {
+        this.isManagerMenuOpen = true;
+      }
+      if (treasurerTabs.includes(initialTab)) {
+        this.isTreasurerMenuOpen = true;
+      }
     }
 
     this.router.events.pipe(
@@ -518,8 +584,23 @@ export class Layout implements OnInit, OnDestroy {
       const tab = parseTabFromUrl(e.urlAfterRedirects || e.url);
       this.store.setCurrentTab(tab);
       this.updateTitle(tab);
-      if (['projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'finance-audit'].includes(tab)) {
+      if (allAccountingTabs.includes(tab)) {
         this.isAccountingMenuOpen = true;
+        if (employeeTabs.includes(tab)) {
+          this.isEmployeeMenuOpen = true;
+        }
+        if (supervisorTabs.includes(tab)) {
+          this.isSupervisorMenuOpen = true;
+        }
+        if (accountantTabs.includes(tab)) {
+          this.isAccountantMenuOpen = true;
+        }
+        if (managerTabs.includes(tab)) {
+          this.isManagerMenuOpen = true;
+        }
+        if (treasurerTabs.includes(tab)) {
+          this.isTreasurerMenuOpen = true;
+        }
       }
     });
   }
@@ -893,6 +974,11 @@ export class Layout implements OnInit, OnDestroy {
     const userPerms = this.auth.userPermissions();
     const isAdmin = userPerms.includes('admin_all');
     const activeRole = this.personaService.activeRole();
+
+    // اگر کاربر در یکی از ۵ نقش تخصصی است، منوی عمومی قدیمی پنهان شود تا سایدبار تمیز و ایزوله باشد
+    if (!isAdmin && ['operator', 'supervisor', 'accountant', 'manager', 'treasury'].includes(activeRole)) {
+      return [];
+    }
     
     return this.SYSTEM_NAV_ITEMS.filter(item => {
       if (!item.isAccounting && item.module !== 'accounting') return false;
@@ -909,20 +995,91 @@ export class Layout implements OnInit, OnDestroy {
         return false;
       }
 
-      if (item.permission === 'view_sys_personnel_attendance' || 
-          item.permission === 'view_sys_fleet_attendance' || 
-          item.permission === 'view_sys_payroll' || 
-          item.permission === 'view_sys_fleet_settlement' ||
-          item.permission === 'view_sys_personnel' ||
-          item.permission === 'view_sys_projects' ||
-          item.permission === 'view_sys_treasury') {
-        return userPerms.includes(item.permission) || userPerms.includes('view_sys_personnel') || userPerms.includes('view_sys_payroll') || userPerms.includes('view_sys_projects');
-      }
       return userPerms.includes(item.permission);
     });
   });
 
-  readonly navItems = computed(() => [...this.primaryNavItems(), ...this.accountingNavItems()]);
+  readonly employeeNavItems = computed(() => {
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
+    if (!isAdmin && activeRole !== 'operator') {
+      return [];
+    }
+    return EMPLOYEE_NAV_ITEMS.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission) || userPerms.includes('can_act_as_operator');
+    });
+  });
+
+  readonly supervisorNavItems = computed(() => {
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
+    if (!isAdmin && activeRole !== 'supervisor') {
+      return [];
+    }
+    return SUPERVISOR_NAV_ITEMS.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission) || userPerms.includes('can_act_as_workshop_supervisor') || userPerms.includes('perm_approve_personnel_supervisor');
+    });
+  });
+
+  readonly accountantNavItems = computed(() => {
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
+    if (!isAdmin && activeRole !== 'accountant') {
+      return [];
+    }
+    return ACCOUNTANT_NAV_ITEMS.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission) || userPerms.includes('can_act_as_accountant') || userPerms.includes('view_sys_payroll') || userPerms.includes('perm_approve_personnel_finance');
+    });
+  });
+
+  readonly managerNavItems = computed(() => {
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
+    if (!isAdmin && activeRole !== 'manager') {
+      return [];
+    }
+    return MANAGER_NAV_ITEMS.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission) || userPerms.includes('can_act_as_company_manager') || userPerms.includes('perm_manager_payment_authorize');
+    });
+  });
+
+  readonly treasurerNavItems = computed(() => {
+    if (!this.moduleRegistry.isModuleInstalled('accounting') || this.personaService.activeApp() === 'warehouse' || this.store.isWarehouseContext()) {
+      return [];
+    }
+    const userPerms = this.auth.userPermissions();
+    const isAdmin = userPerms.includes('admin_all');
+    const activeRole = this.personaService.activeRole();
+    if (!isAdmin && activeRole !== 'treasury') {
+      return [];
+    }
+    return TREASURER_NAV_ITEMS.filter(item => {
+      if (isAdmin) return true;
+      return userPerms.includes(item.permission) || userPerms.includes('view_sys_treasury') || userPerms.includes('perm_treasury_disburse_action');
+    });
+  });
+
+  readonly navItems = computed(() => [...this.primaryNavItems(), ...this.accountingNavItems(), ...this.employeeNavItems(), ...this.supervisorNavItems(), ...this.accountantNavItems(), ...this.managerNavItems(), ...this.treasurerNavItems()]);
   
   get isSidebarOpen() { return this.store.isSidebarOpen(); }
   get currentTab() { return this.store.currentTab(); }
@@ -944,12 +1101,18 @@ export class Layout implements OnInit, OnDestroy {
       return;
     }
     const accountingTabs = [
-      'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
+      'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
       'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement',
-      'counterparties'
+      'counterparties',
+      'employee-attendance', 'employee-fleet', 'employee-invoices', 'employee-petty-cash', 'employee-new-vehicle', 'employee-new-personnel',
+      'supervisor-attendance', 'supervisor-fleet', 'supervisor-invoices', 'supervisor-petty-cash', 'supervisor-new-profiles', 'supervisor-period-lock',
+      'accountant-payroll', 'accountant-fleet', 'accountant-invoices', 'accountant-petty-cash', 'accountant-diskettes', 'accountant-counterparties',
+      'manager-dashboard', 'manager-budget', 'manager-contracts', 'manager-reports',
+      'treasurer-disbursements', 'treasurer-invoices', 'treasurer-bank-accounts', 'treasurer-cheques', 'treasurer-reconciliation'
     ];
-    if (accountingTabs.includes(tabId)) {
+    const isAccountingItem = accountingTabs.includes(tabId) || this.accountingNavItems().some(i => i.id === tabId) || this.employeeNavItems().some(i => i.id === tabId) || this.supervisorNavItems().some(i => i.id === tabId) || this.accountantNavItems().some(i => i.id === tabId) || this.managerNavItems().some(i => i.id === tabId) || this.treasurerNavItems().some(i => i.id === tabId);
+    if (isAccountingItem) {
       this.router.navigate(['/app/finance/' + tabId]);
     } else {
       this.router.navigate(['/app/warehouse/' + tabId]);
@@ -1093,6 +1256,34 @@ export class Layout implements OnInit, OnDestroy {
       'profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'personnel-profiles': 'بانک پرونده‌های پرسنل و ناوگان',
       'base-settings': 'تنظیمات پایه و فرمول‌های محاسباتی',
+      'employee-portal': 'پنل ثبت کارمند (بخش‌ها و پروژه‌ها)',
+      'employee-attendance': 'ثبت کارکرد پرسنل (پنل کارمند)',
+      'employee-fleet': 'کارکرد ماشین‌آلات و تردد (پنل کارمند)',
+      'employee-invoices': 'ثبت فاکتور هزینه و طرف‌حساب (پنل کارمند)',
+      'employee-petty-cash': 'مدیریت و ثبت اسناد تن‌خواه (پنل کارمند)',
+      'employee-new-vehicle': 'تعریف خودرو و ناوگان جدید (پنل کارمند)',
+      'employee-new-personnel': 'تعریف پرسنل و همکار جدید (پنل کارمند)',
+      'supervisor-attendance': 'تایید کارکرد پرسنل (پنل سرپرست کارگاه)',
+      'supervisor-fleet': 'تایید کارکرد ماشین‌آلات (پنل سرپرست کارگاه)',
+      'supervisor-invoices': 'تایید فاکتورهای هزینه (پنل سرپرست کارگاه)',
+      'supervisor-petty-cash': 'تایید اسناد تن‌خواه (پنل سرپرست کارگاه)',
+      'supervisor-new-profiles': 'تایید پرسنل و ناوگان جدید (پنل سرپرست کارگاه)',
+      'supervisor-period-lock': 'بستن دوره کارکرد ماهانه (پنل سرپرست کارگاه)',
+      'accountant-payroll': 'حقوق و دستمزد ماهانه (پنل حسابدار)',
+      'accountant-fleet': 'تسویه و کارکرد ناوگان (پنل حسابدار)',
+      'accountant-invoices': 'ممیزی فاکتورهای هزینه (پنل حسابدار)',
+      'accountant-petty-cash': 'ممیزی اسناد تن‌خواه (پنل حسابدار)',
+      'accountant-diskettes': 'دیسکت‌های بیمه، مالیات و بانک (پنل حسابدار)',
+      'accountant-counterparties': 'پرونده طرف‌حساب‌های مالی (پنل حسابدار)',
+      'manager-dashboard': 'داشبورد هوش مدیریتی و شاخص‌ها (پنل مدیر)',
+      'manager-budget': 'پایش و کنترل سقف بودجه بخش‌ها (پنل مدیر)',
+      'manager-contracts': 'تصویب احکام کارگزینی و قراردادها (پنل مدیر)',
+      'manager-reports': 'گزارشات جامع و تحلیلی مدیریت (پنل مدیر)',
+      'treasurer-disbursements': 'پرداخت مکانیزه حقوق و کارکرد ناوگان (پنل خزانه‌دار)',
+      'treasurer-invoices': 'تسویه فاکتورها و شارژ دفاتر تن‌خواه (پنل خزانه‌دار)',
+      'treasurer-bank-accounts': 'مدیریت حساب‌های بانکی و صندوق‌ها (پنل خزانه‌دار)',
+      'treasurer-cheques': 'مدیریت چک‌های صیادی و تقویم سررسید (پنل خزانه‌دار)',
+      'treasurer-reconciliation': 'مغایرت‌گیری بانکی و تقویم نقدینگی (پنل خزانه‌دار)',
       'projects-and-sections': 'مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها',
       'counterparties': 'مدیریت طرف‌حساب‌های مالی و تجاری',
       'finance-audit': 'رهگیری و ممیزی مالی و اداری',

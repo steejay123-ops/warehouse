@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiService } from './api.service';
+import { ImportResult } from '../http/accounts-http.service';
 import { SKIP_OFFLINE } from '../interceptors/offline.interceptor';
 import {
   PersonnelProfile,
@@ -20,7 +21,10 @@ import {
   ProjectSection,
   UserSectionAssignment,
   Counterparty,
-  ExpenseInvoice
+  ExpenseInvoice,
+  PettyCashAccount,
+  PettyCashTransaction,
+  PettyCashBalanceSummary
 } from '../models/personnel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -30,7 +34,7 @@ export class PersonnelApiService {
   constructor(private api: ApiService) {}
 
   // --- پرسنل و کارگزینی ---
-  getPersonnelProfiles(params?: { warehouse_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<PersonnelProfile[]> {
+  getPersonnelProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<PersonnelProfile[]> {
     return this.api.get<PersonnelProfile[]>(`${this.baseUrl}/profiles`, params as Record<string, unknown>);
   }
 
@@ -38,7 +42,7 @@ export class PersonnelApiService {
     return this.api.get<PersonnelProfile>(`${this.baseUrl}/profiles/${id}`);
   }
 
-  createPersonnelProfile(data: Partial<PersonnelProfile>): Observable<PersonnelProfile> {
+  createPersonnelProfile(data: Partial<PersonnelProfile> | FormData): Observable<PersonnelProfile> {
     return this.api.post<PersonnelProfile>(`${this.baseUrl}/profiles`, data);
   }
 
@@ -52,6 +56,23 @@ export class PersonnelApiService {
 
   importPersonnelExcel(formData: FormData): Observable<any> {
     return this.api.upload<any>(`${this.baseUrl}/profiles/import-excel/`, formData);
+  }
+
+  downloadPersonnelTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/profiles/download-template/`);
+  }
+
+  importPersonnelExcelModal(file: File, sectionId?: number | null, updateExisting: boolean = true, dryRun: boolean = false): Observable<ImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (sectionId) formData.append('section_id', String(sectionId));
+    if (updateExisting) formData.append('update_existing', 'true');
+    if (dryRun) formData.append('dry_run', 'true');
+    return this.api.upload<ImportResult>(`${this.baseUrl}/profiles/import-excel/`, formData);
+  }
+
+  exportPersonnelExcel(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/profiles/export-excel`, params as Record<string, unknown>);
   }
 
   // --- گردش کار تایید پرسنل ---
@@ -72,7 +93,7 @@ export class PersonnelApiService {
   }
 
   // --- ناوگان و رانندگان ---
-  getVehicleProfiles(params?: { warehouse_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<VehicleDriverProfile[]> {
+  getVehicleProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<VehicleDriverProfile[]> {
     return this.api.get<VehicleDriverProfile[]>(`${this.baseUrl}/vehicles`, params as Record<string, unknown>);
   }
 
@@ -102,6 +123,10 @@ export class PersonnelApiService {
 
   deleteVehicleProfile(id: number): Observable<void> {
     return this.api.delete<void>(`${this.baseUrl}/vehicles/${id}`);
+  }
+
+  exportVehiclesExcel(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/vehicles/export-excel`, params as Record<string, unknown>);
   }
 
   // --- گردش کار تایید ناوگان ---
@@ -159,17 +184,25 @@ export class PersonnelApiService {
   getAttendanceMatrix(
     warehouseId: number | null | undefined,
     dateShamsi: string,
-    options?: { context?: import('@angular/common/http').HttpContext }
+    options?: { context?: import('@angular/common/http').HttpContext; section_id?: number; project_id?: number }
   ): Observable<AttendanceMatrixResponse> {
     const params: any = { date_shamsi: dateShamsi };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
+    }
+    if (options?.section_id) {
+      params.section_id = options.section_id;
+    }
+    if (options?.project_id) {
+      params.project_id = options.project_id;
     }
     return this.api.get<AttendanceMatrixResponse>(`${this.baseUrl}/attendance/matrix`, params, options);
   }
 
   saveAttendanceBulk(payload: {
     warehouse_id?: number | null;
+    section_id?: number | null;
+    project_id?: number | null;
     date_shamsi: string;
     client_tab_id?: string;
     items: Array<{
@@ -224,17 +257,25 @@ export class PersonnelApiService {
   getMonthlyAttendanceGrid(
     warehouseId: number | null | undefined,
     yearMonth: string,
-    options?: { context?: import('@angular/common/http').HttpContext }
+    options?: { context?: import('@angular/common/http').HttpContext; section_id?: number; project_id?: number }
   ): Observable<MonthlyGridResponse> {
     const params: any = { year_month: yearMonth };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
+    }
+    if (options?.section_id) {
+      params.section_id = options.section_id;
+    }
+    if (options?.project_id) {
+      params.project_id = options.project_id;
     }
     return this.api.get<MonthlyGridResponse>(`${this.baseUrl}/attendance/monthly-grid`, params, options);
   }
 
   bulkSaveMonthlyGrid(payload: {
     warehouse_id?: number | null;
+    section_id?: number | null;
+    project_id?: number | null;
     year_month: string;
     client_tab_id?: string;
     items: Array<{
@@ -266,10 +307,13 @@ export class PersonnelApiService {
   }
 
   // --- خروجی و بارگذاری دوطرفه اکسل شیت ماهانه ---
-  exportMonthlyAttendanceExcel(warehouseId: number | null | undefined, yearMonth: string): Observable<Blob> {
+  exportMonthlyAttendanceExcel(warehouseId: number | null | undefined, yearMonth: string, sectionId?: number | null): Observable<Blob> {
     const params: any = { year_month: yearMonth };
     if (warehouseId) {
       params.warehouse_id = warehouseId;
+    }
+    if (sectionId) {
+      params.section_id = sectionId;
     }
     return this.api.download(`${this.baseUrl}/attendance/export-monthly-excel/`, params);
   }
@@ -282,7 +326,7 @@ export class PersonnelApiService {
   getVehicleMatrix(
     warehouseId: number | null | undefined,
     dateShamsi: string,
-    options?: { context?: import('@angular/common/http').HttpContext; status?: string }
+    options?: { context?: import('@angular/common/http').HttpContext; status?: string; section_id?: number; project_id?: number }
   ): Observable<VehicleMatrixResponse> {
     const params: any = { date_shamsi: dateShamsi };
     if (warehouseId) {
@@ -291,11 +335,19 @@ export class PersonnelApiService {
     if (options?.status) {
       params.status = options.status;
     }
+    if (options?.section_id) {
+      params.section_id = options.section_id;
+    }
+    if (options?.project_id) {
+      params.project_id = options.project_id;
+    }
     return this.api.get<VehicleMatrixResponse>(`${this.baseUrl}/trips/matrix`, params, options);
   }
 
   saveVehicleTripsBulk(payload: {
     warehouse_id?: number | null;
+    section_id?: number | null;
+    project_id?: number | null;
     date_shamsi: string;
     client_tab_id?: string;
     items: Array<{
@@ -332,7 +384,7 @@ export class PersonnelApiService {
   getVehicleMonthlyGrid(
     warehouseId: number | null | undefined,
     yearMonth: string,
-    options?: { context?: import('@angular/common/http').HttpContext; status?: string }
+    options?: { context?: import('@angular/common/http').HttpContext; status?: string; section_id?: number; project_id?: number }
   ): Observable<VehicleMonthlyGridResponse> {
     const params: any = { year_month: yearMonth };
     if (warehouseId) {
@@ -341,12 +393,20 @@ export class PersonnelApiService {
     if (options?.status) {
       params.status = options.status;
     }
+    if (options?.section_id) {
+      params.section_id = options.section_id;
+    }
+    if (options?.project_id) {
+      params.project_id = options.project_id;
+    }
     return this.api.get<VehicleMonthlyGridResponse>(`${this.baseUrl}/trips/monthly-grid`, params, options);
   }
 
   updateVehicleDayTrip(payload: {
     vehicle_id: number;
     warehouse_id?: number | null;
+    section_id?: number | null;
+    project_id?: number | null;
     date_shamsi: string;
     trip_count: number;
     unit_rate?: number;
@@ -363,6 +423,8 @@ export class PersonnelApiService {
 
   saveVehicleMonthlyGridBulk(payload: {
     warehouse_id?: number | null;
+    section_id?: number | null;
+    project_id?: number | null;
     year_month: string;
     client_tab_id?: string;
     items: Array<{
@@ -531,16 +593,17 @@ export class PersonnelApiService {
     return `/api/personnel/monthly-payroll/export-monthly-excel/?period_id=${periodId}`;
   }
 
-  getFleetMonthlyExcelDownloadUrl(warehouseId: number | null | undefined, yearMonth: string): string {
+  getFleetMonthlyExcelDownloadUrl(warehouseId: number | null | undefined, yearMonth: string, sectionId?: number | null): string {
     const whParam = warehouseId ? `&warehouse_id=${warehouseId}` : '';
-    return `/api/personnel/trips/export-monthly-excel/?year_month=${yearMonth}${whParam}`;
+    const secParam = sectionId ? `&section_id=${sectionId}` : '';
+    return `/api/personnel/trips/export-monthly-excel/?year_month=${yearMonth}${whParam}${secParam}`;
   }
 
   importFleetMonthlyExcel(formData: FormData): Observable<any> {
     return this.api.upload<any>(`${this.baseUrl}/trips/import-monthly-excel/`, formData);
   }
 
-  getVehicleTripAuditLogs(params?: { vehicle_id?: number; year_month?: string }): Observable<VehicleTripAuditLog[]> {
+  getVehicleTripAuditLogs(params?: { vehicle_id?: number; year_month?: string; section_id?: number }): Observable<VehicleTripAuditLog[]> {
     return this.api.get<VehicleTripAuditLog[]>(`${this.baseUrl}/trips/audit-logs/`, params as Record<string, unknown>);
   }
 
@@ -686,7 +749,7 @@ export class PersonnelApiService {
     return this.api.get<ExpenseInvoice[]>(`${this.baseUrl}/expense-invoices`, params as Record<string, unknown>);
   }
 
-  createExpenseInvoice(data: Partial<ExpenseInvoice>): Observable<ExpenseInvoice> {
+  createExpenseInvoice(data: Partial<ExpenseInvoice> | FormData): Observable<ExpenseInvoice> {
     return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices`, data);
   }
 
@@ -696,6 +759,63 @@ export class PersonnelApiService {
 
   deleteExpenseInvoice(id: number): Observable<void> {
     return this.api.delete<void>(`${this.baseUrl}/expense-invoices/${id}`);
+  }
+
+  exportExpenseInvoicesExcel(params?: { section_id?: number; status?: string }): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/expense-invoices/export-excel/`, params as Record<string, unknown>);
+  }
+
+  // --- مدیریت تنخواه‌گردان (Petty Cash Management) ---
+  getPettyCashAccounts(params?: { section_id?: number; custodian_id?: number }): Observable<PettyCashAccount[]> {
+    return this.api.get<PettyCashAccount[]>(`${this.baseUrl}/petty-cash-accounts`, params as Record<string, unknown>);
+  }
+
+  getPettyCashTransactions(params?: {
+    section_id?: number;
+    custodian_id?: number;
+    transaction_type?: string;
+    status?: string;
+    search?: string;
+  }): Observable<PettyCashTransaction[]> {
+    return this.api.get<PettyCashTransaction[]>(`${this.baseUrl}/petty-cash-transactions`, params as Record<string, unknown>);
+  }
+
+  getPettyCashBalance(sectionId: number, custodianId?: number): Observable<PettyCashBalanceSummary> {
+    const params: Record<string, unknown> = { section_id: sectionId };
+    if (custodianId) params['custodian_id'] = custodianId;
+    return this.api.get<PettyCashBalanceSummary>(`${this.baseUrl}/petty-cash-transactions/my-balance`, params);
+  }
+
+  createPettyCashTransaction(data: Partial<PettyCashTransaction> | FormData): Observable<PettyCashTransaction> {
+    return this.api.post<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions`, data);
+  }
+
+  updatePettyCashTransaction(id: number, data: Partial<PettyCashTransaction>): Observable<PettyCashTransaction> {
+    return this.api.patch<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions/${id}`, data);
+  }
+
+  deletePettyCashTransaction(id: number): Observable<void> {
+    return this.api.delete<void>(`${this.baseUrl}/petty-cash-transactions/${id}`);
+  }
+
+  requestPettyCashReplenishment(data: {
+    section_id: number;
+    amount: number;
+    title?: string;
+    description?: string;
+    receipt_number?: string;
+  }): Observable<PettyCashTransaction> {
+    return this.api.post<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions/request-replenishment/`, data);
+  }
+
+  exportPettyCashTransactionsExcel(params?: {
+    section_id?: number;
+    custodian_id?: number;
+    transaction_type?: string;
+    status?: string;
+    search?: string;
+  }): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/petty-cash-transactions/export-excel/`, params as Record<string, unknown>);
   }
 
   // --- ورودی و خروجی اکسل ساختار سازمانی و طرف‌های حساب ---

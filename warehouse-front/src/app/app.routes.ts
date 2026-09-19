@@ -95,10 +95,20 @@ export const routes: Routes = [
         return 'app/warehouse/dashboard';
       }
       if (!hasWh && hasFin) {
-        if (perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
-          return 'app/finance/finance-cartable';
+        const userRoles = (auth.user()?.roles || []).map(r => String(r).toLowerCase());
+        if (userRoles.includes('accountant') || perms.includes('can_act_as_accountant') || perms.includes('perm_approve_personnel_finance') || perms.includes('view_sys_payroll')) {
+          return 'app/finance/accountant-payroll';
         }
-        return 'app/finance/attendance';
+        if (userRoles.includes('treasury') || userRoles.includes('treasurer') || perms.includes('view_sys_treasury') || perms.includes('perm_treasury_disburse_action')) {
+          return 'app/finance/treasurer-disbursements';
+        }
+        if (userRoles.includes('manager') || perms.includes('perm_manager_payment_authorize') || perms.includes('can_act_as_manager') || perms.includes('perm_approve_personnel_manager')) {
+          return 'app/finance/manager-dashboard';
+        }
+        if (userRoles.includes('supervisor') || perms.includes('can_act_as_supervisor') || perms.includes('perm_approve_personnel_supervisor') || perms.includes('perm_approve_fleet_supervisor')) {
+          return 'app/finance/supervisor-attendance';
+        }
+        return 'app/finance/employee-attendance';
       }
       return 'app/launcher';
     },
@@ -138,6 +148,38 @@ export const routes: Routes = [
   { path: 'personnel-profiles', redirectTo: 'app/finance/personnel-profiles', pathMatch: 'full' },
   { path: 'base-settings', redirectTo: 'app/finance/base-settings', pathMatch: 'full' },
   { path: 'projects-and-sections', redirectTo: 'app/finance/projects-and-sections', pathMatch: 'full' },
+  { path: 'employee-portal', redirectTo: 'app/finance/employee-portal', pathMatch: 'full' },
+  { path: 'employee-attendance', redirectTo: 'app/finance/employee-attendance', pathMatch: 'full' },
+  { path: 'employee-fleet', redirectTo: 'app/finance/employee-fleet', pathMatch: 'full' },
+  { path: 'employee-invoices', redirectTo: 'app/finance/employee-invoices', pathMatch: 'full' },
+  { path: 'employee-petty-cash', redirectTo: 'app/finance/employee-petty-cash', pathMatch: 'full' },
+  { path: 'employee-new-vehicle', redirectTo: 'app/finance/employee-new-vehicle', pathMatch: 'full' },
+  { path: 'employee-new-personnel', redirectTo: 'app/finance/employee-new-personnel', pathMatch: 'full' },
+  { path: 'supervisor', redirectTo: 'app/finance/supervisor-attendance', pathMatch: 'full' },
+  { path: 'supervisor-attendance', redirectTo: 'app/finance/supervisor-attendance', pathMatch: 'full' },
+  { path: 'supervisor-fleet', redirectTo: 'app/finance/supervisor-fleet', pathMatch: 'full' },
+  { path: 'supervisor-invoices', redirectTo: 'app/finance/supervisor-invoices', pathMatch: 'full' },
+  { path: 'supervisor-petty-cash', redirectTo: 'app/finance/supervisor-petty-cash', pathMatch: 'full' },
+  { path: 'supervisor-new-profiles', redirectTo: 'app/finance/supervisor-new-profiles', pathMatch: 'full' },
+  { path: 'supervisor-period-lock', redirectTo: 'app/finance/supervisor-period-lock', pathMatch: 'full' },
+  { path: 'accountant', redirectTo: 'app/finance/accountant-payroll', pathMatch: 'full' },
+  { path: 'accountant-payroll', redirectTo: 'app/finance/accountant-payroll', pathMatch: 'full' },
+  { path: 'accountant-fleet', redirectTo: 'app/finance/accountant-fleet', pathMatch: 'full' },
+  { path: 'accountant-invoices', redirectTo: 'app/finance/accountant-invoices', pathMatch: 'full' },
+  { path: 'accountant-petty-cash', redirectTo: 'app/finance/accountant-petty-cash', pathMatch: 'full' },
+  { path: 'accountant-diskettes', redirectTo: 'app/finance/accountant-diskettes', pathMatch: 'full' },
+  { path: 'accountant-counterparties', redirectTo: 'app/finance/accountant-counterparties', pathMatch: 'full' },
+  { path: 'manager', redirectTo: 'app/finance/manager-dashboard', pathMatch: 'full' },
+  { path: 'manager-dashboard', redirectTo: 'app/finance/manager-dashboard', pathMatch: 'full' },
+  { path: 'manager-budget', redirectTo: 'app/finance/manager-budget', pathMatch: 'full' },
+  { path: 'manager-contracts', redirectTo: 'app/finance/manager-contracts', pathMatch: 'full' },
+  { path: 'manager-reports', redirectTo: 'app/finance/manager-reports', pathMatch: 'full' },
+  { path: 'treasurer', redirectTo: 'app/finance/treasurer-disbursements', pathMatch: 'full' },
+  { path: 'treasurer-disbursements', redirectTo: 'app/finance/treasurer-disbursements', pathMatch: 'full' },
+  { path: 'treasurer-invoices', redirectTo: 'app/finance/treasurer-invoices', pathMatch: 'full' },
+  { path: 'treasurer-bank-accounts', redirectTo: 'app/finance/treasurer-bank-accounts', pathMatch: 'full' },
+  { path: 'treasurer-cheques', redirectTo: 'app/finance/treasurer-cheques', pathMatch: 'full' },
+  { path: 'treasurer-reconciliation', redirectTo: 'app/finance/treasurer-reconciliation', pathMatch: 'full' },
   { path: 'personnel', redirectTo: 'app/finance/finance-cartable', pathMatch: 'full' },
   { path: 'payroll', redirectTo: 'app/finance/finance-cartable', pathMatch: 'full' },
   { path: 'fleet-settlement', redirectTo: 'app/finance/treasury-cartable', pathMatch: 'full' },

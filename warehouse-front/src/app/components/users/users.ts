@@ -31,6 +31,7 @@ export class Users implements OnInit, OnDestroy {
   activeTab = 'users';
   activePermTab = 'MAIN_MENU';
   userRoleModalTab: 'all' | 'warehouse' | 'finance' | 'global' = 'finance';
+  userModalInnerTab: 'identity' | 'security' | 'roles' | 'warehouses' = 'identity';
   searchQuery = '';
   searchSubject = new Subject<string>();
   private searchSub?: Subscription;
@@ -221,7 +222,7 @@ export class Users implements OnInit, OnDestroy {
       icon: '📋',
       description: 'مدیریت شمارشگران میدانی، تخصیص کالا و زون‌ها، مقایسه با موجودی دفتری و صدور دستور بازشماری',
       permissionCodenames: [
-        'view_sys_supervisor', 'can_act_as_supervisor', 'view_sys_recounts', 'perm_rec_recount',
+        'view_sys_supervisor', 'can_act_as_wh_supervisor', 'can_act_as_supervisor', 'view_sys_recounts', 'perm_rec_recount',
         'view_wh_dispatch', 'perm_rec_dispatch', 'view_sys_counter'
       ]
     },
@@ -272,7 +273,7 @@ export class Users implements OnInit, OnDestroy {
       icon: '📦',
       description: 'فرماندهی عملیاتی انبارگردانی، داوری نهایی مغایرت‌ها، فریز انبار و بستن قطعی دوره انبارگردانی',
       permissionCodenames: [
-        'view_sys_manager_review', 'can_act_as_manager', 'perm_inventory_finalize',
+        'view_sys_manager_review', 'can_act_as_wh_manager', 'can_act_as_manager', 'perm_inventory_finalize',
         'perm_wh_freeze', 'view_wh_dashboard', 'view_sys_recounts', 'view_wh_docs'
       ]
     },
@@ -287,7 +288,7 @@ export class Users implements OnInit, OnDestroy {
       icon: '👤',
       description: 'ثبت روزانه کارت‌های تردد، حضور و غیاب پرسنل و ساعات کارکرد و سرویس ماشین‌آلات و ناوگان',
       permissionCodenames: [
-        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance', 'can_act_as_operator'
+        'can_act_as_operator', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance'
       ]
     },
     {
@@ -299,9 +300,8 @@ export class Users implements OnInit, OnDestroy {
       icon: '🦺',
       description: 'کنترل کارکردها و تایید مرحله اول (عملیاتی و میدانی) کارکرد ماهانه پرسنل و ناوگان',
       permissionCodenames: [
-        'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
-        'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'view_wh_attendance',
-        'view_sys_supervisor', 'can_act_as_supervisor'
+        'can_act_as_workshop_supervisor', 'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
+        'perm_lock_work_period', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance'
       ]
     },
     {
@@ -313,8 +313,8 @@ export class Users implements OnInit, OnDestroy {
       icon: '💳',
       description: 'محاسبات حقوق و دستمزد ماهانه، کسر بیمه و مالیات، تسویه پیمانکاران ناوگان و تایید مرحله مالی',
       permissionCodenames: [
-        'view_sys_personnel', 'view_sys_payroll', 'view_sys_fleet_settlement',
-        'perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'can_act_as_accountant'
+        'can_act_as_accountant', 'view_sys_payroll', 'view_sys_fleet_settlement',
+        'perm_approve_personnel_finance', 'perm_approve_fleet_finance'
       ]
     },
     {
@@ -326,9 +326,9 @@ export class Users implements OnInit, OnDestroy {
       icon: '👑',
       description: 'بررسی گزارش‌های مالی و حقوق کارگاه‌ها، قفل دوره ماهانه، تصویب و صدور مجوز پرداخت بانکی',
       permissionCodenames: [
-        'view_sys_dashboard', 'view_sys_reports', 'view_sys_personnel', 'view_sys_payroll',
-        'view_sys_fleet_settlement', 'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
-        'perm_lock_work_period', 'perm_manager_payment_authorize', 'can_act_as_manager'
+        'can_act_as_company_manager', 'perm_manager_payment_authorize',
+        'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
+        'perm_lock_work_period', 'view_sys_payroll', 'view_sys_fleet_settlement'
       ]
     },
     {
@@ -340,7 +340,7 @@ export class Users implements OnInit, OnDestroy {
       icon: '🏦',
       description: 'کارتابل خزانه‌داری، صدور فایل پرداخت پایا/چک، ثبت واریز قطعی و صدور رسید تسویه',
       permissionCodenames: [
-        'view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'view_sys_personnel'
+        'view_sys_treasury', 'perm_treasury_disburse_action'
       ]
     },
 
@@ -422,12 +422,16 @@ export class Users implements OnInit, OnDestroy {
     'perm_doc_approve_action': 'امضا و تایید اسناد',
     'perm_feed_approve_action': 'تایید فیدهای گمرکی',
     'can_act_as_counter': 'شمارشگر میدانی',
-    'can_act_as_supervisor': 'سرپرست شمارش',
-    'can_act_as_manager': 'مدیر انبار',
+    'can_act_as_supervisor': 'سرپرست شمارش (انبار)',
+    'can_act_as_wh_supervisor': 'سرپرست شمارش انبار',
+    'can_act_as_manager': 'مدیر انبار (انبار)',
+    'can_act_as_wh_manager': 'مدیر انبار و شمارش',
     'can_act_as_doc_worker': 'کارشناس اسناد',
     'can_act_as_doc_supervisor': 'سرپرست اسناد',
-    'can_act_as_operator': 'کارمند ثبت',
+    'can_act_as_operator': 'کارمند کارگاه',
+    'can_act_as_workshop_supervisor': 'سرپرست کارگاه',
     'can_act_as_accountant': 'حسابدار',
+    'can_act_as_company_manager': 'مدیر شرکت',
     'perm_manage_projects_sections': 'پروژه‌ها و بخش‌ها',
 
     // عملیات انبار و شمارش
@@ -604,7 +608,8 @@ export class Users implements OnInit, OnDestroy {
         'view_wh_labels', 'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
         'view_wh_stocktaking', 'view_warehouse', 'add_warehouse', 'change_warehouse', 'delete_warehouse',
         'view_record', 'add_record', 'change_record', 'delete_record',
-        'can_act_as_counter', 'can_act_as_supervisor', 'can_act_as_manager',
+        'can_act_as_counter', 'can_act_as_supervisor', 'can_act_as_wh_supervisor',
+        'can_act_as_manager', 'can_act_as_wh_manager',
         'can_act_as_doc_worker', 'can_act_as_doc_supervisor',
         'perm_doc_approve_action', 'perm_feed_approve_action', 'perm_inventory_finalize',
         'perm_rec_dispatch', 'perm_rec_recount', 'perm_rec_label', 'perm_rec_import',
@@ -615,7 +620,8 @@ export class Users implements OnInit, OnDestroy {
       const accountingCodenames = [
         'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
         'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
-        'can_act_as_operator', 'can_act_as_accountant',
+        'can_act_as_operator', 'can_act_as_workshop_supervisor',
+        'can_act_as_accountant', 'can_act_as_company_manager',
         'perm_approve_personnel_supervisor', 'perm_approve_fleet_supervisor',
         'perm_approve_personnel_manager', 'perm_approve_fleet_manager',
         'perm_approve_personnel_finance', 'perm_approve_fleet_finance',
@@ -1427,8 +1433,30 @@ export class Users implements OnInit, OnDestroy {
       };
     }
     this.userRoleModalTab = this.hasInventoryModule() ? 'warehouse' : 'finance';
+    this.userModalInnerTab = 'identity';
     this.isUserModalOpen = true;
     this.cdr.detectChanges();
+  }
+
+  setUserModalInnerTab(tab: 'identity' | 'security' | 'roles' | 'warehouses') {
+    this.userModalInnerTab = tab;
+    this.cdr.detectChanges();
+  }
+
+  nextUserModalInnerTab() {
+    const tabs: ('identity' | 'security' | 'roles' | 'warehouses')[] = ['identity', 'security', 'roles', 'warehouses'];
+    const idx = tabs.indexOf(this.userModalInnerTab);
+    if (idx < tabs.length - 1) {
+      this.setUserModalInnerTab(tabs[idx + 1]);
+    }
+  }
+
+  prevUserModalInnerTab() {
+    const tabs: ('identity' | 'security' | 'roles' | 'warehouses')[] = ['identity', 'security', 'roles', 'warehouses'];
+    const idx = tabs.indexOf(this.userModalInnerTab);
+    if (idx > 0) {
+      this.setUserModalInnerTab(tabs[idx - 1]);
+    }
   }
 
   toggleUserRoleCheckbox(roleId: number, event: Event) {
@@ -1598,16 +1626,19 @@ export class Users implements OnInit, OnDestroy {
     const uName = (this.userForm.username || '').trim();
 
     if (!fName) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['first_name'] = true;
       return this.toast.show('error', 'وارد کردن «نام» الزامی است.');
     }
 
     if (!lName) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['last_name'] = true;
       return this.toast.show('error', 'وارد کردن «نام خانوادگی» الزامی است.');
     }
 
     if (!uName) {
+      this.userModalInnerTab = 'security';
       this.userFormErrors['username'] = true;
       return this.toast.show('error', 'وارد کردن «کد / نام کاربری (Username)» الزامی است.');
     }
@@ -1629,6 +1660,7 @@ export class Users implements OnInit, OnDestroy {
     let emergency = normalizeDigits(this.userForm.emergency_contact);
 
     if (nid && !this.validateNationalCode(nid)) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['national_code'] = true;
       return this.toast.show('error', 'کد ملی وارد شده با الگوریتم استاندارد ۱۰ رقمی همخوانی ندارد.');
     }
@@ -1641,23 +1673,27 @@ export class Users implements OnInit, OnDestroy {
     }
 
     if (!this.editingUser && !phone) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['phone_number'] = true;
       return this.toast.show('error', 'وارد کردن شماره تلفن همراه برای تعریف کاربر جدید الزامی است.');
     }
 
     if (phone && !/^09\d{9}$/.test(phone)) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['phone_number'] = true;
       return this.toast.show('error', 'فرمت شماره همراه نامعتبر است. شماره همراه باید با 09 شروع شده و ۱۱ رقم باشد (مانند 09123456789).');
     }
 
     const emailVal = (this.userForm.email || '').trim();
     if (emailVal && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(emailVal)) {
+      this.userModalInnerTab = 'identity';
       this.userFormErrors['email'] = true;
       return this.toast.show('error', 'فرمت آدرس ایمیل واردشده نامعتبر است (مانند user@example.com).');
     }
 
     const pwdVal = (this.userForm.password || '').trim();
     if (pwdVal && pwdVal.length < 6) {
+      this.userModalInnerTab = 'security';
       this.userFormErrors['password'] = true;
       return this.toast.show('error', 'کلمه عبور باید حداقل ۶ کاراکتر باشد.');
     }
@@ -2210,12 +2246,31 @@ export class Users implements OnInit, OnDestroy {
   getFilteredRolesForModal(tab: 'all' | 'warehouse' | 'finance' | 'global'): any[] {
     const roles = this.state.appState.roles || [];
     if (tab === 'all') return roles;
+    if (tab === 'finance') {
+      return roles.filter((r: any) => {
+        const scope = this.getRoleAppScope(r);
+        if (scope === 'finance') return true;
+        const name = (r.name || '').toLowerCase();
+        const title = (r.title || '').toLowerCase();
+        return name === 'workshop_supervisor' || name === 'company_manager' || title.includes('سرپرست کارگاه') || title.includes('مدیر شرکت');
+      });
+    }
     return roles.filter((r: any) => this.getRoleAppScope(r) === tab);
   }
 
   getSelectedRolesCountForScope(scope: 'warehouse' | 'finance' | 'global'): number {
     const selectedIds = this.userForm.groups || [];
     const roles = this.state.appState.roles || [];
+    if (scope === 'finance') {
+      return roles.filter((r: any) => {
+        if (!selectedIds.includes(r.id)) return false;
+        const s = this.getRoleAppScope(r);
+        if (s === 'finance') return true;
+        const name = (r.name || '').toLowerCase();
+        const title = (r.title || '').toLowerCase();
+        return name === 'workshop_supervisor' || name === 'company_manager' || title.includes('سرپرست کارگاه') || title.includes('مدیر شرکت');
+      }).length;
+    }
     return roles.filter((r: any) => selectedIds.includes(r.id) && this.getRoleAppScope(r) === scope).length;
   }
 

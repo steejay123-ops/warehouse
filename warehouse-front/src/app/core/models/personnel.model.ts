@@ -82,13 +82,18 @@ export interface PersonnelProfile {
   phone_number?: string;
   postal_code?: string;
   address?: string;
+  attachment?: string | null;
 
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
+  project?: number | null;
+  project_name?: string;
+  section?: number | null;
+  section_name?: string;
   is_active: boolean;
 
   // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
-  approval_status?: 'draft' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  approval_status?: 'draft' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
   approval_status_display?: string;
   manager_approved_by?: number | null;
   manager_approved_by_name?: string;
@@ -121,10 +126,14 @@ export interface VehicleDriverProfile {
   sheba_number?: string;
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
+  project?: number | null;
+  project_name?: string;
+  section?: number | null;
+  section_name?: string;
   is_active: boolean;
 
   // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
-  approval_status?: 'draft' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  approval_status?: 'draft' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
   approval_status_display?: string;
   manager_approved_by?: number | null;
   manager_approved_by_name?: string;
@@ -650,6 +659,8 @@ export interface Counterparty {
   account_number?: string;
   sheba_number?: string;
   account_code?: string;
+  project?: number | null;
+  section?: number | null;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -676,6 +687,72 @@ export interface ExpenseInvoice {
   created_at?: string;
   updated_at?: string;
 }
+
+export interface PettyCashAccount {
+  id?: number;
+  section: number;
+  section_name?: string;
+  project_id?: number;
+  project_name?: string;
+  custodian: number;
+  custodian_name?: string;
+  ceiling_amount: number;
+  card_or_account_number?: string;
+  sheba_number?: string;
+  is_active?: boolean;
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PettyCashTransaction {
+  id?: number;
+  account?: number | null;
+  section: number;
+  section_name?: string;
+  project_id?: number;
+  project_name?: string;
+  custodian: number;
+  custodian_name?: string;
+  transaction_type: 'expense' | 'allocation' | 'refund';
+  transaction_type_display?: string;
+  amount: number;
+  transaction_date_shamsi: string;
+  title: string;
+  category: string;
+  description?: string;
+  counterparty?: number | null;
+  counterparty_name?: string;
+  receipt_number?: string;
+  attachment?: string | null;
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'approved' | 'rejected';
+  status_display?: string;
+  rejection_reason?: string;
+  created_by?: number | null;
+  created_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PettyCashBalanceSummary {
+  account_id?: number | null;
+  ceiling_amount: number;
+  ceiling_amount_tomans: number;
+  total_allocated: number;
+  total_allocated_tomans: number;
+  total_spent: number;
+  total_spent_tomans: number;
+  current_balance: number;
+  current_balance_tomans: number;
+  pending_settlement: number;
+  pending_settlement_tomans: number;
+  utilization_rate: number;
+  card_or_account_number?: string;
+  sheba_number?: string;
+  custodian_name?: string;
+  custodian_id?: number;
+}
+
 
 
 

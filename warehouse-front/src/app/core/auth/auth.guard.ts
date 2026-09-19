@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { Router, CanActivateFn, CanActivateChildFn, CanMatchFn } from '@angular/router';
 import { AuthService } from './auth.service';
 import { ModuleRegistryService } from '../modules/module-registry.service';
+import { AppPersonaService } from '../services/app-persona.service';
 
 /**
  * گارد تطبیق ماژول انبارداری — در صورت عدم نصب، از روت عبور می‌کند
@@ -41,31 +42,70 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   'feed_approvals': ['view_wh_feed_approvals'],
   'labels': ['view_wh_labels'],
   'label-designer': ['view_wh_label_designer'],
-  'audit': ['view_wh_audit', 'perm_sys_logs', 'view_sys_payroll', 'view_sys_personnel', 'admin_all'],
-  'finance-audit': ['view_sys_payroll', 'view_sys_personnel', 'perm_sys_logs', 'view_wh_audit', 'admin_all'],
+  'audit': ['view_wh_audit', 'perm_sys_logs', 'view_sys_payroll', 'admin_all'],
+  'finance-audit': ['view_sys_payroll', 'perm_sys_logs', 'admin_all'],
   'count-tracking': ['view_sys_manager_review', 'view_sys_supervisor', 'view_sys_dashboard', 'perm_inventory_finalize', 'view_wh_stocktaking', 'can_act_as_manager', 'can_act_as_supervisor'],
   
   // Personnel, Attendance, Fleet, Finance & Treasury
-  'personnel': ['view_sys_payroll', 'view_sys_personnel', 'admin_all'],
-  'payroll': ['view_sys_payroll', 'view_sys_personnel', 'admin_all'],
+  'personnel': ['view_sys_payroll', 'admin_all'],
+  'payroll': ['view_sys_payroll', 'admin_all'],
   'fleet-settlement': ['view_sys_fleet_settlement', 'view_sys_payroll', 'admin_all'],
-  'attendance': ['view_sys_personnel_attendance', 'view_wh_attendance', 'view_sys_personnel', 'view_sys_payroll', 'perm_register_daily_attendance', 'can_act_as_operator', 'can_act_as_supervisor', 'admin_all'],
-  'fleet': ['view_sys_fleet_attendance', 'view_wh_attendance', 'view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'fleet-attendance': ['view_sys_fleet_attendance', 'view_wh_attendance', 'view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'manager-approvals': ['perm_manager_payment_authorize', 'perm_approve_personnel_manager', 'perm_approve_fleet_manager', 'view_sys_personnel', 'can_act_as_manager', 'admin_all'],
-  'finance-cartable': ['perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'view_sys_payroll', 'view_sys_personnel', 'admin_all'],
-  'treasury-cartable': ['view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'admin_all'],
-  'treasury': ['view_sys_treasury', 'perm_treasury_disburse_action', 'view_sys_payroll', 'admin_all'],
-  'profiles': ['view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'personnel-profiles': ['view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'base-settings': ['view_sys_personnel', 'view_sys_settings', 'view_sys_payroll', 'admin_all'],
-  'projects-and-sections': ['view_sys_projects', 'view_sys_personnel', 'view_sys_payroll', 'admin_all'],
-  'counterparties': ['view_sys_payroll', 'view_sys_personnel', 'view_sys_projects', 'admin_all']
+  'attendance': ['view_sys_personnel_attendance', 'view_wh_attendance', 'perm_register_daily_attendance', 'can_act_as_operator', 'can_act_as_supervisor', 'admin_all'],
+  'fleet': ['view_sys_fleet_attendance', 'view_wh_attendance', 'admin_all'],
+  'fleet-attendance': ['view_sys_fleet_attendance', 'view_wh_attendance', 'admin_all'],
+  'manager-approvals': ['perm_manager_payment_authorize', 'perm_approve_personnel_manager', 'perm_approve_fleet_manager', 'can_act_as_manager', 'admin_all'],
+  'finance-cartable': ['perm_approve_personnel_finance', 'perm_approve_fleet_finance', 'view_sys_payroll', 'admin_all'],
+  'treasury-cartable': ['view_sys_treasury', 'perm_treasury_disburse_action', 'admin_all'],
+  'treasury': ['view_sys_treasury', 'perm_treasury_disburse_action', 'admin_all'],
+  'profiles': ['view_sys_personnel', 'admin_all'],
+  'personnel-profiles': ['view_sys_personnel', 'admin_all'],
+  'base-settings': ['view_sys_settings', 'admin_all'],
+  'projects-and-sections': ['view_sys_projects', 'admin_all'],
+  'counterparties': ['view_sys_payroll', 'view_sys_projects', 'admin_all'],
+  
+  // منوی اختصاصی کارمند (Operator Portal)
+  'employee-portal': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+  'employee-attendance': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+  'employee-fleet': ['can_act_as_operator', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance', 'admin_all'],
+  'employee-invoices': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+  'employee-petty-cash': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+  'employee-new-vehicle': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+  'employee-new-personnel': ['can_act_as_operator', 'view_sys_personnel_attendance', 'admin_all'],
+
+  // منوی اختصاصی سرپرست کارگاه (Supervisor Portal)
+  'supervisor-attendance': ['perm_approve_personnel_supervisor', 'can_act_as_workshop_supervisor', 'admin_all'],
+  'supervisor-fleet': ['perm_approve_fleet_supervisor', 'can_act_as_workshop_supervisor', 'admin_all'],
+  'supervisor-invoices': ['perm_approve_personnel_supervisor', 'can_act_as_workshop_supervisor', 'admin_all'],
+  'supervisor-petty-cash': ['perm_approve_personnel_supervisor', 'can_act_as_workshop_supervisor', 'admin_all'],
+  'supervisor-new-profiles': ['perm_approve_personnel_supervisor', 'can_act_as_workshop_supervisor', 'admin_all'],
+  'supervisor-period-lock': ['perm_lock_work_period', 'can_act_as_workshop_supervisor', 'admin_all'],
+
+  // منوی اختصاصی حسابدار (Accountant Portal)
+  'accountant-payroll': ['view_sys_payroll', 'perm_approve_personnel_finance', 'can_act_as_accountant', 'admin_all'],
+  'accountant-fleet': ['view_sys_fleet_settlement', 'perm_approve_fleet_finance', 'can_act_as_accountant', 'admin_all'],
+  'accountant-invoices': ['view_sys_payroll', 'can_act_as_accountant', 'admin_all'],
+  'accountant-petty-cash': ['view_sys_payroll', 'can_act_as_accountant', 'admin_all'],
+  'accountant-diskettes': ['view_sys_payroll', 'can_act_as_accountant', 'admin_all'],
+  'accountant-counterparties': ['view_sys_payroll', 'can_act_as_accountant', 'admin_all'],
+
+  // منوی اختصاصی مدیر (Manager Portal)
+  'manager-dashboard': ['perm_manager_payment_authorize', 'can_act_as_company_manager', 'admin_all'],
+  'manager-budget': ['perm_manager_payment_authorize', 'can_act_as_company_manager', 'admin_all'],
+  'manager-contracts': ['perm_manager_payment_authorize', 'can_act_as_company_manager', 'admin_all'],
+  'manager-reports': ['perm_manager_payment_authorize', 'can_act_as_company_manager', 'admin_all'],
+
+  // منوی اختصاصی خزانه‌دار (Treasurer Portal)
+  'treasurer-disbursements': ['view_sys_treasury', 'perm_treasury_disburse_action', 'admin_all'],
+  'treasurer-invoices': ['view_sys_treasury', 'perm_treasury_disburse_action', 'admin_all'],
+  'treasurer-bank-accounts': ['view_sys_treasury', 'admin_all'],
+  'treasurer-cheques': ['view_sys_treasury', 'perm_treasury_disburse_action', 'admin_all'],
+  'treasurer-reconciliation': ['view_sys_treasury', 'admin_all']
 };
 
 const WAREHOUSE_PERMISSIONS = [
   'view_sys_dashboard', 'view_wh_dashboard', 'view_sys_counter',
-  'view_sys_supervisor', 'view_sys_manager_review', 'view_wh_docs',
+  'view_sys_supervisor', 'can_act_as_wh_supervisor', 'view_sys_manager_review',
+  'can_act_as_wh_manager', 'view_wh_docs',
   'view_wh_dispatch', 'view_wh_customs', 'view_wh_doc_approvals',
   'view_wh_feeding', 'view_wh_feed_approvals', 'view_wh_labels',
   'view_wh_label_designer', 'view_wh_audit', 'view_wh_settings',
@@ -76,12 +116,13 @@ const WAREHOUSE_PERMISSIONS = [
 ];
 
 const PERSONNEL_PERMISSIONS = [
-  'view_sys_projects', 'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
+  'view_sys_personnel', 'view_sys_personnel_attendance', 'view_sys_fleet_attendance',
   'view_sys_payroll', 'view_sys_fleet_settlement', 'view_sys_treasury',
   'perm_lock_work_period', 'perm_approve_personnel_supervisor', 'perm_approve_personnel_manager',
   'perm_approve_personnel_finance', 'perm_approve_fleet_supervisor', 'perm_approve_fleet_manager',
   'perm_approve_fleet_finance', 'perm_manager_payment_authorize', 'perm_treasury_disburse_action',
-  'can_act_as_accountant', 'can_act_as_operator'
+  'perm_manage_projects_sections',
+  'can_act_as_accountant', 'can_act_as_operator', 'can_act_as_workshop_supervisor', 'can_act_as_company_manager'
 ];
 
 const WAREHOUSE_ROUTE_KEYS = new Set([
@@ -93,7 +134,15 @@ const WAREHOUSE_ROUTE_KEYS = new Set([
 const FINANCE_ROUTE_KEYS = new Set([
   'personnel', 'payroll', 'fleet-settlement', 'attendance', 'fleet', 'fleet-attendance',
   'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles',
-  'personnel-profiles', 'base-settings', 'projects-and-sections', 'counterparties'
+  'personnel-profiles', 'base-settings', 'projects-and-sections', 'counterparties',
+  'employee-portal', 'employee-attendance', 'employee-fleet', 'employee-invoices',
+  'employee-petty-cash', 'employee-new-vehicle', 'employee-new-personnel',
+  'supervisor-attendance', 'supervisor-fleet', 'supervisor-invoices', 'supervisor-petty-cash',
+  'supervisor-new-profiles', 'supervisor-period-lock',
+  'accountant-payroll', 'accountant-fleet', 'accountant-invoices', 'accountant-petty-cash',
+  'accountant-diskettes', 'accountant-counterparties',
+  'manager-dashboard', 'manager-budget', 'manager-contracts', 'manager-reports',
+  'treasurer-disbursements', 'treasurer-invoices', 'treasurer-bank-accounts', 'treasurer-cheques', 'treasurer-reconciliation'
 ]);
 
 export const AuthGuard: CanActivateFn = (route, state) => {
@@ -166,6 +215,13 @@ export const AuthGuard: CanActivateFn = (route, state) => {
       }
     }
 
+    // بررسی دسترسی دقیق بر اساس نقش فعال SoD (Segregation of Duties)
+    const personaService = inject(AppPersonaService);
+    if (!isAdmin && !personaService.canAccessRoute(state.url)) {
+      const fallback = personaService.getDefaultRouteForRole();
+      return router.parseUrl(fallback);
+    }
+
     // Check RBAC permissions on individual page
     const path = route.routeConfig?.path;
     if (path && ROUTE_PERMISSIONS[path]) {
@@ -173,7 +229,7 @@ export const AuthGuard: CanActivateFn = (route, state) => {
       if (!isAdmin) {
         if (!hasWarehouseAccess && WAREHOUSE_ROUTE_KEYS.has(path)) {
           if (hasPersonnelAccess) {
-            return router.parseUrl('/app/finance/finance-cartable');
+            return router.parseUrl(personaService.getDefaultRouteForRole());
           }
           return router.parseUrl('/login');
         }
@@ -187,23 +243,8 @@ export const AuthGuard: CanActivateFn = (route, state) => {
 
         const hasAccess = requiredPerms.some(p => userPerms.includes(p));
         if (!hasAccess) {
-          if (isFinanceScope || FINANCE_ROUTE_KEYS.has(path)) {
-            for (const p of Object.keys(ROUTE_PERMISSIONS)) {
-              if (FINANCE_ROUTE_KEYS.has(p) && ROUTE_PERMISSIONS[p].some(req => userPerms.includes(req))) {
-                return router.parseUrl('/app/finance/' + p);
-              }
-            }
-          } else {
-            for (const p of Object.keys(ROUTE_PERMISSIONS)) {
-              if (WAREHOUSE_ROUTE_KEYS.has(p) && ROUTE_PERMISSIONS[p].some(req => userPerms.includes(req))) {
-                return router.parseUrl('/app/warehouse/' + p);
-              }
-            }
-          }
-
-          if (hasWarehouseAccess) return router.parseUrl('/app/warehouse/dashboard');
-          if (hasPersonnelAccess) return router.parseUrl('/app/finance/attendance');
-          return router.parseUrl('/login');
+          const fallback = personaService.getDefaultRouteForRole();
+          return router.parseUrl(fallback);
         }
       }
     }

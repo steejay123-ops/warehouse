@@ -1,0 +1,18 @@
+/* استایل‌های اختصاصی ماژول مدیریت تنخواه‌گردان کارمند */
+:host {
+  display: block;
+  width: 100%;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.dir-ltr {
+  direction: ltr;
+  text-align: left;
+}

@@ -1,0 +1,474 @@
+<div class="min-h-screen bg-slate-50/50 p-3 md:p-6 space-y-4" dir="rtl">
+
+  <!-- ── ۱. هدر یکپارچه و چسبان مرکز فرماندهی (Unified Sticky Command Center Header) ── -->
+  <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
+    <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      
+      <!-- سمت راست: دراپ‌داون انتخاب بخش و ناوبری زیرتب‌ها -->
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- انتخابگر بخش فعال (Guardian G1: Section Isolation) -->
+        <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-100/90 py-1 px-2.5 rounded-xl border border-slate-200/80">
+          <span class="text-[11px] font-bold text-slate-500">بخش فعال:</span>
+          <select
+            [(ngModel)]="selectedSectionId"
+            (change)="onSectionChanged()"
+            class="bg-transparent text-xs font-black text-sky-700 focus:outline-none cursor-pointer">
+            <option *ngFor="let sec of mySections" [value]="sec.id">
+              {{ sec.project_name ? (sec.project_name + ' ◀ ') : '' }}{{ sec.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- میانه: ناوبری زیرتب‌ها در کپسول محصور (Subtabs Pill Container) -->
+        <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
+        <button
+          type="button"
+          (click)="setStatusFilter('all')"
+          [ngClass]="statusFilter === 'all' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+          <span>همه</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                [ngClass]="statusFilter === 'all' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'">
+            {{ formatNumber(vehicleMetrics.total) }}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          (click)="setStatusFilter('draft')"
+          [ngClass]="statusFilter === 'draft' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+          <span>پیش‌نویس</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                [ngClass]="statusFilter === 'draft' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'">
+            {{ formatNumber(vehicleMetrics.drafts) }}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          (click)="setStatusFilter('pending_supervisor')"
+          [ngClass]="statusFilter === 'pending_supervisor' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+          <span>در انتظار</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                [ngClass]="statusFilter === 'pending_supervisor' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'">
+            {{ formatNumber(vehicleMetrics.pending) }}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          (click)="setStatusFilter('approved')"
+          [ngClass]="statusFilter === 'approved' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all whitespace-nowrap cursor-pointer">
+          <span>مصوب</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                [ngClass]="statusFilter === 'approved' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'">
+            {{ formatNumber(vehicleMetrics.approved) }}
+          </span>
+        </button>
+      </div>
+      </div>
+
+      <!-- سمت چپ: دکمه‌های ۳ گانه استاندارد آیکونی -->
+      <div class="flex items-center gap-2 justify-end">
+        <!-- دکمه خروجی اکسل ۲ ردیفه -->
+        <button
+          type="button"
+          (click)="exportExcel()"
+          [disabled]="isExportingExcel || !selectedSectionId"
+          class="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-colors disabled:opacity-50"
+          title="خروجی رسمی اکسل ناوگان">
+          <svg *ngIf="!isExportingExcel" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span *ngIf="isExportingExcel" class="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span>
+        </button>
+
+        <!-- دکمه بازخوانی داده‌ها -->
+        <button
+          type="button"
+          (click)="loadRecentVehicles()"
+          [disabled]="isLoadingVehicles"
+          class="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-colors"
+          title="بروزرسانی داده‌ها">
+          <svg class="w-4 h-4" [class.animate-spin]="isLoadingVehicles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ۲. فرم ثبت مشخصات خودرو جدید (Guardian G2: Draft Invariant) ── -->
+  <div class="bg-white p-5 md:p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-5">
+    
+    <!-- هدر فرم -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+      <div>
+        <h2 class="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span>فرم ثبت مشخصات خودرو و راننده</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200">
+            ثبت پرونده اولیه
+          </span>
+        </h2>
+        <p class="text-[11px] text-slate-500 mt-0.5">
+          مشخصات خودروی جدید را وارد کنید؛ پرونده با تحمیل وضعیت پیش‌نویس برای بخش
+          <span class="font-bold text-sky-600">«{{ selectedSection?.name }}»</span>
+          ذخیره شده و جهت بررسی به کارتابل سرپرست کارگاه ارسال خواهد شد.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          (click)="resetForm()"
+          class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 cursor-pointer transition-colors">
+          پاکسازی فرم
+        </button>
+      </div>
+    </div>
+
+    <!-- فیلدهای فرم در شبکه چندستونه -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <!-- شماره پلاک ملی خودرو -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره پلاک ملی خودرو *</label>
+        <div class="relative">
+          <input
+            type="text"
+            [(ngModel)]="newVehicle.plate_number"
+            placeholder="مثال: ۱۲ الف ۳۴۵ ایران ۶۳"
+            class="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none placeholder:font-normal placeholder:text-slate-400" />
+        </div>
+        <p class="text-[10px] text-slate-400 mt-1">فرمت استاندارد پلاک پلیس راهور (دو رقم، حرف، سه رقم، ایران کد)</p>
+      </div>
+
+      <!-- نوع خودرو -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">نوع خودرو / ماشین‌آلات *</label>
+        <select
+          [(ngModel)]="newVehicle.vehicle_type"
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none cursor-pointer">
+          <option *ngFor="let t of vehicleTypes" [value]="t.value">{{ t.label }}</option>
+        </select>
+      </div>
+
+      <!-- نوع مالکیت -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">نوع مالکیت</label>
+        <select
+          [(ngModel)]="newVehicle.ownership_type"
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none cursor-pointer">
+          <option *ngFor="let o of ownershipTypes" [value]="o.value">{{ o.label }}</option>
+        </select>
+      </div>
+
+      <!-- نام و نام خانوادگی راننده -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">نام و نام خانوادگی راننده *</label>
+        <input
+          type="text"
+          [(ngModel)]="newVehicle.driver_name"
+          placeholder="مثال: علی حسینی"
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+      </div>
+
+      <!-- کد ملی راننده -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">کد ملی راننده (۱۰ رقم)</label>
+        <input
+          type="text"
+          maxlength="10"
+          [(ngModel)]="newVehicle.driver_national_code"
+          (input)="onNationalCodeChange()"
+          placeholder="۰۱۲۳۴۵۶۷۸۹"
+          class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+        <p *ngIf="nationalCodeError" class="text-[10px] text-rose-600 font-bold mt-1">
+          ⚠️ {{ nationalCodeError }}
+        </p>
+      </div>
+
+      <!-- شماره تماس همراه راننده -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره همراه راننده</label>
+        <input
+          type="text"
+          [(ngModel)]="newVehicle.driver_phone"
+          placeholder="۰۹۱۲..."
+          class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+      </div>
+
+      <!-- نرخ پایه پیش‌فرض هر سرویس -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">نرخ پایه پیش‌فرض سرویس (ریال)</label>
+        <input
+          type="number"
+          step="50000"
+          [(ngModel)]="newVehicle.default_service_rate"
+          class="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+        <p *ngIf="newVehicle.default_service_rate && newVehicle.default_service_rate > 0" class="text-[10px] text-emerald-600 font-bold mt-1">
+          معادل: {{ formatNumber(rateInTomans) }} تومان
+        </p>
+      </div>
+
+      <!-- شماره شبا و اعتبارسنجی آنلاین -->
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره شبا راننده / مالک (۲۴ رقم)</label>
+        <input
+          type="text"
+          [(ngModel)]="newVehicle.sheba_number"
+          (input)="onShebaChange()"
+          placeholder="IR..."
+          class="w-full px-3 py-2 text-xs font-mono uppercase bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+        
+        <!-- بازخورد آنلاین اعتبارسنجی شبا -->
+        <div *ngIf="shebaValidationResult" class="text-[10px] mt-1 font-bold"
+             [ngClass]="shebaValidationResult.isValid ? 'text-emerald-600' : 'text-rose-600'">
+          <span *ngIf="shebaValidationResult.isValid">
+            {{ shebaValidationResult.bank?.icon }} بانک: {{ shebaValidationResult.bank?.name }} (تایید شد)
+          </span>
+          <span *ngIf="!shebaValidationResult.isValid">
+            ⚠️ {{ shebaValidationResult.errorMessage }}
+          </span>
+        </div>
+      </div>
+
+      <!-- نام بانک -->
+      <div>
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">نام بانک</label>
+        <input
+          type="text"
+          [(ngModel)]="newVehicle.bank_name"
+          placeholder="تشخیص خودکار از شبا یا دستی..."
+          class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+      </div>
+
+      <!-- شماره حساب -->
+      <div class="md:col-span-2">
+        <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره حساب بانکی</label>
+        <input
+          type="text"
+          [(ngModel)]="newVehicle.account_number"
+          placeholder="شماره حساب بانکی..."
+          class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-sky-500 focus:outline-none" />
+      </div>
+
+    </div>
+
+    <!-- بنر نگهبان G2: تحمیل وضعیت پیش‌نویس -->
+    <div class="p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center justify-between gap-2 text-[11px] text-amber-900 leading-relaxed">
+      <div class="flex items-center gap-2">
+        <span class="text-base">🛡️</span>
+        <span>
+          <strong class="font-black">قانون طلایی نگهبان G2:</strong>
+          خودروهای ثبت‌شده توسط کارمند به طور قطعی در وضعیت <span class="font-bold underline">پیش‌نویس (draft)</span> ذخیره می‌شوند تا پس از بازبینی توسط سرپرست و مدیر به ناوگان رسمی بخش ملحق گردند.
+        </span>
+      </div>
+      <span class="px-2.5 py-0.5 rounded-md bg-amber-100 font-bold border border-amber-300 font-mono text-[10px] whitespace-nowrap">
+        status = draft
+      </span>
+    </div>
+
+    <!-- دکمه ارسال نهایی فرم -->
+    <div class="flex justify-end pt-2">
+      <button
+        type="button"
+        (click)="saveVehicleDraft()"
+        [disabled]="isSaving"
+        class="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-black shadow-xs active:scale-95 cursor-pointer transition-all flex items-center gap-2">
+        <span *ngIf="isSaving" class="animate-spin">⏳</span>
+        <span>ثبت پیش‌نویس خودرو و ارسال به سرپرست</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- ── ۴. جدول کارتابل خودروهای اخیراً ثبت‌شده بخش ── -->
+  <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden space-y-0">
+    
+    <!-- نوار جستجو و فیلترهای بالای جدول -->
+    <div class="p-3 md:p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+      
+      <!-- جستجوی زنده -->
+      <div class="relative w-full sm:w-80">
+        <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+        <input
+          type="text"
+          [(ngModel)]="searchQuery"
+          (ngModelChange)="onSearchChange()"
+          placeholder="جستجوی پلاک، راننده، شماره همراه..."
+          class="w-full pr-8 pl-8 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 shadow-2xs font-medium placeholder:text-slate-400" />
+        <button
+          *ngIf="searchQuery"
+          type="button"
+          (click)="clearSearch()"
+          class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">
+          ✕
+        </button>
+      </div>
+
+      <!-- فیلتر وضعیت و شمارنده -->
+      <div class="flex items-center gap-2 text-xs font-bold text-slate-500">
+        <span class="text-[11px]">وضعیت:</span>
+        <select
+          [ngModel]="statusFilter"
+          (ngModelChange)="setStatusFilter($event)"
+          class="bg-white border border-slate-200 rounded-xl px-2 py-1 text-xs text-slate-700 focus:outline-none cursor-pointer">
+          <option value="all">همه خودروها</option>
+          <option value="draft">پیش‌نویس کارمند</option>
+          <option value="pending_supervisor">در انتظار سرپرست</option>
+          <option value="approved">تایید و فعال‌شده</option>
+        </select>
+        
+        <span class="mr-2">نمایش</span>
+        <span class="font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+          {{ formatNumber(filteredVehicles.length) }}
+        </span>
+        <span>از کل</span>
+        <span class="font-mono text-slate-700">{{ formatNumber(recentVehicles.length) }}</span>
+      </div>
+    </div>
+
+    <!-- بدنه جدول -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-right border-collapse text-xs">
+        <thead>
+          <tr class="bg-slate-50/90 text-slate-600 border-b border-slate-200 text-[11px] font-black">
+            <th class="py-3 px-3 text-center w-12">#</th>
+            <th class="py-3 px-3">شماره پلاک</th>
+            <th class="py-3 px-3">نام راننده</th>
+            <th class="py-3 px-3">نوع خودرو</th>
+            <th class="py-3 px-3">نوع مالکیت</th>
+            <th class="py-3 px-3">شماره همراه</th>
+            <th class="py-3 px-3 text-left">نرخ سرویس (ریال)</th>
+            <th class="py-3 px-3">بانک و شماره شبا</th>
+            <th class="py-3 px-3 text-center">وضعیت تایید</th>
+            <th class="py-3 px-3 text-center w-24">عملیات</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 text-slate-700 font-medium">
+          <tr *ngFor="let v of filteredVehicles; let idx = index" class="hover:bg-slate-50/80 transition-colors">
+            
+            <!-- ردیف -->
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400 text-[11px]">
+              {{ formatNumber(idx + 1) }}
+            </td>
+
+            <!-- شماره پلاک -->
+            <td class="py-2.5 px-3 font-mono font-black text-slate-900 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200 text-[11px]">
+                {{ v.plate_number }}
+              </span>
+            </td>
+
+            <!-- نام راننده -->
+            <td class="py-2.5 px-3 font-bold text-slate-800 whitespace-nowrap">
+              <span class="flex items-center gap-1.5">
+                <span class="text-slate-400 text-xs">👤</span>
+                <span>{{ v.driver_name }}</span>
+              </span>
+            </td>
+
+            <!-- نوع خودرو -->
+            <td class="py-2.5 px-3 whitespace-nowrap">
+              <span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-bold border border-slate-200/60">
+                {{ getVehicleTypeLabel(v.vehicle_type) }}
+              </span>
+            </td>
+
+            <!-- نوع مالکیت -->
+            <td class="py-2.5 px-3 text-slate-600 text-[11px] whitespace-nowrap">
+              {{ getOwnershipTypeLabel(v.ownership_type) }}
+            </td>
+
+            <!-- شماره همراه -->
+            <td class="py-2.5 px-3 font-mono text-slate-600 text-[11px] whitespace-nowrap">
+              {{ v.driver_phone || '-' }}
+            </td>
+
+            <!-- نرخ سرویس -->
+            <td class="py-2.5 px-3 text-left whitespace-nowrap font-mono">
+              <div class="font-black text-slate-900 text-xs">
+                {{ formatNumber(v.default_service_rate) }}
+              </div>
+              <div class="text-[10px] text-slate-400">
+                {{ formatNumber(Math.floor((v.default_service_rate || 0) / 10)) }} تومان
+              </div>
+            </td>
+
+            <!-- بانک و شبا -->
+            <td class="py-2.5 px-3 text-slate-600 text-[11px] whitespace-nowrap">
+              <div *ngIf="v.bank_name" class="font-bold text-slate-800">{{ v.bank_name }}</div>
+              <div *ngIf="v.sheba_number" class="font-mono text-[10px] text-slate-400 uppercase">{{ v.sheba_number }}</div>
+              <div *ngIf="!v.bank_name && !v.sheba_number" class="text-slate-300">-</div>
+            </td>
+
+            <!-- وضعیت تایید -->
+            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+              <span [ngClass]="getStatusBadgeClass(v.approval_status)"
+                    class="px-2.5 py-1 rounded-full text-[10px] font-bold border inline-block shadow-2xs">
+                {{ getStatusLabel(v.approval_status) }}
+              </span>
+            </td>
+
+            <!-- عملیات -->
+            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+              <!-- فقط در صورت پیش‌نویس بودن اجازه حذف داده می‌شود -->
+              <button
+                *ngIf="v.approval_status === 'draft'"
+                type="button"
+                (click)="deleteDraftVehicle(v)"
+                class="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer active:scale-95"
+                title="حذف پیش‌نویس خودرو">
+                🗑️ حذف
+              </button>
+
+              <span *ngIf="v.approval_status !== 'draft'" class="text-[10px] text-slate-400 font-bold px-1.5 py-0.5 bg-slate-50 rounded border border-slate-100">
+                🔒 مصوب
+              </span>
+            </td>
+
+          </tr>
+
+          <!-- ردیف خالی -->
+          <tr *ngIf="filteredVehicles.length === 0 && !isLoadingVehicles">
+            <td colspan="10" class="py-12 text-center text-slate-400">
+              <div class="w-14 h-14 mx-auto rounded-2xl bg-sky-50 text-sky-600 border border-sky-100/80 flex items-center justify-center text-2xl mb-3 shadow-2xs">
+                🚗
+              </div>
+              <p class="font-black text-slate-700 text-xs">هیچ خودرویی با فیلتر جاری یافت نشد</p>
+              <p class="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                {{ searchQuery || statusFilter !== 'all' ? 'با تغییر عبارت جستجو یا انتخاب تب «همه» می‌توانید کلیه خودروها را مشاهده کنید.' : 'از طریق فرم بالا می‌توانید مشخصات خودروهای ورودی را به صورت پیش‌نویس ثبت نمایید.' }}
+              </p>
+              <button
+                *ngIf="statusFilter !== 'all' || searchQuery"
+                type="button"
+                (click)="setStatusFilter('all'); clearSearch()"
+                class="mt-3 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer active:scale-95">
+                نمایش همه خودروها
+              </button>
+            </td>
+          </tr>
+
+          <!-- ردیف در حال بارگذاری -->
+          <tr *ngIf="isLoadingVehicles">
+            <td colspan="10" class="py-12 text-center text-slate-500">
+              <div class="w-7 h-7 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p class="text-xs font-bold text-slate-600">در حال دریافت ناوگان بخش...</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+</div>

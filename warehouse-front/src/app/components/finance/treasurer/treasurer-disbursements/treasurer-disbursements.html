@@ -1,0 +1,227 @@
+<div class="min-h-screen bg-slate-50/50 p-3 md:p-6 space-y-4" dir="rtl">
+
+  <!-- ── ۱. هدر یکپارچه و چسبان مرکز فرماندهی (Unified Sticky Command Center Header) ── -->
+  <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
+    <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      
+      <!-- سمت راست: دراپ‌داون بخش، دوره و تب‌های فرعی -->
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- انتخابگر بخش فعال -->
+        <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">بخش:</span>
+          <select
+            [(ngModel)]="selectedSectionId"
+            (change)="onSectionChanged()"
+            class="bg-transparent text-xs font-black text-teal-700 focus:outline-none cursor-pointer">
+            <option [ngValue]="null">همه بخش‌ها</option>
+            <option *ngFor="let sec of mySections" [value]="sec.id">
+              {{ sec.project_name ? (sec.project_name + ' ◀ ') : '' }}{{ sec.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- فیلتر نوع پرداخت -->
+        <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">نوع پرداخت:</span>
+          <select
+            [(ngModel)]="selectedPaymentType"
+            class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer">
+            <option value="all">همه موارد</option>
+            <option value="payroll">فقط حقوق پرسنل</option>
+            <option value="fleet">فقط تسویه ناوگان</option>
+          </select>
+        </div>
+
+        <!-- تب‌های فرعی در کپسول محصور (Subtabs Navigation) -->
+        <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
+          <button
+            type="button"
+            (click)="switchSubTab('pending_queue')"
+            [ngClass]="activeSubTab === 'pending_queue' ? 'bg-white text-teal-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>💳 صف دستور پرداخت‌های مصوب</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800">
+              {{ pendingTotalAmount > 0 ? ((pendingTotalAmount / 1000000) | number:'1.0-0') + ' م.ت' : '۰' }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            (click)="switchSubTab('disbursed_archive')"
+            [ngClass]="activeSubTab === 'disbursed_archive' ? 'bg-white text-teal-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>✅ آرشیو واریزی‌های انجام‌شده</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- سمت چپ: دکمه‌های اکشن استاندارد و خروجی دیسکت پایا -->
+      <div class="flex items-center gap-2 justify-end">
+        <button
+          type="button"
+          (click)="generateBatchPayaFile()"
+          class="px-3 py-1.5 rounded-xl bg-teal-600 text-white hover:bg-teal-700 text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95">
+          <span>⚡</span>
+          <span>تولید فایل تجمیعی پایا/شبا</span>
+        </button>
+
+        <!-- خروجی اکسل ۲ ردیفه -->
+        <button
+          type="button"
+          (click)="exportExcel()"
+          class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95"
+          title="خروجی فایل اکسل لیست پرداخت"
+          aria-label="خروجی اکسل">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+
+        <!-- بروزرسانی زنده -->
+        <button
+          type="button"
+          (click)="refreshData()"
+          class="w-9 h-9 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95"
+          title="همگام‌سازی صف پرداخت"
+          aria-label="رفرش زنده">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"></path>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ۲. جدول کارتابل پرداخت حقوق و کارکرد ناوگان ── -->
+  <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/60">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-teal-600"></span>
+        <h2 class="text-sm font-black text-slate-900">
+          {{ activeSubTab === 'pending_queue' ? 'دستور پرداخت‌های مصوب مدیر (آماده واریز)' : 'سوابق اسناد واریز شده و کدهای پیگیری بانک' }}
+        </h2>
+      </div>
+
+      <!-- جستجوی درون‌خطی جدول -->
+      <div class="relative w-full md:w-64">
+        <input
+          type="text"
+          [(ngModel)]="searchQuery"
+          (ngModelChange)="syncUrlParams()"
+          placeholder="جستجوی نام یا شماره شبا..."
+          class="w-full bg-white border border-slate-200 text-xs rounded-xl px-3 py-1.5 pr-8 pl-8 focus:outline-none focus:border-teal-500 transition-colors placeholder:text-slate-400">
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
+        <button *ngIf="searchQuery" (click)="clearSearch()" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-black">
+          <tr>
+            <th class="py-3 px-3">ردیف</th>
+            <th class="py-3 px-3">شرح دستور پرداخت</th>
+            <th class="py-3 px-3">دریافت‌کننده</th>
+            <th class="py-3 px-3 font-mono">شماره شبا مقصد</th>
+            <th class="py-3 px-3">بانک</th>
+            <th class="py-3 px-3 font-mono">مبلغ خالص (تومان)</th>
+            <th class="py-3 px-3 text-center">وضعیت تایید مدیر</th>
+            <th class="py-3 px-3 text-center" *ngIf="activeSubTab === 'disbursed_archive'">کد رهگیری پایا</th>
+            <th class="py-3 px-3 text-center">عملیات خزانه‌دار</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr *ngFor="let item of filteredItems; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+            <td class="py-3 px-3 font-mono text-slate-400">{{ idx + 1 }}</td>
+            <td class="py-3 px-3">
+              <div class="font-bold text-slate-900">{{ item.title }}</div>
+              <div class="text-[10px] text-slate-500">{{ item.section_name }}</div>
+            </td>
+            <td class="py-3 px-3 font-bold text-slate-900">{{ item.recipient_name }}</td>
+            <td class="py-3 px-3 font-mono text-slate-600 text-[11px]">{{ item.sheba_number }}</td>
+            <td class="py-3 px-3 text-slate-700 font-medium">{{ item.bank_name }}</td>
+            <td class="py-3 px-3 font-mono font-black text-teal-700 text-sm">{{ item.amount | number }}</td>
+            <td class="py-3 px-3 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">مصوب مدیر</span>
+            </td>
+            <td class="py-3 px-3 text-center font-mono font-bold text-slate-700" *ngIf="activeSubTab === 'disbursed_archive'">
+              {{ item.tracking_code }}
+              <div class="text-[9px] text-slate-400">{{ item.payment_date }}</div>
+            </td>
+            <td class="py-3 px-3 text-center">
+              <button
+                *ngIf="item.status === 'pending_payment'"
+                type="button"
+                (click)="openPayModal(item)"
+                class="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer">
+                ثبت واریز بانکی
+              </button>
+              <span *ngIf="item.status === 'paid'" class="text-[11px] font-bold text-emerald-600">✓ واریز شده</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── ۳. مودال ثبت انتقال وجه و شماره پیگیری ── -->
+  <div *ngIf="isPayModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white w-full max-w-md rounded-3xl border border-slate-200 shadow-xl p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-sm font-black text-slate-900">ثبت پرداخت وجه و رهگیری بانک</h3>
+        <button type="button" (click)="closePayModal()" class="text-slate-400 hover:text-slate-600 text-sm">✕</button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">دریافت‌کننده و شرح:</label>
+          <div class="font-bold text-slate-900 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            {{ payingItem?.recipient_name }} — {{ payingItem?.title }}
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">مبلغ واریزی:</label>
+          <div class="font-mono text-base font-black text-teal-700 bg-teal-50/50 p-2 rounded-xl border border-teal-100">
+            {{ payingItem?.amount | number }} تومان
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">شماره شبا مقصد:</label>
+          <div class="font-mono text-xs font-bold text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            {{ payingItem?.sheba_number }} ({{ payingItem?.bank_name }})
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">روش انتقال وجه:</label>
+          <select [(ngModel)]="paymentMethod" class="w-full bg-white border border-slate-200 text-xs font-bold rounded-xl p-2 focus:outline-none focus:border-teal-500">
+            <option value="PAYA">پایا (انتقال بین‌بانکی دسته‌ای)</option>
+            <option value="SATNA">ساتنا (فوری مبالغ بالا)</option>
+            <option value="INTERNAL">حواله داخلی درون‌بانکی</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">شناسه یا کد رهگیری بانک:</label>
+          <input
+            type="text"
+            [(ngModel)]="trackingCodeInput"
+            placeholder="مثال: TRK-1234567"
+            class="w-full bg-white border border-slate-200 font-mono text-xs font-bold text-slate-900 rounded-xl p-2 focus:outline-none focus:border-teal-500">
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" (click)="closePayModal()" class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50">انصراف</button>
+        <button type="button" (click)="confirmDisbursement()" class="px-4 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-black hover:bg-teal-700 shadow-xs">ثبت و تسویه نهایی</button>
+      </div>
+    </div>
+  </div>
+
+</div>

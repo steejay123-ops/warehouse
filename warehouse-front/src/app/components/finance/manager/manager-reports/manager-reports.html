@@ -1,0 +1,166 @@
+<div class="min-h-screen bg-slate-50/50 p-3 md:p-6 space-y-4" dir="rtl">
+
+  <!-- ── ۱. هدر یکپارچه و چسبان مرکز فرماندهی (Unified Sticky Command Center Header) ── -->
+  <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
+    <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      
+      <!-- سمت راست: دراپ‌داون بخش، دوره و تب‌های فرعی -->
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- انتخابگر بخش فعال -->
+        <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">بخش:</span>
+          <select
+            [(ngModel)]="selectedSectionId"
+            (change)="onSectionChanged()"
+            class="bg-transparent text-xs font-black text-purple-700 focus:outline-none cursor-pointer">
+            <option [ngValue]="null">تلفیق کل بخش‌ها</option>
+            <option *ngFor="let sec of mySections" [value]="sec.id">
+              {{ sec.project_name ? (sec.project_name + ' ◀ ') : '' }}{{ sec.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- دوره مالی -->
+        <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">دوره آماری:</span>
+          <span class="text-xs font-black text-slate-800 font-mono">{{ selectedMonth }} {{ fiscalYear }}</span>
+        </div>
+
+        <!-- تب‌های فرعی در کپسول محصور (Subtabs Navigation) -->
+        <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
+          <button
+            type="button"
+            (click)="switchSubTab('labor_costs')"
+            [ngClass]="activeSubTab === 'labor_costs' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>👥 بهای تمام‌شده نیروی انسانی</span>
+          </button>
+
+          <button
+            type="button"
+            (click)="switchSubTab('fleet_efficiency')"
+            [ngClass]="activeSubTab === 'fleet_efficiency' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>🚚 بهره‌وری و مصارف ناوگان</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- سمت چپ: دکمه‌های اکشن ۳گانه استاندارد و چاپ -->
+      <div class="flex items-center gap-2 justify-end">
+        <button
+          type="button"
+          (click)="printReport()"
+          class="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer">
+          <span>🖨️</span>
+          <span>چاپ گزارش هیئت مدیره</span>
+        </button>
+
+        <!-- خروجی اکسل ۲ ردیفه -->
+        <button
+          type="button"
+          (click)="exportExcel()"
+          class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95"
+          title="خروجی فایل اکسل تحلیلی ۲ ردیفه"
+          aria-label="خروجی اکسل">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+
+        <!-- بروزرسانی زنده -->
+        <button
+          type="button"
+          (click)="refreshData()"
+          class="w-9 h-9 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95"
+          title="همگام‌سازی گزارشات"
+          aria-label="رفرش زنده">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"></path>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ۲. جدول بهای تمام‌شده نیروی انسانی ── -->
+  <div *ngIf="activeSubTab === 'labor_costs'" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/60">
+      <span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+      <h2 class="text-sm font-black text-slate-900">گزارش تحلیلی بهای تمام‌شده نیروی انسانی و سهم بیمه کارفرما (ماه {{ selectedMonth }})</h2>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-black">
+          <tr>
+            <th class="py-3 px-3">ردیف</th>
+            <th class="py-3 px-3">بخش سازمانی</th>
+            <th class="py-3 px-3 text-center">تعداد نفرات</th>
+            <th class="py-3 px-3 font-mono">مزد پایه (تومان)</th>
+            <th class="py-3 px-3 font-mono">اضافه‌کاری قانونی (تومان)</th>
+            <th class="py-3 px-3 font-mono">مزایای رفاهی (تومان)</th>
+            <th class="py-3 px-3 font-mono">بیمه سهم کارفرما ۲۳٪ (تومان)</th>
+            <th class="py-3 px-3 font-mono">بهای تمام‌شده کل (تومان)</th>
+            <th class="py-3 px-3 font-mono">میانگین هزینه هر نفر (تومان)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr *ngFor="let item of laborReports; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+            <td class="py-3 px-3 font-mono text-slate-400">{{ idx + 1 }}</td>
+            <td class="py-3 px-3 font-bold text-slate-900">{{ item.section_name }}</td>
+            <td class="py-3 px-3 text-center font-mono font-bold text-blue-700">{{ item.headcount }} نفر</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_base_wage | number }}</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_overtime_pay | number }}</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_allowances | number }}</td>
+            <td class="py-3 px-3 font-mono text-purple-700 font-bold">{{ item.employer_insurance_23pct | number }}</td>
+            <td class="py-3 px-3 font-mono font-black text-slate-900">{{ item.total_cost_to_company | number }}</td>
+            <td class="py-3 px-3 font-mono font-bold text-emerald-700">{{ item.avg_cost_per_person | number }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── ۳. جدول بهره‌وری و مصارف ناوگان ── -->
+  <div *ngIf="activeSubTab === 'fleet_efficiency'" class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-slate-100 flex items-center gap-2 bg-slate-50/60">
+      <span class="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
+      <h2 class="text-sm font-black text-slate-900">گزارش تحلیلی هزینه‌کرد و راندمان ناوگان ترابری</h2>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-right text-xs">
+        <thead class="bg-slate-100/75 border-b border-slate-200 text-slate-600 font-black">
+          <tr>
+            <th class="py-3 px-3">ردیف</th>
+            <th class="py-3 px-3">بخش سازمانی</th>
+            <th class="py-3 px-3 text-center">تعداد خودرو</th>
+            <th class="py-3 px-3 font-mono">اجاره ثابت (تومان)</th>
+            <th class="py-3 px-3 font-mono">اضافه‌کاری ناوگان (تومان)</th>
+            <th class="py-3 px-3 font-mono">مصرف سوخت (لیتر)</th>
+            <th class="py-3 px-3 font-mono">کل مخارج ناوگان (تومان)</th>
+            <th class="py-3 px-3 font-mono">میانگین هزینه هر دستگاه (تومان)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr *ngFor="let item of fleetReports; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+            <td class="py-3 px-3 font-mono text-slate-400">{{ idx + 1 }}</td>
+            <td class="py-3 px-3 font-bold text-slate-900">{{ item.section_name }}</td>
+            <td class="py-3 px-3 text-center font-mono font-bold text-amber-700">{{ item.active_vehicles }} دستگاه</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_fixed_rent | number }}</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_overtime_pay | number }}</td>
+            <td class="py-3 px-3 font-mono text-slate-700">{{ item.total_fuel_liters | number }}</td>
+            <td class="py-3 px-3 font-mono font-black text-slate-900">{{ item.total_fleet_expenditure | number }}</td>
+            <td class="py-3 px-3 font-mono font-bold text-emerald-700">{{ item.avg_cost_per_vehicle | number }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>

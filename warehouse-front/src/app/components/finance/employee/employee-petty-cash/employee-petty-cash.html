@@ -1,0 +1,668 @@
+<div class="min-h-screen bg-slate-50/60 pb-16 font-sans text-slate-800" dir="rtl">
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۱. هدر استیکی فرماندهی یکپارچه (Unified Sticky Command Center Standard) -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <header class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-2 pb-2 px-3 md:px-6 border-b border-slate-200/80 shadow-2xs">
+    <div class="bg-white p-2.5 md:p-3.5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      
+      <!-- سمت راست: دراپ‌داون انتخاب بخش و تب‌های وضعیت اسناد تنخواه -->
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- سلکتور بخش پروژه (Guardian G1: Section Isolation) -->
+        <div class="flex items-center gap-1.5 bg-slate-100/90 py-1 px-2.5 rounded-xl border border-slate-200">
+          <label for="sectionSelect" class="text-[11px] font-bold text-slate-600 whitespace-nowrap">بخش فعال:</label>
+          <select
+            id="sectionSelect"
+            [(ngModel)]="selectedSectionId"
+            (change)="onSectionChanged()"
+            class="bg-transparent border-none text-xs font-bold text-indigo-900 focus:outline-hidden cursor-pointer"
+            [disabled]="isLoadingSections">
+            @for (sec of mySections; track sec.id) {
+              <option [value]="sec.id">{{ sec.project_name }} - {{ sec.name }} ({{ sec.code }})</option>
+            }
+          </select>
+          @if (isLoadingSections) {
+            <span class="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+          }
+        </div>
+
+        <!-- مانده فعال تنخواه (Compact Balance Badge) -->
+        <div *ngIf="balanceSummary" class="flex items-center gap-1.5 bg-amber-50/90 border border-amber-200/80 py-1 px-2.5 rounded-xl text-xs shadow-2xs" title="مانده فعال تنخواه در دست شما">
+          <span class="text-amber-800 font-bold text-[11px]">مانده:</span>
+          <span class="font-mono font-black text-amber-950">{{ (balanceSummary?.current_balance || 0) | number }}</span>
+          <span class="text-[10px] text-amber-700 font-medium">ریال</span>
+          <span class="text-[10px] text-amber-600 font-mono hidden sm:inline">({{ (balanceSummary?.current_balance_tomans || 0) | number }} تومان)</span>
+        </div>
+
+        <!-- تب‌های وضعیت اسناد تنخواه (Subtab Navigation Consistency) -->
+        <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full lg:w-auto self-stretch lg:self-auto scrollbar-none">
+        <button
+          (click)="setStatusFilter('all')"
+          [class]="statusFilter === 'all' ? 'bg-white text-amber-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>همه اسناد</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'all' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.all }}
+          </span>
+        </button>
+
+        <button
+          (click)="setStatusFilter('draft')"
+          [class]="statusFilter === 'draft' ? 'bg-white text-slate-800 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>پیش‌نویس</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'draft' ? 'bg-slate-200 text-slate-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.draft }}
+          </span>
+        </button>
+
+        <button
+          (click)="setStatusFilter('pending_supervisor')"
+          [class]="statusFilter === 'pending_supervisor' ? 'bg-white text-amber-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>در انتظار سرپرست</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'pending_supervisor' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.pending_supervisor }}
+          </span>
+        </button>
+
+        <button
+          (click)="setStatusFilter('approved')"
+          [class]="statusFilter === 'approved' ? 'bg-white text-emerald-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>تایید و تسویه‌شده</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.approved }}
+          </span>
+        </button>
+
+        <button
+          (click)="setStatusFilter('allocation')"
+          [class]="statusFilter === 'allocation' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>شارژهای دریافتی</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'allocation' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.allocation }}
+          </span>
+        </button>
+
+        <button
+          (click)="setStatusFilter('rejected')"
+          [class]="statusFilter === 'rejected' ? 'bg-white text-rose-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all whitespace-nowrap">
+          <span>رد شده</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md" [class]="statusFilter === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-slate-200 text-slate-600'">
+            {{ statusCounters.rejected }}
+          </span>
+        </button>
+      </div>
+      </div>
+
+      <!-- سمت چپ: دکمه‌های ۳گانه آیکونی و اکشن‌های ثبت سند و شارژ -->
+      <div class="flex items-center gap-2">
+        <!-- خروجی اکسل استاندارد -->
+        <button
+          (click)="exportExcel()"
+          title="خروجی اکسل رسمی گردش تنخواه"
+          class="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100/80 transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+        </button>
+
+        <!-- تازه‌سازی -->
+        <button
+          (click)="refreshData()"
+          title="بروزرسانی اطلاعات و مانده تنخواه"
+          class="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 transition-all">
+          <svg class="w-4 h-4" [class.animate-spin]="isLoading || isLoadingBalance" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+
+        <!-- دکمه درخواست شارژ مجدد -->
+        <button
+          (click)="openReplenishModal()"
+          class="px-3 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95">
+          <span>⚡ درخواست شارژ</span>
+        </button>
+
+        <!-- دکمه ثبت هزینه از تنخواه -->
+        <button
+          (click)="openNewExpenseModal()"
+          class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white text-xs font-black flex items-center gap-1.5 transition-all shadow-xs shadow-amber-600/30 cursor-pointer active:scale-95">
+          <span>+ ثبت هزینه از تنخواه</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۲. جدول داده‌های گردش اسناد تنخواه (Data Table Card & Action Ergonomics) -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <main class="px-3 md:px-6 pt-4">
+    <div class="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
+      
+      <!-- نوار بالای جدول: جستجوی زنده و فیلترها -->
+      <div class="p-3.5 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-3">
+        <div class="relative w-full md:w-80">
+          <span class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-slate-400">🔍</span>
+          <input
+            type="text"
+            [(ngModel)]="transactionSearch"
+            placeholder="جستجو در عنوان، شماره رسید، طرف‌حساب..."
+            class="w-full pr-9 pl-8 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"/>
+          @if (transactionSearch) {
+            <button
+              (click)="transactionSearch = ''"
+              class="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 hover:text-slate-600">✕</button>
+          }
+        </div>
+
+        <div class="flex items-center gap-2 self-end md:self-auto">
+          <button
+            (click)="openQuickCounterpartyModal()"
+            class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1 transition-all">
+            <span>+ تعریف سریع طرف‌حساب</span>
+          </button>
+          <span class="text-xs text-slate-500 font-bold">
+            نمایش {{ filteredTransactions.length }} از {{ transactions.length }} سند
+          </span>
+        </div>
+      </div>
+
+      <!-- جدول تراکنش‌ها -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 font-bold border-b border-slate-200">
+            <tr>
+              <th class="py-3 px-3 w-12 text-center">ردیف</th>
+              <th class="py-3 px-3">نوع سند</th>
+              <th class="py-3 px-3">تاریخ (شمسی)</th>
+              <th class="py-3 px-3">عنوان و شرح هزینه</th>
+              <th class="py-3 px-3">طرف‌حساب / فروشنده</th>
+              <th class="py-3 px-3">سرفصل</th>
+              <th class="py-3 px-3">شماره رسید/فاکتور</th>
+              <th class="py-3 px-3 text-left">مبلغ سند</th>
+              <th class="py-3 px-3 text-center">وضعیت</th>
+              <th class="py-3 px-3 text-center w-28">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            @if (isLoading) {
+              <tr>
+                <td colspan="10" class="py-12 text-center text-slate-400">
+                  <div class="flex flex-col items-center justify-center gap-2">
+                    <span class="w-6 h-6 border-2 border-amber-600 border-t-transparent rounded-full animate-spin"></span>
+                    <span>در حال بارگذاری تراکنش‌های تنخواه...</span>
+                  </div>
+                </td>
+              </tr>
+            } @else if (filteredTransactions.length === 0) {
+              <tr>
+                <td colspan="10" class="py-12 text-center text-slate-400">
+                  <div class="flex flex-col items-center justify-center gap-1.5">
+                    <span class="text-2xl">📭</span>
+                    <span class="font-bold text-slate-600">هیچ سندی در این بخش یا فیلتر یافت نشد.</span>
+                    <span class="text-[11px] text-slate-400">با کلیک روی «+ ثبت هزینه از تنخواه» سند جدید ثبت کنید.</span>
+                  </div>
+                </td>
+              </tr>
+            } @else {
+              @for (tx of filteredTransactions; track tx.id; let idx = $index) {
+                <tr class="hover:bg-amber-50/20 transition-colors">
+                  <td class="py-3 px-3 text-center font-mono text-slate-400">{{ idx + 1 }}</td>
+                  
+                  <!-- نوع سند -->
+                  <td class="py-3 px-3">
+                    @if (tx.transaction_type === 'expense') {
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span>📤</span> هزینه‌کرد
+                      </span>
+                    } @else if (tx.transaction_type === 'allocation') {
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                        <span>📥</span> شارژ تنخواه
+                      </span>
+                    } @else {
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                        <span>🔄</span> عودت مانده
+                      </span>
+                    }
+                  </td>
+
+                  <!-- تاریخ شمسی -->
+                  <td class="py-3 px-3 font-mono text-slate-600 whitespace-nowrap">{{ tx.transaction_date_shamsi }}</td>
+
+                  <!-- عنوان و شرح -->
+                  <td class="py-3 px-3 max-w-xs">
+                    <p class="font-bold text-slate-900 leading-snug">{{ tx.title }}</p>
+                    @if (tx.description) {
+                      <p class="text-[11px] text-slate-500 truncate mt-0.5">{{ tx.description }}</p>
+                    }
+                  </td>
+
+                  <!-- طرف‌حساب -->
+                  <td class="py-3 px-3">
+                    @if (tx.counterparty_name) {
+                      <span class="font-bold text-slate-800">{{ tx.counterparty_name }}</span>
+                    } @else {
+                      <span class="text-slate-400 text-[11px]">خرید نقدی/متفرقه</span>
+                    }
+                  </td>
+
+                  <!-- سرفصل -->
+                  <td class="py-3 px-3">
+                    <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-bold">
+                      {{ tx.category }}
+                    </span>
+                  </td>
+
+                  <!-- شماره رسید -->
+                  <td class="py-3 px-3 font-mono text-slate-600">
+                    {{ tx.receipt_number || '-' }}
+                  </td>
+
+                  <!-- مبلغ -->
+                  <td class="py-3 px-3 text-left whitespace-nowrap">
+                    <span class="font-mono font-bold text-sm text-slate-900" [class.text-indigo-700]="tx.transaction_type === 'allocation'">
+                      {{ tx.transaction_type === 'allocation' ? '+' : '-' }}{{ (tx.amount || 0) | number }}
+                    </span>
+                    <span class="text-[10px] text-slate-400 mr-1">ریال</span>
+                    <div class="text-[10px] text-slate-500 font-mono">
+                      {{ Math.floor((tx.amount || 0) / 10) | number }} ت
+                    </div>
+                  </td>
+
+                  <!-- نشان وضعیت -->
+                  <td class="py-3 px-3 text-center whitespace-nowrap">
+                    @if (tx.status === 'draft') {
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                        پیش‌نویس
+                      </span>
+                    } @else if (tx.status === 'pending_supervisor') {
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 animate-pulse">
+                        در انتظار سرپرست
+                      </span>
+                    } @else if (tx.status === 'pending_accountant') {
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                        در بررسی حسابدار
+                      </span>
+                    } @else if (tx.status === 'approved') {
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        تایید و تسویه‌شده
+                      </span>
+                    } @else if (tx.status === 'rejected') {
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-800 border border-rose-200" [title]="tx.rejection_reason || ''">
+                        رد شده
+                      </span>
+                    }
+                  </td>
+
+                  <!-- عملیات -->
+                  <td class="py-3 px-3 text-center whitespace-nowrap">
+                    <div class="flex items-center justify-center gap-1">
+                      <!-- مشاهده پیوست -->
+                      @if (tx.attachment) {
+                        <button
+                          (click)="openAttachmentPreview(tx)"
+                          title="مشاهده تصویر فاکتور/رسید"
+                          class="p-1 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                          </svg>
+                        </button>
+                      }
+
+                      <!-- ارسال به سرپرست در صورت پیش‌نویس -->
+                      @if (tx.status === 'draft') {
+                        <button
+                          (click)="sendToSupervisor(tx)"
+                          title="ارسال به سرپرست جهت بررسی و تایید"
+                          class="px-2 py-1 text-slate-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg text-[11px] font-bold transition-all">
+                          ارسال
+                        </button>
+                        <button
+                          (click)="deleteDraftTransaction(tx)"
+                          title="حذف پیش‌نویس"
+                          class="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۴. مودال ثبت هزینه از محل تنخواه (Guardian G2: Draft Invariant)       -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  @if (isNewExpenseModalOpen) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <!-- هدر مودال -->
+        <div class="px-5 py-4 bg-gradient-to-r from-amber-600 to-amber-500 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🧾</span>
+            <div>
+              <h3 class="font-black text-sm md:text-base">ثبت سند هزینه از محل تنخواه</h3>
+              <p class="text-[11px] text-amber-100">پرداخت‌شده از مانده نقدی تنخواه‌دار (پیش‌نویس اولیه)</p>
+            </div>
+          </div>
+          <button (click)="closeNewExpenseModal()" class="text-amber-200 hover:text-white text-lg">✕</button>
+        </div>
+
+        <!-- محتوای فرم -->
+        <div class="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+          
+          <!-- عنوان سند -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">عنوان / شرح مختصر هزینه <span class="text-rose-500">*</span></label>
+            <input
+              type="text"
+              [(ngModel)]="newExpense.title"
+              placeholder="مثال: خرید ملزومات مصرفی و لوازم‌التحریر کارگاه"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-amber-500 focus:ring-1 focus:ring-amber-500"/>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- سرفصل هزینه -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">سرفصل هزینه</label>
+              <select
+                [(ngModel)]="newExpense.category"
+                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-amber-500">
+                @for (cat of expenseCategories; track cat) {
+                  <option [value]="cat">{{ cat }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- تاریخ شمسی هزینه -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">تاریخ پرداخت (شمسی) <span class="text-rose-500">*</span></label>
+              <input
+                type="text"
+                [(ngModel)]="newExpense.transaction_date_shamsi"
+                placeholder="1405/04/01"
+                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-hidden focus:border-amber-500"/>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- طرف‌حساب / فروشنده (اختیاری) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">فروشنده / طرف‌حساب</label>
+                <button
+                  type="button"
+                  (click)="openQuickCounterpartyModal()"
+                  class="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold">+ تعریف جدید</button>
+              </div>
+              <select
+                [(ngModel)]="newExpense.counterparty"
+                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-amber-500">
+                <option [ngValue]="undefined">-- خرید متفرقه / بدون طرف‌حساب --</option>
+                @for (cp of counterparties; track cp.id) {
+                  <option [value]="cp.id">{{ cp.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- شماره فاکتور یا رسید پرداخت -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">شماره رسید / شماره فاکتور</label>
+              <input
+                type="text"
+                [(ngModel)]="newExpense.receipt_number"
+                placeholder="مثال: رسید کارتخوان یا شماره فاکتور"
+                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-amber-500"/>
+            </div>
+          </div>
+
+          <!-- مبلغ سند (ریال و تومان) -->
+          <div class="bg-amber-50/60 p-3 rounded-2xl border border-amber-100">
+            <label class="block text-xs font-bold text-slate-700 mb-1">مبلغ هزینه (ریال) <span class="text-rose-500">*</span></label>
+            <input
+              type="number"
+              [(ngModel)]="newExpense.amount"
+              min="0"
+              placeholder="0"
+              class="w-full px-3 py-2 bg-white border border-amber-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-hidden focus:border-amber-500"/>
+            <div class="flex items-center justify-between text-xs text-amber-800 font-bold mt-1.5 px-1">
+              <span>معادل به تومان:</span>
+              <span class="font-mono text-sm">{{ expenseAmountTomans | number }} تومان</span>
+            </div>
+          </div>
+
+          <!-- پیوست فایل/تصویر فاکتور -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">تصویر یا رسید پرداخت فاکتور</label>
+            <div class="flex items-center gap-2">
+              <input
+                type="file"
+                (change)="onExpenseFileSelected($event)"
+                accept="image/*,.pdf"
+                class="text-xs text-slate-500 file:mr-0 file:ml-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"/>
+              @if (attachmentFileName) {
+                <button
+                  type="button"
+                  (click)="removeSelectedAttachment()"
+                  class="text-xs text-rose-500 hover:text-rose-700">حذف پیوست</button>
+              }
+            </div>
+          </div>
+
+          <!-- توضیحات تفصیلی -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">توضیحات و شرح تکمیلی</label>
+            <textarea
+              rows="2"
+              [(ngModel)]="newExpense.description"
+              placeholder="توضیحات و جزئیات خرید از محل تنخواه..."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-amber-500"></textarea>
+          </div>
+
+        </div>
+
+        <!-- فوتر مودال -->
+        <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <button
+            type="button"
+            (click)="closeNewExpenseModal()"
+            class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-all">
+            انصراف
+          </button>
+          <button
+            type="button"
+            (click)="saveExpense()"
+            [disabled]="isSaving"
+            class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black transition-all shadow-xs flex items-center gap-2">
+            @if (isSaving) {
+              <span class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            }
+            <span>ثبت هزینه (پیش‌نویس)</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۵. مودال درخواست شارژ مجدد تنخواه (Replenishment Request Modal)        -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  @if (isReplenishModalOpen) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <div class="px-5 py-4 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">⚡</span>
+            <div>
+              <h3 class="font-black text-sm md:text-base">درخواست شارژ مجدد تنخواه</h3>
+              <p class="text-[11px] text-indigo-100">ارسال درخواست واریز وجه تنخواه به کارتابل مدیریت</p>
+            </div>
+          </div>
+          <button (click)="closeReplenishModal()" class="text-indigo-200 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <!-- عنوان درخواست -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">عنوان درخواست</label>
+            <input
+              type="text"
+              [(ngModel)]="replenishData.title"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-indigo-500"/>
+          </div>
+
+          <!-- مبلغ درخواستی (ریال و تومان) -->
+          <div class="bg-indigo-50/60 p-3 rounded-2xl border border-indigo-100">
+            <label class="block text-xs font-bold text-slate-700 mb-1">مبلغ مورد نیاز (ریال) <span class="text-rose-500">*</span></label>
+            <input
+              type="number"
+              [(ngModel)]="replenishData.amount"
+              min="0"
+              placeholder="0"
+              class="w-full px-3 py-2 bg-white border border-indigo-200 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-hidden focus:border-indigo-500"/>
+            <div class="flex items-center justify-between text-xs text-indigo-800 font-bold mt-1.5 px-1">
+              <span>معادل به تومان:</span>
+              <span class="font-mono text-sm">{{ replenishAmountTomans | number }} تومان</span>
+            </div>
+          </div>
+
+          <!-- توضیحات / یادداشت درخواست -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">علت و توضیحات درخواست شارژ</label>
+            <textarea
+              rows="3"
+              [(ngModel)]="replenishData.description"
+              placeholder="شرح مخارج آتی و دلایل نیاز به تجدید تنخواه..."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-indigo-500"></textarea>
+          </div>
+        </div>
+
+        <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <button
+            type="button"
+            (click)="closeReplenishModal()"
+            class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-100">
+            انصراف
+          </button>
+          <button
+            type="button"
+            (click)="submitReplenishment()"
+            [disabled]="isSaving"
+            class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center gap-2 shadow-xs">
+            @if (isSaving) {
+              <span class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            }
+            <span>ارسال درخواست شارژ</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۶. مودال تعریف سریع طرف‌حساب جدید                                     -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  @if (isQuickCounterpartyModalOpen) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-xs">
+      <div class="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        
+        <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🤝</span>
+            <h3 class="font-black text-sm md:text-base">تعریف سریع طرف‌حساب / فروشنده</h3>
+          </div>
+          <button (click)="closeQuickCounterpartyModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div class="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">نام شخص یا فروشگاه <span class="text-rose-500">*</span></label>
+            <input
+              type="text"
+              [(ngModel)]="newCounterparty.name"
+              placeholder="مثال: فروشگاه ابزار صنعت"
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-slate-800"/>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">تلفن تماس</label>
+            <input
+              type="text"
+              [(ngModel)]="newCounterparty.phone"
+              placeholder="0912..."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-hidden focus:border-slate-800"/>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">شماره شبا (اختیاری)</label>
+            <input
+              type="text"
+              [(ngModel)]="newCounterparty.sheba_number"
+              (input)="onShebaInput()"
+              placeholder="IR..."
+              class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono dir-ltr text-slate-800 focus:outline-hidden focus:border-slate-800"/>
+            @if (shebaValidationResult) {
+              <p class="text-[11px] font-bold mt-1" [class]="shebaValidationResult.isValid ? 'text-emerald-600' : 'text-rose-600'">
+                {{ shebaValidationResult.bank ? shebaValidationResult.bank.name + ' - ' : '' }}{{ shebaValidationResult.errorMessage || 'شماره شبا معتبر است' }}
+              </p>
+            }
+          </div>
+        </div>
+
+        <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+          <button
+            type="button"
+            (click)="closeQuickCounterpartyModal()"
+            class="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-100">
+            انصراف
+          </button>
+          <button
+            type="button"
+            (click)="saveQuickCounterparty()"
+            [disabled]="isSaving"
+            class="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black flex items-center gap-2">
+            @if (isSaving) {
+              <span class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            }
+            <span>ذخیره طرف‌حساب</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  }
+
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  <!-- ۷. مودال پیش‌نمایش تصویر فاکتور / رسید                                 -->
+  <!-- ══════════════════════════════════════════════════════════════════════ -->
+  @if (isAttachmentPreviewModalOpen) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-slate-900/70 backdrop-blur-xs" (click)="closeAttachmentPreview()">
+      <div class="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden" (click)="$event.stopPropagation()">
+        <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between">
+          <h4 class="font-bold text-xs truncate">{{ previewTxTitle }}</h4>
+          <button (click)="closeAttachmentPreview()" class="text-slate-400 hover:text-white text-lg">✕</button>
+        </div>
+        <div class="p-4 flex items-center justify-center max-h-[75vh] overflow-auto bg-slate-100">
+          <img [src]="previewAttachmentUrl" alt="پیوست سند تنخواه" class="max-h-full max-w-full rounded-xl object-contain shadow-sm"/>
+        </div>
+      </div>
+    </div>
+  }
+
+</div>

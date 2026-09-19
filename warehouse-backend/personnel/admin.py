@@ -5,6 +5,8 @@ from .models import (
     UserSectionAssignment,
     Counterparty,
     ExpenseInvoice,
+    PettyCashAccount,
+    PettyCashTransaction,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -50,6 +52,19 @@ class ExpenseInvoiceAdmin(admin.ModelAdmin):
     search_fields = ('invoice_number', 'counterparty__name', 'description')
     list_filter = ('status', 'section__project', 'section')
 
+
+@admin.register(PettyCashAccount)
+class PettyCashAccountAdmin(admin.ModelAdmin):
+    list_display = ('section', 'custodian', 'ceiling_amount', 'is_active', 'created_at')
+    search_fields = ('custodian__username', 'custodian__first_name', 'custodian__last_name', 'section__name')
+    list_filter = ('is_active', 'section__project', 'section')
+
+
+@admin.register(PettyCashTransaction)
+class PettyCashTransactionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'transaction_type', 'section', 'custodian', 'amount', 'transaction_date_shamsi', 'status')
+    search_fields = ('title', 'receipt_number', 'custodian__username', 'description')
+    list_filter = ('transaction_type', 'status', 'section__project', 'section')
 
 
 @admin.register(PersonnelProfile)

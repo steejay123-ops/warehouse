@@ -8,6 +8,8 @@ from .models import (
     UserSectionAssignment,
     Counterparty,
     ExpenseInvoice,
+    PettyCashAccount,
+    PettyCashTransaction,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -734,4 +736,48 @@ class ExpenseInvoiceSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+
+
+class PettyCashAccountSerializer(serializers.ModelSerializer):
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    project_id = serializers.IntegerField(source='section.project.id', read_only=True)
+    project_name = serializers.CharField(source='section.project.name', read_only=True)
+    custodian_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PettyCashAccount
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_custodian_name(self, obj):
+        if obj.custodian:
+            return f"{obj.custodian.first_name} {obj.custodian.last_name}".strip() or obj.custodian.username
+        return None
+
+
+class PettyCashTransactionSerializer(serializers.ModelSerializer):
+    section_name = serializers.CharField(source='section.name', read_only=True)
+    project_id = serializers.IntegerField(source='section.project.id', read_only=True)
+    project_name = serializers.CharField(source='section.project.name', read_only=True)
+    custodian_name = serializers.SerializerMethodField()
+    counterparty_name = serializers.CharField(source='counterparty.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PettyCashTransaction
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+    def get_custodian_name(self, obj):
+        if obj.custodian:
+            return f"{obj.custodian.first_name} {obj.custodian.last_name}".strip() or obj.custodian.username
+        return None
+
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
 

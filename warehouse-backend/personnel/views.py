@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, parsers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
@@ -31,6 +31,8 @@ from .models import (
     UserSectionAssignment,
     Counterparty,
     ExpenseInvoice,
+    PettyCashAccount,
+    PettyCashTransaction,
     PersonnelProfile,
     VehicleDriverProfile,
     PersonnelChangeRequest,
@@ -53,6 +55,8 @@ from .serializers import (
     UserSectionAssignmentSerializer,
     CounterpartySerializer,
     ExpenseInvoiceSerializer,
+    PettyCashAccountSerializer,
+    PettyCashTransactionSerializer,
     PersonnelProfileSerializer,
     VehicleDriverProfileSerializer,
     PersonnelChangeRequestSerializer,
@@ -89,6 +93,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
     queryset = PersonnelProfile.objects.all().select_related('user')
     serializer_class = PersonnelProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
     pagination_class = None
 
     def get_queryset(self):
@@ -96,6 +101,13 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
+        
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(section__project_id=project_id)
         
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -285,10 +297,94 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         instance.delete()
         return Response({'message': f'پرسنل «{full_name}» با موفقیت از سامانه حذف گردید.'}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        """
+        دانلود قالب اکسل خام پرسنل با ساختار ۲ سطری استاندارد شرکت
+        """
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Emp_info'
+        ws.sheet_view.rightToLeft = True
+
+        columns_fa = [
+            'ردیف', 'کد ملی', 'نام', 'نام خانوادگی', 'نام پدر', 'شماره شناسنامه', 'تاریخ تولد', 'محل تولد',
+            'سمت شغل', 'نوع استخدام', 'شماره همراه', 'مزد روزانه', 'شماره حساب', 'شماره شبا',
+            'نام بانک', 'آدرس', 'کد پستی', 'وضعیت تاهل', 'تعداد فرزند'
+        ]
+        columns_en = [
+            'row_num', 'national_code', 'first_name', 'last_name', 'father_name', 'id_number', 'birth_date', 'birth_place',
+            'job_title', 'employment_type', 'mobile_phone', 'daily_base_wage', 'account_number', 'sheba_number',
+            'bank_name', 'address', 'postal_code', 'marital_status', 'children_count'
+        ]
+
+        f_title = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        f_key = Font(name='Segoe UI', size=9, bold=True, color='CBD5E1')
+        fill_title = PatternFill(start_color='4338CA', end_color='4338CA', fill_type='solid')
+        fill_key = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.row_dimensions[1].height = 28
+        ws.row_dimensions[2].height = 20
+        ws.freeze_panes = 'A3'
+
+        for col_idx, (c_fa, c_en) in enumerate(zip(columns_fa, columns_en), 1):
+            cell_fa = ws.cell(row=1, column=col_idx, value=c_fa)
+            cell_fa.font = f_title
+            cell_fa.fill = fill_title
+            cell_fa.alignment = align_center
+            cell_fa.border = thin_border
+
+            cell_en = ws.cell(row=2, column=col_idx, value=c_en)
+            cell_en.font = f_key
+            cell_en.fill = fill_key
+            cell_en.alignment = align_center
+            cell_en.border = thin_border
+
+        # ردیف نمونه راهنما
+        sample_row = [
+            1, '0012345678', 'علی', 'محمدی', 'رضا', '1234', '1370/01/01', 'تهران',
+            'کارگر انبار', 'قراردادی', '09123456789', 3500000, '1234567890', 'IR120120000000001234567890',
+            'بانک ملت', 'تهران، خیابان آزادی', '1234567890', 'متاهل', 1
+        ]
+        ws.row_dimensions[3].height = 22
+        for col_idx, val in enumerate(sample_row, 1):
+            c = ws.cell(row=3, column=col_idx, value=val)
+            c.alignment = align_center
+            c.border = thin_border
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="personnel_template.xlsx"'
+        return response
+
     @action(detail=False, methods=['post', 'POST', 'get', 'GET'], url_path='import-excel')
     def import_excel(self, request):
         """
         درون‌ریزی مستقیم شیت Emp_info از فایل اکسل شرکت (Upsert بر مبنای کد ملی ۱۰ رقمی)
+        پشتیبانی کامل از dry_run (پیش‌نمایش بدون تغییر در دیتابیس) و update_existing مطابق استاندارد ExcelImportModal
         """
         import openpyxl
         file_obj = request.FILES.get('file')
@@ -296,11 +392,19 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             return Response({'error': 'فایل اکسل الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
         
         warehouse_id = request.data.get('warehouse_id') or request.query_params.get('warehouse_id')
+        section_id = request.data.get('section_id') or request.query_params.get('section_id')
+        dry_run = str(request.data.get('dry_run') or request.query_params.get('dry_run', 'false')).lower() in ['true', '1']
+        update_existing = str(request.data.get('update_existing') or request.query_params.get('update_existing', 'true')).lower() in ['true', '1']
         
         try:
             wb = openpyxl.load_workbook(file_obj, data_only=True)
         except Exception as e:
-            return Response({'error': f'خطا در باز کردن فایل اکسل: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'success': False,
+                'dry_run': dry_run,
+                'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0, 'valid_count': 0, 'error_count': 1},
+                'errors': [{'row': 0, 'field': 'فایل اکسل', 'message': f'خطا در باز کردن فایل اکسل: {str(e)}'}]
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         target_sheet = None
         for name in wb.sheetnames:
@@ -329,122 +433,296 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 header_map[cleaned] = col_idx
 
         if 'کد ملی' not in header_map and 'نام خانوادگی' not in header_map:
-            return Response({'error': 'شیت پرسنلی یا ستون‌های الزامی (کد ملی، نام خانوادگی) در فایل یافت نشد.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'success': False,
+                'dry_run': dry_run,
+                'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0, 'valid_count': 0, 'error_count': 1},
+                'errors': [{'row': header_row_idx, 'field': 'ستون‌ها', 'message': 'شیت پرسنلی یا ستون‌های الزامی (کد ملی، نام خانوادگی) در فایل یافت نشد.'}]
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         created_count = 0
         updated_count = 0
+        skipped_count = 0
         errors = []
+        preview_rows = []
 
-        with transaction.atomic():
-            for r in range(header_row_idx + 1, ws.max_row + 1):
-                nat_col = header_map.get('کد ملی')
-                if not nat_col:
-                    continue
-                raw_nc = ws.cell(row=r, column=nat_col).value
-                if raw_nc is None or str(raw_nc).strip() == '':
-                    continue
-                
-                nc_clean = str(raw_nc).split('.')[0].strip().zfill(10)
-                if not nc_clean.isdigit() or len(nc_clean) != 10:
-                    errors.append(f'ردیف {r}: کد ملی نامعتبر است ({raw_nc})')
-                    continue
+        valid_rows_data = []
 
-                def get_v(key, default=''):
-                    c_idx = header_map.get(key)
-                    if c_idx:
-                        val = ws.cell(row=r, column=c_idx).value
-                        if val is not None:
-                            return str(val).strip()
-                    return default
+        def get_v(r, key, default=''):
+            c_idx = header_map.get(key)
+            if c_idx:
+                val = ws.cell(row=r, column=c_idx).value
+                if val is not None:
+                    return str(val).strip()
+            return default
 
-                def get_num(key, default=0):
-                    c_idx = header_map.get(key)
-                    if c_idx:
-                        val = ws.cell(row=r, column=c_idx).value
-                        if val is not None:
-                            try:
-                                return float(val)
-                            except (ValueError, TypeError):
-                                pass
-                    return default
+        def get_num(r, key, default=0):
+            c_idx = header_map.get(key)
+            if c_idx:
+                val = ws.cell(row=r, column=c_idx).value
+                if val is not None:
+                    try:
+                        return float(val)
+                    except (ValueError, TypeError):
+                        pass
+            return default
 
-                def get_bool(key, default=True):
-                    c_idx = header_map.get(key)
-                    if c_idx:
-                        val = ws.cell(row=r, column=c_idx).value
-                        if val is not None:
-                            return str(val).strip() in ['1', 'true', 'True', 'بله']
-                    return default
+        def get_bool(r, key, default=True):
+            c_idx = header_map.get(key)
+            if c_idx:
+                val = ws.cell(row=r, column=c_idx).value
+                if val is not None:
+                    return str(val).strip() in ['1', 'true', 'True', 'بله']
+            return default
 
-                first_name = get_v('نام')
-                last_name = get_v('نام خانوادگی')
-                if not last_name:
-                    continue
+        for r in range(header_row_idx + 1, ws.max_row + 1):
+            nat_col = header_map.get('کد ملی')
+            if not nat_col:
+                continue
+            raw_nc = ws.cell(row=r, column=nat_col).value
+            if raw_nc is None or str(raw_nc).strip() == '':
+                continue
 
-                profile_defaults = {
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'father_name': get_v('نام پدر') or get_v('نام  پدر'),
-                    'birth_date': get_v('تاریخ تولد'),
-                    'id_number': get_v('شماره شناسنامه'),
-                    'birth_place': get_v('محل تولد'),
-                    'education_level': get_v('مدرک تحصیلی', '5'),
-                    'insurance_type': get_v('نوع بیمه', '2'),
-                    'insurance_number': get_v('شماره بیمه'),
-                    'insurance_name': get_v('نام بیمه', 'تامین اجتماعی'),
-                    'exemption_type': get_v('نوع معافیت', '1'),
-                    'job_category': get_v('رسته', '15'),
-                    'job_title': get_v('سمت شغل') or get_v('عنوان شغل') or 'پرسنل انبار',
-                    'employment_type': get_v('نوع استخدام', '2'),
-                    'start_date': get_v('تاریخ شروع به کار'),
-                    'end_date': get_v('تاریخ پایان کار'),
-                    'retirement_date': get_v('تاریخ بازنشستگی'),
-                    'job_code': get_v('کد شغل').zfill(6) if get_v('کد شغل') else '',
-                    'id_series': get_v('مسلسل شناسنامه'),
-                    'id_serial': get_v('سریال'),
-                    'issue_place': get_v('محل صدور'),
-                    'issue_date': get_v('تاریخ صدور'),
-                    'gender': get_v('جنسیت', 'مرد'),
-                    'phone_number': get_v('موبایل') or get_v('شماره همراه') or get_v('شماره تماس'),
-                    'account_number': get_v('شماره حساب'),
-                    'sheba_number': get_v('شماره شبا') or get_v('شبا'),
-                    'bank_name': get_v('نام بانک') or get_v('بانک'),
-                    'address': get_v('آدرس') or get_v('ادرس') or get_v('آدرس محل سکونت'),
-                    'postal_code': get_v('کد پستی') or get_v('کدپستی'),
-                    'marital_status': 'married' if 'متاهل' in get_v('وضعیت تاهل') or 'متأهل' in get_v('وضعیت تاهل') else 'single',
-                    'children_count': int(get_num('تعداد فرزند', 0)),
-                    'contract_hours': get_num('ساعت کار قرارداد شده', 230),
-                    'contract_base_salary': get_num('حقوق قرارداد شده', 0),
-                    'job_grade': get_v('گروه شغلی', '19'),
-                    'daily_base_wage': get_num('مزد روزانه', 0),
-                    'daily_seniority_bonus': get_num('پایه سنواتی', 0),
-                    'base_daily_rate': get_num('مزد مبنا', 0),
-                    'base_years_experience': int(get_num('تعداد سال کارکرد', 0)),
-                    'status_category': get_v('وضعیت', 'نفرات شرکتی'),
-                    'group_status': get_v('گروه', 'شاغل'),
-                    'include_in_tax': get_bool('maliat', True),
-                    'include_in_insurance': get_bool('بیمه', True),
-                    'include_in_bank': get_bool('bank', True),
-                    'created_by': request.user if request.user and request.user.is_authenticated else None
-                }
-                if warehouse_id and str(warehouse_id).isdigit():
-                    profile_defaults['assigned_warehouse_id'] = int(warehouse_id)
+            # در صورتی که سطر، سطر دوم هدر (کلیدهای انگلیسی استاندارد شرکت) باشد، از آن صرف‌نظر شود
+            if str(raw_nc).strip().lower() in ['national_code', 'national code', 'کد ملی', 'کلید']:
+                continue
+            
+            nc_clean = str(raw_nc).split('.')[0].strip().zfill(10)
+            if not nc_clean.isdigit() or len(nc_clean) != 10:
+                errors.append({
+                    'row': r,
+                    'field': 'کد ملی',
+                    'message': f'کد ملی نامعتبر است ({raw_nc})'
+                })
+                continue
 
-                obj, created = PersonnelProfile.objects.update_or_create(
-                    national_code=nc_clean,
-                    defaults=profile_defaults
-                )
-                if created:
-                    created_count += 1
-                else:
+            first_name = get_v(r, 'نام')
+            last_name = get_v(r, 'نام خانوادگی')
+            if not last_name:
+                errors.append({
+                    'row': r,
+                    'field': 'نام خانوادگی',
+                    'message': 'نام خانوادگی در این ردیف خالی است'
+                })
+                continue
+
+            profile_defaults = {
+                'first_name': first_name,
+                'last_name': last_name,
+                'father_name': get_v(r, 'نام پدر') or get_v(r, 'نام  پدر'),
+                'birth_date': get_v(r, 'تاریخ تولد'),
+                'id_number': get_v(r, 'شماره شناسنامه'),
+                'birth_place': get_v(r, 'محل تولد'),
+                'education_level': get_v(r, 'مدرک تحصیلی', '5'),
+                'insurance_type': get_v(r, 'نوع بیمه', '2'),
+                'insurance_number': get_v(r, 'شماره بیمه'),
+                'insurance_name': get_v(r, 'نام بیمه', 'تامین اجتماعی'),
+                'exemption_type': get_v(r, 'نوع معافیت', '1'),
+                'job_category': get_v(r, 'رسته', '15'),
+                'job_title': get_v(r, 'سمت شغل') or get_v(r, 'عنوان شغل') or 'پرسنل انبار',
+                'employment_type': get_v(r, 'نوع استخدام', '2'),
+                'start_date': get_v(r, 'تاریخ شروع به کار'),
+                'end_date': get_v(r, 'تاریخ پایان کار'),
+                'retirement_date': get_v(r, 'تاریخ بازنشستگی'),
+                'job_code': get_v(r, 'کد شغل').zfill(6) if get_v(r, 'کد شغل') else '',
+                'id_series': get_v(r, 'مسلسل شناسنامه'),
+                'id_serial': get_v(r, 'سریال'),
+                'issue_place': get_v(r, 'محل صدور'),
+                'issue_date': get_v(r, 'تاریخ صدور'),
+                'gender': get_v(r, 'جنسیت', 'مرد'),
+                'phone_number': get_v(r, 'موبایل') or get_v(r, 'شماره همراه') or get_v(r, 'شماره تماس'),
+                'account_number': get_v(r, 'شماره حساب'),
+                'sheba_number': get_v(r, 'شماره شبا') or get_v(r, 'شبا'),
+                'bank_name': get_v(r, 'نام بانک') or get_v(r, 'بانک'),
+                'address': get_v(r, 'آدرس') or get_v(r, 'ادرس') or get_v(r, 'آدرس محل سکونت'),
+                'postal_code': get_v(r, 'کد پستی') or get_v(r, 'کدپستی'),
+                'marital_status': 'married' if 'متاهل' in get_v(r, 'وضعیت تاهل') or 'متأهل' in get_v(r, 'وضعیت تاهل') else 'single',
+                'children_count': int(get_num(r, 'تعداد فرزند', 0)),
+                'contract_hours': get_num(r, 'ساعت کار قرارداد شده', 230),
+                'contract_base_salary': get_num(r, 'حقوق قرارداد شده', 0),
+                'job_grade': get_v(r, 'گروه شغلی', '19'),
+                'daily_base_wage': get_num(r, 'مزد روزانه', 0),
+                'daily_seniority_bonus': get_num(r, 'پایه سنواتی', 0),
+                'base_daily_rate': get_num(r, 'مزد مبنا', 0),
+                'base_years_experience': int(get_num(r, 'تعداد سال کارکرد', 0)),
+                'status_category': get_v(r, 'وضعیت', 'نفرات شرکتی'),
+                'group_status': get_v(r, 'گروه', 'شاغل'),
+                'include_in_tax': get_bool(r, 'maliat', True),
+                'include_in_insurance': get_bool(r, 'بیمه', True),
+                'include_in_bank': get_bool(r, 'bank', True),
+                'contract_type': 'daily',
+                'created_by': request.user if request.user and request.user.is_authenticated else None
+            }
+            if warehouse_id and str(warehouse_id).isdigit():
+                profile_defaults['assigned_warehouse_id'] = int(warehouse_id)
+            if section_id and str(section_id).isdigit():
+                profile_defaults['section_id'] = int(section_id)
+
+            valid_rows_data.append((r, nc_clean, profile_defaults))
+
+        existing_national_codes = set(
+            PersonnelProfile.objects.filter(
+                national_code__in=[x[1] for x in valid_rows_data]
+            ).values_list('national_code', flat=True)
+        )
+
+        for r, nc_clean, p_defaults in valid_rows_data:
+            exists = nc_clean in existing_national_codes
+            full_name = f"{p_defaults['first_name']} {p_defaults['last_name']}".strip()
+            
+            if exists:
+                if update_existing:
                     updated_count += 1
+                else:
+                    skipped_count += 1
+            else:
+                created_count += 1
+
+            if len(preview_rows) < 30:
+                preview_rows.append({
+                    'row': r,
+                    'name': full_name,
+                    'username': nc_clean,
+                    'national_code': nc_clean,
+                    'roles': p_defaults.get('job_title') or 'پرسنل انبار',
+                    'warehouses': f"بخش {section_id}" if section_id else "عمومی",
+                    'is_update': exists
+                })
+
+        if not dry_run:
+            with transaction.atomic():
+                for r, nc_clean, p_defaults in valid_rows_data:
+                    exists = nc_clean in existing_national_codes
+                    if exists and not update_existing:
+                        continue
+                    PersonnelProfile.objects.update_or_create(
+                        national_code=nc_clean,
+                        defaults=p_defaults
+                    )
+
+        valid_count = created_count + updated_count
+        total_rows = valid_count + len(errors) + skipped_count
 
         return Response({
+            'success': len(errors) == 0 or valid_count > 0,
+            'dry_run': dry_run,
             'message': f'درون‌ریزی پرسنل با موفقیت انجام شد ({created_count} پرسنل جدید، {updated_count} به‌روزرسانی).',
             'created_count': created_count,
             'updated_count': updated_count,
+            'summary': {
+                'total_rows': total_rows,
+                'created': created_count,
+                'updated': updated_count,
+                'skipped': len(errors) + skipped_count,
+                'valid_count': valid_count,
+                'error_count': len(errors),
+            },
+            'preview_rows': preview_rows,
             'errors': errors
-        })
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        """
+        خروجی رسمی ۲ ردیفه اطلاعات پرسنل بخش
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "پرسنل و کارکنان"
+        ws.views.sheetView[0].rightToLeft = True
+
+        headers_fa = [
+            'ردیف', 'کد ملی', 'نام و نام خانوادگی', 'سمت شغلی', 'نوع استخدام',
+            'شماره همراه', 'دستمزد پایه روزانه (ریال)', 'شماره حساب', 'شماره شبا',
+            'نام بانک', 'وضعیت تایید پرونده', 'وضعیت فعال'
+        ]
+        headers_en = [
+            'row_num', 'national_code', 'full_name', 'job_title', 'employment_type_display',
+            'mobile_phone', 'daily_base_wage', 'account_number', 'sheba_number',
+            'bank_name', 'approval_status_display', 'is_active'
+        ]
+
+        title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        key_font = Font(name='Segoe UI', size=8, italic=True, color='94A3B8')
+        title_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        key_fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.append(headers_fa)
+        ws.append(headers_en)
+
+        for col_idx in range(1, len(headers_fa) + 1):
+            cell_fa = ws.cell(row=1, column=col_idx)
+            cell_fa.font = title_font
+            cell_fa.fill = title_fill
+            cell_fa.alignment = Alignment(horizontal='center', vertical='center')
+
+            cell_en = ws.cell(row=2, column=col_idx)
+            cell_en.font = key_font
+            cell_en.fill = key_fill
+            cell_en.alignment = Alignment(horizontal='center', vertical='center')
+
+        ws.freeze_panes = 'A3'
+
+        data_font = Font(name='B Nazanin', size=10)
+        data_font_num = Font(name='Segoe UI', size=10)
+
+        for idx, p in enumerate(qs, start=1):
+            curr_row = idx + 2
+            row_data = [
+                idx,
+                p.national_code,
+                p.full_name,
+                p.job_title or '-',
+                p.get_employment_type_display() if hasattr(p, 'get_employment_type_display') else '-',
+                p.mobile_phone or '-',
+                float(p.daily_base_wage or 0),
+                p.account_number or '-',
+                p.sheba_number or '-',
+                p.bank_name or '-',
+                p.get_approval_status_display(),
+                'فعال' if p.is_active else 'غیرفعال'
+            ]
+            ws.append(row_data)
+
+            for col_idx in range(1, len(row_data) + 1):
+                c = ws.cell(row=curr_row, column=col_idx)
+                c.border = thin_border
+                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 4] else 'right', vertical='center')
+                if col_idx in [1, 2, 6, 7, 8, 9]:
+                    c.font = data_font_num
+                else:
+                    c.font = data_font
+                if col_idx == 7:
+                    c.number_format = '#,##0'
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        filename = f"personnel_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
 
 
 class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
@@ -459,6 +737,13 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         if warehouse_id:
             qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
             
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(section__project_id=project_id)
+
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() in ['true', '1'])
@@ -624,6 +909,108 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             'message': 'پرونده جهت بازنگری و اصلاح به اپراتور ارجاع داده شد.',
             'data': self.get_serializer(instance).data
         })
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        """
+        خروجی رسمی ۲ ردیفه اطلاعات ناوگان و رانندگان
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "ناوگان و رانندگان"
+        ws.views.sheetView[0].rightToLeft = True
+
+        headers_fa = [
+            'ردیف', 'شماره پلاک', 'نوع خودرو', 'نام راننده', 'کد ملی راننده',
+            'شماره تماس', 'نرخ پایه سرویس (ریال)', 'شماره حساب', 'شماره شبا',
+            'نام بانک', 'وضعیت تایید پرونده', 'وضعیت فعال'
+        ]
+        headers_en = [
+            'row_num', 'plate_number', 'vehicle_type_display', 'driver_name', 'driver_national_code',
+            'driver_phone', 'default_service_rate', 'account_number', 'sheba_number',
+            'bank_name', 'approval_status_display', 'is_active'
+        ]
+
+        title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        key_font = Font(name='Segoe UI', size=8, italic=True, color='94A3B8')
+        title_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        key_fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.append(headers_fa)
+        ws.append(headers_en)
+
+        for col_idx in range(1, len(headers_fa) + 1):
+            cell_fa = ws.cell(row=1, column=col_idx)
+            cell_fa.font = title_font
+            cell_fa.fill = title_fill
+            cell_fa.alignment = Alignment(horizontal='center', vertical='center')
+
+            cell_en = ws.cell(row=2, column=col_idx)
+            cell_en.font = key_font
+            cell_en.fill = key_fill
+            cell_en.alignment = Alignment(horizontal='center', vertical='center')
+
+        ws.freeze_panes = 'A3'
+
+        data_font = Font(name='B Nazanin', size=10)
+        data_font_num = Font(name='Segoe UI', size=10)
+
+        for idx, v in enumerate(qs, start=1):
+            curr_row = idx + 2
+            row_data = [
+                idx,
+                v.plate_number,
+                v.get_vehicle_type_display() if hasattr(v, 'get_vehicle_type_display') else v.vehicle_type,
+                v.driver_name,
+                v.driver_national_code or '-',
+                v.driver_phone or '-',
+                float(v.default_service_rate or 0),
+                v.account_number or '-',
+                v.sheba_number or '-',
+                v.bank_name or '-',
+                v.get_approval_status_display() if hasattr(v, 'get_approval_status_display') else str(v.approval_status),
+                'فعال' if v.is_active else 'غیرفعال'
+            ]
+            ws.append(row_data)
+
+            for col_idx in range(1, len(row_data) + 1):
+                c = ws.cell(row=curr_row, column=col_idx)
+                c.border = thin_border
+                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 4] else 'right', vertical='center')
+                if col_idx in [1, 2, 5, 6, 7, 8, 9]:
+                    c.font = data_font_num
+                else:
+                    c.font = data_font
+                if col_idx == 7:
+                    c.number_format = '#,##0'
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        filename = f"fleet_vehicles_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 class PersonnelChangeRequestViewSet(viewsets.ModelViewSet):
@@ -928,6 +1315,12 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(warehouse_id=warehouse_id)
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(Q(section_id=section_id) | Q(personnel__section_id=section_id))
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(Q(section__project_id=project_id) | Q(personnel__section__project_id=project_id))
         date_shamsi = self.request.query_params.get('date_shamsi')
         if date_shamsi:
             qs = qs.filter(date_shamsi=date_shamsi)
@@ -985,6 +1378,11 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 is_deleted=False
             ).select_related('personnel').order_by('id')
             existing_attendances = {att.personnel_id: att for att in attendances_qs}
+
+        raw_sec = request.query_params.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        if section_id:
+            personnel_list = personnel_list.filter(section_id=section_id)
 
         is_today_friday = is_date_shamsi_friday(date_shamsi)
 
@@ -1320,6 +1718,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         raw_wh = request.query_params.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
         project_id = safe_int(request.query_params.get('project_id'))
+        section_id = safe_int(request.query_params.get('section_id'))
         raw_year_month = request.query_params.get('year_month')
         if not raw_year_month:
             return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1400,6 +1799,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi__startswith=year_month, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
+            if section_id:
+                personnel_list = personnel_list.filter(section_id=section_id)
             attendances = DailyAttendance.objects.filter(
                 Q(warehouse_id=warehouse_id) | Q(personnel__in=personnel_list),
                 date_shamsi__startswith=year_month,
@@ -1409,6 +1810,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
             personnel_list = PersonnelProfile.objects.filter(
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi__startswith=year_month, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
+            if section_id:
+                personnel_list = personnel_list.filter(section_id=section_id)
             attendances = DailyAttendance.objects.filter(
                 date_shamsi__startswith=year_month,
                 is_deleted=False
@@ -1597,6 +2000,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
             year_month = raw_ym
 
         items = serializer.validated_data['items']
+        section_id = serializer.validated_data.get('section_id')
+        project_id = serializer.validated_data.get('project_id')
 
         allow_override = bool(request.data.get('is_override', False) or request.headers.get('X-Admin-Override') == 'true')
         is_admin_override = allow_override and (getattr(request.user, 'is_superuser', False) or request.user.has_perm('personnel.can_override_attendance_lock'))
@@ -1750,6 +2155,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     att_obj.notes = notes_val
                     if target_wh:
                         att_obj.warehouse_id = target_wh
+                    if section_id:
+                        att_obj.section_id = section_id
                     att_obj.modified_by = request.user
                     if target_period:
                         att_obj.period = target_period
@@ -1778,6 +2185,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     att_obj = DailyAttendance.objects.create(
                         personnel_id=personnel_id,
                         warehouse_id=target_wh,
+                        section_id=section_id or p_obj.section_id,
+                        project_id=project_id or p_obj.project_id,
                         date_shamsi=date_shamsi,
                         status=status_val,
                         effective_hours=eff_h,
@@ -1793,13 +2202,20 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     saved_count += 1
 
         client_tab_id = request.data.get('client_tab_id') or request.headers.get('X-Client-Tab-ID')
+        extra_data = {}
+        if section_id:
+            extra_data['section_id'] = section_id
+        if project_id:
+            extra_data['project_id'] = project_id
+
         broadcast_attendance_updated(
             warehouse_id=warehouse_id,
             date_shamsi=f"{year_month}/01",
             year_month=year_month,
             sender_id=request.user.id if request.user and request.user.is_authenticated else None,
             client_tab_id=client_tab_id,
-            message=f'شیت کارکرد ماهانه {year_month} به‌روزرسانی شد.'
+            message=f'شیت کارکرد ماهانه {year_month} به‌روزرسانی شد.',
+            extra_data=extra_data
         )
 
         return Response({
@@ -1820,6 +2236,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         raw_wh = request.query_params.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_sec = request.query_params.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_proj = request.query_params.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '']) else None
         raw_ym = request.query_params.get('year_month')
         if not raw_ym:
             return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1854,22 +2274,22 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 fridays.add(d)
             day_headers.append(f"{d} ({weekday_names[w]})")
 
-        if warehouse_id:
-            personnel_list = PersonnelProfile.objects.filter(
-                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
-                is_active=True
-            ).order_by('last_name', 'first_name')
-            attendances = DailyAttendance.objects.filter(
-                warehouse_id=warehouse_id,
-                date_shamsi__startswith=year_month,
-                is_deleted=False
+        personnel_list = PersonnelProfile.objects.filter(is_active=True)
+        attendances = DailyAttendance.objects.filter(
+            date_shamsi__startswith=year_month,
+            is_deleted=False
+        )
+
+        if section_id:
+            personnel_list = personnel_list.filter(section_id=section_id)
+            attendances = attendances.filter(section_id=section_id)
+        elif warehouse_id:
+            personnel_list = personnel_list.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True)
             )
-        else:
-            personnel_list = PersonnelProfile.objects.filter(is_active=True).order_by('last_name', 'first_name')
-            attendances = DailyAttendance.objects.filter(
-                date_shamsi__startswith=year_month,
-                is_deleted=False
-            )
+            attendances = attendances.filter(warehouse_id=warehouse_id)
+
+        personnel_list = personnel_list.order_by('last_name', 'first_name')
 
         att_map = {(a.personnel_id, int(a.date_shamsi.split('/')[2])): a for a in attendances}
 
@@ -2042,6 +2462,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         raw_wh = request.data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_sec = request.data.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_proj = request.data.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '']) else None
         raw_ym = request.data.get('year_month')
         if not raw_ym:
             return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -2094,9 +2518,17 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         if not day_cols:
             return Response({'error': 'هیچ ستونی برای روزهای ماه در فایل اکسل شناسایی نشد.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        personnel_qs = PersonnelProfile.objects.filter(is_active=True)
+        if section_id:
+            personnel_qs = personnel_qs.filter(section_id=section_id)
+        elif warehouse_id:
+            personnel_qs = personnel_qs.filter(
+                Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True)
+            )
+
         personnel_map = {
             normalize_digits(str(p.national_code)).split('.')[0].strip().zfill(10): p
-            for p in PersonnelProfile.objects.filter(is_active=True)
+            for p in personnel_qs
             if p.national_code
         }
 
@@ -2233,6 +2665,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                             att_obj.is_mission = is_mission
                             if target_wh:
                                 att_obj.warehouse_id = target_wh
+                            if section_id:
+                                att_obj.section_id = section_id
+                            if project_id:
+                                att_obj.project_id = project_id
                             if target_period:
                                 att_obj.period = target_period
                             att_obj.modified_by = request.user
@@ -2254,6 +2690,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                         att_obj = DailyAttendance.objects.create(
                             personnel=p_obj,
                             warehouse_id=target_wh,
+                            section_id=section_id or p_obj.section_id,
+                            project_id=project_id or p_obj.project_id,
                             period=target_period,
                             date_shamsi=date_shamsi,
                             status=status_val,
@@ -2277,12 +2715,19 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                         )
                         updated_cells += 1
 
+        extra_data = {}
+        if section_id:
+            extra_data['section_id'] = section_id
+        if project_id:
+            extra_data['project_id'] = project_id
+
         broadcast_attendance_updated(
             warehouse_id=warehouse_id,
             date_shamsi=f"{year_month}/01",
             year_month=year_month,
             sender_id=request.user.id if request.user and request.user.is_authenticated else None,
-            message=f'اطلاعات شیت کارکرد ماهانه {year_month} از فایل اکسل بارگذاری و به‌روزرسانی شد.'
+            message=f'اطلاعات شیت کارکرد ماهانه {year_month} از فایل اکسل بارگذاری و به‌روزرسانی شد.',
+            extra_data=extra_data
         )
 
         return Response({
@@ -2389,6 +2834,12 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(warehouse_id=warehouse_id)
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(Q(section_id=section_id) | Q(vehicle__section_id=section_id))
+        project_id = self.request.query_params.get('project_id')
+        if project_id:
+            qs = qs.filter(Q(section__project_id=project_id) | Q(vehicle__section__project_id=project_id))
         date_shamsi = self.request.query_params.get('date_shamsi')
         if date_shamsi:
             qs = qs.filter(date_shamsi=date_shamsi)
@@ -2434,6 +2885,12 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                 date_shamsi=date_shamsi,
                 is_deleted=False
             )
+
+        raw_sec = request.query_params.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        if section_id:
+            vehicles = vehicles.filter(section_id=section_id)
+            trip_qs = trip_qs.filter(Q(section_id=section_id) | Q(vehicle__section_id=section_id))
 
         existing_trips = {
             t.vehicle_id: t
@@ -2495,6 +2952,10 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         
         raw_wh = serializer.validated_data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_sec = serializer.validated_data.get('section_id') or request.query_params.get('section_id') or request.data.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_proj = serializer.validated_data.get('project_id') or request.query_params.get('project_id') or request.data.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '']) else None
         date_shamsi = serializer.validated_data['date_shamsi']
         items = serializer.validated_data['items']
 
@@ -2552,6 +3013,8 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                 total_amount = unit_rate * trip_count
 
                 if trip_count > 0:
+                    effective_section_id = section_id or v_obj.section_id
+                    effective_project_id = project_id or (v_obj.section.project_id if v_obj.section else None)
                     if trip_obj:
                         trip_obj.trip_count = trip_count
                         trip_obj.unit_rate = unit_rate
@@ -2560,11 +3023,17 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                         trip_obj.origin_destination = item.get('origin_destination', '')
                         trip_obj.notes = item.get('notes', '')
                         trip_obj.period = target_period
+                        if effective_section_id:
+                            trip_obj.section_id = effective_section_id
+                        if effective_project_id:
+                            trip_obj.project_id = effective_project_id
                         trip_obj.save()
                     else:
                         VehicleTripLog.objects.create(
                             vehicle_id=vehicle_id,
                             warehouse_id=target_wh,
+                            section_id=effective_section_id,
+                            project_id=effective_project_id,
                             date_shamsi=date_shamsi,
                             trip_count=trip_count,
                             unit_rate=unit_rate,
@@ -2596,6 +3065,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                         'type_str': 'fleet_trips_updated',
                         'message': f'تردد ناوگان برای تاریخ {date_shamsi} ثبت/به‌روزرسانی شد.',
                         'warehouse_id': warehouse_id,
+                        'section_id': section_id,
                         'date_shamsi': date_shamsi,
                         'year_month': year_month,
                         'sender_id': request.user.id if request.user and request.user.is_authenticated else None,
@@ -2749,12 +3219,26 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                 active_filter_q
             ).order_by('driver_name')
 
+        raw_sec = request.query_params.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '', 'UNDEFINED', 'NULL']) else None
+        if section_id:
+            vehicles = vehicles.filter(section_id=section_id)
+
+        raw_proj = request.query_params.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '', 'UNDEFINED', 'NULL']) else None
+        if project_id:
+            vehicles = vehicles.filter(section__project_id=project_id)
+
         trips = VehicleTripLog.objects.filter(
             date_shamsi__startswith=year_month,
             is_deleted=False
         )
         if warehouse_id:
             trips = trips.filter(warehouse_id=warehouse_id)
+        if section_id:
+            trips = trips.filter(Q(section_id=section_id) | Q(vehicle__section_id=section_id))
+        if project_id:
+            trips = trips.filter(Q(section__project_id=project_id) | Q(vehicle__section__project_id=project_id))
 
         trip_map = {}
         for t in trips:
@@ -2859,6 +3343,11 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         notes = serializer.validated_data.get('notes', '') or ''
         client_tab_id = serializer.validated_data.get('client_tab_id')
 
+        raw_sec = serializer.validated_data.get('section_id') or request.query_params.get('section_id') or request.data.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_proj = serializer.validated_data.get('project_id') or request.query_params.get('project_id') or request.data.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '']) else None
+
         v_obj = VehicleDriverProfile.objects.filter(id=vehicle_id).first()
         if not v_obj:
             return Response({'error': 'خودرو یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
@@ -2885,6 +3374,9 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                 date_shamsi=date_shamsi,
                 is_deleted=False
             ).first()
+
+            effective_section_id = section_id or v_obj.section_id
+            effective_project_id = project_id or (v_obj.section.project_id if v_obj.section else None)
 
             if trip_count > 0:
                 total_amount = unit_rate * trip_count
@@ -2922,11 +3414,17 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                     trip_obj.origin_destination = orig_dest
                     trip_obj.notes = notes
                     trip_obj.is_deleted = False
+                    if effective_section_id:
+                        trip_obj.section_id = effective_section_id
+                    if effective_project_id:
+                        trip_obj.project_id = effective_project_id
                     trip_obj.save()
                 else:
                     trip_obj = VehicleTripLog.objects.create(
                         vehicle_id=vehicle_id,
                         warehouse_id=target_wh,
+                        section_id=effective_section_id,
+                        project_id=effective_project_id,
                         date_shamsi=date_shamsi,
                         trip_count=trip_count,
                         unit_rate=unit_rate,
@@ -2976,6 +3474,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                         'type_str': 'fleet_trips_updated',
                         'message': f'تردد خودرو {v_obj.driver_name} در تاریخ {date_shamsi} به‌روزرسانی شد.',
                         'warehouse_id': warehouse_id,
+                        'section_id': section_id,
                         'date_shamsi': date_shamsi,
                         'year_month': year_month,
                         'sender_id': request.user.id if request.user and request.user.is_authenticated else None,
@@ -3017,6 +3516,10 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
 
         raw_wh = serializer.validated_data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_sec = serializer.validated_data.get('section_id') or request.query_params.get('section_id') or request.data.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+        raw_proj = serializer.validated_data.get('project_id') or request.query_params.get('project_id') or request.data.get('project_id')
+        project_id = int(raw_proj) if (raw_proj and str(raw_proj).upper() not in ['ALL', '0', 'NONE', '']) else None
         year_month = serializer.validated_data['year_month']
         items = serializer.validated_data['items']
         client_tab_id = serializer.validated_data.get('client_tab_id')
@@ -3058,6 +3561,9 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                     is_deleted=False
                 ).first()
 
+                effective_section_id = section_id or v_obj.section_id
+                effective_project_id = project_id or (v_obj.section.project_id if v_obj.section else None)
+
                 if trip_count > 0:
                     if trip_obj:
                         trip_obj.trip_count = trip_count
@@ -3066,11 +3572,18 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                         trip_obj.dispatch_reference = item.get('dispatch_reference', '') or ''
                         trip_obj.origin_destination = item.get('origin_destination', '') or ''
                         trip_obj.notes = item.get('notes', '') or ''
+                        trip_obj.is_deleted = False
+                        if effective_section_id:
+                            trip_obj.section_id = effective_section_id
+                        if effective_project_id:
+                            trip_obj.project_id = effective_project_id
                         trip_obj.save()
                     else:
                         VehicleTripLog.objects.create(
                             vehicle_id=v_id,
                             warehouse_id=target_wh,
+                            section_id=effective_section_id,
+                            project_id=effective_project_id,
                             date_shamsi=date_shamsi,
                             trip_count=trip_count,
                             unit_rate=unit_rate,
@@ -3099,6 +3612,7 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
                         'type_str': 'fleet_trips_updated',
                         'message': f'ماتریس ۳۱ روزه ناوگان برای دوره {year_month} ذخیره شد.',
                         'warehouse_id': warehouse_id,
+                        'section_id': section_id,
                         'year_month': year_month,
                         'sender_id': request.user.id if request.user and request.user.is_authenticated else None,
                         'client_tab_id': client_tab_id
@@ -3124,7 +3638,10 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         if not year_month:
             return Response({'error': 'پارامتر year_month الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        excel_buffer = export_fleet_monthly_excel(warehouse_id=warehouse_id, year_month=year_month)
+        raw_sec = request.query_params.get('section_id')
+        section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
+
+        excel_buffer = export_fleet_monthly_excel(warehouse_id=warehouse_id, year_month=year_month, section_id=section_id)
         filename = f"Fleet_Timesheet_{year_month.replace('/', '_')}.xlsx"
         response = HttpResponse(
             excel_buffer.getvalue(),
@@ -4940,6 +5457,11 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
     pagination_class = OptionalPageNumberPagination
 
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve', 'create']:
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsOrgStructureManagerOrReadOnly()]
+
     def get_queryset(self):
         qs = super().get_queryset()
         c_type = self.request.query_params.get('counterparty_type')
@@ -5012,6 +5534,7 @@ class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
     queryset = ExpenseInvoice.objects.all().select_related('section', 'section__project', 'counterparty', 'created_by')
     serializer_class = ExpenseInvoiceSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
     pagination_class = None
 
     def get_queryset(self):
@@ -5031,7 +5554,485 @@ class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
         return qs.order_by('-invoice_date_shamsi', '-created_at')
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        user = self.request.user
+        # Guardian G2: employee-submitted invoices must always be created in 'draft' status
+        if not user.is_superuser:
+            serializer.save(created_by=user, status='draft')
+        else:
+            serializer.save(created_by=user)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if not user.is_superuser:
+            new_status = serializer.validated_data.get('status')
+            if new_status and new_status not in ['draft', 'pending_supervisor']:
+                serializer.save(status=instance.status)
+                return
+        serializer.save()
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        """
+        خروجی اکسل استاندارد ۲ ردیفه فاکتورهای هزینه بر اساس معماری سیستم
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "فاکتورهای هزینه"
+        ws.views.sheetView[0].rightToLeft = True
+
+        headers_fa = [
+            'ردیف', 'شماره فاکتور', 'تاریخ فاکتور (شمسی)', 'پروژه', 'بخش', 
+            'طرف‌حساب', 'سرفصل هزینه', 'مبلغ (ریال)', 'وضعیت', 'ثبت‌کننده', 'شرح هزینه'
+        ]
+        headers_en = [
+            'row_num', 'invoice_number', 'invoice_date_shamsi', 'project_name', 'section_name',
+            'counterparty_name', 'category', 'amount', 'status_display', 'created_by_name', 'description'
+        ]
+
+        title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        key_font = Font(name='Segoe UI', size=8, italic=True, color='94A3B8')
+        title_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        key_fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.append(headers_fa)
+        ws.append(headers_en)
+
+        for col_idx in range(1, len(headers_fa) + 1):
+            cell_fa = ws.cell(row=1, column=col_idx)
+            cell_fa.font = title_font
+            cell_fa.fill = title_fill
+            cell_fa.alignment = Alignment(horizontal='center', vertical='center')
+
+            cell_en = ws.cell(row=2, column=col_idx)
+            cell_en.font = key_font
+            cell_en.fill = key_fill
+            cell_en.alignment = Alignment(horizontal='center', vertical='center')
+
+        ws.row_dimensions[1].height = 26
+        ws.row_dimensions[2].height = 16
+        ws.freeze_panes = 'A3'
+
+        data_font = Font(name='B Nazanin', size=10)
+        data_font_num = Font(name='Segoe UI', size=10)
+
+        for idx, inv in enumerate(qs, start=1):
+            created_name = f"{inv.created_by.first_name} {inv.created_by.last_name}".strip() or inv.created_by.username if inv.created_by else 'سیستم'
+            ws.append([
+                idx,
+                inv.invoice_number,
+                inv.invoice_date_shamsi,
+                inv.section.project.name if inv.section and inv.section.project else '',
+                inv.section.name if inv.section else '',
+                inv.counterparty.name if inv.counterparty else '',
+                inv.category,
+                inv.amount,
+                inv.get_status_display(),
+                created_name,
+                inv.description or ''
+            ])
+            curr_row = idx + 2
+            ws.row_dimensions[curr_row].height = 20
+            for col_idx in range(1, len(headers_fa) + 1):
+                c = ws.cell(row=curr_row, column=col_idx)
+                c.border = thin_border
+                c.alignment = Alignment(horizontal='center' if col_idx not in [6, 11] else 'right', vertical='center')
+                if col_idx in [1, 2, 3, 8]:
+                    c.font = data_font_num
+                else:
+                    c.font = data_font
+                if col_idx == 8:
+                    c.number_format = '#,##0'
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        filename = f"expense_invoices_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+# ==============================================================================
+# 0.2 ویوست‌های مدیریت تنخواه‌گردان (Petty Cash Management ViewSets)
+# ==============================================================================
+
+class PettyCashAccountViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت و تعریف حساب‌ها / سقف‌های تنخواه‌گردان کارمندان در بخش‌های پروژه
+    """
+    queryset = PettyCashAccount.objects.all().select_related('section', 'section__project', 'custodian')
+    serializer_class = PettyCashAccountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        custodian_id = self.request.query_params.get('custodian_id')
+        if custodian_id:
+            qs = qs.filter(custodian_id=custodian_id)
+        user = self.request.user
+        # کارمندان عادی فقط حساب تنخواه خود را مشاهده می‌کنند
+        if not user.is_superuser:
+            is_manager = UserSectionAssignment.objects.filter(
+                user=user,
+                section_id=section_id,
+                role__in=['supervisor', 'accountant', 'manager', 'treasury']
+            ).exists() if section_id else False
+            if not is_manager:
+                qs = qs.filter(custodian=user)
+        return qs.order_by('section', 'custodian')
+
+
+class PettyCashTransactionViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت اسناد، هزینه‌کردها، درخواست‌های شارژ و تسویه تنخواه‌گردان
+    """
+    queryset = PettyCashTransaction.objects.all().select_related(
+        'section', 'section__project', 'custodian', 'counterparty', 'created_by', 'account'
+    )
+    serializer_class = PettyCashTransactionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        section_id = self.request.query_params.get('section_id')
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        custodian_id = self.request.query_params.get('custodian_id')
+        if custodian_id:
+            qs = qs.filter(custodian_id=custodian_id)
+        tx_type = self.request.query_params.get('transaction_type')
+        if tx_type:
+            qs = qs.filter(transaction_type=tx_type)
+        status_val = self.request.query_params.get('status')
+        if status_val:
+            qs = qs.filter(status=status_val)
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search) |
+                Q(receipt_number__icontains=search) |
+                Q(category__icontains=search) |
+                Q(counterparty__name__icontains=search) |
+                Q(description__icontains=search)
+            )
+
+        user = self.request.user
+        # اگر کاربر دسترسی مدیریتی نداشته باشد، فقط اسناد تنخواه خودش در بخش را می‌بیند
+        if not user.is_superuser and not custodian_id:
+            is_manager = UserSectionAssignment.objects.filter(
+                user=user,
+                section_id=section_id,
+                role__in=['supervisor', 'accountant', 'manager', 'treasury']
+            ).exists() if section_id else False
+            if not is_manager:
+                qs = qs.filter(custodian=user)
+
+        return qs.order_by('-transaction_date_shamsi', '-created_at')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        section = serializer.validated_data.get('section')
+        custodian = serializer.validated_data.get('custodian') or user
+
+        # اتصال خودکار یا ایجاد حساب تنخواه برای بخش و کاربر
+        account = serializer.validated_data.get('account')
+        if not account and section:
+            account, _ = PettyCashAccount.objects.get_or_create(
+                section=section,
+                custodian=custodian,
+                defaults={'ceiling_amount': Decimal('100000000')}
+            )
+
+        # تحمیل قانون طلایی پیش‌نویس (Guardian G2)
+        if not user.is_superuser:
+            serializer.save(
+                created_by=user,
+                custodian=custodian,
+                account=account,
+                status='draft'
+            )
+        else:
+            serializer.save(created_by=user, custodian=custodian, account=account)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = self.get_object()
+        if not user.is_superuser:
+            new_status = serializer.validated_data.get('status')
+            # کارمندان عادی فقط مجاز به نگه‌داشتن draft یا ارسال به pending_supervisor هستند
+            if new_status and new_status not in ['draft', 'pending_supervisor']:
+                serializer.save(status=instance.status)
+                return
+        serializer.save()
+
+    @action(detail=False, methods=['get'], url_path='my-balance')
+    def my_balance(self, request):
+        """
+        محاسبه مانده زنده تنخواه، سقف مصوب، هزینه‌های تاییدشده و در جریان (Guardian G1)
+        """
+        section_id = request.query_params.get('section_id')
+        if not section_id:
+            return Response(
+                {'error': 'شناسه بخش پروژه (section_id) الزامی است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        target_user_id = request.query_params.get('custodian_id')
+        if target_user_id and (request.user.is_superuser or UserSectionAssignment.objects.filter(
+            user=request.user, section_id=section_id, role__in=['supervisor', 'accountant', 'manager', 'treasury']
+        ).exists()):
+            custodian = get_user_model().objects.filter(id=target_user_id).first() or request.user
+        else:
+            custodian = request.user
+
+        account = PettyCashAccount.objects.filter(
+            section_id=section_id, custodian=custodian, is_active=True
+        ).first()
+
+        ceiling = account.ceiling_amount if account else Decimal('0')
+
+        # مجموع شارژهای دریافت شده (approved / paid)
+        allocations_sum = PettyCashTransaction.objects.filter(
+            section_id=section_id,
+            custodian=custodian,
+            transaction_type='allocation',
+            status__in=['approved', 'paid']
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # مجموع هزینه‌های تایید شده و تسویه شده
+        spent_sum = PettyCashTransaction.objects.filter(
+            section_id=section_id,
+            custodian=custodian,
+            transaction_type='expense',
+            status='approved'
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # مجموع هزینه‌های در جریان تایید (draft / pending)
+        pending_settlement = PettyCashTransaction.objects.filter(
+            section_id=section_id,
+            custodian=custodian,
+            transaction_type='expense',
+            status__in=['draft', 'pending_supervisor', 'pending_accountant']
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+        # مانده نقد در دست تنخواه‌دار
+        current_balance = allocations_sum - spent_sum
+
+        # درصد مصرف از سقف تنخواه
+        utilization_rate = 0.0
+        if ceiling > Decimal('0'):
+            utilization_rate = float(min(Decimal('100.0'), (spent_sum / ceiling) * Decimal('100.0')))
+
+        custodian_full_name = f"{custodian.first_name} {custodian.last_name}".strip() or custodian.username
+
+        return Response({
+            'account_id': account.id if account else None,
+            'ceiling_amount': int(ceiling),
+            'ceiling_amount_tomans': int(ceiling // 10),
+            'total_allocated': int(allocations_sum),
+            'total_allocated_tomans': int(allocations_sum // 10),
+            'total_spent': int(spent_sum),
+            'total_spent_tomans': int(spent_sum // 10),
+            'current_balance': int(current_balance),
+            'current_balance_tomans': int(current_balance // 10),
+            'pending_settlement': int(pending_settlement),
+            'pending_settlement_tomans': int(pending_settlement // 10),
+            'utilization_rate': round(utilization_rate, 1),
+            'card_or_account_number': account.card_or_account_number if account else '',
+            'sheba_number': account.sheba_number if account else '',
+            'custodian_name': custodian_full_name,
+            'custodian_id': custodian.id
+        })
+
+    @action(detail=False, methods=['post'], url_path='request-replenishment')
+    def request_replenishment(self, request):
+        """
+        ثبت سریع درخواست شارژ مجدد / واریز به حساب تنخواه
+        """
+        section_id = request.data.get('section_id')
+        amount = request.data.get('amount')
+        title = request.data.get('title') or 'درخواست شارژ مجدد تنخواه'
+        description = request.data.get('description', '')
+        receipt_number = request.data.get('receipt_number', '')
+
+        if not section_id or not amount:
+            return Response(
+                {'error': 'شناسه بخش و مبلغ الزامی هستند.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            amount_dec = Decimal(str(amount))
+            if amount_dec <= 0:
+                raise ValueError()
+        except Exception:
+            return Response({'error': 'مبلغ باید عددی مثبت باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        section = get_object_or_404(ProjectSection, id=section_id)
+        custodian = request.user
+
+        account, _ = PettyCashAccount.objects.get_or_create(
+            section=section,
+            custodian=custodian,
+            defaults={'ceiling_amount': Decimal('100000000')}
+        )
+
+        from common.date_utils import gregorian_to_jalali
+        now = timezone.now()
+        shamsi_today = gregorian_to_jalali(now.year, now.month, now.day)
+
+        tx = PettyCashTransaction.objects.create(
+            account=account,
+            section=section,
+            custodian=custodian,
+            created_by=request.user,
+            transaction_type='allocation',
+            amount=amount_dec,
+            transaction_date_shamsi=shamsi_today,
+            title=title,
+            category='شارژ مجدد تنخواه',
+            description=description,
+            receipt_number=receipt_number,
+            status='draft'
+        )
+
+        serializer = self.get_serializer(tx)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        """
+        خروجی اکسل رسمی ۲ ردیفه گردش و تراکنش‌های تنخواه‌گردان مطابق استانداردهای سیستم
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "گردش تنخواه‌گردان"
+        ws.views.sheetView[0].rightToLeft = True
+
+        headers_fa = [
+            'ردیف', 'نوع تراکنش', 'شماره رسید/فاکتور', 'تاریخ (شمسی)', 'پروژه', 'بخش',
+            'تنخواه‌دار', 'طرف‌حساب/فروشنده', 'سرفصل هزینه', 'عنوان / شرح مختصر',
+            'مبلغ (ریال)', 'وضعیت سند', 'ثبت‌کننده', 'توضیحات تفصیلی'
+        ]
+        headers_en = [
+            'row_num', 'transaction_type_display', 'receipt_number', 'transaction_date_shamsi',
+            'project_name', 'section_name', 'custodian_name', 'counterparty_name',
+            'category', 'title', 'amount', 'status_display', 'created_by_name', 'description'
+        ]
+
+        title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        key_font = Font(name='Segoe UI', size=8, italic=True, color='94A3B8')
+        title_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        key_fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.append(headers_fa)
+        ws.append(headers_en)
+
+        for col_idx in range(1, len(headers_fa) + 1):
+            cell_fa = ws.cell(row=1, column=col_idx)
+            cell_fa.font = title_font
+            cell_fa.fill = title_fill
+            cell_fa.alignment = Alignment(horizontal='center', vertical='center')
+
+            cell_en = ws.cell(row=2, column=col_idx)
+            cell_en.font = key_font
+            cell_en.fill = key_fill
+            cell_en.alignment = Alignment(horizontal='center', vertical='center')
+
+        ws.freeze_panes = 'A3'
+
+        data_font = Font(name='B Nazanin', size=10)
+        data_font_num = Font(name='Segoe UI', size=10)
+
+        for idx, tx in enumerate(qs, start=1):
+            curr_row = idx + 2
+            cust_name = f"{tx.custodian.first_name} {tx.custodian.last_name}".strip() or tx.custodian.username
+            cp_name = tx.counterparty.name if tx.counterparty else '-'
+            creator_name = f"{tx.created_by.first_name} {tx.created_by.last_name}".strip() if tx.created_by else '-'
+            row_data = [
+                idx,
+                tx.get_transaction_type_display(),
+                tx.receipt_number or '-',
+                tx.transaction_date_shamsi,
+                tx.section.project.name if tx.section else '-',
+                tx.section.name if tx.section else '-',
+                cust_name,
+                cp_name,
+                tx.category,
+                tx.title,
+                float(tx.amount),
+                tx.get_status_display(),
+                creator_name,
+                tx.description or '-'
+            ]
+            ws.append(row_data)
+
+            for col_idx in range(1, len(row_data) + 1):
+                c = ws.cell(row=curr_row, column=col_idx)
+                c.border = thin_border
+                c.alignment = Alignment(horizontal='center' if col_idx not in [8, 10, 14] else 'right', vertical='center')
+                if col_idx in [1, 3, 4, 11]:
+                    c.font = data_font_num
+                else:
+                    c.font = data_font
+                if col_idx == 11:
+                    c.number_format = '#,##0'
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        filename = f"petty_cash_transactions_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
 
 
 

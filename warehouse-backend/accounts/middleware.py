@@ -116,29 +116,30 @@ def get_user_valid_roles_for_app(user, app_module: str = 'personnel') -> list[st
 
     roles = []
     if module_code == 'accounting':
-        if user.has_perm('accounts.view_sys_personnel_attendance') or user.has_perm('accounts.view_sys_personnel'):
+        # اپراتور/کارمند: فقط اگر صراحتاً نقش کارمند داشته باشد
+        if user.has_perm('accounts.can_act_as_operator'):
             roles.append('operator')
-        if user.has_perm('accounts.perm_approve_personnel_supervisor') or user.has_perm('accounts.perm_approve_fleet_supervisor'):
+        if user.has_perm('accounts.can_act_as_workshop_supervisor') or user.has_perm('accounts.perm_approve_personnel_supervisor') or user.has_perm('accounts.perm_approve_fleet_supervisor'):
             roles.append('supervisor')
-        if user.has_perm('accounts.perm_approve_personnel_finance') or user.has_perm('accounts.perm_approve_fleet_finance') or user.has_perm('accounts.view_sys_payroll'):
+        if user.has_perm('accounts.can_act_as_accountant') or user.has_perm('accounts.perm_approve_personnel_finance') or user.has_perm('accounts.perm_approve_fleet_finance'):
             roles.append('accountant')
-        if user.has_perm('accounts.perm_manager_payment_authorize') or user.has_perm('accounts.can_act_as_manager') or user.has_perm('accounts.perm_approve_personnel_manager'):
+        if user.has_perm('accounts.can_act_as_company_manager') or user.has_perm('accounts.perm_manager_payment_authorize') or user.has_perm('accounts.perm_approve_personnel_manager'):
             roles.append('manager')
         if user.has_perm('accounts.perm_treasury_disburse_action') or user.has_perm('accounts.view_sys_treasury'):
             roles.append('treasury')
-        if not roles:
+        if not roles and (user.has_perm('accounts.view_sys_personnel_attendance') or user.has_perm('accounts.view_sys_personnel')):
             roles.append('operator')
     elif module_code == 'warehouse':
         # Warehouse & Inventory App
-        if user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.view_wh_dispatch'):
+        if user.has_perm('accounts.can_act_as_counter') or user.has_perm('accounts.view_sys_counter') or user.has_perm('accounts.view_wh_dispatch'):
             roles.append('counter')
-        if user.has_perm('accounts.view_sys_supervisor') or user.has_perm('accounts.view_wh_doc_approvals'):
+        if user.has_perm('accounts.can_act_as_wh_supervisor') or (user.has_perm('accounts.view_sys_supervisor') and not user.has_perm('accounts.can_act_as_workshop_supervisor')) or user.has_perm('accounts.view_wh_doc_approvals'):
             roles.append('warehouse_supervisor')
-        if user.has_perm('accounts.view_wh_docs') or user.has_perm('accounts.perm_doc_approve_action'):
+        if user.has_perm('accounts.can_act_as_doc_worker') or user.has_perm('accounts.view_wh_docs') or user.has_perm('accounts.perm_doc_approve_action'):
             roles.append('docs_specialist')
-        if user.has_perm('accounts.view_sys_manager_review') or user.has_perm('accounts.perm_inventory_finalize'):
+        if user.has_perm('accounts.can_act_as_wh_manager') or user.has_perm('accounts.can_act_as_manager') or user.has_perm('accounts.view_sys_manager_review') or user.has_perm('accounts.perm_inventory_finalize'):
             roles.append('manager_review')
-        if not roles:
+        if not roles and any(p in user.get_all_permissions() for p in spec.permission_markers):
             roles.append('counter')
     else:
         return []

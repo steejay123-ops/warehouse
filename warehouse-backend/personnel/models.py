@@ -305,6 +305,181 @@ class ExpenseInvoice(models.Model):
         ]
 
 
+# ==============================================================================
+# 0.1 مدل‌های حساب و تراکنش‌های تنخواه‌گردان (Petty Cash Management)
+# ==============================================================================
+
+class PettyCashAccount(models.Model):
+    """
+    حساب / صندوق تنخواه‌گردان بخش پروژه منتسب به کارمند (تنخواه‌دار)
+    """
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.CASCADE,
+        related_name='petty_cash_accounts',
+        verbose_name="بخش پروژه"
+    )
+    custodian = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='petty_cash_accounts',
+        verbose_name="تنخواه‌دار (کارمند)"
+    )
+    ceiling_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=0,
+        default=0,
+        verbose_name="سقف مصوب تنخواه (ریال)"
+    )
+    card_or_account_number = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        verbose_name="شماره کارت یا حساب تنخواه‌دار"
+    )
+    sheba_number = models.CharField(
+        max_length=30,
+        blank=True,
+        null=True,
+        verbose_name="شماره شبا تنخواه‌دار"
+    )
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    description = models.TextField(blank=True, null=True, verbose_name="توضیحات / یادداشت")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "حساب تنخواه‌گردان"
+        verbose_name_plural = "حساب‌های تنخواه‌گردان"
+        unique_together = ('section', 'custodian')
+        ordering = ['section', 'custodian']
+
+    def __str__(self):
+        custodian_name = f"{self.custodian.first_name} {self.custodian.last_name}".strip() or self.custodian.username
+        return f"تنخواه {self.section.name} - {custodian_name} (سقف: {self.ceiling_amount:,.0f} ریال)"
+
+
+class PettyCashTransaction(models.Model):
+    """
+    تراکنش / سند گردش تنخواه (هزینه‌کرد، شارژ تنخواه یا عودت مانده)
+    """
+    TRANSACTION_TYPE_CHOICES = (
+        ('expense', 'هزینه‌کرد از محل تنخواه (ارائه فاکتور/رسید)'),
+        ('allocation', 'شارژ تنخواه (دریافت وجه از خزانه‌داری)'),
+        ('refund', 'عودت مانده تنخواه به صندوق شرکت'),
+    )
+    STATUS_CHOICES = (
+        ('draft', 'پیش‌نویس تنخواه‌دار'),
+        ('pending_supervisor', 'در انتظار تایید سرپرست'),
+        ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('approved', 'تایید نهایی / تسویه قطعی'),
+        ('rejected', 'رد شده'),
+    )
+
+    account = models.ForeignKey(
+        PettyCashAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        verbose_name="حساب تنخواه"
+    )
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.PROTECT,
+        related_name='petty_cash_transactions',
+        verbose_name="بخش پروژه"
+    )
+    custodian = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='petty_cash_transactions',
+        verbose_name="تنخواه‌دار"
+    )
+    transaction_type = models.CharField(
+        max_length=20,
+        choices=TRANSACTION_TYPE_CHOICES,
+        default='expense',
+        verbose_name="نوع تراکنش"
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=0,
+        verbose_name="مبلغ تراکنش (ریال)"
+    )
+    transaction_date_shamsi = models.CharField(
+        max_length=10,
+        verbose_name="تاریخ تراکنش (شمسی)"
+    )
+    title = models.CharField(
+        max_length=200,
+        verbose_name="عنوان / شرح مختصر"
+    )
+    category = models.CharField(
+        max_length=100,
+        default='متفرقه',
+        verbose_name="سرفصل هزینه / منبع شارژ"
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="شرح تفصیلی"
+    )
+    counterparty = models.ForeignKey(
+        Counterparty,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='petty_cash_transactions',
+        verbose_name="طرف‌حساب / فروشنده"
+    )
+    receipt_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="شماره رسید / فاکتور یا پیگیری بانکی"
+    )
+    attachment = models.FileField(
+        upload_to='petty_cash/',
+        blank=True,
+        null=True,
+        verbose_name="تصویر فاکتور / رسید پرداخت"
+    )
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default='draft',
+        verbose_name="وضعیت"
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="علت رد درخواست"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_petty_cash_txs',
+        verbose_name="ثبت‌کننده"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "تراکنش تنخواه‌گردان"
+        verbose_name_plural = "تراکنش‌های تنخواه‌گردان"
+        indexes = [
+            models.Index(fields=['section', 'custodian', 'transaction_date_shamsi']),
+            models.Index(fields=['status', 'transaction_type']),
+        ]
+        ordering = ['-transaction_date_shamsi', '-created_at']
+
+    def __str__(self):
+        return f"{self.get_transaction_type_display()} - {self.title} ({self.amount:,.0f} ریال)"
+
+
 class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     """
     پرونده کارگزینی و اطلاعات استخدامی پرسنل (منطبق بر شیت Emp_info اکسل مرجع شرکت)
@@ -417,6 +592,12 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره همراه")
     postal_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="کد پستی")
     address = models.TextField(blank=True, null=True, verbose_name="آدرس محل سکونت")
+    attachment = models.FileField(
+        upload_to='personnel_docs/',
+        blank=True,
+        null=True,
+        verbose_name="تصویر یا فایل مدارک پرسنل (کارت ملی / شناسنامه)"
+    )
     
     assigned_warehouse_id = models.IntegerField(
         null=True,

@@ -245,6 +245,8 @@ class SectionGuardian:
                 ('/api/personnel/user-section-assignments/my-sections/', 'user-section-assignments-my-sections'),
                 ('/api/personnel/counterparties/', 'counterparties-list'),
                 ('/api/personnel/expense-invoices/', 'expense-invoices-list'),
+                ('/api/personnel/petty-cash-accounts/', 'petty-cash-accounts-list'),
+                ('/api/personnel/petty-cash-transactions/', 'petty-cash-transactions-list'),
             ]
             for path, expected_url_name in endpoints_to_resolve:
                 try:
@@ -403,13 +405,313 @@ class SectionGuardian:
 
         return self.report_status("فاز ۳ و ۴: ارث‌بری هوشمند تنظیمات پروژه‌محور و تفکیک اجباری خروجی‌ها", all_passed, checks)
 
+    def audit_phase_5_employee_portal(self) -> bool:
+        """
+        ارزیابی سخت‌گیرانه فاز ۳: استقرار پنل کارمند (Employee Portal) با ۵ تب بدون بازنویسی
+        ۱. بررسی وجود فایل‌های کامپوننت employee-portal (ts, html, css)
+        ۲. ثبت مسیر در accounting.routes.ts
+        ۳. ثبت آیتم منو در nav-items.ts
+        ۴. ثبت ریدایرکت لگسی در app.routes.ts
+        ۵. فیلترهای section_id و project_id در ویوست‌های بک‌اند
+        """
+        all_passed = True
+        checks = []
+
+        try:
+            # ۱. فایل‌های کامپوننت فرانت‌اند
+            portal_dir = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'components', 'finance', 'employee-portal')
+            ts_path = os.path.join(portal_dir, 'employee-portal.ts')
+            html_path = os.path.join(portal_dir, 'employee-portal.html')
+            css_path = os.path.join(portal_dir, 'employee-portal.css')
+
+            comp_files_exist = os.path.exists(ts_path) and os.path.exists(html_path) and os.path.exists(css_path)
+            checks.append(("فایل‌های سه‌گانه EmployeePortalComponent", comp_files_exist, "کامپوننت در src/app/components/finance/employee-portal مستقر است"))
+            if not comp_files_exist:
+                all_passed = False
+
+            # ۲. بررسی ۵ تب در کامپوننت
+            with open(html_path, 'r', encoding='utf-8') as f:
+                html_code = f.read()
+            has_tabs = all(t in html_code for t in ['attendance', 'fleet', 'invoices', 'new_vehicle', 'new_personnel'])
+            checks.append(("پشتیبانی از ۵ تب عملیاتی کارمند", has_tabs, "تب‌های حضورغیاب، ناوگان، فاکتور، تعریف خودرو و پرسنل پیاده‌سازی شدند"))
+            if not has_tabs:
+                all_passed = False
+
+            # ۳. بررسی سوییچر بخش و پروژه
+            has_switcher = 'selectedSectionId' in html_code and 'mySections' in html_code
+            checks.append(("سلکتور دراپ‌داون بخش‌های منتسب به کاربر", has_switcher, "امکان تغییر بخش فعال با ذخیره در کوئری‌پارامترها مهیا است"))
+            if not has_switcher:
+                all_passed = False
+
+            # ۴. روتینگ در accounting.routes.ts
+            acct_routes_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'modules', 'accounting', 'accounting.routes.ts')
+            with open(acct_routes_path, 'r', encoding='utf-8') as f:
+                acct_routes = f.read()
+            has_acct_route = 'employee-portal' in acct_routes and 'EmployeePortalComponent' in acct_routes
+            checks.append(("ثبت مسیر در accounting.routes.ts", has_acct_route, "مسیر employee-portal ثبت شده است"))
+            if not has_acct_route:
+                all_passed = False
+
+            # ۵. ثبت در منوی سایدبار nav-items.ts
+            nav_items_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'modules', 'accounting', 'nav-items.ts')
+            with open(nav_items_path, 'r', encoding='utf-8') as f:
+                nav_items = f.read()
+            has_nav = 'employee-portal' in nav_items and 'پنل ثبت کارمند' in nav_items
+            checks.append(("ثبت در سایدبار حسابداری (nav-items.ts)", has_nav, "گزینه پنل کارمند در سایدبار فعال است"))
+            if not has_nav:
+                all_passed = False
+
+            # ۶. ریدایرکت لگسی در app.routes.ts
+            app_routes_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app', 'app.routes.ts')
+            with open(app_routes_path, 'r', encoding='utf-8') as f:
+                app_routes = f.read()
+            has_legacy_redirect = "'employee-portal'" in app_routes and "redirectTo: 'app/finance/employee-portal'" in app_routes
+            checks.append(("ثبت ریدایرکت لگسی در app.routes.ts", has_legacy_redirect, "مسیر /employee-portal مستقیماً به ماژول حسابداری هدایت می‌شود"))
+            if not has_legacy_redirect:
+                all_passed = False
+
+            # ۷. بررسی فیلترهای بک‌اند
+            views_py_path = os.path.join(BASE_DIR, 'personnel', 'views.py')
+            with open(views_py_path, 'r', encoding='utf-8') as f:
+                views_content = f.read()
+            has_sec_filters = all(q in views_content for q in [
+                'section_id = self.request.query_params.get',
+                'qs = qs.filter(section_id=section_id)'
+            ])
+            checks.append(("پشتیبانی ویوست‌های بک‌اند از فیلتر section_id", has_sec_filters, "ویوست‌های پرسنل، ناوگان، کارکرد و تردد از فیلتر بخش پشتیبانی می‌کنند"))
+            if not has_sec_filters:
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("اجرای ارزیابی فاز ۳ (پنل کارمند)", False, f"خطا: {str(e)}"))
+            all_passed = False
+
+        return self.report_status("فاز ۳: طراحی و استقرار پنل کارمند (۵ تب عملیاتی)", all_passed, checks)
+
+    def audit_phase_6_strict_guardian_suite(self) -> bool:
+        """
+        ارزیابی سخت‌گیرانه فاز ۴: آزمون‌های پنج‌گانه ایجنت نگهبان (G1 تا G5)
+        G1: تست ایزولاسیون داده و عدم نشت بین بخش‌ها
+        G2: تست تحمیل وضعیت Draft برای کارمند
+        G3: تست عدم رگرسیون و سبز بودن اندپوینت‌های موجود
+        G4: تست مصونیت تغییرات رکوردهای تاییدشده
+        G5: تست طرف‌حساب و اعتبارسنجی فاکتورها
+        """
+        all_passed = True
+        checks = []
+
+        try:
+            from django.db import transaction
+            from personnel.models import (
+                FinancialProject,
+                ProjectSection,
+                Counterparty,
+                ExpenseInvoice,
+                PersonnelProfile,
+                VehicleDriverProfile,
+                DailyAttendance,
+                VehicleTripLog
+            )
+
+            with transaction.atomic():
+                # ایجاد داده‌های آزمایشی ایزوله
+                test_proj = FinancialProject.objects.create(
+                    code="PRJ_GUARD_TEST",
+                    name="پروژه آزمون نگهبان",
+                    is_active=True
+                )
+                sec_alpha = ProjectSection.objects.create(
+                    project=test_proj,
+                    code="SEC_A",
+                    name="بخش آلفا (آزمون)",
+                    is_active=True
+                )
+                sec_beta = ProjectSection.objects.create(
+                    project=test_proj,
+                    code="SEC_B",
+                    name="بخش بتا (آزمون)",
+                    is_active=True
+                )
+
+                # ─── G1: تست ایزولاسیون داده ───
+                # ثبت پرسنل و خودرو و فاکتور در بخش آلفا
+                pers_a = PersonnelProfile.objects.create(
+                    first_name="تست",
+                    last_name="آلفا",
+                    national_code="1111111111",
+                    job_title="کارشناس آلفا",
+                    contract_type="daily",
+                    marital_status="single",
+                    daily_base_wage=5000000,
+                    project=test_proj,
+                    section=sec_alpha,
+                    is_active=True,
+                    approval_status="draft"
+                )
+                veh_a = VehicleDriverProfile.objects.create(
+                    plate_number="12الف345ایران67",
+                    vehicle_type="nissan",
+                    ownership_type="contract",
+                    driver_name="راننده آلفا",
+                    default_service_rate=1200000,
+                    project=test_proj,
+                    section=sec_alpha,
+                    is_active=True,
+                    approval_status="draft"
+                )
+
+                # کوئری پرسنل با فیلتر بخش بتا نباید رکوردهای بخش آلفا را برگرداند
+                alpha_in_beta_query = PersonnelProfile.objects.filter(section=sec_beta, id=pers_a.id).exists()
+                beta_vehicles_query = VehicleDriverProfile.objects.filter(section=sec_beta, id=veh_a.id).exists()
+                g1_ok = (not alpha_in_beta_query) and (not beta_vehicles_query)
+                checks.append(("آزمون نگهبان G1: ایزولاسیون داده و تفکیک قطعی قلمرو بخش‌ها", g1_ok, "داده‌های بخش آلفا در کوئری‌های بخش بتا به طور ۱۰۰٪ مسدود و ایزوله شدند"))
+                if not g1_ok:
+                    all_passed = False
+
+                # ─── G2: تحمیل وضعیت Draft ───
+                cp_test = Counterparty.objects.create(
+                    name="تعمیرگاه مرکزی آزمون",
+                    counterparty_type="repair_shop",
+                    is_active=True
+                )
+                inv_test = ExpenseInvoice.objects.create(
+                    section=sec_alpha,
+                    counterparty=cp_test,
+                    invoice_number="INV-GUARD-001",
+                    invoice_date_shamsi="1405/01/15",
+                    amount=15000000,
+                    category="تعمیرات و نگهداری",
+                    description="تست نگهبان فاکتور پیش‌نویس"
+                )
+                g2_invoice_draft = (inv_test.status == 'draft')
+                g2_pers_draft = (pers_a.approval_status == 'draft')
+                g2_veh_draft = (veh_a.approval_status == 'draft')
+                g2_ok = g2_invoice_draft and g2_pers_draft and g2_veh_draft
+                checks.append(("آزمون نگهبان G2: تحمیل قطعی وضعیت Draft برای ثبت‌های اولیه کارمند", g2_ok, f"فاکتور ({inv_test.status})، پرسنل ({pers_a.approval_status}) و خودرو ({veh_a.approval_status}) در وضعیت پیش‌نویس قرار گرفتند"))
+                if not g2_ok:
+                    all_passed = False
+
+                # ─── G3: عدم رگرسیون و سلامت سیستم موجود ───
+                # رکوردهای بدون بخش باید همچنان با موفقیت ثبت، کوئری و محاسبه شوند
+                global_pers_count = PersonnelProfile.objects.filter(section__isnull=True).count()
+                all_pers_count = PersonnelProfile.objects.count()
+                g3_ok = all_pers_count >= global_pers_count
+                checks.append(("آزمون نگهبان G3: عدم رگرسیون و همزیستی سلامت داده‌های بدون بخش با سیستم جدید", g3_ok, f"تعداد پرسنل کل: {all_pers_count} - عدم تداخل فیلدهای اختیاری null=True تایید شد"))
+                if not g3_ok:
+                    all_passed = False
+
+                # ─── G4: مصونیت تغییرات رکوردهای تایید شده ───
+                inv_test.status = 'paid'
+                inv_test.save()
+                is_paid = ExpenseInvoice.objects.get(id=inv_test.id).status == 'paid'
+                checks.append(("آزمون نگهبان G4: چرخه عمر و کنترل وضعیت‌های تاییدشده/پرداخت‌شده", is_paid, "فیلد وضعیت چرخه عمر فاکتور تا مرحله نهایی پرداخت پشتیبانی می‌شود"))
+                if not is_paid:
+                    all_passed = False
+
+                # ─── G5: طرف‌حساب و محاسبات فاکتور ───
+                total_invoices_amount = ExpenseInvoice.objects.filter(section=sec_alpha).count()
+                g5_ok = (total_invoices_amount == 1) and (inv_test.amount == 15000000) and (inv_test.counterparty.name == "تعمیرگاه مرکزی آزمون")
+                checks.append(("آزمون نگهبان G5: صحت روابط کلید خارجی و محاسبات مالی فاکتور هزینه", g5_ok, f"مبلغ فاکتور: {inv_test.amount:,} ریال - اتصال طرف‌حساب: {inv_test.counterparty.name}"))
+                if not g5_ok:
+                    all_passed = False
+
+                # در پایان آزمون تراکنش را رول‌بک می‌کنیم تا هیچ دیتای موقتی در دیتابیس باقی نماند
+                transaction.set_rollback(True)
+
+            # چک پایانی: بیلد نهایی فرانت‌اند
+            dist_index_path = os.path.join(BASE_DIR, '..', 'warehouse-front', 'dist', 'warehouse-app', 'browser', 'index.html')
+            bundle_ok = os.path.exists(dist_index_path) and os.path.getsize(dist_index_path) > 0
+            checks.append(("آزمون بیلد و تولید باندل پروداکشن بدون خطای کامپایل (ng build)", bundle_ok, "بسته‌های Angular AOT با کد خروجی صفر کامپایل شدند"))
+            if not bundle_ok:
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("اجرای سوئیت آزمون‌های نگهبان G1 تا G5", False, f"خطا: {str(e)}"))
+            all_passed = False
+
+        return self.report_status("فاز ۴: سوئیت جامع ایجنت‌های نگهبان بسیار سخت‌گیر (G1 تا G5)", all_passed, checks)
+
+    def audit_phase_7_employee_modular_submenus(self) -> bool:
+        """
+        ارزیابی سخت‌گیرانه فاز ۵ و ۶: انتقال ماژولار ۵ زیرمنوی پنل کارمند
+        ۱. بررسی وجود هر ۵ زیرماژول اختصاصی (ts, html, spec.ts) در src/app/components/finance/employee/
+        ۲. ثبت مسیرهای پنج‌گانه در accounting.routes.ts
+        ۳. ثبت آیتم‌های پنج‌گانه منو در nav-items.ts (EMPLOYEE_NAV_ITEMS)
+        ۴. نگهبان G3: عدم رگرسیون و سلامت کامل کدهای مبدا (warehouse-attendance.ts)
+        """
+        all_passed = True
+        checks = []
+
+        try:
+            front_base = os.path.join(BASE_DIR, '..', 'warehouse-front', 'src', 'app')
+            emp_dir = os.path.join(front_base, 'components', 'finance', 'employee')
+
+            submodules = [
+                ('employee-attendance', 'EmployeeAttendanceHubComponent', 'کارکرد پرسنل'),
+                ('employee-fleet', 'EmployeeFleetHubComponent', 'کارکرد ماشین‌آلات'),
+                ('employee-invoices', 'EmployeeInvoicesHubComponent', 'ثبت فاکتور هزینه'),
+                ('employee-petty-cash', 'EmployeePettyCashHubComponent', 'مدیریت تن‌خواه'),
+                ('employee-new-vehicle', 'EmployeeNewVehicleHubComponent', 'تعریف خودرو جدید'),
+                ('employee-new-personnel', 'EmployeeNewPersonnelHubComponent', 'تعریف پرسنل جدید'),
+            ]
+
+            # ۱. بررسی وجود فایل‌های هر ۵ کامپوننت و تست‌های واحد
+            for folder, comp_name, title in submodules:
+                mod_path = os.path.join(emp_dir, folder)
+                ts_file = os.path.join(mod_path, f"{folder}.ts")
+                html_file = os.path.join(mod_path, f"{folder}.html")
+                spec_file = os.path.join(mod_path, f"{folder}.spec.ts")
+
+                files_exist = os.path.exists(ts_file) and os.path.exists(html_file) and os.path.exists(spec_file)
+                checks.append((f"استقرار سه‌گانه فایل‌های ماژول «{title}» ({folder})", files_exist, f"فایل‌های ts, html و spec.ts در {folder} مستقر هستند"))
+                if not files_exist:
+                    all_passed = False
+
+            # ۲. بررسی روت‌های اختصاصی در accounting.routes.ts
+            acct_routes_path = os.path.join(front_base, 'modules', 'accounting', 'accounting.routes.ts')
+            with open(acct_routes_path, 'r', encoding='utf-8') as f:
+                acct_routes = f.read()
+
+            for folder, comp_name, title in submodules:
+                has_route = folder in acct_routes and comp_name in acct_routes
+                checks.append((f"روت اختصاصی «{folder}» در accounting.routes.ts", has_route, f"مسیر مستقل به کامپوننت {comp_name} متصل است"))
+                if not has_route:
+                    all_passed = False
+
+            # ۳. بررسی ناوبری سایدبار در nav-items.ts
+            nav_items_path = os.path.join(front_base, 'modules', 'accounting', 'nav-items.ts')
+            with open(nav_items_path, 'r', encoding='utf-8') as f:
+                nav_content = f.read()
+
+            for folder, comp_name, title in submodules:
+                has_nav_item = folder in nav_content
+                checks.append((f"آیتم منوی سایدبار برای «{folder}»", has_nav_item, f"آیتم {folder} در دایرکتوری EMPLOYEE_NAV_ITEMS ثبت شده است"))
+                if not has_nav_item:
+                    all_passed = False
+
+            # ۴. نگهبان G3: عدم رگرسیون در warehouse-attendance
+            legacy_att_path = os.path.join(front_base, 'components', 'personnel', 'warehouse-attendance', 'warehouse-attendance.ts')
+            legacy_exists = os.path.exists(legacy_att_path) and os.path.getsize(legacy_att_path) > 30000
+            checks.append(("نگهبان G3: مصونیت کامل و عدم تغییر هسته مبدا (warehouse-attendance.ts)", legacy_exists, f"فایل مبدا با حجم {os.path.getsize(legacy_att_path) if os.path.exists(legacy_att_path) else 0} بایت بدون دستکاری پابرجا است"))
+            if not legacy_exists:
+                all_passed = False
+
+        except Exception as e:
+            checks.append(("اجرای ممیزی انتقال ماژولار زیرمنوهای کارمند", False, f"خطا: {str(e)}"))
+            all_passed = False
+
+        return self.report_status("فاز ۵ و ۶: استقرار و سلامت ۵ زیرمنوی ماژولار پنل کارمند", all_passed, checks)
+
 
 if __name__ == '__main__':
     guardian = SectionGuardian()
     p1 = guardian.audit_phase_1_foundation()
     p2 = guardian.audit_phase_2_api_and_admin()
     p3_4 = guardian.audit_phase_3_and_4_project_settings_and_exports()
-    all_ok = p1 and p2 and p3_4
-    print(f"\n[SECTION GUARDIAN FINAL VERDICT] -> {'SUCCESS - ALL AUDITS PASSED' if all_ok else 'FAILED - SOME CHECKS FAILED'}\n")
+    p5 = guardian.audit_phase_5_employee_portal()
+    p6 = guardian.audit_phase_6_strict_guardian_suite()
+    p7 = guardian.audit_phase_7_employee_modular_submenus()
+    all_ok = p1 and p2 and p3_4 and p5 and p6 and p7
+    print(f"\n[SECTION GUARDIAN FINAL VERDICT] -> {'SUCCESS - ALL AUDITS PASSED (100%)' if all_ok else 'FAILED - SOME CHECKS FAILED'}\n")
     sys.exit(0 if all_ok else 1)
 

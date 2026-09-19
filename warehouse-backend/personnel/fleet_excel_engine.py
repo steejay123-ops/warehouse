@@ -15,7 +15,7 @@ from .models import (
 from common.date_utils import normalize_digits
 
 
-def export_fleet_monthly_excel(warehouse_id=None, year_month=None):
+def export_fleet_monthly_excel(warehouse_id=None, year_month=None, section_id=None):
     """
     تولید فایل اکسل استاندارد ۳۱ روزه تردد و کارکرد ماهانه ناوگان
     مطابق با معماری ۲ سطری هدر:
@@ -134,6 +134,9 @@ def export_fleet_monthly_excel(warehouse_id=None, year_month=None):
     )
     if warehouse_id:
         trips = trips.filter(warehouse_id=warehouse_id)
+    if section_id:
+        vehicles = vehicles.filter(section_id=section_id)
+        trips = trips.filter(Q(section_id=section_id) | Q(vehicle__section_id=section_id))
 
     trip_map = {}
     for t in trips:

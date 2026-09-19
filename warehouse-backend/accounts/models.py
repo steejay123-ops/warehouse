@@ -81,12 +81,16 @@ class CustomUser(AbstractUser):
 
             # Operational Roles & Workflow (فرآیندی، نقش‌های عملیاتی و کارتابل‌ها)
             ("can_act_as_counter", "شمارنده و انبارگردانی میدانی"),
-            ("can_act_as_supervisor", "سرپرست شمارش (تایید مغایرت‌ها)"),
-            ("can_act_as_manager", "مدیر انبار (تایید نهایی)"),
+            ("can_act_as_supervisor", "سرپرست شمارش انبار (قدیمی/سازگاری)"),
+            ("can_act_as_wh_supervisor", "سرپرست شمارش انبار (تایید مغایرت‌ها)"),
+            ("can_act_as_manager", "مدیر انبار (قدیمی/سازگاری)"),
+            ("can_act_as_wh_manager", "مدیر انبار و شمارش (تایید نهایی انبار)"),
             ("can_act_as_doc_worker", "کارشناس اسناد مالی"),
             ("can_act_as_doc_supervisor", "سرپرست اسناد"),
             ("can_act_as_operator", "کارمند کارگاه و ثبت کارکرد"),
+            ("can_act_as_workshop_supervisor", "سرپرست کارگاه (تایید اولیه کارکرد پرسنل و ناوگان)"),
             ("can_act_as_accountant", "حسابدار و کارشناس مالی"),
+            ("can_act_as_company_manager", "مدیر شرکت (تایید نهایی و مجوز پرداخت)"),
 
             # Approvals & Actions (تاییدات و چرخه تاییدات)
             ("view_sys_treasury", "کارتابل خزانه‌داری و پرداخت"),

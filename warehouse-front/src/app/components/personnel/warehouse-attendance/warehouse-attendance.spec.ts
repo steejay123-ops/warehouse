@@ -8,6 +8,7 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
   let component: WarehouseAttendance;
   let mockState: any;
   let mockAuth: any;
+  let mockPersona: any;
   let mockPersonnelApi: any;
   let mockWhService: any;
   let mockWsService: any;
@@ -26,6 +27,10 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
     mockAuth = {
       user: vi.fn().mockReturnValue({ id: 1, username: 'admin', is_superuser: true }),
       isSuperAdmin: vi.fn().mockReturnValue(true)
+    };
+
+    mockPersona = {
+      canPerform: vi.fn().mockReturnValue(true)
     };
 
     mockPersonnelApi = {
@@ -124,6 +129,7 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
     component = new WarehouseAttendance(
       mockState,
       mockAuth,
+      mockPersona,
       mockPersonnelApi,
       mockWhService,
       mockWsService,

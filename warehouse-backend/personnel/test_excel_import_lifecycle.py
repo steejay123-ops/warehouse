@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from personnel.models import Counterparty
+from personnel.models import Counterparty, PersonnelProfile
 from personnel.org_excel_engine import (
     download_org_template,
     import_counterparties_from_excel,
@@ -115,3 +115,49 @@ class ExcelImportLifecycleTests(TestCase):
         deleted_count, _ = Counterparty.objects.filter(name__in=sample_names).delete()
         self.assertEqual(deleted_count, 2)
         self.assertEqual(Counterparty.objects.filter(name__in=sample_names).count(), 0)
+
+    def test_personnel_excel_template_and_import_lifecycle(self):
+        # تست دانلود قالب پرسنل
+        tpl_res = self.client.get('/api/personnel/profiles/download-template/')
+        self.assertEqual(tpl_res.status_code, 200)
+        self.assertEqual(tpl_res['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+        upload_file = SimpleUploadedFile(
+            'personnel_template.xlsx',
+            tpl_res.content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+        # تست Dry-Run
+        res_dry = self.client.post(
+            '/api/personnel/profiles/import-excel/',
+            {'file': upload_file, 'dry_run': 'true'},
+            format='multipart'
+        )
+        self.assertEqual(res_dry.status_code, 200)
+        dry_data = res_dry.json()
+        self.assertTrue(dry_data['success'])
+        self.assertTrue(dry_data['dry_run'])
+        self.assertEqual(dry_data['summary']['valid_count'], 1)
+        self.assertEqual(dry_data['summary']['error_count'], 0)
+        self.assertEqual(len(dry_data['preview_rows']), 1)
+        self.assertEqual(dry_data['preview_rows'][0]['national_code'], '0012345678')
+
+        # رکورد نباید در دیتابیس ایجاد شده باشد
+        self.assertFalse(PersonnelProfile.objects.filter(national_code='0012345678').exists())
+
+        # تست Commit واقعی
+        upload_file.seek(0)
+        res_commit = self.client.post(
+            '/api/personnel/profiles/import-excel/',
+            {'file': upload_file, 'dry_run': 'false'},
+            format='multipart'
+        )
+        self.assertEqual(res_commit.status_code, 200)
+        commit_data = res_commit.json()
+        self.assertTrue(commit_data['success'])
+        self.assertEqual(commit_data['created_count'], 1)
+        self.assertTrue(PersonnelProfile.objects.filter(national_code='0012345678').exists())
+
+        # پاکسازی
+        PersonnelProfile.objects.filter(national_code='0012345678').delete()

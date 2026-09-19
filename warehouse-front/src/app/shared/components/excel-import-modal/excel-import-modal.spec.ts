@@ -28,6 +28,7 @@ describe('ExcelImportModal Component & DOM Normalization Tests', () => {
     const legacyResponse: ImportResult = {
       success: true,
       dry_run: true,
+      errors: [],
       summary: {
         total_rows: 2,
         created: 2,
@@ -49,6 +50,7 @@ describe('ExcelImportModal Component & DOM Normalization Tests', () => {
     const modernResponse: ImportResult = {
       success: true,
       dry_run: true,
+      errors: [],
       summary: {
         total_rows: 2,
         valid_count: 2,
@@ -72,6 +74,7 @@ describe('ExcelImportModal Component & DOM Normalization Tests', () => {
     const sampleBackendResult: ImportResult = {
       success: true,
       dry_run: true,
+      errors: [],
       summary: {
         total_rows: 2,
         valid_count: 2,

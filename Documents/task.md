@@ -110,6 +110,21 @@
 - [x] <!-- id: RBAC.4 --> **فاز ۴: تضمین امنیت لایه وب‌سرویس و SoD بک‌اند** (بررسی قلمرو توکن در `middleware.py` و اعتبارسنجی کنترلرهای تراکنشی `personnel/views.py`)
 - [x] <!-- id: RBAC.5 --> **فاز ۵: تست، ارزیابی بیلد و تضمین کیفیت** (تست شبیه‌سازی نقش‌های مختلف، تست بیلد `npm run build` و ثبت گزارشات)
 
+---
+
+# 🚚 فهرست وظایف بازطراحی و ارتقای ناوگان جدید (Vehicle New Fleet Refactor Master Task List)
+* **سند تفصیلی طرح:** [`Documents/Vehicle_New_Fleet_Refactor/implementation_plan_vehicle_refactor.md`](file:///e:/warehouse%20project/Documents/Vehicle_New_Fleet_Refactor/implementation_plan_vehicle_refactor.md)
+* **سند تفصیلی تسک:** [`Documents/Vehicle_New_Fleet_Refactor/task_vehicle_refactor.md`](file:///e:/warehouse%20project/Documents/Vehicle_New_Fleet_Refactor/task_vehicle_refactor.md)
+* **سند مرجع تحلیلی ۲۴ موردی:** [`Documents/plan_employee_new_vehicle_comprehensive.md`](file:///e:/warehouse%20project/Documents/plan_employee_new_vehicle_comprehensive.md)
+* **وضعیت:** ⏳ مرحله طراحی و برنامه‌ریزی (آماده اجرا پس از تایید کاربر)
+
+### 🔹 فازهای پنج‌گانه ارتقای ناوگان جدید:
+- [ ] <!-- id: VNF.1 --> **فاز ۱: بازطراحی UI، هدر چسبان و انتقال فرم به مودال** (حذف فرم ۵۰۰ پیکسلی، مودال شناور و Bottom Sheet، هدر شیشه‌ای استاندارد، پلاک گرافیکی ۴ تکه ایران، اصلاح شبا)
+- [ ] <!-- id: VNF.2 --> **فاز ۲: چرخه کارتابل، گردش کار بازنگری و امکان ویرایش رکوردهای مصوب** (دکمه‌های دوگانه پیش‌نویس/ارسال، آیکون موشک ارسال سریع، ثبت درخواست تغییرات `VehicleChangeRequest`، تب عودت و پاپ‌اور علت)
+- [ ] <!-- id: VNF.3 --> **فاز ۳: ایمن‌سازی امنیتی و رفع باگ تنزل رتبه در بک‌اند** (رفع باگ بازگشت مصوب به پیش‌نویس در `views.py:1040`، فیلتر قلمرو بخش‌ها `UserSectionAssignment`، جلوگیری از حذف فیزیکی دیتابیس)
+- [ ] <!-- id: VNF.4 --> **فاز ۴: ورود اکسل، وب‌سوکت و ارگونومی داده‌ها** (مودال و اندپوینت ایمپورت اکسل ناوگان، برودکست وب‌سوکت لحظه‌ای، دی‌بانس ۳۰۰ms جستجو، تفکیک مالک و راننده)
+- [ ] <!-- id: VNF.5 --> **فاز ۵: نمای موبایل، آزمون‌های سریع DOM و راستی‌آزمایی کیفیت** (کارت‌های ارگونومیک موبایل، آزمون‌های Vitest کامپوننت، تست بیلد `npx tsc --noEmit`)
+
 </div>
 
 

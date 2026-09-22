@@ -27,7 +27,7 @@ export const EMPLOYEE_NAV_ITEMS: NavItem[] = [
   { id: 'employee-invoices', label: '🧾 ثبت فاکتور هزینه', icon: 'dollar-sign', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
   { id: 'employee-petty-cash', label: '💰 مدیریت تن‌خواه', icon: 'credit-card', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
   { id: 'employee-new-vehicle', label: '🚗 تعریف خودرو (پیش‌نویس)', icon: 'truck', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
-  { id: 'employee-new-personnel', label: '👥 تعریف پرسنل (پیش‌نویس)', icon: 'users', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
+  { id: 'employee-new-personnel', label: '👥 تعریف پرسنل', icon: 'users', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
 ];
 
 export const SUPERVISOR_NAV_ITEMS: NavItem[] = [

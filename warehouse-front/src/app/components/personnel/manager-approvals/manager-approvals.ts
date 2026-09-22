@@ -28,8 +28,8 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   // 4 Main Tabs:
   activeTab: 'new_personnel' | 'new_fleet' | 'change_requests' | 'work_periods' = 'new_personnel';
   
-  // Status Filters: 'ALL' | 'draft' | 'revision_required' | 'manager_approved' | 'approved' | 'rejected'
-  approvalStatusFilter: string = 'draft';
+  // Status Filters: 'ALL' | 'pending_manager' | 'revision_required' | 'approved' | 'rejected'
+  approvalStatusFilter: string = 'pending_manager';
   changeRequestSubTab: 'personnel' | 'vehicles' = 'personnel';
   
   // Warehouse & Date Context
@@ -108,16 +108,16 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   }
 
   get pendingPersonnelCount(): number {
-    return this.personnelList.filter(p => p.approval_status === 'draft' || p.approval_status === 'revision_required').length;
+    return this.personnelList.filter(p => p.approval_status === 'pending_manager' || p.approval_status === 'accountant_approved' || p.approval_status === 'draft' || p.approval_status === 'revision_required').length;
   }
 
   get pendingFleetCount(): number {
-    return this.vehiclesList.filter(v => v.approval_status === 'draft' || v.approval_status === 'revision_required').length;
+    return this.vehiclesList.filter(v => v.approval_status === 'pending_manager' || v.approval_status === 'accountant_approved' || v.approval_status === 'draft' || v.approval_status === 'revision_required').length;
   }
 
   get pendingCRCount(): number {
-    const p = this.personnelChangeRequests.filter(cr => cr.status === 'pending_manager').length;
-    const v = this.vehicleChangeRequests.filter(cr => cr.status === 'pending_manager').length;
+    const p = this.personnelChangeRequests.filter(cr => cr.status === 'pending_manager' || cr.status === 'accountant_approved').length;
+    const v = this.vehicleChangeRequests.filter(cr => cr.status === 'pending_manager' || cr.status === 'accountant_approved').length;
     return p + v;
   }
 
@@ -209,7 +209,10 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   // ─── 1. Personnel Operations ──────────────────────────────
   loadPersonnel(): void {
     this.isLoading = true;
-    const filterStatus = this.approvalStatusFilter === 'ALL' ? undefined : this.approvalStatusFilter;
+    let filterStatus = this.approvalStatusFilter === 'ALL' ? undefined : this.approvalStatusFilter;
+    if (filterStatus === 'pending_manager') {
+      filterStatus = 'pending_manager,accountant_approved';
+    }
     this.api.getPersonnelProfiles({
       warehouse_id: this.selectedWarehouseId || undefined,
       approval_status: filterStatus
@@ -230,7 +233,11 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   get filteredPersonnel(): PersonnelProfile[] {
     let list = this.personnelList;
     if (this.approvalStatusFilter !== 'ALL') {
-      list = list.filter(p => p.approval_status === this.approvalStatusFilter);
+      if (this.approvalStatusFilter === 'pending_manager') {
+        list = list.filter(p => p.approval_status === 'pending_manager' || p.approval_status === 'accountant_approved');
+      } else {
+        list = list.filter(p => p.approval_status === this.approvalStatusFilter);
+      }
     }
     if (this.personnelSearch.trim()) {
       const q = this.personnelSearch.trim().toLowerCase();
@@ -248,11 +255,11 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     if (!p.id) return;
     this.api.approvePersonnelManager(p.id).subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول مدیر با موفقیت ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و پرسنل فعال گردید.');
         this.loadPersonnel();
       },
       error: (err: any) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت تایید مدیر');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب نهایی مدیر');
       }
     });
   }
@@ -260,7 +267,10 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   // ─── 2. Fleet Operations ──────────────────────────────────
   loadVehicles(): void {
     this.isLoading = true;
-    const filterStatus = this.approvalStatusFilter === 'ALL' ? undefined : this.approvalStatusFilter;
+    let filterStatus = this.approvalStatusFilter === 'ALL' ? undefined : this.approvalStatusFilter;
+    if (filterStatus === 'pending_manager') {
+      filterStatus = 'pending_manager,accountant_approved';
+    }
     this.api.getVehicleProfiles({
       warehouse_id: this.selectedWarehouseId || undefined,
       approval_status: filterStatus
@@ -281,7 +291,11 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   get filteredVehicles(): VehicleDriverProfile[] {
     let list = this.vehiclesList;
     if (this.approvalStatusFilter !== 'ALL') {
-      list = list.filter(v => v.approval_status === this.approvalStatusFilter);
+      if (this.approvalStatusFilter === 'pending_manager') {
+        list = list.filter(v => v.approval_status === 'pending_manager' || v.approval_status === 'accountant_approved');
+      } else {
+        list = list.filter(v => v.approval_status === this.approvalStatusFilter);
+      }
     }
     if (this.vehicleSearch.trim()) {
       const q = this.vehicleSearch.trim().toLowerCase();
@@ -298,11 +312,11 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     if (!v.id) return;
     this.api.approveVehicleManager(v.id).subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول ناوگان با موفقیت ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.');
         this.loadVehicles();
       },
       error: (err: any) => {
-        this.toast.show('error', err?.error?.error || 'خطا در ثبت تایید ناوگان');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب نهایی ناوگان');
       }
     });
   }
@@ -336,7 +350,11 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     this.selectedDiffCR = cr;
     this.diffFieldRows = [];
 
-    const changes = cr.changes_payload || cr.proposed_changes || {};
+    const proposed = cr.proposed_changes || {};
+    const previous = cr.previous_values || {};
+    const payload = cr.changes_payload || {};
+    const allKeys = Array.from(new Set([...Object.keys(proposed), ...Object.keys(previous), ...Object.keys(payload)]));
+
     const labels: { [k: string]: string } = {
       first_name: 'نام',
       last_name: 'نام خانوادگی',
@@ -359,14 +377,26 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       ownership_type: 'نوع مالکیت'
     };
 
-    for (const key of Object.keys(changes)) {
-      const item = changes[key];
+    for (const key of allKeys) {
+      let oldVal = previous[key];
+      let newVal = proposed[key];
+
+      if (oldVal === undefined && payload[key]?.old !== undefined) {
+        oldVal = payload[key].old;
+      }
+      if (newVal === undefined && payload[key]?.new !== undefined) {
+        newVal = payload[key].new;
+      }
+      if (newVal === undefined && payload[key] !== undefined && typeof payload[key] !== 'object') {
+        newVal = payload[key];
+      }
+
       this.diffFieldRows.push({
         field_name: key,
         field_label: labels[key] || key,
-        old_value: item?.old ?? '—',
-        new_value: item?.new ?? '—',
-        is_changed: String(item?.old) !== String(item?.new)
+        old_value: oldVal ?? '—',
+        new_value: newVal ?? '—',
+        is_changed: String(oldVal ?? '') !== String(newVal ?? '')
       });
     }
 
@@ -380,12 +410,12 @@ export class ManagerApprovals implements OnInit, OnDestroy {
 
     req$.subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول تغییرات با موفقیت ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی تغییرات با موفقیت انجام و روی پرونده اعمال گردید.');
         this.isDiffModalOpen = false;
         this.loadChangeRequests();
       },
       error: (err: any) => {
-        this.toast.show('error', err?.error?.error || 'خطا در تایید تغییرات');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب تغییرات');
       }
     });
   }
@@ -545,8 +575,13 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   getApprovalBadgeClass(status?: string): string {
     switch (status) {
       case 'approved': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'manager_approved': return 'bg-blue-50 text-blue-700 border-blue-200';
-      case 'draft': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'pending_manager':
+      case 'accountant_approved':
+      case 'manager_approved': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'pending_accountant':
+      case 'supervisor_approved': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'draft':
+      case 'pending_supervisor': return 'bg-amber-50 text-amber-700 border-amber-200';
       case 'revision_required': return 'bg-purple-50 text-purple-700 border-purple-200';
       case 'rejected': return 'bg-rose-50 text-rose-700 border-rose-200';
       default: return 'bg-slate-50 text-slate-600 border-slate-200';
@@ -555,9 +590,14 @@ export class ManagerApprovals implements OnInit, OnDestroy {
 
   getApprovalStatusTitle(status?: string): string {
     switch (status) {
-      case 'approved': return 'تایید نهایی';
-      case 'manager_approved': return 'تایید مدیر (در انتظار حسابدار)';
-      case 'draft': return 'پیش‌نویس (در انتظار تایید مدیر)';
+      case 'approved': return 'مصوب نهایی و فعال';
+      case 'pending_manager':
+      case 'accountant_approved': return 'در انتظار تصویب مدیر';
+      case 'manager_approved': return 'تایید مرحله اول مدیر';
+      case 'pending_accountant':
+      case 'supervisor_approved': return 'در انتظار تایید مالی (حسابدار)';
+      case 'pending_supervisor': return 'در انتظار بررسی سرپرست';
+      case 'draft': return 'پیش‌نویس';
       case 'revision_required': return 'نیازمند بازنگری و اصلاح';
       case 'rejected': return 'رد شده';
       default: return status || '—';

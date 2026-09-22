@@ -92,9 +92,12 @@ export interface PersonnelProfile {
   section_name?: string;
   is_active: boolean;
 
-  // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
-  approval_status?: 'draft' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  // فیلدهای گردش کار تایید سه مرحله‌ای (سرپرست، حسابدار، مدیر)
+  approval_status?: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'supervisor_approved' | 'pending_manager' | 'accountant_approved' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
   approval_status_display?: string;
+  supervisor_approved_by?: number | null;
+  supervisor_approved_by_name?: string;
+  supervisor_approved_at?: string | null;
   manager_approved_by?: number | null;
   manager_approved_by_name?: string;
   manager_approved_at?: string | null;
@@ -103,6 +106,13 @@ export interface PersonnelProfile {
   accountant_approved_at?: string | null;
   rejection_reason?: string;
   has_pending_changes?: boolean;
+  pending_change_request?: {
+    id: number;
+    status?: string;
+    proposed_changes?: Record<string, any>;
+    previous_values?: Record<string, any>;
+    created_at?: string;
+  } | null;
 
   created_at?: string;
   updated_at?: string;
@@ -132,9 +142,12 @@ export interface VehicleDriverProfile {
   section_name?: string;
   is_active: boolean;
 
-  // فیلدهای گردش کار تایید دو مرحله‌ای (مدیر و حسابدار)
-  approval_status?: 'draft' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  // فیلدهای گردش کار تایید سه مرحله‌ای (سرپرست، حسابدار، مدیر)
+  approval_status?: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'supervisor_approved' | 'pending_manager' | 'accountant_approved' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
   approval_status_display?: string;
+  supervisor_approved_by?: number | null;
+  supervisor_approved_by_name?: string;
+  supervisor_approved_at?: string | null;
   manager_approved_by?: number | null;
   manager_approved_by_name?: string;
   manager_approved_at?: string | null;
@@ -153,12 +166,19 @@ export interface PersonnelChangeRequest {
   personnel: number;
   personnel_name?: string;
   national_code?: string;
+  personnel_national_code?: string;
   proposed_changes: Record<string, any>;
+  previous_values?: Record<string, any>;
   change_reason?: string;
-  status: 'pending_manager' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'supervisor_approved' | 'pending_manager' | 'accountant_approved' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required' | 'pending_finance';
   status_display?: string;
   created_by?: number;
   created_by_name?: string;
+  requested_by?: number;
+  requested_by_name?: string;
+  supervisor_reviewed_by?: number;
+  supervisor_reviewed_by_name?: string;
+  supervisor_reviewed_at?: string;
   manager_approved_by?: number;
   manager_approved_by_name?: string;
   manager_approved_at?: string;
@@ -176,11 +196,17 @@ export interface VehicleChangeRequest {
   driver_name?: string;
   plate_number?: string;
   proposed_changes: Record<string, any>;
+  previous_values?: Record<string, any>;
   change_reason?: string;
-  status: 'pending_manager' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required';
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'supervisor_approved' | 'pending_manager' | 'accountant_approved' | 'manager_approved' | 'approved' | 'rejected' | 'revision_required' | 'pending_finance';
   status_display?: string;
   created_by?: number;
   created_by_name?: string;
+  requested_by?: number;
+  requested_by_name?: string;
+  supervisor_reviewed_by?: number;
+  supervisor_reviewed_by_name?: string;
+  supervisor_reviewed_at?: string;
   manager_approved_by?: number;
   manager_approved_by_name?: string;
   manager_approved_at?: string;

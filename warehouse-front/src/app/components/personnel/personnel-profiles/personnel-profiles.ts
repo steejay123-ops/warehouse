@@ -313,11 +313,11 @@ export class PersonnelProfilesHub implements OnInit {
     if (!p.id) return;
     this.api.approvePersonnelManager(p.id).subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول (مدیر) با موفقیت ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و پرونده فعال گردید.');
         this.loadProfiles();
       },
       error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب نهایی مدیر');
       }
     });
   }
@@ -326,7 +326,7 @@ export class PersonnelProfilesHub implements OnInit {
     if (!p.id) return;
     this.api.approvePersonnelFinance(p.id).subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید نهایی مالی با موفقیت انجام شد و پرونده فعال گردید.');
+        this.toast.show('success', res.message || 'تایید مالی با موفقیت ثبت شد و پرونده جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadProfiles();
       },
       error: (err) => {
@@ -339,11 +339,11 @@ export class PersonnelProfilesHub implements OnInit {
     if (!v.id) return;
     this.api.approveVehicleManager(v.id).subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول خودرو (مدیر) با موفقیت ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.');
         this.loadProfiles();
       },
       error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب نهایی خودرو');
       }
     });
   }
@@ -352,7 +352,7 @@ export class PersonnelProfilesHub implements OnInit {
     if (!v.id) return;
     this.api.approveVehicleFinance(v.id).subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید نهایی مالی خودرو با موفقیت انجام شد و خودرو فعال گردید.');
+        this.toast.show('success', res.message || 'تایید مالی خودرو با موفقیت انجام شد و پرونده جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadProfiles();
       },
       error: (err) => {
@@ -369,12 +369,12 @@ export class PersonnelProfilesHub implements OnInit {
 
     call.subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید مرحله اول درخواست تغییرات توسط مدیر ثبت شد.');
+        this.toast.show('success', res.message || 'تصویب نهایی تغییرات توسط مدیر انجام و به پرونده اصلی اعمال گردید.');
         if (this.isDiffModalOpen) this.closeDiffModal();
         this.loadChangeRequests();
       },
       error: (err) => {
-        this.toast.show('error', err?.error?.error || 'خطا در تایید مدیر');
+        this.toast.show('error', err?.error?.error || 'خطا در تصویب نهایی مدیر');
       }
     });
   }
@@ -386,7 +386,7 @@ export class PersonnelProfilesHub implements OnInit {
 
     call.subscribe({
       next: (res) => {
-        this.toast.show('success', res.message || 'تایید نهایی تغییرات توسط حسابدار انجام شد و پرونده به‌روزرسانی گردید.');
+        this.toast.show('success', res.message || 'تایید مالی درخواست تغییرات انجام و جهت تصویب نهایی به مدیر ارسال شد.');
         if (this.isDiffModalOpen) this.closeDiffModal();
         this.loadChangeRequests();
       },

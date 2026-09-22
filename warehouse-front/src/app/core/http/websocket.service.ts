@@ -129,6 +129,7 @@ export class WebSocketService implements OnDestroy {
             'login_log_created',
             'warehouse_mutation',
             'attendance_updated',
+            'personnel_updated',
             'fleet_trips_updated',
             'org_structure_updated',
             'session_revoked'

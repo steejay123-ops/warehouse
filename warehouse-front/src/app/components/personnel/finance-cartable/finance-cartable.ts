@@ -248,7 +248,7 @@ export class FinanceCartable implements OnInit, OnDestroy {
   loadFinalApprovalsData(): void {
     this.api.getPersonnelProfiles({
       warehouse_id: this.selectedWarehouseId || undefined,
-      approval_status: 'manager_approved'
+      approval_status: 'pending_accountant,supervisor_approved,manager_approved'
     }).subscribe({
       next: (res: any) => {
         this.pendingPersonnelList = Array.isArray(res) ? res : (res?.results || []);
@@ -259,7 +259,7 @@ export class FinanceCartable implements OnInit, OnDestroy {
 
     this.api.getVehicleProfiles({
       warehouse_id: this.selectedWarehouseId || undefined,
-      approval_status: 'manager_approved'
+      approval_status: 'pending_accountant,supervisor_approved,manager_approved'
     }).subscribe({
       next: (res: any) => {
         this.pendingFleetList = Array.isArray(res) ? res : (res?.results || []);
@@ -271,7 +271,9 @@ export class FinanceCartable implements OnInit, OnDestroy {
     this.api.getPersonnelChangeRequests().subscribe({
       next: (res: any) => {
         const all = Array.isArray(res) ? res : (res?.results || []);
-        this.pendingPersonnelCR = all.filter((cr: any) => cr.status === 'manager_approved');
+        this.pendingPersonnelCR = all.filter((cr: any) =>
+          cr.status === 'pending_accountant' || cr.status === 'supervisor_approved' || cr.status === 'manager_approved' || cr.status === 'pending_finance'
+        );
         this.cdr.detectChanges();
       },
       error: () => {}
@@ -280,7 +282,9 @@ export class FinanceCartable implements OnInit, OnDestroy {
     this.api.getVehicleChangeRequests().subscribe({
       next: (res: any) => {
         const all = Array.isArray(res) ? res : (res?.results || []);
-        this.pendingFleetCR = all.filter((cr: any) => cr.status === 'manager_approved');
+        this.pendingFleetCR = all.filter((cr: any) =>
+          cr.status === 'pending_accountant' || cr.status === 'supervisor_approved' || cr.status === 'manager_approved' || cr.status === 'pending_finance'
+        );
         this.cdr.detectChanges();
       },
       error: () => {}
@@ -291,7 +295,7 @@ export class FinanceCartable implements OnInit, OnDestroy {
     if (!p.id) return;
     this.api.approvePersonnelFinance(p.id).subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید نهایی مالی با موفقیت صادر و پرونده پرسنل فعال گردید.');
+        this.toast.show('success', res.message || 'تایید مالی با موفقیت صادر و پرونده پرسنل جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadFinalApprovalsData();
       },
       error: (err: any) => {
@@ -304,7 +308,7 @@ export class FinanceCartable implements OnInit, OnDestroy {
     if (!v.id) return;
     this.api.approveVehicleFinance(v.id).subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید نهایی مالی با موفقیت صادر و پرونده ناوگان فعال گردید.');
+        this.toast.show('success', res.message || 'تایید مالی با موفقیت صادر و پرونده ناوگان جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadFinalApprovalsData();
       },
       error: (err: any) => {
@@ -320,7 +324,7 @@ export class FinanceCartable implements OnInit, OnDestroy {
 
     req$.subscribe({
       next: (res: any) => {
-        this.toast.show('success', res.message || 'تایید نهایی مالی ثبت و تغییرات با موفقیت روی پرونده اعمال شد.');
+        this.toast.show('success', res.message || 'تایید مالی ثبت و درخواست تغییرات جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.isDiffModalOpen = false;
         this.loadFinalApprovalsData();
       },
@@ -506,7 +510,11 @@ export class FinanceCartable implements OnInit, OnDestroy {
     this.selectedDiffCR = cr;
     this.diffFieldRows = [];
 
-    const changes = cr.changes_payload || cr.proposed_changes || {};
+    const proposed = cr.proposed_changes || {};
+    const previous = cr.previous_values || {};
+    const payload = cr.changes_payload || {};
+    const allKeys = Array.from(new Set([...Object.keys(proposed), ...Object.keys(previous), ...Object.keys(payload)]));
+
     const labels: { [k: string]: string } = {
       first_name: 'نام',
       last_name: 'نام خانوادگی',
@@ -524,14 +532,26 @@ export class FinanceCartable implements OnInit, OnDestroy {
       default_service_rate: 'نرخ پایه سرویس'
     };
 
-    for (const key of Object.keys(changes)) {
-      const item = changes[key];
+    for (const key of allKeys) {
+      let oldVal = previous[key];
+      let newVal = proposed[key];
+
+      if (oldVal === undefined && payload[key]?.old !== undefined) {
+        oldVal = payload[key].old;
+      }
+      if (newVal === undefined && payload[key]?.new !== undefined) {
+        newVal = payload[key].new;
+      }
+      if (newVal === undefined && payload[key] !== undefined && typeof payload[key] !== 'object') {
+        newVal = payload[key];
+      }
+
       this.diffFieldRows.push({
         field_name: key,
         field_label: labels[key] || key,
-        old_value: item?.old ?? '—',
-        new_value: item?.new ?? '—',
-        is_changed: String(item?.old) !== String(item?.new)
+        old_value: oldVal ?? '—',
+        new_value: newVal ?? '—',
+        is_changed: String(oldVal ?? '') !== String(newVal ?? '')
       });
     }
 

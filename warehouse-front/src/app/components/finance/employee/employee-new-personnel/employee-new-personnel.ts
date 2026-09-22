@@ -1,11 +1,13 @@
-import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { ProjectSection, PersonnelProfile } from '../../../../core/models/personnel.model';
 import { PersonnelApiService } from '../../../../core/api/personnel-api.service';
 import { AuthService } from '../../../../core/auth/auth.service';
+import { WebSocketService } from '../../../../core/http/websocket.service';
 import { ToastService } from '../../../../shared/components/toast/toast.component';
 import { normalizeDigits } from '../../../../core/utils/date-utils';
 import { ExcelImportModal } from '../../../../shared/components/excel-import-modal/excel-import-modal';
@@ -20,7 +22,7 @@ import {
   ShebaValidationResult
 } from '../../../../core/utils/sheba-utils';
 
-export type PersonnelStatusFilter = 'all' | 'draft' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'revision_required' | 'rejected';
+export type PersonnelStatusFilter = 'all' | 'draft' | 'pending' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'revision_required' | 'rejected';
 
 @Component({
   selector: 'app-employee-new-personnel-hub',
@@ -29,7 +31,7 @@ export type PersonnelStatusFilter = 'all' | 'draft' | 'pending_supervisor' | 'ma
   templateUrl: './employee-new-personnel.html',
   styleUrl: './employee-new-personnel.css'
 })
-export class EmployeeNewPersonnelHubComponent implements OnInit {
+export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
   readonly Math = Math;
 
   // ─── مدیریت بخش و ایزولاسیون قلمرو (Guardian G1: Section Isolation) ───
@@ -46,9 +48,21 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
   isImportingExcel: boolean = false;
   searchQuery: string = '';
   statusFilter: PersonnelStatusFilter = 'all';
+  private searchSubject = new Subject<string>();
+  private searchSub?: Subscription;
+  private wsSub?: Subscription;
+
+  // ─── مودال مقایسه و مشاهده تغییرات معلق (Diff Viewer Modal) ───
+  isPendingDiffModalOpen: boolean = false;
+  pendingDiffPersonnel: PersonnelProfile | null = null;
 
   // ─── وضعیت باز بودن مودال ثبت پرسنل جدید ───
   isNewPersonnelModalOpen: boolean = false;
+  editingPersonnel: PersonnelProfile | null = null;
+  editingId: number | null = null;
+  existingAttachmentUrl: string | null = null;
+  wageFormattedDisplay: string = '';
+  reviewedDraftIds: Set<number> = new Set<number>();
 
   // ─── مودال استاندارد ورود اطلاعات از فایل اکسل (مشابه projects-and-sections) ───
   isExcelModalOpen: boolean = false;
@@ -92,8 +106,8 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
   // اعتبارسنجی زنده کد ملی
   nationalCodeError: string | null = null;
 
-  // ─── عناوین شغلی استاندارد ───
-  readonly jobTitles: string[] = [
+  // ─── عناوین شغلی استاندارد (قابلیت گسترش داینامیک از بک‌اند) ───
+  jobTitles: string[] = [
     'کارگر ساده انبار',
     'اپراتور لیفتراک',
     'کمک انباردار',
@@ -113,14 +127,19 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
   constructor(
     public auth: AuthService,
     private personnelApi: PersonnelApiService,
+    private ws: WebSocketService,
     private toast: ToastService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
     private router: Router
-  ) {}
+  ) {
+    this.setupSearchDebounce();
+  }
 
   ngOnInit(): void {
     this.loadMySections();
+    this.loadJobTitles();
+    this.setupWebSocket();
     this.route.queryParams.subscribe(params => {
       if (params['section_id']) {
         const sId = Number(params['section_id']);
@@ -132,12 +151,52 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
           }
         }
       }
-      if (params['status_filter'] && ['all', 'draft', 'pending_supervisor', 'manager_approved', 'approved', 'revision_required', 'rejected'].includes(params['status_filter'])) {
+      if (params['status_filter'] && ['all', 'draft', 'pending', 'pending_supervisor', 'manager_approved', 'approved', 'revision_required', 'rejected'].includes(params['status_filter'])) {
         this.statusFilter = params['status_filter'] as PersonnelStatusFilter;
       }
       if (params['search'] !== undefined) {
         this.searchQuery = params['search'] || '';
       }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.searchSub?.unsubscribe();
+    this.wsSub?.unsubscribe();
+  }
+
+  private setupSearchDebounce(): void {
+    this.searchSub = this.searchSubject.pipe(
+      debounceTime(300),
+      distinctUntilChanged()
+    ).subscribe(q => {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { search: q.trim() || null },
+        queryParamsHandling: 'merge'
+      });
+    });
+  }
+
+  private setupWebSocket(): void {
+    this.wsSub = this.ws.notifications$.subscribe((msg: any) => {
+      if (msg && (msg.type_str === 'personnel_updated' || msg.type === 'personnel_updated')) {
+        if (!this.selectedSectionId || !msg.section_id || msg.section_id === this.selectedSectionId) {
+          this.loadRecentPersonnel();
+        }
+      }
+    });
+  }
+
+  loadJobTitles(): void {
+    this.personnelApi.getJobTitles().subscribe({
+      next: (res) => {
+        if (res?.job_titles && Array.isArray(res.job_titles) && res.job_titles.length > 0) {
+          this.jobTitles = res.job_titles;
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => {}
     });
   }
 
@@ -219,7 +278,17 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     let list = this.recentPersonnel;
 
     if (this.statusFilter !== 'all') {
-      list = list.filter(p => p.approval_status === this.statusFilter);
+      if (this.statusFilter === 'pending' || this.statusFilter === 'pending_supervisor') {
+        list = list.filter(p =>
+          p.approval_status === 'pending_supervisor' ||
+          p.approval_status === 'pending_accountant' ||
+          p.approval_status === 'pending_manager'
+        );
+      } else if (this.statusFilter === 'approved') {
+        list = list.filter(p => p.approval_status === 'approved' || p.approval_status === 'manager_approved');
+      } else {
+        list = list.filter(p => p.approval_status === this.statusFilter);
+      }
     }
 
     const q = this.searchQuery.trim().toLowerCase();
@@ -241,9 +310,14 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
   get personnelMetrics() {
     const total = this.recentPersonnel.length;
     const drafts = this.recentPersonnel.filter(p => p.approval_status === 'draft').length;
-    const pending = this.recentPersonnel.filter(p => p.approval_status === 'pending_supervisor').length;
+    const pending = this.recentPersonnel.filter(p =>
+      p.approval_status === 'pending_supervisor' ||
+      p.approval_status === 'pending_accountant' ||
+      p.approval_status === 'pending_manager'
+    ).length;
     const approved = this.recentPersonnel.filter(p => p.approval_status === 'approved' || p.approval_status === 'manager_approved').length;
-    const rejected = this.recentPersonnel.filter(p => p.approval_status === 'rejected' || p.approval_status === 'revision_required').length;
+    const rejected = this.recentPersonnel.filter(p => p.approval_status === 'rejected').length;
+    const revision_required = this.recentPersonnel.filter(p => p.approval_status === 'revision_required').length;
     const dailyCount = this.recentPersonnel.filter(p => p.contract_type === 'daily').length;
 
     return {
@@ -252,8 +326,79 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
       pending,
       approved,
       rejected,
+      revision_required,
       dailyCount
     };
+  }
+
+  get unreviewedDraftCount(): number {
+    return this.recentPersonnel.filter(p => p.approval_status === 'draft' && !this.isDraftReviewed(p.id)).length;
+  }
+
+  isDraftReviewed(id?: number): boolean {
+    if (!id) return false;
+    return this.reviewedDraftIds.has(id);
+  }
+
+  get isApprovedRecord(): boolean {
+    return this.editingPersonnel?.approval_status === 'approved' || this.editingPersonnel?.approval_status === 'manager_approved';
+  }
+
+  get editingPersonnelHasPendingChanges(): boolean {
+    return !!this.editingPersonnel?.has_pending_changes;
+  }
+
+  get editingPersonnelStatus(): string | null {
+    return this.editingPersonnel?.approval_status || null;
+  }
+
+  get isReadOnlyMode(): boolean {
+    if (!this.editingPersonnel) return false;
+    if (this.isApprovedRecord) return false;
+    return this.editingPersonnelStatus !== 'draft' && this.editingPersonnelStatus !== 'revision_required';
+  }
+
+  get rejectionReasonToDisplay(): string | null {
+    return this.editingPersonnel?.rejection_reason || null;
+  }
+
+  get rejectionRequestedByName(): string | null {
+    return (this.editingPersonnel as any)?.revision_requested_by_name || (this.editingPersonnel as any)?.supervisor_name || null;
+  }
+
+  get modalHeaderTitle(): string {
+    if (this.editingPersonnel) {
+      if (this.isApprovedRecord) return 'ویرایش و پیشنهاد تغییرات پرونده مصوب';
+      if (this.editingPersonnelStatus === 'revision_required') return 'اصلاح و بازنگری پرونده پرسنل';
+      if (this.isReadOnlyMode) return 'مشاهده مشخصات پرسنل';
+      return 'ویرایش پرونده پیش‌نویس پرسنل';
+    }
+    return 'تشکیل پرونده و معرفی پرسنل جدید';
+  }
+
+  get modalHeaderBadge(): { label: string; class: string } {
+    if (this.isApprovedRecord) {
+      return { label: 'پرونده مصوب', class: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
+    }
+    if (this.editingPersonnelStatus === 'revision_required') {
+      return { label: 'نیازمند اصلاح', class: 'bg-amber-100 text-amber-800 border-amber-300' };
+    }
+    if (this.editingPersonnelStatus === 'pending_supervisor') {
+      return { label: 'در انتظار تایید سرپرست', class: 'bg-purple-100 text-purple-800 border-purple-300' };
+    }
+    if (this.editingPersonnelStatus === 'pending_accountant') {
+      return { label: 'در انتظار بررسی حسابدار', class: 'bg-indigo-100 text-indigo-800 border-indigo-300' };
+    }
+    if (this.editingPersonnelStatus === 'pending_manager') {
+      return { label: 'در انتظار تصویب مدیر', class: 'bg-indigo-100 text-indigo-800 border-indigo-300' };
+    }
+    if (this.editingPersonnelStatus === 'rejected') {
+      return { label: 'رد شده', class: 'bg-rose-100 text-rose-800 border-rose-300' };
+    }
+    if (this.editingId) {
+      return { label: 'پیش‌نویس کارمند', class: 'bg-slate-100 text-slate-700 border-slate-300' };
+    }
+    return { label: 'جدید', class: 'bg-white/20 text-white border-white/30' };
   }
 
   setStatusFilter(filter: PersonnelStatusFilter): void {
@@ -266,16 +411,36 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
   }
 
   onSearchChange(): void {
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { search: this.searchQuery.trim() || null },
-      queryParamsHandling: 'merge'
-    });
+    this.searchSubject.next(this.searchQuery);
   }
 
   clearSearch(): void {
     this.searchQuery = '';
-    this.onSearchChange();
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { search: null },
+      queryParamsHandling: 'merge'
+    });
+    this.searchSubject.next('');
+  }
+
+  getCleanTelUrl(phone?: string): string {
+    if (!phone) return '';
+    const clean = normalizeDigits(phone).replace(/[^\d+]/g, '');
+    return `tel:${clean}`;
+  }
+
+  // ─── مدیریت مودال مشاهده تغییرات معلق (Diff Viewer) ───
+  openPendingDiffModal(p: PersonnelProfile): void {
+    this.pendingDiffPersonnel = p;
+    this.isPendingDiffModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closePendingDiffModal(): void {
+    this.isPendingDiffModalOpen = false;
+    this.pendingDiffPersonnel = null;
+    this.cdr.detectChanges();
   }
 
   exportExcel(): void {
@@ -300,49 +465,6 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
       error: (err: any) => {
         this.isExportingExcel = false;
         this.toast.show('error', 'خطا در دریافت خروجی اکسل: ' + (err.error?.error || err.message || 'نامشخص'));
-      }
-    });
-  }
-
-  // ─── ورود اطلاعات از طریق فایل اکسل (Excel Import) ───
-  onExcelFileSelected(event: any): void {
-    const file = event.target?.files?.[0];
-    if (!file) return;
-
-    const fileName = (file.name || '').toLowerCase();
-    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
-      this.toast.show('warning', 'لطفاً یک فایل معتبر اکسل با پسوند .xlsx یا .xls انتخاب فرمایید.');
-      if (event.target) event.target.value = '';
-      return;
-    }
-
-    if (!this.selectedSectionId) {
-      this.toast.show('warning', 'لطفاً ابتدا یک بخش را انتخاب کنید.');
-      if (event.target) event.target.value = '';
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('section_id', String(this.selectedSectionId));
-
-    this.isImportingExcel = true;
-    this.toast.show('info', 'در حال پردازش و ورود اطلاعات پرسنل از فایل اکسل...');
-
-    this.personnelApi.importPersonnelExcel(formData).subscribe({
-      next: (res: any) => {
-        this.isImportingExcel = false;
-        const msg = res?.message || `درون‌ریزی انجام شد: ${res?.created_count || 0} پرسنل جدید، ${res?.updated_count || 0} به‌روزرسانی.`;
-        this.toast.show('success', msg);
-        if (event.target) event.target.value = '';
-        this.loadRecentPersonnel();
-      },
-      error: (err: any) => {
-        this.isImportingExcel = false;
-        const errMsg = err?.error?.error || err?.message || 'خطا در ورود اطلاعات از فایل اکسل';
-        this.toast.show('error', errMsg);
-        if (event.target) event.target.value = '';
-        this.cdr.detectChanges();
       }
     });
   }
@@ -397,6 +519,10 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
       this.toast.show('warning', 'لطفاً ابتدا یک بخش را انتخاب کنید.');
       return;
     }
+    this.editingPersonnel = null;
+    this.editingId = null;
+    this.existingAttachmentUrl = null;
+    this.wageFormattedDisplay = '';
     this.resetForm();
     this.isNewPersonnelModalOpen = true;
     this.cdr.detectChanges();
@@ -404,11 +530,88 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
 
   closeNewPersonnelModal(): void {
     this.isNewPersonnelModalOpen = false;
+    this.editingPersonnel = null;
+    this.editingId = null;
+    this.existingAttachmentUrl = null;
+    this.wageFormattedDisplay = '';
     this.cdr.detectChanges();
+  }
+
+  openEditModal(p: PersonnelProfile): void {
+    if (!this.selectedSectionId && p.section) {
+      this.selectedSectionId = p.section;
+      this.selectedSection = this.mySections.find(s => s.id === p.section) || null;
+    }
+    this.editingPersonnel = p;
+    this.editingId = p.id || null;
+    if (p.id) {
+      this.reviewedDraftIds.add(p.id);
+    }
+    this.newPersonnel = {
+      ...p,
+      contract_type: p.contract_type || 'daily',
+      marital_status: p.marital_status || 'single',
+      children_count: p.children_count || 0,
+      daily_base_wage: p.daily_base_wage || 0
+    };
+    this.wageFormattedDisplay = (p.daily_base_wage && p.daily_base_wage > 0) ? (p.daily_base_wage).toLocaleString('fa-IR') : '';
+    this.existingAttachmentUrl = p.attachment || null;
+    this.selectedDocumentAttachment = null;
+    this.attachmentFileName = '';
+    this.nationalCodeError = null;
+    if (p.sheba_number) {
+      this.onShebaChange();
+    } else {
+      this.shebaValidationResult = null;
+      this.shebaDigitsDisplay = '';
+    }
+    this.isNewPersonnelModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  submitDraftToSupervisor(p: PersonnelProfile): void {
+    if (!p.id) return;
+    this.personnelApi.updatePersonnelProfile(p.id, { approval_status: 'pending_supervisor' }).subscribe({
+      next: (updated: PersonnelProfile) => {
+        this.toast.show('success', `پرونده «${updated.first_name} ${updated.last_name}» به کارتابل سرپرست بخش ارسال گردید.`);
+        this.loadRecentPersonnel();
+      },
+      error: (err: any) => {
+        this.toast.show('error', 'خطا در ارسال پرونده به سرپرست: ' + (err.error?.error || err.message || 'نامشخص'));
+      }
+    });
+  }
+
+  onWageInput(event: any): void {
+    const inputEl = event?.target as HTMLInputElement | undefined;
+    const oldVal = inputEl?.value || (typeof event === 'string' ? event : '');
+    const oldSel = inputEl?.selectionStart ?? 0;
+    const cleanDigits = normalizeDigits(oldVal).replace(/\D/g, '');
+    const num = Number(cleanDigits) || 0;
+    this.newPersonnel.daily_base_wage = num;
+    this.wageFormattedDisplay = num > 0 ? num.toLocaleString('fa-IR') : '';
+    if (inputEl && typeof event !== 'string') {
+      const digitsBeforeCursor = normalizeDigits(oldVal.slice(0, oldSel)).replace(/\D/g, '').length;
+      inputEl.value = this.wageFormattedDisplay;
+      let newPos = 0;
+      let countedDigits = 0;
+      for (let i = 0; i < this.wageFormattedDisplay.length; i++) {
+        if (countedDigits >= digitsBeforeCursor) break;
+        if (/\d/.test(normalizeDigits(this.wageFormattedDisplay[i]))) {
+          countedDigits++;
+        }
+        newPos = i + 1;
+      }
+      try { inputEl.setSelectionRange(newPos, newPos); } catch {}
+    }
   }
 
   @HostListener('document:keydown.escape')
   handleEscape(): void {
+    if (this.isPendingDiffModalOpen) {
+      this.closePendingDiffModal();
+      return;
+    }
     if (this.isNewPersonnelModalOpen) {
       this.closeNewPersonnelModal();
     }
@@ -419,8 +622,12 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     if (this._isSyncingBank) return;
     this._isSyncingBank = true;
     try {
-      const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
-      const digits = extractShebaDigits(rawVal);
+      const inputEl = event?.target as HTMLInputElement | undefined;
+      const oldVal = inputEl?.value || (typeof event === 'string' ? event : '');
+      const oldSel = inputEl?.selectionStart ?? 0;
+      const digitsBeforeCursor = extractShebaDigits(oldVal.slice(0, oldSel)).length;
+
+      const digits = extractShebaDigits(oldVal);
       const res = validateSheba(digits);
       this.shebaValidationResult = res;
       this.shebaDigitsDisplay = res.formattedDigits || digits;
@@ -431,8 +638,18 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
       if (res.accountNumber) {
         this.newPersonnel.account_number = res.accountNumber;
       }
-      if (event?.target) {
-        event.target.value = this.shebaDigitsDisplay;
+      if (inputEl && typeof event !== 'string') {
+        inputEl.value = this.shebaDigitsDisplay;
+        let newPos = 0;
+        let countedDigits = 0;
+        for (let i = 0; i < this.shebaDigitsDisplay.length; i++) {
+          if (countedDigits >= digitsBeforeCursor) break;
+          if (/\d/.test(this.shebaDigitsDisplay[i])) {
+            countedDigits++;
+          }
+          newPos = i + 1;
+        }
+        try { inputEl.setSelectionRange(newPos, newPos); } catch {}
       }
     } finally {
       this._isSyncingBank = false;
@@ -550,8 +767,8 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     return Math.floor((Number(this.newPersonnel.daily_base_wage) || 0) / 10);
   }
 
-  // ─── ثبت پرسنل جدید (Guardian G2: Force approval_status = 'draft') ───
-  savePersonnelDraft(): void {
+  // ─── ثبت و بروزرسانی پرونده پرسنل (پیش‌نویس، ارسال به سرپرست یا پیشنهاد ویرایش) ───
+  savePersonnel(targetStatus: 'draft' | 'pending_supervisor' = 'draft'): void {
     if (!this.selectedSectionId) {
       this.toast.show('warning', 'لطفاً ابتدا یک بخش را انتخاب کنید.');
       return;
@@ -594,7 +811,7 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
       if (this.newPersonnel.bank_name?.trim()) formData.append('bank_name', this.newPersonnel.bank_name.trim());
       if (this.newPersonnel.account_number?.trim()) formData.append('account_number', this.newPersonnel.account_number.trim());
       if (this.newPersonnel.sheba_number) formData.append('sheba_number', cleanShebaInput(this.newPersonnel.sheba_number));
-      formData.append('approval_status', 'draft');
+      formData.append('approval_status', targetStatus);
       formData.append('is_active', 'true');
       formData.append('attachment', this.selectedDocumentAttachment);
       payload = formData;
@@ -610,26 +827,56 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
         phone_number: this.newPersonnel.phone_number?.trim() || undefined,
         sheba_number: this.newPersonnel.sheba_number ? cleanShebaInput(this.newPersonnel.sheba_number) : undefined,
         section: this.selectedSectionId,
-        approval_status: 'draft',
+        approval_status: targetStatus,
         is_active: true
       };
+      delete (payload as any).attachment;
     }
 
-    this.personnelApi.createPersonnelProfile(payload).subscribe({
-      next: (created: PersonnelProfile) => {
-        this.isSaving = false;
-        this.toast.show('success', `پرونده «${created.first_name} ${created.last_name}» در وضعیت پیش‌نویس ثبت شد و به کارتابل سرپرست ارسال گردید.`);
-        this.resetForm();
-        this.isNewPersonnelModalOpen = false;
-        this.loadRecentPersonnel();
-      },
-      error: (err: any) => {
-        this.isSaving = false;
-        const msg = err.error?.national_code?.[0] || err.error?.error || err.message || 'نامشخص';
-        this.toast.show('error', 'خطا در ثبت پرسنل: ' + msg);
-        this.cdr.detectChanges();
-      }
-    });
+    if (this.editingId) {
+      this.personnelApi.updatePersonnelProfile(this.editingId, payload).subscribe({
+        next: (res: any) => {
+          this.isSaving = false;
+          const updatedName = res?.first_name ? `${res.first_name} ${res.last_name}` : (this.newPersonnel.first_name + ' ' + this.newPersonnel.last_name);
+          if (this.isApprovedRecord) {
+            this.toast.show('success', `درخواست تغییرات پرونده «${updatedName}» ثبت و جهت بررسی به کارتابل سرپرست و مدیر ارسال گردید.`);
+          } else if (targetStatus === 'pending_supervisor') {
+            this.toast.show('success', `پرونده «${updatedName}» به کارتابل سرپرست ارسال گردید.`);
+          } else {
+            this.toast.show('success', `تغییرات پیش‌نویس پرونده «${updatedName}» با موفقیت ذخیره شد.`);
+          }
+          this.closeNewPersonnelModal();
+          this.loadRecentPersonnel();
+        },
+        error: (err: any) => {
+          this.isSaving = false;
+          const msg = err.error?.national_code?.[0] || err.error?.error || err.message || 'نامشخص';
+          this.toast.show('error', 'خطا در ذخیره تغییرات پرسنل: ' + msg);
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      this.personnelApi.createPersonnelProfile(payload).subscribe({
+        next: (created: PersonnelProfile) => {
+          this.isSaving = false;
+          const targetMsg = targetStatus === 'pending_supervisor' ? 'ثبت و به کارتابل سرپرست ارسال گردید.' : 'در وضعیت پیش‌نویس ثبت شد.';
+          this.toast.show('success', `پرونده «${created.first_name} ${created.last_name}» ${targetMsg}`);
+          this.resetForm();
+          this.closeNewPersonnelModal();
+          this.loadRecentPersonnel();
+        },
+        error: (err: any) => {
+          this.isSaving = false;
+          const msg = err.error?.national_code?.[0] || err.error?.error || err.message || 'نامشخص';
+          this.toast.show('error', 'خطا در ثبت پرسنل: ' + msg);
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  savePersonnelDraft(): void {
+    this.savePersonnel('draft');
   }
 
   resetForm(): void {
@@ -652,27 +899,29 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     };
     this.shebaValidationResult = null;
     this.shebaDigitsDisplay = '';
+    this.wageFormattedDisplay = '';
     this.isShebaCopied = false;
     this.selectedDocumentAttachment = null;
     this.attachmentFileName = '';
     this.nationalCodeError = null;
   }
 
-  // ─── حذف پرسنل پیش‌نویس ───
+  // ─── حذف پرسنل پیش‌نویس یا عودت‌داده‌شده ───
   deleteDraftPersonnel(personnel: PersonnelProfile): void {
     if (!personnel.id) return;
-    if (personnel.approval_status !== 'draft') {
-      this.toast.show('warning', 'فقط پرونده‌های در وضعیت پیش‌نویس قابل حذف توسط کارمند هستند.');
+    if (personnel.approval_status !== 'draft' && personnel.approval_status !== 'revision_required') {
+      this.toast.show('warning', 'فقط پرونده‌های در وضعیت پیش‌نویس یا عودت‌داده‌شده قابل حذف توسط کارمند هستند.');
       return;
     }
 
-    if (!confirm(`آیا از حذف پرونده پیش‌نویس «${personnel.first_name} ${personnel.last_name}» اطمینان دارید؟`)) {
+    const typeDesc = personnel.approval_status === 'revision_required' ? 'عودت‌داده‌شده' : 'پیش‌نویس';
+    if (!confirm(`آیا از حذف پرونده ${typeDesc} «${personnel.first_name} ${personnel.last_name}» اطمینان دارید؟`)) {
       return;
     }
 
     this.personnelApi.deletePersonnelProfile(personnel.id).subscribe({
       next: () => {
-        this.toast.show('success', `پرونده پیش‌نویس «${personnel.first_name} ${personnel.last_name}» حذف گردید.`);
+        this.toast.show('success', `پرونده ${typeDesc} «${personnel.first_name} ${personnel.last_name}» حذف گردید.`);
         this.loadRecentPersonnel();
       },
       error: (err: any) => {
@@ -681,13 +930,15 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     });
   }
 
-  // ─── فرمت‌بندی و نمایش وضعیت ───
+  // ─── فرمت‌بندی و نمایش وضعیت (Concise Icons & Labels) ───
   getStatusBadgeClass(status?: string): string {
     switch (status) {
       case 'draft':
         return 'bg-slate-100 text-slate-700 border-slate-200';
       case 'pending_supervisor':
         return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'pending_accountant':
+      case 'pending_manager':
       case 'manager_approved':
         return 'bg-indigo-50 text-indigo-700 border-indigo-200';
       case 'approved':
@@ -701,20 +952,67 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     }
   }
 
+  getStatusIcon(status?: string): string {
+    switch (status) {
+      case 'draft':
+        return '📝';
+      case 'pending_supervisor':
+      case 'pending_accountant':
+      case 'pending_manager':
+        return '⏳';
+      case 'manager_approved':
+      case 'approved':
+        return '✓';
+      case 'revision_required':
+        return '↩';
+      case 'rejected':
+        return '✕';
+      default:
+        return '•';
+    }
+  }
+
   getStatusLabel(status?: string): string {
     switch (status) {
       case 'draft':
-        return 'پیش‌نویس کارمند';
+        return 'پیش‌نویس';
       case 'pending_supervisor':
-        return 'در انتظار تایید سرپرست';
+        return 'سرپرست';
+      case 'pending_accountant':
+        return 'حسابدار';
+      case 'pending_manager':
+        return 'مدیر';
+      case 'manager_approved':
+        return 'تایید مدیر';
+      case 'approved':
+        return 'مصوب';
+      case 'revision_required':
+        return 'عودت';
+      case 'rejected':
+        return 'رد شده';
+      default:
+        return status || 'نامشخص';
+    }
+  }
+
+  getFullStatusDescription(status?: string): string {
+    switch (status) {
+      case 'draft':
+        return 'پیش‌نویس ثبت شده توسط کارمند انبار';
+      case 'pending_supervisor':
+        return 'در انتظار بررسی و تایید سرپرست انبار';
+      case 'pending_accountant':
+        return 'تایید سرپرست / در انتظار بررسی حسابدار';
+      case 'pending_manager':
+        return 'تایید حسابدار / در انتظار تصویب مدیر';
       case 'manager_approved':
         return 'تایید اولیه مدیر';
       case 'approved':
-        return 'تصویب و فعال شده';
+        return 'تصویب و فعال‌سازی نهایی شده';
       case 'revision_required':
-        return 'نیازمند اصلاح';
+        return 'نیازمند بازنگری و اصلاح به دلیل اشکال';
       case 'rejected':
-        return 'رد شده';
+        return 'رد شده و باطل گردیده';
       default:
         return status || 'نامشخص';
     }
@@ -734,5 +1032,24 @@ export class EmployeeNewPersonnelHubComponent implements OnInit {
     const n = Number(val);
     if (isNaN(n)) return String(val);
     return n.toLocaleString('fa-IR');
+  }
+
+  formatShebaDisplay(sheba?: string): string {
+    if (!sheba) return '—';
+    const clean = sheba.replace(/\s+/g, '').toUpperCase();
+    return clean.replace(/(.{4})/g, '$1 ').trim();
+  }
+
+  copyToClipboard(text?: string, label: string = 'متن'): void {
+    if (!text) return;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        this.toast.show('success', `${label} در کلیپ‌بورد کپی شد.`);
+      }).catch(() => {
+        this.toast.show('info', text);
+      });
+    } else {
+      this.toast.show('info', text);
+    }
   }
 }

@@ -46,8 +46,12 @@ export class PersonnelApiService {
     return this.api.post<PersonnelProfile>(`${this.baseUrl}/profiles`, data);
   }
 
-  updatePersonnelProfile(id: number, data: Partial<PersonnelProfile>): Observable<any> {
-    return this.api.patch<any>(`${this.baseUrl}/profiles/${id}`, data);
+  updatePersonnelProfile(id: number, data: Partial<PersonnelProfile> | FormData): Observable<any> {
+    return this.api.patch<any>(`${this.baseUrl}/profiles/${id}/`, data);
+  }
+
+  getJobTitles(): Observable<{ job_titles: string[] }> {
+    return this.api.get<{ job_titles: string[] }>(`${this.baseUrl}/profiles/job-titles/`);
   }
 
   deletePersonnelProfile(id: number): Observable<void> {
@@ -66,7 +70,7 @@ export class PersonnelApiService {
     const formData = new FormData();
     formData.append('file', file);
     if (sectionId) formData.append('section_id', String(sectionId));
-    if (updateExisting) formData.append('update_existing', 'true');
+    formData.append('update_existing', updateExisting ? 'true' : 'false');
     if (dryRun) formData.append('dry_run', 'true');
     return this.api.upload<ImportResult>(`${this.baseUrl}/profiles/import-excel/`, formData);
   }
@@ -76,6 +80,10 @@ export class PersonnelApiService {
   }
 
   // --- گردش کار تایید پرسنل ---
+  approvePersonnelSupervisor(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-supervisor/`, {});
+  }
+
   approvePersonnelManager(id: number): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-manager/`, {});
   }
@@ -130,6 +138,10 @@ export class PersonnelApiService {
   }
 
   // --- گردش کار تایید ناوگان ---
+  approveVehicleSupervisor(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-supervisor/`, {});
+  }
+
   approveVehicleManager(id: number): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-manager/`, {});
   }
@@ -151,12 +163,16 @@ export class PersonnelApiService {
     return this.api.get<PersonnelChangeRequest[]>(`${this.baseUrl}/personnel-change-requests`, params as Record<string, unknown>);
   }
 
-  approvePersonnelChangeRequestManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-manager/`, {});
+  approvePersonnelChangeRequestSupervisor(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-supervisor/`, {});
   }
 
   approvePersonnelChangeRequestFinance(id: number): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-finance/`, {});
+  }
+
+  approvePersonnelChangeRequestManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-manager/`, {});
   }
 
   rejectPersonnelChangeRequest(id: number, reason: string): Observable<any> {
@@ -168,12 +184,16 @@ export class PersonnelApiService {
     return this.api.get<VehicleChangeRequest[]>(`${this.baseUrl}/vehicle-change-requests`, params as Record<string, unknown>);
   }
 
-  approveVehicleChangeRequestManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-manager/`, {});
+  approveVehicleChangeRequestSupervisor(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-supervisor/`, {});
   }
 
   approveVehicleChangeRequestFinance(id: number): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-finance/`, {});
+  }
+
+  approveVehicleChangeRequestManager(id: number): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-manager/`, {});
   }
 
   rejectVehicleChangeRequest(id: number, reason: string): Observable<any> {

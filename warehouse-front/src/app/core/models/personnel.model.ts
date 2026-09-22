@@ -130,6 +130,10 @@ export interface VehicleDriverProfile {
   driver_name: string;
   driver_national_code?: string;
   driver_phone?: string;
+  is_driver_owner?: boolean;
+  owner_name?: string;
+  owner_national_code?: string;
+  owner_phone?: string;
   default_service_rate: number;
   bank_name?: string;
   account_number?: string;
@@ -156,6 +160,14 @@ export interface VehicleDriverProfile {
   accountant_approved_at?: string | null;
   rejection_reason?: string;
   has_pending_changes?: boolean;
+
+  pending_change_request?: {
+    id: number;
+    status?: string;
+    proposed_changes?: Record<string, any>;
+    previous_values?: Record<string, any>;
+    created_at?: string;
+  } | null;
 
   created_at?: string;
   updated_at?: string;

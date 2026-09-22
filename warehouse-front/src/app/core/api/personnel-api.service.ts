@@ -137,6 +137,23 @@ export class PersonnelApiService {
     return this.api.download(`${this.baseUrl}/vehicles/export-excel`, params as Record<string, unknown>);
   }
 
+  importVehicleExcel(formData: FormData): Observable<any> {
+    return this.api.upload<any>(`${this.baseUrl}/vehicles/import-excel/`, formData);
+  }
+
+  downloadVehicleTemplate(): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/vehicles/download-template/`);
+  }
+
+  importVehicleExcelModal(file: File, sectionId?: number | null, updateExisting: boolean = true, dryRun: boolean = false): Observable<ImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (sectionId) formData.append('section_id', String(sectionId));
+    formData.append('update_existing', updateExisting ? 'true' : 'false');
+    if (dryRun) formData.append('dry_run', 'true');
+    return this.api.upload<ImportResult>(`${this.baseUrl}/vehicles/import-excel/`, formData);
+  }
+
   // --- گردش کار تایید ناوگان ---
   approveVehicleSupervisor(id: number): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-supervisor/`, {});

@@ -64,36 +64,48 @@ class RoleBasedCartablesTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data.get('job_grades', [])), 20)
 
-    def test_02_manager_approval_flow(self):
-        """بررسی تایید مرحله اول مدیر برای پرسنل و ناوگان"""
-        # Personnel Manager Approval
-        res = self.client.post(f'/api/personnel/profiles/{self.personnel.id}/approve-manager/')
+    def test_02_supervisor_approval_flow(self):
+        """بررسی تایید مرحله اول سرپرست برای پرسنل و ناوگان"""
+        # Personnel Supervisor Approval
+        res = self.client.post(f'/api/personnel/profiles/{self.personnel.id}/approve-supervisor/')
         self.assertEqual(res.status_code, 200)
         self.personnel.refresh_from_db()
-        self.assertEqual(self.personnel.approval_status, 'manager_approved')
+        self.assertEqual(self.personnel.approval_status, 'pending_accountant')
 
-        # Vehicle Manager Approval
-        res_v = self.client.post(f'/api/personnel/vehicles/{self.vehicle.id}/approve-manager/')
+        # Vehicle Supervisor Approval
+        res_v = self.client.post(f'/api/personnel/vehicles/{self.vehicle.id}/approve-supervisor/')
         self.assertEqual(res_v.status_code, 200)
         self.vehicle.refresh_from_db()
-        self.assertEqual(self.vehicle.approval_status, 'manager_approved')
+        self.assertEqual(self.vehicle.approval_status, 'pending_accountant')
 
-    def test_03_finance_final_approval_flow(self):
-        """بررسی تایید مرحله دوم و نهایی مالی و فعال‌سازی پرونده"""
-        self.personnel.approval_status = 'manager_approved'
+    def test_03_finance_and_manager_approval_flow(self):
+        """بررسی تایید مرحله دوم (حسابدار) و مرحله نهایی (مدیر)"""
+        self.personnel.approval_status = 'pending_accountant'
         self.personnel.save()
-        self.vehicle.approval_status = 'manager_approved'
+        self.vehicle.approval_status = 'pending_accountant'
         self.vehicle.save()
 
-        # Finance Personnel Approval
+        # Finance Personnel Approval -> pending_manager
         res = self.client.post(f'/api/personnel/profiles/{self.personnel.id}/approve-finance/')
         self.assertEqual(res.status_code, 200)
         self.personnel.refresh_from_db()
+        self.assertEqual(self.personnel.approval_status, 'pending_manager')
+
+        # Manager Personnel Approval -> approved
+        res_m = self.client.post(f'/api/personnel/profiles/{self.personnel.id}/approve-manager/')
+        self.assertEqual(res_m.status_code, 200)
+        self.personnel.refresh_from_db()
         self.assertEqual(self.personnel.approval_status, 'approved')
 
-        # Finance Vehicle Approval
+        # Finance Vehicle Approval -> pending_manager
         res_v = self.client.post(f'/api/personnel/vehicles/{self.vehicle.id}/approve-finance/')
         self.assertEqual(res_v.status_code, 200)
+        self.vehicle.refresh_from_db()
+        self.assertEqual(self.vehicle.approval_status, 'pending_manager')
+
+        # Manager Vehicle Approval -> approved
+        res_vm = self.client.post(f'/api/personnel/vehicles/{self.vehicle.id}/approve-manager/')
+        self.assertEqual(res_vm.status_code, 200)
         self.vehicle.refresh_from_db()
         self.assertEqual(self.vehicle.approval_status, 'approved')
 
@@ -103,18 +115,18 @@ class RoleBasedCartablesTestCase(TestCase):
             personnel=self.personnel,
             proposed_changes={'first_name': 'علیرضا'},
             previous_values={'first_name': 'علی'},
-            status='pending_manager',
+            status='pending_accountant',
             requested_by=self.admin
         )
-        # Manager Approval of CR
-        res = self.client.post(f'/api/personnel/personnel-change-requests/{cr.id}/approve-manager/')
-        self.assertEqual(res.status_code, 200)
-        cr.refresh_from_db()
-        self.assertEqual(cr.status, 'manager_approved')
-
-        # Finance Approval of CR
+        # Finance Approval of CR -> pending_manager
         res_f = self.client.post(f'/api/personnel/personnel-change-requests/{cr.id}/approve-finance/')
         self.assertEqual(res_f.status_code, 200)
+        cr.refresh_from_db()
+        self.assertEqual(cr.status, 'pending_manager')
+
+        # Manager Approval of CR -> approved & applied
+        res = self.client.post(f'/api/personnel/personnel-change-requests/{cr.id}/approve-manager/')
+        self.assertEqual(res.status_code, 200)
         cr.refresh_from_db()
         self.assertEqual(cr.status, 'approved')
         self.personnel.refresh_from_db()

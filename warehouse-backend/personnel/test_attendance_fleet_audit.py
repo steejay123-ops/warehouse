@@ -32,7 +32,8 @@ class AttendanceAndFleetAuditTests(TestCase):
             national_code='0012345678',
             assigned_warehouse=self.warehouse1,
             daily_base_wage=5000000,
-            is_active=True
+            is_active=True,
+            approval_status='approved'
         )
 
         self.personnel_floating = PersonnelProfile.objects.create(
@@ -41,7 +42,8 @@ class AttendanceAndFleetAuditTests(TestCase):
             national_code='0098765432',
             assigned_warehouse=None,
             daily_base_wage=5000000,
-            is_active=True
+            is_active=True,
+            approval_status='approved'
         )
 
         self.vehicle1 = VehicleDriverProfile.objects.create(
@@ -49,7 +51,8 @@ class AttendanceAndFleetAuditTests(TestCase):
             plate_number='12ع345-67',
             assigned_warehouse=self.warehouse1,
             default_service_rate=1500000,
-            is_active=True
+            is_active=True,
+            approval_status='approved'
         )
 
     def test_01_bulk_save_preserves_assigned_warehouse_when_floating_or_null(self):

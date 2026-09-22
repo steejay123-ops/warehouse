@@ -49,7 +49,8 @@ class PersonnelAppTests(TestCase):
             job_title='مدیر پروژه',
             daily_base_wage=6572696,
             assigned_warehouse=self.warehouse,
-            project=self.project
+            project=self.project,
+            approval_status='approved'
         )
         
         self.personnel2 = PersonnelProfile.objects.create(
@@ -59,7 +60,8 @@ class PersonnelAppTests(TestCase):
             job_title='کمک انباردار',
             daily_base_wage=6044057,
             assigned_warehouse=self.warehouse,
-            project=self.project
+            project=self.project,
+            approval_status='approved'
         )
         
         self.vehicle1 = VehicleDriverProfile.objects.create(
@@ -67,7 +69,8 @@ class PersonnelAppTests(TestCase):
             vehicle_type='nissan',
             driver_name='محمد رضایی',
             default_service_rate=2500000,
-            assigned_warehouse=self.warehouse
+            assigned_warehouse=self.warehouse,
+            approval_status='approved'
         )
 
     def test_personnel_hourly_rate(self):
@@ -425,7 +428,8 @@ class PersonnelAttendanceWindowTestCase(TestCase):
             national_code='1271234567',
             job_title='انباردار',
             daily_base_wage=5000000,
-            assigned_warehouse=self.warehouse
+            assigned_warehouse=self.warehouse,
+            approval_status='approved'
         )
         
         today = jdatetime.date.today()
@@ -573,7 +577,8 @@ class PersonnelAttendanceFiveRequirementsTestCase(TestCase):
             last_name='مرادی',
             national_code='1112223334',
             job_title='کارشناس فنی',
-            assigned_warehouse=self.warehouse
+            assigned_warehouse=self.warehouse,
+            approval_status='approved'
         )
 
     def test_8_digit_date_format_accepted(self):

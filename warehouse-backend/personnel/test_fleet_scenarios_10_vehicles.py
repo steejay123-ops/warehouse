@@ -196,7 +196,7 @@ class FleetComprehensiveTenVehiclesTests(TestCase):
             },
         ]
 
-        self.vehicles = [VehicleDriverProfile.objects.create(**vd) for vd in self.vehicles_data]
+        self.vehicles = [VehicleDriverProfile.objects.create(approval_status='approved', **vd) for vd in self.vehicles_data]
         self.year_month = '1405/06'
 
     def test_01_verify_ten_vehicles_created(self):

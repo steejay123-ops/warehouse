@@ -141,10 +141,10 @@ class ExcelImportLifecycleTests(TestCase):
         self.assertEqual(dry_data['summary']['valid_count'], 1)
         self.assertEqual(dry_data['summary']['error_count'], 0)
         self.assertEqual(len(dry_data['preview_rows']), 1)
-        self.assertEqual(dry_data['preview_rows'][0]['national_code'], '0012345678')
+        self.assertEqual(dry_data['preview_rows'][0]['national_code'], '0010376488')
 
         # رکورد نباید در دیتابیس ایجاد شده باشد
-        self.assertFalse(PersonnelProfile.objects.filter(national_code='0012345678').exists())
+        self.assertFalse(PersonnelProfile.objects.filter(national_code='0010376488').exists())
 
         # تست Commit واقعی
         upload_file.seek(0)
@@ -157,7 +157,7 @@ class ExcelImportLifecycleTests(TestCase):
         commit_data = res_commit.json()
         self.assertTrue(commit_data['success'])
         self.assertEqual(commit_data['created_count'], 1)
-        self.assertTrue(PersonnelProfile.objects.filter(national_code='0012345678').exists())
+        self.assertTrue(PersonnelProfile.objects.filter(national_code='0010376488').exists())
 
         # پاکسازی
-        PersonnelProfile.objects.filter(national_code='0012345678').delete()
+        PersonnelProfile.objects.filter(national_code='0010376488').delete()

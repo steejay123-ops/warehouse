@@ -125,6 +125,21 @@
 - [ ] <!-- id: VNF.4 --> **فاز ۴: ورود اکسل، وب‌سوکت و ارگونومی داده‌ها** (مودال و اندپوینت ایمپورت اکسل ناوگان، برودکست وب‌سوکت لحظه‌ای، دی‌بانس ۳۰۰ms جستجو، تفکیک مالک و راننده)
 - [ ] <!-- id: VNF.5 --> **فاز ۵: نمای موبایل، آزمون‌های سریع DOM و راستی‌آزمایی کیفیت** (کارت‌های ارگونومیک موبایل، آزمون‌های Vitest کامپوننت، تست بیلد `npx tsc --noEmit`)
 
+---
+
+# 🏢 فهرست وظایف فازبندی‌شده استقرار معماری چندشرکتی (Multi-Tenant Company Architecture Master Tasks)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture.md)
+* **سند تفصیلی تسک:** [`Documents/Company_Multi_Tenant_Architecture/task_company_architecture.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_architecture.md)
+* **وضعیت:** ⏳ در انتظار تایید کاربر (هیچ کدی پیش از تایید تغییر نمی‌کند)
+
+### 🔹 فازهای پنج‌گانه استقرار سطح شرکت:
+- [ ] <!-- id: CMP.1 --> **فاز ۱: زیرساخت بک‌اند و دیتابیس** (مدل‌های Company و UserCompanyAccess، کلید خارجی در FinancialProject، مایگریشن خودکار داده‌ها و اتصال پروژه‌های دالان، پارسیان و انبارداری بدون تغییر ID)
+- [ ] <!-- id: CMP.2 --> **فاز ۲: لایه وب‌سرویس و تفکیک دسترسی** (CompanyViewSet، سریالایزر و اعتبارسنجی شناسه ملی، فیلتر سراسری کوئری‌ها بر مبنای X-Company-ID و RBAC ترکیبی)
+- [ ] <!-- id: CMP.3 --> **فاز ۳: سرویس فرانت‌اند و کانتکست کاری ورود** (ActiveCompanyService، اینترسپتور، مودال انتخاب شرکت هنگام لاگین، سوئیچر سریع در هدر اصلی)
+- [ ] <!-- id: CMP.4 --> **فاز ۴: پورتال اختصاصی مدیریت شرکت‌ها** (کامپوننت /app/finance/companies، هدر استیکی، دکمه‌های ۳ گانه، جدول کارتی با سرچ زنده و مودال ثبت با لوگو)
+- [ ] <!-- id: CMP.5 --> **فاز ۵: آزمون‌های یکپارچگی و صحه‌گذاری نهایی** (تست بک‌اند مایگریشن و دیسکت‌های بیمه شیراز/تهران، تست‌های DOM نوع ۱ بر پایه Vitest، و تست بیلد تایپ‌اسکریپت)
+
 </div>
+
 
 

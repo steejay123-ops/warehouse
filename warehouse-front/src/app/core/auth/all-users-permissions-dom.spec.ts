@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { signal } from '@angular/core';
+import { signal, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router } from '@angular/router';
 import { AppPersonaService } from '../services/app-persona.service';
 import { AuthService } from './auth.service';
 import { ModuleRegistryService } from '../modules/module-registry.service';
@@ -296,11 +296,17 @@ describe('Segregation of Duties (SoD) & DOM Verification for All 12 Database Use
       mockAuth.isSuperuser.set(user.isSuperuser);
 
       // 2. Configure Angular DI
-      TestBed.resetTestingModule();
-      await TestBed.configureTestingModule({
+      const injector = Injector.create({
         providers: [
-          provideRouter([]),
-          AppPersonaService,
+          {
+            provide: Router,
+            useValue: {
+              events: { pipe: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }) },
+              navigate: vi.fn(),
+              url: '/'
+            }
+          },
+          { provide: AppPersonaService, useClass: AppPersonaService },
           { provide: AuthService, useValue: mockAuth },
           { provide: ModuleRegistryService, useValue: mockModuleRegistry },
           { provide: WebSocketService, useValue: { sendMessage: vi.fn(), switchAppChannel: vi.fn() } },
@@ -315,9 +321,9 @@ describe('Segregation of Duties (SoD) & DOM Verification for All 12 Database Use
             }
           }
         ]
-      }).compileComponents();
+      });
 
-      const personaService = TestBed.inject(AppPersonaService);
+      const personaService = injector.get(AppPersonaService);
 
       // 3. Verify App Scope & Isolation
       const apps = personaService.accessibleApps();

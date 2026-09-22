@@ -2,13 +2,14 @@
 import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EmployeeNewPersonnelHubComponent } from './employee-new-personnel';
-import { of, throwError } from 'rxjs';
+import { of, throwError, Subject } from 'rxjs';
 import { PersonnelProfile, ProjectSection } from '../../../../core/models/personnel.model';
 
 describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
   let component: EmployeeNewPersonnelHubComponent;
   let mockAuth: any;
   let mockPersonnelApi: any;
+  let mockWs: any;
   let mockToast: any;
   let mockCdr: any;
   let mockRoute: any;
@@ -86,7 +87,9 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
       getMySections: vi.fn().mockReturnValue(of(sampleSections)),
       getProjectSections: vi.fn().mockReturnValue(of(sampleSections)),
       getPersonnelProfiles: vi.fn().mockReturnValue(of(samplePersonnel)),
+      getJobTitles: vi.fn().mockReturnValue(of({ job_titles: ['کارگر ساده انبار', 'اپراتور لیفتراک', 'راننده'] })),
       createPersonnelProfile: vi.fn().mockImplementation((data: any) => of({ id: 204, ...data })),
+      updatePersonnelProfile: vi.fn().mockImplementation((id: number, data: any) => of({ id, ...data })),
       deletePersonnelProfile: vi.fn().mockReturnValue(of({ success: true })),
       exportPersonnelExcel: vi.fn().mockReturnValue(of(new Blob(['fake excel content']))),
       importPersonnelExcel: vi.fn().mockReturnValue(of({ message: 'درون‌ریزی پرسنل با موفقیت انجام شد', created_count: 5, updated_count: 2 })),
@@ -98,6 +101,11 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
         created_count: 5,
         updated_count: 2
       }))
+    };
+
+    mockWs = {
+      notifications$: new Subject<any>(),
+      connected$: of(true)
     };
 
     mockToast = {
@@ -119,6 +127,7 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
     component = new EmployeeNewPersonnelHubComponent(
       mockAuth,
       mockPersonnelApi,
+      mockWs,
       mockToast,
       mockCdr,
       mockRoute,
@@ -492,9 +501,11 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
       expect(formatted).toMatch(/[۰-۹]/);
     });
 
-    it('getStatusLabel و getStatusBadgeClass باید برچسب و استایل‌های متناسب بازگردانند', () => {
-      expect(component.getStatusLabel('draft')).toContain('پیش‌نویس');
-      expect(component.getStatusLabel('approved')).toContain('تصویب');
+    it('getStatusLabel و getStatusBadgeClass و getStatusIcon باید برچسب و استایل‌های متناسب بازگردانند', () => {
+      expect(component.getStatusLabel('draft')).toBe('پیش‌نویس');
+      expect(component.getStatusLabel('approved')).toBe('مصوب');
+      expect(component.getStatusIcon('draft')).toBe('📝');
+      expect(component.getStatusIcon('approved')).toBe('✓');
       expect(component.getStatusBadgeClass('draft')).toContain('bg-slate-100');
       expect(component.getStatusBadgeClass('approved')).toContain('bg-emerald-50');
     });
@@ -531,8 +542,10 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
     });
 
     it('تغییر و پاکسازی جستجو باید کوئری‌پارامتر search را هماهنگ کند', () => {
+      vi.useFakeTimers();
       component.searchQuery = 'صادقی';
       component.onSearchChange();
+      vi.advanceTimersByTime(350);
       expect(mockRouter.navigate).toHaveBeenCalledWith([], {
         relativeTo: mockRoute,
         queryParams: { search: 'صادقی' },
@@ -546,6 +559,7 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
         queryParams: { search: null },
         queryParamsHandling: 'merge'
       });
+      vi.useRealTimers();
     });
 
     it('متد exportExcel باید خروجی اکسل پرسنل بخش جاری را فراخوانی کند', () => {
@@ -690,53 +704,23 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
     });
   });
 
-  describe('۱۲. ورود اطلاعات از طریق فایل اکسل (Excel Import)', () => {
+  describe('۱۲. مدیریت مودال استاندارد ورود اطلاعات از فایل اکسل (Unified Excel Import)', () => {
     beforeEach(() => {
       component.ngOnInit();
       component.selectedSectionId = 101;
     });
 
-    it('انتخاب فایل اکسل معتبر باید متد importPersonnelExcel را فراخوانی کرده و لیست را بازخوانی کند', () => {
-      const mockFile = new File(['mock excel content'], 'personnel_list.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const mockInput = { target: { files: [mockFile], value: 'fakepath' } };
+    it('فراخوانی closeExcelModal باید فلگ باز بودن مودال را false کند', () => {
+      component.isExcelModalOpen = true;
+      component.closeExcelModal();
+      expect(component.isExcelModalOpen).toBe(false);
+      expect(mockCdr.detectChanges).toHaveBeenCalled();
+    });
 
-      component.onExcelFileSelected(mockInput);
-
-      expect(mockPersonnelApi.importPersonnelExcel).toHaveBeenCalledWith(expect.any(FormData));
-      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('درون‌ریزی پرسنل با موفقیت انجام شد'));
+    it('فراخوانی onExcelImported با نتیجه موفقیت‌آمیز باید پیام موفقیت دهد و پرسنل را مجدداً لود کند', () => {
+      component.onExcelImported({ success: true, created_count: 3 });
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('اطلاعات پرسنل با موفقیت'));
       expect(mockPersonnelApi.getPersonnelProfiles).toHaveBeenCalled();
-    });
-
-    it('انتخاب فایل با پسوند نامعتبر باید رد شود و هشدار دهد', () => {
-      const invalidFile = new File(['text'], 'report.pdf', { type: 'application/pdf' });
-      const mockInput = { target: { files: [invalidFile], value: 'fakepath' } };
-
-      component.onExcelFileSelected(mockInput);
-
-      expect(mockPersonnelApi.importPersonnelExcel).not.toHaveBeenCalled();
-      expect(mockToast.show).toHaveBeenCalledWith('warning', expect.stringContaining('معتبر اکسل'));
-    });
-
-    it('در صورت عدم انتخاب بخش فعال، باید مانع ارسال فایل اکسل شود', () => {
-      component.selectedSectionId = null;
-      const mockFile = new File(['mock excel content'], 'personnel.xlsx');
-      const mockInput = { target: { files: [mockFile], value: 'fakepath' } };
-
-      component.onExcelFileSelected(mockInput);
-
-      expect(mockPersonnelApi.importPersonnelExcel).not.toHaveBeenCalled();
-      expect(mockToast.show).toHaveBeenCalledWith('warning', expect.stringContaining('ابتدا یک بخش'));
-    });
-
-    it('در صورت بروز خطا در بک‌اند، باید پیام خطای متناسب به کاربر نمایش دهد', () => {
-      mockPersonnelApi.importPersonnelExcel.mockReturnValueOnce(throwError(() => ({ error: { error: 'شیت پرسنل یافت نشد' } })));
-      const mockFile = new File(['mock excel content'], 'test.xlsx');
-      const mockInput = { target: { files: [mockFile], value: 'fakepath' } };
-
-      component.onExcelFileSelected(mockInput);
-
-      expect(component.isImportingExcel).toBe(false);
-      expect(mockToast.show).toHaveBeenCalledWith('error', expect.stringContaining('شیت پرسنل یافت نشد'));
     });
 
     it('فراخوانی openImportModal در صورت انتخاب بخش، باید مودال اکسل را باز کرده و توابع ورود و دانلود قالب را تنظیم کند', () => {
@@ -788,6 +772,200 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
 
       expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('اطلاعات پرسنل با موفقیت'));
       expect(mockPersonnelApi.getPersonnelProfiles).toHaveBeenCalled();
+    });
+  });
+
+  describe('۱۲. تست DOM و فرآیند تغییر پرسنل تصویب‌شده (Approved Personnel Change Workflow)', () => {
+    it('باز کردن مودال برای پرسنل تصویب‌شده باید حالت ویرایش و پیشنهاد تغییرات را فعال کند', () => {
+      component.selectedSectionId = 101;
+      const approvedPerson = samplePersonnel.find(p => p.approval_status === 'approved')!;
+      
+      component.openEditModal(approvedPerson);
+
+      expect(component.isNewPersonnelModalOpen).toBe(true);
+      expect(component.editingPersonnel).toBe(approvedPerson);
+      expect(component.editingId).toBe(approvedPerson.id);
+      expect(component.isApprovedRecord).toBe(true);
+      expect(component.isReadOnlyMode).toBe(false);
+      expect(component.modalHeaderTitle).toBe('ویرایش و پیشنهاد تغییرات پرونده مصوب');
+      expect(component.modalHeaderBadge.label).toBe('پرونده مصوب');
+      expect(component.modalHeaderBadge.class).toContain('emerald');
+    });
+
+    it('ویرایش مشخصات پرسنل تصویب‌شده و ثبت تغییرات باید updatePersonnelProfile را با وضعیت pending_supervisor فراخوانی کند', () => {
+      component.selectedSectionId = 101;
+      const approvedPerson = samplePersonnel.find(p => p.approval_status === 'approved')!;
+      component.openEditModal(approvedPerson);
+
+      component.newPersonnel.job_title = 'مسئول فنی انبار';
+      component.newPersonnel.daily_base_wage = 9500000;
+
+      component.savePersonnel('pending_supervisor');
+
+      expect(mockPersonnelApi.updatePersonnelProfile).toHaveBeenCalledWith(
+        approvedPerson.id,
+        expect.objectContaining({
+          job_title: 'مسئول فنی انبار',
+          daily_base_wage: 9500000,
+          approval_status: 'pending_supervisor'
+        })
+      );
+      expect(mockToast.show).toHaveBeenCalledWith(
+        'success',
+        expect.stringContaining('درخواست تغییرات پرونده «احمد کریمی» ثبت و جهت بررسی به کارتابل سرپرست و مدیر ارسال گردید.')
+      );
+      expect(component.isNewPersonnelModalOpen).toBe(false);
+      expect(mockPersonnelApi.getPersonnelProfiles).toHaveBeenCalled();
+    });
+
+    it('باید رکوردهایی که دارای فلگ has_pending_changes هستند را با برچسب وضعیت در حال بررسی شناسایی کند', () => {
+      const personWithChanges: PersonnelProfile = {
+        ...samplePersonnel[1],
+        id: 202,
+        has_pending_changes: true
+      };
+      component.recentPersonnel = [personWithChanges];
+
+      component.openEditModal(personWithChanges);
+      expect(component.editingPersonnelHasPendingChanges).toBe(true);
+    });
+
+    it('ارسال مستقیم پیش‌نویس به کارتابل سرپرست از طریق submitDraftToSupervisor باید کار کند', () => {
+      component.selectedSectionId = 101;
+      const draftPerson = samplePersonnel.find(p => p.approval_status === 'draft')!;
+      component.submitDraftToSupervisor(draftPerson);
+
+      expect(mockPersonnelApi.updatePersonnelProfile).toHaveBeenCalledWith(draftPerson.id, { approval_status: 'pending_supervisor' });
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('به کارتابل سرپرست بخش ارسال گردید'));
+      expect(mockPersonnelApi.getPersonnelProfiles).toHaveBeenCalled();
+    });
+  });
+
+  describe('۱۶. بهینه‌سازی و استانداردهای ارگونومی موبایل (Mobile UX & Ergonomics)', () => {
+    it('متد formatShebaDisplay باید شماره شبا را در قالب بسته‌های ۴ رقمی استاندارد نمایش دهد', () => {
+      expect(component.formatShebaDisplay('IR060170000000100324200001')).toBe('IR06 0170 0000 0010 0324 2000 01');
+      expect(component.formatShebaDisplay('')).toBe('—');
+      expect(component.formatShebaDisplay(undefined)).toBe('—');
+    });
+
+    it('متد getFullStatusDescription باید توضیحات کامل و اداری برای تولتیپ‌های موبایل بازگرداند', () => {
+      expect(component.getFullStatusDescription('draft')).toContain('پیش‌نویس ثبت شده');
+      expect(component.getFullStatusDescription('pending_supervisor')).toContain('سرپرست');
+      expect(component.getFullStatusDescription('approved')).toContain('تصویب و فعال‌سازی');
+      expect(component.getFullStatusDescription('revision_required')).toContain('نیازمند بازنگری');
+    });
+
+    it('متد copyToClipboard باید در کلیپ‌بورد کپی کرده یا با توست اطلاع‌رسانی کند', async () => {
+      component.copyToClipboard('IR060170000000100324200001', 'شماره شبا');
+      await Promise.resolve();
+      expect(mockToast.show).toHaveBeenCalled();
+    });
+  });
+
+  describe('۱۷. آزمون‌های جامع ممیزی عمیق و گردش کار (Comprehensive Audit Suite)', () => {
+    it('باید پیام‌های وب‌سوکت personnel_updated بخش جاری را دریافت و لیست پرسنل را بازخوانی کند', () => {
+      component.selectedSectionId = 101;
+      component.ngOnInit();
+      const loadSpy = vi.spyOn(component, 'loadRecentPersonnel');
+
+      mockWs.notifications$.next({
+        type: 'personnel_updated',
+        section_id: 101,
+        profile_id: 201
+      });
+
+      expect(loadSpy).toHaveBeenCalled();
+    });
+
+    it('پیام‌های وب‌سوکت مربوط به بخش‌های دیگر نباید جدول را بازخوانی کنند', () => {
+      component.selectedSectionId = 101;
+      component.ngOnInit();
+      const loadSpy = vi.spyOn(component, 'loadRecentPersonnel');
+
+      mockWs.notifications$.next({
+        type: 'personnel_updated',
+        section_id: 999,
+        profile_id: 201
+      });
+
+      expect(loadSpy).not.toHaveBeenCalled();
+    });
+
+    it('حذف پرونده‌های در وضعیت revision_required باید مجاز باشد', () => {
+      component.selectedSectionId = 101;
+      const revisionPerson: PersonnelProfile = {
+        ...samplePersonnel[0],
+        id: 205,
+        approval_status: 'revision_required'
+      };
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      component.deleteDraftPersonnel(revisionPerson);
+
+      expect(mockPersonnelApi.deletePersonnelProfile).toHaveBeenCalledWith(205);
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('عودت‌داده‌شده'));
+    });
+
+    it('متد isReadOnlyMode باید برای وضعیت‌های pending_accountant و pending_manager مقدار true باشد', () => {
+      component.editingPersonnel = {
+        ...samplePersonnel[0],
+        approval_status: 'pending_accountant' as any
+      };
+      expect(component.isReadOnlyMode).toBe(true);
+
+      component.editingPersonnel = {
+        ...samplePersonnel[0],
+        approval_status: 'pending_manager' as any
+      };
+      expect(component.isReadOnlyMode).toBe(true);
+
+      component.editingPersonnel = {
+        ...samplePersonnel[0],
+        approval_status: 'revision_required'
+      };
+      expect(component.isReadOnlyMode).toBe(false);
+
+      component.editingPersonnel = {
+        ...samplePersonnel[0],
+        approval_status: 'draft'
+      };
+      expect(component.isReadOnlyMode).toBe(false);
+    });
+
+    it('گتر rejectionRequestedByName باید نام بازنگری‌کننده را از revision_requested_by_name استخراج کند', () => {
+      component.editingPersonnel = {
+        ...samplePersonnel[0],
+        approval_status: 'revision_required',
+        revision_requested_by_name: 'محمد حسینی (سرپرست انبار)'
+      } as any;
+
+      expect(component.rejectionRequestedByName).toBe('محمد حسینی (سرپرست انبار)');
+    });
+
+    it('متد getCleanTelUrl باید شماره تماس را برای دایلر موبایل نرمال‌سازی کند', () => {
+      expect(component.getCleanTelUrl('۰۹۱۲۳۴۵۶۷۸۹')).toBe('tel:09123456789');
+      expect(component.getCleanTelUrl('+98 912 345 6789')).toBe('tel:+989123456789');
+      expect(component.getCleanTelUrl('')).toBe('');
+    });
+
+    it('مودال مقایسه تغییرات معلق openPendingDiffModal و closePendingDiffModal باید درست کار کنند', () => {
+      const personWithDiff: PersonnelProfile = {
+        ...samplePersonnel[1],
+        has_pending_changes: true
+      };
+      component.openPendingDiffModal(personWithDiff);
+      expect(component.isPendingDiffModalOpen).toBe(true);
+      expect(component.pendingDiffPersonnel).toBe(personWithDiff);
+
+      component.closePendingDiffModal();
+      expect(component.isPendingDiffModalOpen).toBe(false);
+      expect(component.pendingDiffPersonnel).toBeNull();
+    });
+
+    it('عناوین شغلی باید از طریق API به صورت داینامیک دریافت شوند', () => {
+      component.loadJobTitles();
+      expect(mockPersonnelApi.getJobTitles).toHaveBeenCalled();
+      expect(component.jobTitles).toContain('راننده');
     });
   });
 });

@@ -58,6 +58,10 @@ urlpatterns = [
     path('profiles/download-template', PersonnelProfileViewSet.as_view({'get': 'download_template'})),
     path('profiles/import-excel/', PersonnelProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'}), name='personnel-import-excel'),
     path('profiles/import-excel', PersonnelProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'})),
+    path('vehicles/download-template/', VehicleDriverProfileViewSet.as_view({'get': 'download_template'}), name='vehicles-download-template'),
+    path('vehicles/download-template', VehicleDriverProfileViewSet.as_view({'get': 'download_template'})),
+    path('vehicles/import-excel/', VehicleDriverProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'}), name='vehicles-import-excel'),
+    path('vehicles/import-excel', VehicleDriverProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'})),
     path('', include(router.urls)),
 ]
 

@@ -851,6 +851,11 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     driver_national_code = models.CharField(max_length=10, blank=True, null=True, verbose_name="کد ملی راننده")
     driver_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تماس راننده")
     
+    is_driver_owner = models.BooleanField(default=True, verbose_name="مالک شخص راننده است")
+    owner_name = models.CharField(max_length=150, blank=True, null=True, verbose_name="نام و نام خانوادگی مالک")
+    owner_national_code = models.CharField(max_length=10, blank=True, null=True, verbose_name="کد ملی مالک")
+    owner_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تماس مالک")
+    
     default_service_rate = models.DecimalField(max_digits=14, decimal_places=0, default=0, verbose_name="نرخ پایه پیش‌فرض به ازای هر سرویس (ریال)")
     
     bank_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام بانک")

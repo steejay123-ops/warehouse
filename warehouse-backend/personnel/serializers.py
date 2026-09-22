@@ -311,6 +311,7 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     revision_requested_by_name = serializers.SerializerMethodField()
     auto_passed_by_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    pending_change_request = serializers.SerializerMethodField()
 
     class Meta:
         model = VehicleDriverProfile
@@ -363,6 +364,52 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+
+    def get_pending_change_request(self, obj):
+        if not getattr(obj, 'has_pending_changes', False):
+            return None
+        cr = obj.change_requests.filter(
+            status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'supervisor_approved', 'accountant_approved', 'manager_approved']
+        ).order_by('-created_at').first()
+        if cr:
+            return {
+                'id': cr.id,
+                'status': cr.status,
+                'proposed_changes': cr.proposed_changes,
+                'previous_values': cr.previous_values,
+                'created_at': cr.created_at.isoformat() if cr.created_at else None,
+            }
+        return None
+
+    def validate_driver_national_code(self, value):
+        if not value or not str(value).strip():
+            return value
+        clean_code = str(value).strip().zfill(10)
+        if len(clean_code) != 10 or not clean_code.isdigit():
+            raise serializers.ValidationError("کد ملی راننده باید دقیقاً ۱۰ رقم عددی باشد.")
+        if len(set(clean_code)) == 1:
+            raise serializers.ValidationError("کد ملی راننده نامعتبر است (ارقام تکراری).")
+        s = sum(int(clean_code[i]) * (10 - i) for i in range(9))
+        r = s % 11
+        check = int(clean_code[9])
+        if not ((r < 2 and check == r) or (r >= 2 and check == 11 - r)):
+            raise serializers.ValidationError("کد ملی راننده وارد شده با الگوریتم اعتبارسنجی همخوانی ندارد.")
+        return clean_code
+
+    def validate_owner_national_code(self, value):
+        if not value or not str(value).strip():
+            return value
+        clean_code = str(value).strip().zfill(10)
+        if len(clean_code) != 10 or not clean_code.isdigit():
+            raise serializers.ValidationError("کد ملی مالک باید دقیقاً ۱۰ رقم عددی باشد.")
+        if len(set(clean_code)) == 1:
+            raise serializers.ValidationError("کد ملی مالک نامعتبر است (ارقام تکراری).")
+        s = sum(int(clean_code[i]) * (10 - i) for i in range(9))
+        r = s % 11
+        check = int(clean_code[9])
+        if not ((r < 2 and check == r) or (r >= 2 and check == 11 - r)):
+            raise serializers.ValidationError("کد ملی مالک وارد شده با الگوریتم اعتبارسنجی همخوانی ندارد.")
+        return clean_code
 
     def validate_sheba_number(self, value):
         if not value or not str(value).strip():

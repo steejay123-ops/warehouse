@@ -122,6 +122,40 @@ def broadcast_personnel_update(personnel, action_type='updated', message=None, s
         logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting personnel_updated: {e}")
 
 
+def broadcast_vehicle_update(vehicle, action_type='updated', message=None, sender_id=None, client_tab_id=None):
+    """
+    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده ناوگان/راننده به کانال وب‌سوکت سراسری
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            plate_number = getattr(vehicle, 'plate_number', '') or ''
+            driver_name = getattr(vehicle, 'driver_name', '') or ''
+            payload = {
+                'type': 'send_notification',
+                'type_str': 'vehicle_updated',
+                'action': action_type,
+                'vehicle_id': getattr(vehicle, 'id', None),
+                'section_id': getattr(vehicle, 'section_id', None),
+                'project_id': getattr(vehicle, 'project_id', None) if hasattr(vehicle, 'project_id') else None,
+                'plate_number': plate_number,
+                'driver_name': driver_name,
+                'approval_status': getattr(vehicle, 'approval_status', ''),
+                'message': message or f'پرونده خودرو «{plate_number}» با راننده «{driver_name}» به‌روزرسانی شد.',
+                'sender_id': sender_id,
+                'client_tab_id': client_tab_id,
+            }
+            async_to_sync(channel_layer.group_send)(
+                'global_notifications',
+                payload
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting vehicle_updated: {e}")
+
+
 class PersonnelProfileViewSet(viewsets.ModelViewSet):
     queryset = PersonnelProfile.objects.all().select_related('user')
     serializer_class = PersonnelProfileSerializer
@@ -970,12 +1004,36 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        
+        # ایزولاسیون قلمرو (Guardian G1 / BOLA Protection):
+        # کاربران عادی (غیرسوپریوزر و فاقد دسترسی مدیر/حسابدار کل ناوگان) صرفاً به بخش‌های فعال منتسب مجاز هستند
+        is_global_auditor = bool(
+            user and (
+                user.is_superuser
+                or user.has_perm('accounts.perm_approve_fleet_manager')
+                or user.has_perm('accounts.can_act_as_manager')
+                or user.has_perm('accounts.perm_approve_fleet_finance')
+            )
+        )
+        if not is_global_auditor and user and user.is_authenticated:
+            user_section_ids = list(
+                UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
+            )
+            qs = qs.filter(Q(section_id__in=user_section_ids) | Q(created_by=user))
+
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
             
         section_id = self.request.query_params.get('section_id')
         if section_id:
+            if not is_global_auditor and user and user.is_authenticated:
+                user_section_ids = list(
+                    UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
+                )
+                if str(section_id).isdigit() and int(section_id) not in user_section_ids:
+                    return qs.none()
             qs = qs.filter(section_id=section_id)
         project_id = self.request.query_params.get('project_id')
         if project_id:
@@ -987,32 +1045,51 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
         approval_status = self.request.query_params.get('approval_status')
         if approval_status:
-            qs = qs.filter(approval_status=approval_status)
+            if ',' in approval_status:
+                status_list = [s.strip() for s in approval_status.split(',') if s.strip()]
+                qs = qs.filter(approval_status__in=status_list)
+            else:
+                qs = qs.filter(approval_status=approval_status)
 
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(
                 Q(driver_name__icontains=search) |
                 Q(plate_number__icontains=search) |
-                Q(driver_national_code__icontains=search)
+                Q(driver_national_code__icontains=search) |
+                Q(driver_phone__icontains=search)
             )
         return qs
 
     def perform_create(self, serializer):
         user = self.request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
+        
+        section = serializer.validated_data.get('section')
+        # گارد انتساب بخش: کاربر عادی باید انتساب فعال به بخش انتخاب‌شده داشته باشد
+        if not is_mgr and section and user and user.is_authenticated:
+            is_assigned = UserSectionAssignment.objects.filter(user=user, section=section, is_active=True).exists()
+            if not is_assigned:
+                raise PermissionDenied("شما انتساب فعال در این بخش برای معرفی خودرو جدید ندارید.")
+
+        extra_kwargs = {'created_by': user}
+        if section and hasattr(section, 'project') and section.project:
+            if not serializer.validated_data.get('project'):
+                extra_kwargs['project'] = section.project
+
+        req_status = self.request.data.get('approval_status')
         if is_mgr:
-            serializer.save(
-                created_by=user,
-                approval_status='manager_approved',
-                manager_approved_by=user,
-                manager_approved_at=timezone.now()
-            )
+            extra_kwargs.update({
+                'approval_status': req_status if req_status in ['draft', 'pending_supervisor', 'manager_approved'] else 'manager_approved',
+                'manager_approved_by': user,
+                'manager_approved_at': timezone.now()
+            })
         else:
-            serializer.save(
-                created_by=user,
-                approval_status='draft'
-            )
+            # کاربر عادی می‌تواند به عنوان پیش‌نویس موقت ذخیره کند یا مستقیماً به سرپرست ارسال نماید
+            extra_kwargs['approval_status'] = 'pending_supervisor' if req_status == 'pending_supervisor' else 'draft'
+
+        instance = serializer.save(**extra_kwargs)
+        broadcast_vehicle_update(instance, action_type='created', message=f'پرونده خودرو «{instance.plate_number}» با راننده «{instance.driver_name}» ثبت شد.', sender_id=user.id if user else None)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -1020,6 +1097,13 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         user = request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
         is_fin = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')
+
+        # قفل ویرایش مستقیم برای رکوردهای در جریان حسابداری و مدیریت
+        if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['pending_accountant', 'pending_manager']:
+            return Response(
+                {'error': f'این پرونده در وضعیت «{instance.get_approval_status_display()}» قرار دارد و اطلاعات آن تا پایان گردش کار قابل تغییر مستقیم نیست.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # اگر اپراتور رکوردی که تایید شده یا در تایید مدیر است را تغییر دهد:
         if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['approved', 'manager_approved']:
@@ -1028,7 +1112,10 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             
             diff = {}
             old_diff = {}
+            excluded_fields = {'id', 'pk', 'approval_status', 'created_at', 'created_by', 'plate_number', 'section'}
             for k, v in serializer.validated_data.items():
+                if k in excluded_fields:
+                    continue
                 old_v = getattr(instance, k, None)
                 if hasattr(old_v, 'id'):
                     old_val_rep = old_v.id
@@ -1056,7 +1143,60 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_202_ACCEPTED)
             return Response(self.get_serializer(instance).data)
 
-        return super().update(request, *args, partial=partial, **kwargs)
+        # ویرایش رکوردهای پیش‌نویس یا عودت‌داده‌شده:
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+
+        extra_kwargs = {}
+        section = serializer.validated_data.get('section', instance.section)
+        if section and hasattr(section, 'project') and section.project:
+            if not serializer.validated_data.get('project') and not instance.project_id:
+                extra_kwargs['project'] = section.project
+
+        req_status = request.data.get('approval_status')
+        if not (user.is_superuser or is_mgr):
+            if req_status in ['draft', 'pending_supervisor']:
+                extra_kwargs['approval_status'] = req_status
+                if req_status == 'pending_supervisor':
+                    extra_kwargs['rejection_reason'] = None  # پاکسازی دلیل عودت در ارسال مجدد به سرپرست
+
+        updated_instance = serializer.save(**extra_kwargs)
+        broadcast_vehicle_update(updated_instance, action_type='updated', message=f'پرونده خودرو «{updated_instance.plate_number}» به‌روزرسانی شد.', sender_id=user.id if user else None)
+        return Response(self.get_serializer(updated_instance).data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        حذف خودرو با محافظت کامل در برابر حذف فیزیکی زنجیره‌ای (Hard Cascade Delete):
+        - کاربران عادی صرفاً مجاز به حذف پرونده‌های در وضعیت پیش‌نویس (draft) یا عودت‌داده‌شده (revision_required) هستند.
+        - اگر خودرو دارای هرگونه سابقه کارکرد یا تردد (VehicleTripLog) باشد،
+          جهت حفظ یکپارچگی مالی، امکان حذف فیزیکی وجود ندارد و پرونده به صورت نرم غیرفعال (is_active = False) می‌شود.
+        - در صورت عدم وجود هرگونه سابقه کارکرد، پرونده پیش‌نویس به صورت قطعی حذف می‌گردد.
+        """
+        instance = self.get_object()
+        user = request.user
+        is_mgr = bool(user and (user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')))
+        
+        # تنها پرونده‌های در وضعیت پیش‌نویس (draft) یا عودت‌شده (revision_required) توسط کارمند قابل حذف هستند
+        if not is_mgr and instance.approval_status not in ['draft', 'revision_required']:
+            return Response(
+                {'error': 'فقط پرونده‌های در وضعیت پیش‌نویس یا عودت‌داده‌شده قابل حذف هستند.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        has_trips = VehicleTripLog.objects.filter(vehicle=instance).exists()
+        if has_trips:
+            instance.is_active = False
+            instance.save(update_fields=['is_active'])
+            broadcast_vehicle_update(instance, action_type='updated', message=f'خودرو «{instance.plate_number}» به دلیل داشتن سوابق تردد غیرفعال شد.', sender_id=user.id if user else None)
+            return Response(
+                {'message': f'پرونده خودرو «{instance.plate_number}» به دلیل داشتن سوابق تردد غیرفعال گردید و از حذف فیزیکی آن جلوگیری شد.'},
+                status=status.HTTP_200_OK
+            )
+            
+        plate_number = instance.plate_number
+        self.perform_destroy(instance)
+        broadcast_vehicle_update(instance, action_type='deleted', message=f'خودرو «{plate_number}» حذف شد.', sender_id=user.id if user else None)
+        return Response({'message': f'خودرو «{plate_number}» با موفقیت از سامانه حذف گردید.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='approve-supervisor')
     def approve_supervisor(self, request, pk=None):
@@ -1080,6 +1220,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید سرپرست رسید و به حسابداری ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده خودرو به حسابداری ارسال گردید.',
             'data': self.get_serializer(instance).data
@@ -1101,6 +1242,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید مالی رسید و به مدیر ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید مالی با موفقیت ثبت شد و پرونده خودرو جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
             'data': self.get_serializer(instance).data
@@ -1138,6 +1280,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.rejection_reason = None
         instance.is_active = True
         instance.save()
+        broadcast_vehicle_update(instance, action_type='updated', message=f'خودرو «{instance.plate_number}» با راننده «{instance.driver_name}» تصویب و فعال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.',
             'data': self.get_serializer(instance).data
@@ -1165,6 +1308,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'rejected'
         instance.rejection_reason = reason
         instance.save()
+        broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» رد شد: {reason}', sender_id=user.id if user else None)
         return Response({
             'message': 'پرونده خودرو/راننده رد شد.',
             'data': self.get_serializer(instance).data
@@ -1192,9 +1336,367 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'revision_required'
         instance.rejection_reason = reason
         instance.save()
+        broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» جهت اصلاح عودت داده شد: {reason}', sender_id=user.id if user else None)
         return Response({
             'message': 'پرونده جهت بازنگری و اصلاح به اپراتور ارجاع داده شد.',
             'data': self.get_serializer(instance).data
+        })
+
+    @action(detail=False, methods=['get'], url_path='download-template')
+    def download_template(self, request):
+        """
+        دانلود قالب اکسل خام ناوگان و رانندگان با ساختار ۲ سطری استاندارد شرکت
+        """
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from django.http import HttpResponse
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Vehicles'
+        ws.sheet_view.rightToLeft = True
+
+        columns_fa = [
+            'ردیف', 'شماره پلاک', 'نام راننده', 'کد ملی راننده', 'شماره همراه راننده',
+            'نام مالک', 'کد ملی مالک', 'شماره همراه مالک',
+            'نوع خودرو', 'نوع مالکیت', 'نرخ پایه سرویس (ریال)', 'شماره شبا', 'نام بانک', 'شماره حساب'
+        ]
+        columns_en = [
+            'row_num', 'plate_number', 'driver_name', 'driver_national_code', 'driver_phone',
+            'owner_name', 'owner_national_code', 'owner_phone',
+            'vehicle_type', 'ownership_type', 'default_service_rate', 'sheba_number', 'bank_name', 'account_number'
+        ]
+
+        f_title = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        f_key = Font(name='Segoe UI', size=9, bold=True, color='CBD5E1')
+        fill_title = PatternFill(start_color='0284C7', end_color='0284C7', fill_type='solid') # Sky-600
+        fill_key = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        align_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.row_dimensions[1].height = 28
+        ws.row_dimensions[2].height = 20
+        ws.freeze_panes = 'A3'
+
+        for col_idx, (c_fa, c_en) in enumerate(zip(columns_fa, columns_en), 1):
+            cell_fa = ws.cell(row=1, column=col_idx, value=c_fa)
+            cell_fa.font = f_title
+            cell_fa.fill = fill_title
+            cell_fa.alignment = align_center
+            cell_fa.border = thin_border
+
+            cell_en = ws.cell(row=2, column=col_idx, value=c_en)
+            cell_en.font = f_key
+            cell_en.fill = fill_key
+            cell_en.alignment = align_center
+            cell_en.border = thin_border
+
+        # ردیف نمونه راهنما
+        sample_row = [
+            1, '12الف345ایران63', 'رضا اکبری', '0010376488', '09123456789',
+            'رضا اکبری', '0010376488', '09123456789',
+            'وانت نیسان', 'استیجاری', 4500000, 'IR120170000000123456789012', 'بانک ملی ایران', '0101234567001'
+        ]
+        ws.row_dimensions[3].height = 22
+        for col_idx, val in enumerate(sample_row, 1):
+            c = ws.cell(row=3, column=col_idx, value=val)
+            c.alignment = align_center
+            c.border = thin_border
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename="fleet_vehicles_template.xlsx"'
+        return response
+
+    @action(detail=False, methods=['post', 'POST', 'get', 'GET'], url_path='import-excel')
+    def import_excel(self, request):
+        """
+        درون‌ریزی مستقیم شیت ناوگان از فایل اکسل شرکت (Upsert بر مبنای شماره پلاک خودرو)
+        پشتیبانی کامل از dry_run (پیش‌نمایش بدون تغییر در دیتابیس) و update_existing مطابق استاندارد ExcelImportModal
+        """
+        import openpyxl
+        from .sheba_utils import clean_sheba, validate_sheba, get_bank_from_sheba
+
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({'error': 'فایل اکسل الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        section_id = request.data.get('section_id') or request.query_params.get('section_id')
+        dry_run = str(request.data.get('dry_run') or request.query_params.get('dry_run', 'false')).lower() in ['true', '1']
+        update_existing = str(request.data.get('update_existing') or request.query_params.get('update_existing', 'true')).lower() in ['true', '1']
+        
+        user = request.user
+        is_mgr = bool(user and (user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')))
+
+        # تعیین بخش پیش‌فرض
+        target_section = None
+        if section_id:
+            target_section = ProjectSection.objects.filter(id=section_id).first()
+        if not target_section and not is_mgr and user and user.is_authenticated:
+            first_assign = UserSectionAssignment.objects.filter(user=user, is_active=True).select_related('section').first()
+            if first_assign:
+                target_section = first_assign.section
+
+        if not target_section and not is_mgr:
+            return Response({'error': 'انتخاب بخش جهت درون‌ریزی ناوگان الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            wb = openpyxl.load_workbook(file_obj, data_only=True)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'dry_run': dry_run,
+                'summary': {'total_rows': 0, 'created': 0, 'updated': 0, 'skipped': 0, 'valid_count': 0, 'error_count': 1},
+                'errors': [{'row': 0, 'field': 'فایل اکسل', 'message': f'خطا در باز کردن فایل اکسل: {str(e)}'}]
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        target_sheet = None
+        for name in wb.sheetnames:
+            if name.strip().lower() in ['vehicles', 'fleet', 'ناوگان', 'خودرو', 'رانندگان']:
+                target_sheet = wb[name]
+                break
+        if not target_sheet:
+            target_sheet = wb.active
+
+        # مپینگ نام ستون‌ها
+        vtype_map = {
+            'وانت نیسان': 'nissan', 'نیسان': 'nissan', 'nissan': 'nissan',
+            'خاور': 'khavar', 'کامیونت': 'khavar', 'khavar': 'khavar',
+            'تریلی': 'trailer', 'کشنده': 'trailer', 'trailer': 'trailer',
+            'وانت بار': 'pickup', 'وانت': 'pickup', 'pickup': 'pickup',
+            'کامیون': 'truck', 'تک': 'truck', 'جفت': 'truck', 'truck': 'truck',
+            'سواری': 'sedan', 'sedan': 'sedan',
+            'سایر': 'other', 'other': 'other'
+        }
+        own_map = {
+            'استیجاری': 'contract', 'پیمانکاری': 'contract', 'contract': 'contract',
+            'شرکتی': 'company', 'ملکی پروژه': 'company', 'company': 'company',
+            'ملکی': 'personal', 'ملکی راننده': 'personal', 'personal': 'personal'
+        }
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+        parsed_vehicles = []
+
+        # بررسی سرستون‌های ردیف ۲ جهت نگاشت منعطف ستون‌ها
+        col_map = {}
+        for c in range(1, min(target_sheet.max_column + 1, 20)):
+            val = str(target_sheet.cell(row=2, column=c).value or '').strip().lower()
+            if val:
+                col_map[val] = c
+
+        has_owner_cols = 'owner_name' in col_map or 'owner_national_code' in col_map
+
+        for row_idx in range(3, target_sheet.max_row + 1):
+            plate_raw = target_sheet.cell(row=row_idx, column=col_map.get('plate_number', 2)).value
+            if not plate_raw or not str(plate_raw).strip():
+                continue
+
+            plate = str(plate_raw).strip()
+            driver_name = str(target_sheet.cell(row=row_idx, column=col_map.get('driver_name', 3)).value or '').strip()
+            if not driver_name:
+                errors.append({'row': row_idx, 'field': 'نام راننده', 'message': f'نام راننده برای پلاک {plate} الزامی است.'})
+                continue
+
+            nat_code_raw = target_sheet.cell(row=row_idx, column=col_map.get('driver_national_code', 4)).value
+            nat_code = str(nat_code_raw).strip() if nat_code_raw else ''
+            if nat_code:
+                clean_nat = ''.join(c for c in normalize_digits(nat_code) if c.isdigit())
+                nat_code = clean_nat.zfill(10) if clean_nat else None
+            else:
+                nat_code = None
+
+            phone = str(target_sheet.cell(row=row_idx, column=col_map.get('driver_phone', 5)).value or '').strip() or None
+            
+            if has_owner_cols:
+                owner_name = str(target_sheet.cell(row=row_idx, column=col_map.get('owner_name', 6)).value or '').strip() or None
+                owner_nat_raw = target_sheet.cell(row=row_idx, column=col_map.get('owner_national_code', 7)).value
+                owner_nat = str(owner_nat_raw).strip() if owner_nat_raw else ''
+                if owner_nat:
+                    clean_o_nat = ''.join(c for c in normalize_digits(owner_nat) if c.isdigit())
+                    owner_nat = clean_o_nat.zfill(10) if clean_o_nat else None
+                else:
+                    owner_nat = None
+                owner_phone = str(target_sheet.cell(row=row_idx, column=col_map.get('owner_phone', 8)).value or '').strip() or None
+                is_driver_owner = bool(not owner_nat or owner_nat == nat_code)
+
+                vtype_col = col_map.get('vehicle_type', 9)
+                own_col = col_map.get('ownership_type', 10)
+                rate_col = col_map.get('default_service_rate', 11)
+                sheba_col = col_map.get('sheba_number', 12)
+                bank_col = col_map.get('bank_name', 13)
+                acc_col = col_map.get('account_number', 14)
+            else:
+                owner_name = driver_name
+                owner_nat = nat_code
+                owner_phone = phone
+                is_driver_owner = True
+
+                vtype_col = col_map.get('vehicle_type', 6)
+                own_col = col_map.get('ownership_type', 7)
+                rate_col = col_map.get('default_service_rate', 8)
+                sheba_col = col_map.get('sheba_number', 9)
+                bank_col = col_map.get('bank_name', 10)
+                acc_col = col_map.get('account_number', 11)
+
+            vtype_raw = str(target_sheet.cell(row=row_idx, column=vtype_col).value or '').strip().lower()
+            vehicle_type = vtype_map.get(vtype_raw, 'nissan')
+
+            own_raw = str(target_sheet.cell(row=row_idx, column=own_col).value or '').strip().lower()
+            ownership_type = own_map.get(own_raw, 'contract')
+
+            rate_raw = target_sheet.cell(row=row_idx, column=rate_col).value
+            try:
+                rate = Decimal(str(rate_raw or 0).replace(',', '').strip())
+            except Exception:
+                rate = Decimal(0)
+
+            sheba_raw = str(target_sheet.cell(row=row_idx, column=sheba_col).value or '').strip()
+            sheba = clean_sheba(sheba_raw) if sheba_raw else None
+            
+            bank_name = str(target_sheet.cell(row=row_idx, column=bank_col).value or '').strip() or None
+            if sheba and not bank_name:
+                b_info = get_bank_from_sheba(sheba)
+                if b_info:
+                    bank_name = b_info.get('name')
+
+            account_no = str(target_sheet.cell(row=row_idx, column=acc_col).value or '').strip() or None
+
+            parsed_vehicles.append({
+                'row_idx': row_idx,
+                'plate_number': plate,
+                'driver_name': driver_name,
+                'driver_national_code': nat_code,
+                'driver_phone': phone,
+                'is_driver_owner': is_driver_owner,
+                'owner_name': owner_name,
+                'owner_national_code': owner_nat,
+                'owner_phone': owner_phone,
+                'vehicle_type': vehicle_type,
+                'ownership_type': ownership_type,
+                'default_service_rate': rate,
+                'sheba_number': sheba,
+                'bank_name': bank_name,
+                'account_number': account_no,
+            })
+
+        if errors:
+            return Response({
+                'success': False,
+                'dry_run': dry_run,
+                'summary': {
+                    'total_rows': len(parsed_vehicles) + len(errors),
+                    'created': 0, 'updated': 0, 'skipped': len(errors),
+                    'valid_count': len(parsed_vehicles), 'error_count': len(errors)
+                },
+                'errors': errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if not dry_run:
+            with transaction.atomic():
+                for item in parsed_vehicles:
+                    plate = item['plate_number']
+                    existing = VehicleDriverProfile.objects.filter(plate_number=plate).first()
+                    if existing:
+                        if update_existing:
+                            existing.driver_name = item['driver_name']
+                            if item['driver_national_code']:
+                                existing.driver_national_code = item['driver_national_code']
+                            if item['driver_phone']:
+                                existing.driver_phone = item['driver_phone']
+                            existing.is_driver_owner = item['is_driver_owner']
+                            if item['owner_name']:
+                                existing.owner_name = item['owner_name']
+                            if item['owner_national_code']:
+                                existing.owner_national_code = item['owner_national_code']
+                            if item['owner_phone']:
+                                existing.owner_phone = item['owner_phone']
+                            existing.vehicle_type = item['vehicle_type']
+                            existing.ownership_type = item['ownership_type']
+                            if item['default_service_rate']:
+                                existing.default_service_rate = item['default_service_rate']
+                            if item['sheba_number']:
+                                existing.sheba_number = item['sheba_number']
+                            if item['bank_name']:
+                                existing.bank_name = item['bank_name']
+                            if item['account_number']:
+                                existing.account_number = item['account_number']
+                            if target_section and not existing.section_id:
+                                existing.section = target_section
+                                if target_section.project:
+                                    existing.project = target_section.project
+                            existing.save()
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
+                    else:
+                        init_status = 'manager_approved' if is_mgr else 'draft'
+                        VehicleDriverProfile.objects.create(
+                            plate_number=plate,
+                            driver_name=item['driver_name'],
+                            driver_national_code=item['driver_national_code'],
+                            driver_phone=item['driver_phone'],
+                            is_driver_owner=item['is_driver_owner'],
+                            owner_name=item['owner_name'],
+                            owner_national_code=item['owner_national_code'],
+                            owner_phone=item['owner_phone'],
+                            vehicle_type=item['vehicle_type'],
+                            ownership_type=item['ownership_type'],
+                            default_service_rate=item['default_service_rate'],
+                            sheba_number=item['sheba_number'],
+                            bank_name=item['bank_name'],
+                            account_number=item['account_number'],
+                            section=target_section,
+                            project=target_section.project if (target_section and target_section.project) else None,
+                            created_by=user if user and user.is_authenticated else None,
+                            approval_status=init_status,
+                            is_active=True
+                        )
+                        created_count += 1
+        else:
+            for item in parsed_vehicles:
+                existing = VehicleDriverProfile.objects.filter(plate_number=item['plate_number']).exists()
+                if existing:
+                    if update_existing:
+                        updated_count += 1
+                    else:
+                        skipped_count += 1
+                else:
+                    created_count += 1
+
+        return Response({
+            'success': True,
+            'dry_run': dry_run,
+            'summary': {
+                'total_rows': len(parsed_vehicles),
+                'created': created_count,
+                'updated': updated_count,
+                'skipped': skipped_count,
+                'valid_count': len(parsed_vehicles),
+                'error_count': 0
+            },
+            'created_count': created_count,
+            'updated_count': updated_count,
+            'errors': []
         })
 
     @action(detail=False, methods=['get'], url_path='export-excel')
@@ -1507,11 +2009,12 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
         if cr.status not in valid_statuses:
             return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تصویب مدیر نیست.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # اعمال تغییرات روی پرونده خودرو منحصراً توسط مدیر
+        # اعمال تغییرات روی پرونده خودرو منحصراً توسط مدیر (با جلوگیری قطعی از تنزل رتبه یا بازنویسی فیلدهای سیستمی)
         vehicle = cr.vehicle
         with transaction.atomic():
+            excluded_fields = {'id', 'pk', 'plate_number', 'approval_status', 'created_at', 'created_by', 'section'}
             for field, val in cr.proposed_changes.items():
-                if hasattr(vehicle, field):
+                if hasattr(vehicle, field) and field not in excluded_fields:
                     setattr(vehicle, field, val)
             vehicle.has_pending_changes = False
             vehicle.save()
@@ -1526,6 +2029,8 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
                 cr.accountant_reviewed_by = user
                 cr.accountant_reviewed_at = timezone.now()
             cr.save()
+
+            broadcast_vehicle_update(vehicle, action_type='updated', message=f'تغییرات خودرو «{vehicle.plate_number}» توسط مدیر تایید و اعمال گردید.', sender_id=user.id if user else None)
 
         return Response({'message': 'درخواست تغییرات خودرو توسط مدیر تصویب و اعمال گردید.', 'data': self.get_serializer(cr).data})
 
@@ -1556,6 +2061,8 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
         if not other_pending:
             cr.vehicle.has_pending_changes = False
             cr.vehicle.save(update_fields=['has_pending_changes'])
+
+        broadcast_vehicle_update(cr.vehicle, action_type='updated', message=f'درخواست تغییرات خودرو «{cr.vehicle.plate_number}» رد شد: {reason}', sender_id=user.id if user else None)
 
         return Response({'message': 'درخواست تغییرات خودرو رد شد.', 'data': self.get_serializer(cr).data})
 

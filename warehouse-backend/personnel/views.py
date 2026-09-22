@@ -89,6 +89,39 @@ from .fleet_excel_engine import export_fleet_monthly_excel, import_fleet_monthly
 from .fleet_settlement_engine import calculate_monthly_fleet_settlement, generate_fleet_bank_meli_excel
 
 
+def broadcast_personnel_update(personnel, action_type='updated', message=None, sender_id=None, client_tab_id=None):
+    """
+    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده پرسنل به کانال وب‌سوکت سراسری
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer is not None:
+            full_name = getattr(personnel, 'full_name', '') or f"{getattr(personnel, 'first_name', '')} {getattr(personnel, 'last_name', '')}".strip()
+            payload = {
+                'type': 'send_notification',
+                'type_str': 'personnel_updated',
+                'action': action_type,
+                'personnel_id': getattr(personnel, 'id', None),
+                'section_id': getattr(personnel, 'section_id', None),
+                'project_id': getattr(personnel, 'project_id', None),
+                'national_code': getattr(personnel, 'national_code', ''),
+                'full_name': full_name,
+                'approval_status': getattr(personnel, 'approval_status', ''),
+                'message': message or f'پرونده پرسنل «{full_name}» به‌روزرسانی شد.',
+                'sender_id': sender_id,
+                'client_tab_id': client_tab_id,
+            }
+            async_to_sync(channel_layer.group_send)(
+                'global_notifications',
+                payload
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting personnel_updated: {e}")
+
+
 class PersonnelProfileViewSet(viewsets.ModelViewSet):
     queryset = PersonnelProfile.objects.all().select_related('user')
     serializer_class = PersonnelProfileSerializer
@@ -98,12 +131,36 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        
+        # ایزولاسیون قلمرو (Guardian G1 / BOLA Protection):
+        # کاربران عادی (غیرسوپریوزر و فاقد دسترسی مدیر/حسابدار کل) صرفاً به بخش‌های فعال منتسب مجاز هستند
+        is_global_auditor = bool(
+            user and (
+                user.is_superuser
+                or user.has_perm('accounts.perm_approve_personnel_manager')
+                or user.has_perm('accounts.can_act_as_manager')
+                or user.has_perm('accounts.perm_approve_personnel_finance')
+            )
+        )
+        if not is_global_auditor and user and user.is_authenticated:
+            user_section_ids = list(
+                UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
+            )
+            qs = qs.filter(Q(section_id__in=user_section_ids) | Q(created_by=user))
+
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
         
         section_id = self.request.query_params.get('section_id')
         if section_id:
+            if not is_global_auditor and user and user.is_authenticated:
+                user_section_ids = list(
+                    UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
+                )
+                if str(section_id).isdigit() and int(section_id) not in user_section_ids:
+                    return qs.none()
             qs = qs.filter(section_id=section_id)
         project_id = self.request.query_params.get('project_id')
         if project_id:
@@ -115,7 +172,11 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             
         approval_status = self.request.query_params.get('approval_status')
         if approval_status:
-            qs = qs.filter(approval_status=approval_status)
+            if ',' in approval_status:
+                status_list = [s.strip() for s in approval_status.split(',') if s.strip()]
+                qs = qs.filter(approval_status__in=status_list)
+            else:
+                qs = qs.filter(approval_status=approval_status)
 
         search = self.request.query_params.get('search')
         if search:
@@ -130,18 +191,32 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
+        
+        section = serializer.validated_data.get('section')
+        # گارد انتساب بخش: کاربر عادی باید انتساب فعال به بخش انتخاب‌شده داشته باشد
+        if not is_mgr and section and user and user.is_authenticated:
+            is_assigned = UserSectionAssignment.objects.filter(user=user, section=section, is_active=True).exists()
+            if not is_assigned:
+                raise PermissionDenied("شما انتساب فعال در این بخش برای معرفی پرسنل جدید ندارید.")
+
+        extra_kwargs = {'created_by': user}
+        if section and hasattr(section, 'project') and section.project:
+            if not serializer.validated_data.get('project'):
+                extra_kwargs['project'] = section.project
+
+        req_status = self.request.data.get('approval_status')
         if is_mgr:
-            serializer.save(
-                created_by=user,
-                approval_status='manager_approved',
-                manager_approved_by=user,
-                manager_approved_at=timezone.now()
-            )
+            extra_kwargs.update({
+                'approval_status': req_status if req_status in ['draft', 'pending_supervisor', 'manager_approved'] else 'manager_approved',
+                'manager_approved_by': user,
+                'manager_approved_at': timezone.now()
+            })
         else:
-            serializer.save(
-                created_by=user,
-                approval_status='draft'
-            )
+            # کاربر عادی می‌تواند به عنوان پیش‌نویس موقت ذخیره کند یا مستقیماً به سرپرست ارسال نماید
+            extra_kwargs['approval_status'] = 'pending_supervisor' if req_status == 'pending_supervisor' else 'draft'
+
+        instance = serializer.save(**extra_kwargs)
+        broadcast_personnel_update(instance, action_type='created', message=f'پرونده پرسنل «{instance.full_name}» ثبت شد.', sender_id=user.id if user else None)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -149,6 +224,13 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         user = request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
         is_fin = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_finance')
+
+        # قفل ویرایش مستقیم برای رکوردهای در جریان حسابداری و مدیریت
+        if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['pending_accountant', 'pending_manager']:
+            return Response(
+                {'error': f'این پرونده در وضعیت «{instance.get_approval_status_display()}» قرار دارد و اطلاعات آن تا پایان گردش کار قابل تغییر مستقیم نیست.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # اگر اپراتور رکوردی که تایید شده یا در تایید مدیر است را تغییر دهد:
         if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['approved', 'manager_approved']:
@@ -157,7 +239,10 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             
             diff = {}
             old_diff = {}
+            excluded_fields = {'id', 'pk', 'approval_status', 'created_at', 'created_by', 'national_code', 'section'}
             for k, v in serializer.validated_data.items():
+                if k in excluded_fields:
+                    continue
                 old_v = getattr(instance, k, None)
                 if hasattr(old_v, 'id'):
                     old_val_rep = old_v.id
@@ -174,43 +259,130 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                     requested_by=user,
                     proposed_changes=diff,
                     previous_values=old_diff,
-                    status='pending_manager'
+                    status='pending_supervisor'
                 )
                 instance.has_pending_changes = True
                 instance.save(update_fields=['has_pending_changes'])
                 return Response({
-                    'message': 'تغییرات با موفقیت به عنوان پیش‌نویس ثبت شد و جهت بررسی در کارتابل مدیر و حسابدار قرار گرفت. اطلاعات قبلی تا زمان تایید نهایی معتبر باقی می‌ماند.',
+                    'message': 'درخواست تغییرات با موفقیت ثبت شد و جهت بررسی در کارتابل سرپرست قرار گرفت. اطلاعات قبلی تا زمان تصویب نهایی مدیر معتبر باقی می‌ماند.',
                     'change_request_id': cr.id,
                     'data': self.get_serializer(instance).data
                 }, status=status.HTTP_202_ACCEPTED)
             return Response(self.get_serializer(instance).data)
 
-        return super().update(request, *args, partial=partial, **kwargs)
+        # ویرایش رکوردهای پیش‌نویس یا عودت‌داده‌شده:
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
 
-    @action(detail=True, methods=['post'], url_path='approve-manager')
-    def approve_manager(self, request, pk=None):
+        extra_kwargs = {}
+        section = serializer.validated_data.get('section', instance.section)
+        if section and hasattr(section, 'project') and section.project:
+            if not serializer.validated_data.get('project') and not instance.project_id:
+                extra_kwargs['project'] = section.project
+
+        req_status = request.data.get('approval_status')
+        if instance.approval_status in ['draft', 'revision_required', 'pending_supervisor']:
+            if req_status in ['draft', 'pending_supervisor']:
+                extra_kwargs['approval_status'] = req_status
+                if req_status == 'pending_supervisor':
+                    extra_kwargs['rejection_reason'] = None  # پاکسازی دلیل عودت در ارسال مجدد به سرپرست
+
+        updated_instance = serializer.save(**extra_kwargs)
+        broadcast_personnel_update(updated_instance, action_type='updated', message=f'پرونده پرسنل «{updated_instance.full_name}» به‌روزرسانی شد.', sender_id=user.id if user else None)
+        return Response(self.get_serializer(updated_instance).data)
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        حذف پرسنل با محافظت کامل در برابر حذف فیزیکی زنجیره‌ای (Hard Cascade Delete):
+        - کاربران عادی صرفاً مجاز به حذف پرونده‌های در وضعیت پیش‌نویس (draft) یا عودت‌داده‌شده (revision_required) هستند.
+        - اگر پرسنل دارای هرگونه سابقه کارکرد (حتی کارکردهای سافت‌دیلیت‌شده) یا سوابق حقوقی باشد،
+          جهت حفظ یکپارچگی مالی و سوابق قانونی، امکان حذف فیزیکی وجود ندارد و پرونده به صورت نرم غیرفعال (is_active = False) می‌شود.
+        - در صورت عدم وجود هرگونه سابقه کارکرد یا حقوقی، پرونده پیش‌نویس به صورت قطعی حذف می‌گردد.
+        """
+        instance = self.get_object()
         user = request.user
-        if not (user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')):
-            raise PermissionDenied("شما دسترسی تایید مرحله اول (عملیاتی) پرسنل را ندارید.")
+        is_mgr = bool(user and (user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')))
+        
+        # تنها پرونده‌های در وضعیت پیش‌نویس (draft) یا عودت‌شده (revision_required) توسط کارمند قابل حذف هستند
+        if not is_mgr and instance.approval_status not in ['draft', 'revision_required']:
+            return Response(
+                {'error': 'فقط پرونده‌های در وضعیت پیش‌نویس یا عودت‌داده‌شده قابل حذف هستند.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        # بررسی وجود هرگونه سابقه کارکرد (شامل سطرهای عادی و سافت‌دیلیت‌شده) یا فیش حقوقی
+        has_attendance = DailyAttendance.objects.filter(personnel=instance).exists()
+        has_payroll = MonthlyPayrollRecord.objects.filter(personnel=instance).exists()
+
+        if has_attendance or has_payroll:
+            instance.is_active = False
+            instance.save(update_fields=['is_active'])
+            broadcast_personnel_update(instance, action_type='updated', message=f'پرونده پرسنل «{instance.full_name}» به دلیل داشتن سوابق کارکرد یا حقوق غیرفعال شد.', sender_id=user.id if user else None)
+            return Response(
+                {'message': f'پرونده پرسنل «{instance.full_name}» به دلیل داشتن سوابق کارکرد یا حقوق غیرفعال گردید و از حذف فیزیکی آن جلوگیری شد.'},
+                status=status.HTTP_200_OK
+            )
+            
+        full_name = instance.full_name
+        self.perform_destroy(instance)
+        broadcast_personnel_update(instance, action_type='deleted', message=f'پرونده پرسنل «{full_name}» حذف شد.', sender_id=user.id if user else None)
+        return Response({'message': f'پرسنل «{full_name}» با موفقیت از سامانه حذف گردید.'}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='job-titles')
+    def job_titles(self, request):
+        """
+        ارائه لیست تجمیعی سمت‌های شغلی استاندارد و عناوین استفاده‌شده در سامانه
+        """
+        standard_titles = [
+            'کارگر ساده انبار',
+            'اپراتور لیفتراک',
+            'کمک انباردار',
+            'راننده خودرو سبک/سنگین',
+            'مسئول انبار',
+            'کارشناس اداری و مالی',
+            'نگهبان و انتظامات',
+            'کارگر فنی و تاسیسات',
+            'استادکار تعمیرات و نگهداری',
+            'سایر'
+        ]
+        db_titles = list(
+            PersonnelProfile.objects.exclude(job_title__isnull=True)
+            .exclude(job_title='')
+            .values_list('job_title', flat=True)
+            .distinct()
+        )
+        merged = []
+        for t in standard_titles + db_titles:
+            clean = (t or '').strip()
+            if clean and clean not in merged:
+                merged.append(clean)
+        return Response({'job_titles': merged})
+
+    @action(detail=True, methods=['post'], url_path='approve-supervisor')
+    def approve_supervisor(self, request, pk=None):
+        user = request.user
+        is_op_approver = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+        )
+        if not is_op_approver:
+            raise PermissionDenied("شما دسترسی تایید مرحله اول (سرپرست) پرسنل را ندارید.")
         
         instance = self.get_object()
-        if instance.approval_status not in ['draft', 'revision_required']:
-            return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تایید مدیر ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+        if instance.approval_status not in ['draft', 'revision_required', 'pending_supervisor']:
+            return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تایید سرپرست ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        instance.approval_status = 'manager_approved'
-        instance.manager_approved_by = user
-        instance.manager_approved_at = timezone.now()
+        instance.approval_status = 'pending_accountant'
+        instance.supervisor_approved_by = user
+        instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
-        
-        # اگر توسط حسابدار ثبت شده باشد، پس از تایید مدیر نهایی می‌شود
-        if instance.created_by and (instance.created_by.has_perm('accounts.perm_approve_personnel_finance') or instance.created_by.is_superuser):
-            instance.approval_status = 'approved'
-            instance.accountant_approved_by = instance.created_by
-            instance.accountant_approved_at = timezone.now()
-
         instance.save()
+        broadcast_personnel_update(instance, action_type='pending_accountant', message=f'پرونده پرسنل «{instance.full_name}» به تایید سرپرست رسید و به حسابداری ارسال شد.', sender_id=user.id)
         return Response({
-            'message': 'تایید مرحله اول (مدیر) با موفقیت ثبت شد.',
+            'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده به حسابداری ارسال گردید.',
             'data': self.get_serializer(instance).data
         })
 
@@ -221,23 +393,69 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("شما دسترسی تایید مرحله دوم (مالی) پرسنل را ندارید.")
         
         instance = self.get_object()
-        if instance.approval_status != 'manager_approved':
-            return Response({'error': f'پرسنل ابتدا باید به تایید مدیر برسد (وضعیت فعلی: {instance.get_approval_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['pending_accountant', 'supervisor_approved', 'manager_approved']
+        if instance.approval_status not in valid_statuses:
+            return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تایید مالی ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        instance.approval_status = 'approved'
+        instance.approval_status = 'pending_manager'
         instance.accountant_approved_by = user
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        broadcast_personnel_update(instance, action_type='pending_manager', message=f'پرونده پرسنل «{instance.full_name}» به تایید مالی رسید و به کارتابل مدیر ارسال شد.', sender_id=user.id)
         return Response({
-            'message': 'تایید نهایی مالی با موفقیت ثبت و پرسنل فعال گردید.',
+            'message': 'تایید مالی با موفقیت ثبت شد و پرونده جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
+            'data': self.get_serializer(instance).data
+        })
+
+    @action(detail=True, methods=['post'], url_path='approve-manager')
+    def approve_manager(self, request, pk=None):
+        user = request.user
+        is_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.can_act_as_company_manager')
+        )
+        if not is_mgr:
+            raise PermissionDenied("شما دسترسی تصویب نهایی (مدیر) پرسنل را ندارید.")
+        
+        instance = self.get_object()
+        valid_statuses = ['pending_manager', 'accountant_approved']
+        if user.is_superuser or is_mgr:
+            valid_statuses += ['pending_accountant', 'supervisor_approved', 'pending_supervisor', 'draft', 'manager_approved']
+        
+        if instance.approval_status not in valid_statuses:
+            return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تصویب نهایی مدیر را ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        instance.approval_status = 'approved'
+        instance.manager_approved_by = user
+        instance.manager_approved_at = timezone.now()
+        if not instance.supervisor_approved_by:
+            instance.supervisor_approved_by = user
+            instance.supervisor_approved_at = timezone.now()
+        if not instance.accountant_approved_by:
+            instance.accountant_approved_by = user
+            instance.accountant_approved_at = timezone.now()
+        instance.rejection_reason = None
+        instance.is_active = True
+        instance.save()
+        broadcast_personnel_update(instance, action_type='approved', message=f'پرونده پرسنل «{instance.full_name}» به تصویب نهایی مدیر رسید و فعال گردید.', sender_id=user.id)
+        return Response({
+            'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و پرسنل فعال گردید.',
             'data': self.get_serializer(instance).data
         })
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
+        can_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_personnel_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+        )
         can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_finance')
         if not (can_mgr or can_fin):
             raise PermissionDenied("شما دسترسی لازم برای رد این پرونده را ندارید.")
@@ -250,6 +468,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'rejected'
         instance.rejection_reason = reason
         instance.save()
+        broadcast_personnel_update(instance, action_type='rejected', message=f'پرونده پرسنل «{instance.full_name}» رد شد.', sender_id=user.id)
         return Response({
             'message': 'پرونده پرسنل رد شد.',
             'data': self.get_serializer(instance).data
@@ -258,7 +477,13 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='request-revision')
     def request_revision(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
+        can_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_personnel_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+        )
         can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_finance')
         if not (can_mgr or can_fin):
             raise PermissionDenied("شما دسترسی لازم برای ارجاع به بازنگری را ندارید.")
@@ -271,31 +496,11 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'revision_required'
         instance.rejection_reason = reason
         instance.save()
+        broadcast_personnel_update(instance, action_type='revision_required', message=f'پرونده پرسنل «{instance.full_name}» عودت داده شد: {reason}', sender_id=user.id)
         return Response({
             'message': 'پرونده جهت بازنگری و اصلاح به اپراتور ارجاع داده شد.',
             'data': self.get_serializer(instance).data
         })
-
-    def destroy(self, request, *args, **kwargs):
-        """
-        حذف پرسنل:
-        اگر پرسنل دارای کارکرد ثبت‌شده یا فیش حقوقی باشد، جهت حفظ یکپارچگی مالی
-        امکان حذف مستقیم وجود ندارد (باید غیرفعال شود).
-        اما اگر هنوز هیچ کارکردی برای این فرد ثبت نشده است، اجازه حذف کامل داده می‌شود.
-        """
-        instance = self.get_object()
-        has_attendance = DailyAttendance.objects.filter(personnel=instance, is_deleted=False).exists()
-        has_payroll = MonthlyPayrollRecord.objects.filter(personnel=instance).exists()
-
-        if has_attendance or has_payroll:
-            return Response(
-                {'error': f'پرسنل «{instance.full_name}» دارای سابقه کارکرد یا حقوق ثبت‌شده است و نمی‌توان پرونده او را حذف کرد. می‌توانید وضعیت او را غیرفعال نمایید.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        full_name = instance.full_name
-        instance.delete()
-        return Response({'message': f'پرسنل «{full_name}» با موفقیت از سامانه حذف گردید.'}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], url_path='download-template')
     def download_template(self, request):
@@ -319,7 +524,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         ]
         columns_en = [
             'row_num', 'national_code', 'first_name', 'last_name', 'father_name', 'id_number', 'birth_date', 'birth_place',
-            'job_title', 'employment_type', 'mobile_phone', 'daily_base_wage', 'account_number', 'sheba_number',
+            'job_title', 'employment_type', 'phone_number', 'daily_base_wage', 'account_number', 'sheba_number',
             'bank_name', 'address', 'postal_code', 'marital_status', 'children_count'
         ]
 
@@ -352,9 +557,9 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             cell_en.alignment = align_center
             cell_en.border = thin_border
 
-        # ردیف نمونه راهنما
+        # ردیف نمونه راهنما با کد ملی معتبر دارای چکسام صحیح (Mod 11)
         sample_row = [
-            1, '0012345678', 'علی', 'محمدی', 'رضا', '1234', '1370/01/01', 'تهران',
+            1, '0010376488', 'علی', 'محمدی', 'رضا', '1234', '1370/01/01', 'تهران',
             'کارگر انبار', 'قراردادی', '09123456789', 3500000, '1234567890', 'IR120120000000001234567890',
             'بانک ملت', 'تهران، خیابان آزادی', '1234567890', 'متاهل', 1
         ]
@@ -448,6 +653,8 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
 
         valid_rows_data = []
 
+        persian_arabic_digits = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
+
         def get_v(r, key, default=''):
             c_idx = header_map.get(key)
             if c_idx:
@@ -462,7 +669,8 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 val = ws.cell(row=r, column=c_idx).value
                 if val is not None:
                     try:
-                        return float(val)
+                        clean_str = str(val).translate(persian_arabic_digits).replace(',', '').strip()
+                        return float(clean_str)
                     except (ValueError, TypeError):
                         pass
             return default
@@ -487,7 +695,8 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             if str(raw_nc).strip().lower() in ['national_code', 'national code', 'کد ملی', 'کلید']:
                 continue
             
-            nc_clean = str(raw_nc).split('.')[0].strip().zfill(10)
+            nc_raw_str = str(raw_nc).translate(persian_arabic_digits).strip()
+            nc_clean = nc_raw_str.split('.')[0].strip().zfill(10)
             if not nc_clean.isdigit() or len(nc_clean) != 10:
                 errors.append({
                     'row': r,
@@ -557,6 +766,9 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 profile_defaults['assigned_warehouse_id'] = int(warehouse_id)
             if section_id and str(section_id).isdigit():
                 profile_defaults['section_id'] = int(section_id)
+                sec_obj = ProjectSection.objects.filter(id=int(section_id)).select_related('project').first()
+                if sec_obj and sec_obj.project_id:
+                    profile_defaults['project_id'] = sec_obj.project_id
 
             valid_rows_data.append((r, nc_clean, profile_defaults))
 
@@ -590,15 +802,40 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 })
 
         if not dry_run:
+            user = request.user
+            is_mgr = bool(user and (user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')))
             with transaction.atomic():
                 for r, nc_clean, p_defaults in valid_rows_data:
                     exists = nc_clean in existing_national_codes
                     if exists and not update_existing:
                         continue
+
+                    if not exists:
+                        # رعایت تفکیک وظایف (SoD): برای اپراتور یا کارمند پرونده در وضعیت پیش‌نویس قرار می‌گیرد
+                        if is_mgr:
+                            p_defaults['approval_status'] = 'manager_approved'
+                            p_defaults['manager_approved_by'] = user
+                            p_defaults['manager_approved_at'] = timezone.now()
+                        else:
+                            p_defaults['approval_status'] = 'draft'
+                    else:
+                        # اگر رکورد قبلاً وجود داشته و کاربر مدیر نیست
+                        if not is_mgr:
+                            p_defaults.pop('approval_status', None)
+                            # حفاظت از SoD: دستمزد و شبای پرسنل مصوب نباید از طریق اکسل اپراتور مستقیم تغییر کند
+                            existing_prof = PersonnelProfile.objects.filter(national_code=nc_clean).first()
+                            if existing_prof and existing_prof.approval_status in ['approved', 'manager_approved']:
+                                p_defaults.pop('daily_base_wage', None)
+                                p_defaults.pop('base_daily_rate', None)
+                                p_defaults.pop('sheba_number', None)
+                                p_defaults.pop('account_number', None)
+
                     PersonnelProfile.objects.update_or_create(
                         national_code=nc_clean,
                         defaults=p_defaults
                     )
+
+            broadcast_personnel_update(None, action_type='imported', message=f'درون‌ریزی پرسنل انجام شد ({created_count} ایجاد، {updated_count} به‌روزرسانی).', sender_id=request.user.id if request.user else None)
 
         valid_count = created_count + updated_count
         total_rows = valid_count + len(errors) + skipped_count
@@ -643,7 +880,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         ]
         headers_en = [
             'row_num', 'national_code', 'full_name', 'job_title', 'employment_type_display',
-            'mobile_phone', 'daily_base_wage', 'account_number', 'sheba_number',
+            'phone_number', 'daily_base_wage', 'account_number', 'sheba_number',
             'bank_name', 'approval_status_display', 'is_active'
         ]
 
@@ -686,7 +923,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 p.full_name,
                 p.job_title or '-',
                 p.get_employment_type_display() if hasattr(p, 'get_employment_type_display') else '-',
-                p.mobile_phone or '-',
+                getattr(p, 'phone_number', None) or getattr(p, 'mobile_phone', None) or '-',
                 float(p.daily_base_wage or 0),
                 p.account_number or '-',
                 p.sheba_number or '-',
@@ -808,12 +1045,12 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
                     requested_by=user,
                     proposed_changes=diff,
                     previous_values=old_diff,
-                    status='pending_manager'
+                    status='pending_supervisor'
                 )
                 instance.has_pending_changes = True
                 instance.save(update_fields=['has_pending_changes'])
                 return Response({
-                    'message': 'تغییرات با موفقیت به عنوان پیش‌نویس ثبت شد و جهت بررسی در کارتابل مدیر و حسابدار قرار گرفت. اطلاعات قبلی تا زمان تایید نهایی معتبر باقی می‌ماند.',
+                    'message': 'درخواست تغییرات خودرو با موفقیت ثبت شد و جهت بررسی در کارتابل سرپرست قرار گرفت. اطلاعات قبلی تا زمان تصویب نهایی معتبر باقی می‌ماند.',
                     'change_request_id': cr.id,
                     'data': self.get_serializer(instance).data
                 }, status=status.HTTP_202_ACCEPTED)
@@ -821,30 +1058,30 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
         return super().update(request, *args, partial=partial, **kwargs)
 
-    @action(detail=True, methods=['post'], url_path='approve-manager')
-    def approve_manager(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='approve-supervisor')
+    def approve_supervisor(self, request, pk=None):
         user = request.user
-        if not (user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')):
-            raise PermissionDenied("شما دسترسی تایید مرحله اول (عملیاتی) ناوگان را ندارید.")
+        is_op_approver = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+        )
+        if not is_op_approver:
+            raise PermissionDenied("شما دسترسی تایید مرحله اول (سرپرست) ناوگان را ندارید.")
         
         instance = self.get_object()
-        if instance.approval_status not in ['draft', 'revision_required']:
-            return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تایید مدیر ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+        if instance.approval_status not in ['draft', 'revision_required', 'pending_supervisor']:
+            return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تایید سرپرست ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        instance.approval_status = 'manager_approved'
-        instance.manager_approved_by = user
-        instance.manager_approved_at = timezone.now()
+        instance.approval_status = 'pending_accountant'
+        instance.supervisor_approved_by = user
+        instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
-        
-        # اگر توسط حسابدار ثبت شده باشد، پس از تایید مدیر نهایی می‌شود
-        if instance.created_by and (instance.created_by.has_perm('accounts.perm_approve_fleet_finance') or instance.created_by.is_superuser):
-            instance.approval_status = 'approved'
-            instance.accountant_approved_by = instance.created_by
-            instance.accountant_approved_at = timezone.now()
-
         instance.save()
         return Response({
-            'message': 'تایید مرحله اول (مدیر) با موفقیت ثبت شد.',
+            'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده خودرو به حسابداری ارسال گردید.',
             'data': self.get_serializer(instance).data
         })
 
@@ -855,23 +1092,67 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("شما دسترسی تایید مرحله دوم (مالی) ناوگان را ندارید.")
         
         instance = self.get_object()
-        if instance.approval_status != 'manager_approved':
-            return Response({'error': f'خودرو ابتدا باید به تایید مدیر برسد (وضعیت فعلی: {instance.get_approval_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['pending_accountant', 'supervisor_approved', 'manager_approved']
+        if instance.approval_status not in valid_statuses:
+            return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تایید مالی ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        instance.approval_status = 'approved'
+        instance.approval_status = 'pending_manager'
         instance.accountant_approved_by = user
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
         return Response({
-            'message': 'تایید نهایی مالی با موفقیت ثبت و خودرو فعال گردید.',
+            'message': 'تایید مالی با موفقیت ثبت شد و پرونده خودرو جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
+            'data': self.get_serializer(instance).data
+        })
+
+    @action(detail=True, methods=['post'], url_path='approve-manager')
+    def approve_manager(self, request, pk=None):
+        user = request.user
+        is_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.can_act_as_company_manager')
+        )
+        if not is_mgr:
+            raise PermissionDenied("شما دسترسی تصویب نهایی (مدیر) ناوگان را ندارید.")
+        
+        instance = self.get_object()
+        valid_statuses = ['pending_manager', 'accountant_approved']
+        if user.is_superuser or is_mgr:
+            valid_statuses += ['pending_accountant', 'supervisor_approved', 'pending_supervisor', 'draft', 'manager_approved']
+        
+        if instance.approval_status not in valid_statuses:
+            return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تصویب نهایی مدیر ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        instance.approval_status = 'approved'
+        instance.manager_approved_by = user
+        instance.manager_approved_at = timezone.now()
+        if not instance.supervisor_approved_by:
+            instance.supervisor_approved_by = user
+            instance.supervisor_approved_at = timezone.now()
+        if not instance.accountant_approved_by:
+            instance.accountant_approved_by = user
+            instance.accountant_approved_at = timezone.now()
+        instance.rejection_reason = None
+        instance.is_active = True
+        instance.save()
+        return Response({
+            'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.',
             'data': self.get_serializer(instance).data
         })
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
+        can_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_fleet_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+        )
         can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')
         if not (can_mgr or can_fin):
             raise PermissionDenied("شما دسترسی لازم برای رد این پرونده را ندارید.")
@@ -892,7 +1173,13 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='request-revision')
     def request_revision(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
+        can_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_fleet_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+        )
         can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')
         if not (can_mgr or can_fin):
             raise PermissionDenied("شما دسترسی لازم برای ارجاع به بازنگری را ندارید.")
@@ -1029,54 +1316,101 @@ class PersonnelChangeRequestViewSet(viewsets.ModelViewSet):
             qs = qs.filter(personnel_id=personnel_id)
         return qs
 
-    @action(detail=True, methods=['post'], url_path='approve-manager')
-    def approve_manager(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='approve-supervisor')
+    def approve_supervisor(self, request, pk=None):
         user = request.user
-        if not (user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')):
-            raise PermissionDenied("شما دسترسی بررسی مرحله اول درخواست تغییرات را ندارید.")
+        is_sup = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+        )
+        if not is_sup:
+            raise PermissionDenied("شما دسترسی بررسی مرحله اول (سرپرست) درخواست تغییرات را ندارید.")
         
         cr = self.get_object()
-        if cr.status != 'pending_manager':
-            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تایید مدیر نیست.'}, status=status.HTTP_400_BAD_REQUEST)
+        if cr.status not in ['draft', 'pending_supervisor', 'revision_required']:
+            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تایید سرپرست نیست.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        cr.status = 'manager_approved'
-        cr.manager_reviewed_by = user
-        cr.manager_reviewed_at = timezone.now()
+        cr.status = 'pending_accountant'
+        cr.supervisor_reviewed_by = user
+        cr.supervisor_reviewed_at = timezone.now()
         cr.save()
-        return Response({'message': 'تغییرات به تایید مدیر رسید و به کارتابل حسابدار ارسال شد.', 'data': self.get_serializer(cr).data})
+        return Response({'message': 'درخواست تغییرات به تایید سرپرست رسید و به کارتابل حسابداری ارسال شد.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='approve-finance')
     def approve_finance(self, request, pk=None):
         user = request.user
         if not (user.is_superuser or user.has_perm('accounts.perm_approve_personnel_finance')):
-            raise PermissionDenied("شما دسترسی تایید نهایی مالی درخواست تغییرات را ندارید.")
+            raise PermissionDenied("شما دسترسی تایید مرحله دوم (مالی) درخواست تغییرات را ندارید.")
         
         cr = self.get_object()
-        if cr.status != 'manager_approved':
-            return Response({'error': 'درخواست ابتدا باید به تایید مدیر برسد.'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['pending_accountant', 'supervisor_approved', 'manager_approved']
+        if cr.status not in valid_statuses:
+            return Response({'error': f'درخواست ابتدا باید به تایید سرپرست برسد (وضعیت فعلی: {cr.get_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # اعمال تغییرات روی پرونده اصلی پرسنل
+        cr.status = 'pending_manager'
+        cr.accountant_reviewed_by = user
+        cr.accountant_reviewed_at = timezone.now()
+        cr.save()
+        return Response({'message': 'درخواست تغییرات به تایید مالی رسید و به کارتابل مدیر ارسال شد.', 'data': self.get_serializer(cr).data})
+
+    @action(detail=True, methods=['post'], url_path='approve-manager')
+    def approve_manager(self, request, pk=None):
+        user = request.user
+        is_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.can_act_as_company_manager')
+        )
+        if not is_mgr:
+            raise PermissionDenied("شما دسترسی تصویب نهایی درخواست تغییرات را ندارید.")
+        
+        cr = self.get_object()
+        valid_statuses = ['pending_manager', 'accountant_approved']
+        if user.is_superuser or is_mgr:
+            valid_statuses += ['pending_supervisor', 'pending_accountant', 'draft', 'manager_approved']
+        
+        if cr.status not in valid_statuses:
+            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تصویب مدیر نیست.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # اعمال تغییرات روی پرونده اصلی پرسنل منحصراً توسط مدیر
         personnel = cr.personnel
         with transaction.atomic():
+            excluded_fields = {'id', 'pk', 'national_code', 'approval_status', 'created_at', 'created_by', 'section'}
             for field, val in cr.proposed_changes.items():
-                if hasattr(personnel, field):
+                if hasattr(personnel, field) and field not in excluded_fields:
                     setattr(personnel, field, val)
             personnel.has_pending_changes = False
             personnel.save()
 
             cr.status = 'approved'
-            cr.accountant_reviewed_by = user
-            cr.accountant_reviewed_at = timezone.now()
+            cr.manager_reviewed_by = user
+            cr.manager_reviewed_at = timezone.now()
+            if not cr.supervisor_reviewed_by:
+                cr.supervisor_reviewed_by = user
+                cr.supervisor_reviewed_at = timezone.now()
+            if not cr.accountant_reviewed_by:
+                cr.accountant_reviewed_by = user
+                cr.accountant_reviewed_at = timezone.now()
             cr.save()
 
-        return Response({'message': 'تغییرات با موفقیت تایید و روی پرونده پرسنل اعمال گردید.', 'data': self.get_serializer(cr).data})
+        return Response({'message': 'درخواست تغییرات توسط مدیر تصویب و روی پرونده پرسنل اعمال گردید.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
-        can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_finance')
-        if not (can_mgr or can_fin):
+        can_op = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_personnel_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_personnel_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_personnel_finance')
+        )
+        if not can_op:
             raise PermissionDenied("دسترسی رد این درخواست را ندارید.")
         
         reason = request.data.get('reason', '').strip()
@@ -1086,7 +1420,10 @@ class PersonnelChangeRequestViewSet(viewsets.ModelViewSet):
         cr.save()
 
         # بررسی اینکه آیا درخواست معلق دیگری برای این پرسنل وجود دارد
-        other_pending = PersonnelChangeRequest.objects.filter(personnel=cr.personnel, status__in=['pending_manager', 'manager_approved']).exclude(id=cr.id).exists()
+        other_pending = PersonnelChangeRequest.objects.filter(
+            personnel=cr.personnel,
+            status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'manager_approved']
+        ).exclude(id=cr.id).exists()
         if not other_pending:
             cr.personnel.has_pending_changes = False
             cr.personnel.save(update_fields=['has_pending_changes'])
@@ -1110,32 +1447,67 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
             qs = qs.filter(vehicle_id=vehicle_id)
         return qs
 
-    @action(detail=True, methods=['post'], url_path='approve-manager')
-    def approve_manager(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='approve-supervisor')
+    def approve_supervisor(self, request, pk=None):
         user = request.user
-        if not (user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')):
-            raise PermissionDenied("شما دسترسی بررسی مرحله اول درخواست تغییرات ناوگان را ندارید.")
+        is_sup = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+        )
+        if not is_sup:
+            raise PermissionDenied("شما دسترسی بررسی مرحله اول (سرپرست) درخواست تغییرات ناوگان را ندارید.")
         
         cr = self.get_object()
-        if cr.status != 'pending_manager':
-            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تایید مدیر نیست.'}, status=status.HTTP_400_BAD_REQUEST)
+        if cr.status not in ['draft', 'pending_supervisor', 'revision_required']:
+            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تایید سرپرست نیست.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        cr.status = 'manager_approved'
-        cr.manager_reviewed_by = user
-        cr.manager_reviewed_at = timezone.now()
+        cr.status = 'pending_accountant'
+        cr.supervisor_reviewed_by = user
+        cr.supervisor_reviewed_at = timezone.now()
         cr.save()
-        return Response({'message': 'تغییرات خودرو به تایید مدیر رسید و به کارتابل حسابدار ارسال شد.', 'data': self.get_serializer(cr).data})
+        return Response({'message': 'درخواست تغییرات خودرو به تایید سرپرست رسید و به کارتابل حسابداری ارسال شد.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='approve-finance')
     def approve_finance(self, request, pk=None):
         user = request.user
         if not (user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')):
-            raise PermissionDenied("شما دسترسی تایید نهایی مالی درخواست تغییرات ناوگان را ندارید.")
+            raise PermissionDenied("شما دسترسی تایید مرحله دوم (مالی) درخواست تغییرات ناوگان را ندارید.")
         
         cr = self.get_object()
-        if cr.status != 'manager_approved':
-            return Response({'error': 'درخواست ابتدا باید به تایید مدیر برسد.'}, status=status.HTTP_400_BAD_REQUEST)
+        valid_statuses = ['pending_accountant', 'supervisor_approved', 'manager_approved']
+        if cr.status not in valid_statuses:
+            return Response({'error': f'درخواست ابتدا باید به تایید سرپرست برسد (وضعیت فعلی: {cr.get_status_display()}).'}, status=status.HTTP_400_BAD_REQUEST)
         
+        cr.status = 'pending_manager'
+        cr.accountant_reviewed_by = user
+        cr.accountant_reviewed_at = timezone.now()
+        cr.save()
+        return Response({'message': 'درخواست تغییرات خودرو به تایید مالی رسید و به کارتابل مدیر ارسال شد.', 'data': self.get_serializer(cr).data})
+
+    @action(detail=True, methods=['post'], url_path='approve-manager')
+    def approve_manager(self, request, pk=None):
+        user = request.user
+        is_mgr = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.can_act_as_company_manager')
+        )
+        if not is_mgr:
+            raise PermissionDenied("شما دسترسی تصویب نهایی درخواست تغییرات ناوگان را ندارید.")
+        
+        cr = self.get_object()
+        valid_statuses = ['pending_manager', 'accountant_approved']
+        if user.is_superuser or is_mgr:
+            valid_statuses += ['pending_supervisor', 'pending_accountant', 'draft', 'manager_approved']
+        
+        if cr.status not in valid_statuses:
+            return Response({'error': f'درخواست در وضعیت «{cr.get_status_display()}» قابل تصویب مدیر نیست.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # اعمال تغییرات روی پرونده خودرو منحصراً توسط مدیر
         vehicle = cr.vehicle
         with transaction.atomic():
             for field, val in cr.proposed_changes.items():
@@ -1145,18 +1517,30 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
             vehicle.save()
 
             cr.status = 'approved'
-            cr.accountant_reviewed_by = user
-            cr.accountant_reviewed_at = timezone.now()
+            cr.manager_reviewed_by = user
+            cr.manager_reviewed_at = timezone.now()
+            if not cr.supervisor_reviewed_by:
+                cr.supervisor_reviewed_by = user
+                cr.supervisor_reviewed_at = timezone.now()
+            if not cr.accountant_reviewed_by:
+                cr.accountant_reviewed_by = user
+                cr.accountant_reviewed_at = timezone.now()
             cr.save()
 
-        return Response({'message': 'تغییرات خودرو با موفقیت تایید و اعمال گردید.', 'data': self.get_serializer(cr).data})
+        return Response({'message': 'درخواست تغییرات خودرو توسط مدیر تصویب و اعمال گردید.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='reject')
     def reject(self, request, pk=None):
         user = request.user
-        can_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
-        can_fin = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')
-        if not (can_mgr or can_fin):
+        can_op = (
+            user.is_superuser
+            or user.has_perm('accounts.perm_approve_fleet_manager')
+            or user.has_perm('accounts.can_act_as_manager')
+            or user.has_perm('accounts.perm_approve_fleet_supervisor')
+            or user.has_perm('accounts.can_act_as_workshop_supervisor')
+            or user.has_perm('accounts.perm_approve_fleet_finance')
+        )
+        if not can_op:
             raise PermissionDenied("دسترسی رد این درخواست را ندارید.")
         
         reason = request.data.get('reason', '').strip()
@@ -1165,7 +1549,10 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
         cr.rejection_reason = reason
         cr.save()
 
-        other_pending = VehicleChangeRequest.objects.filter(vehicle=cr.vehicle, status__in=['pending_manager', 'manager_approved']).exclude(id=cr.id).exists()
+        other_pending = VehicleChangeRequest.objects.filter(
+            vehicle=cr.vehicle,
+            status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'manager_approved']
+        ).exclude(id=cr.id).exists()
         if not other_pending:
             cr.vehicle.has_pending_changes = False
             cr.vehicle.save(update_fields=['has_pending_changes'])

@@ -211,6 +211,7 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
     revision_requested_by_name = serializers.SerializerMethodField()
     auto_passed_by_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    pending_change_request = serializers.SerializerMethodField()
 
     class Meta:
         model = PersonnelProfile
@@ -262,6 +263,22 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_pending_change_request(self, obj):
+        if not getattr(obj, 'has_pending_changes', False):
+            return None
+        cr = obj.change_requests.filter(
+            status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'supervisor_approved', 'accountant_approved', 'manager_approved']
+        ).order_by('-created_at').first()
+        if cr:
+            return {
+                'id': cr.id,
+                'status': cr.status,
+                'proposed_changes': cr.proposed_changes,
+                'previous_values': cr.previous_values,
+                'created_at': cr.created_at.isoformat() if cr.created_at else None,
+            }
         return None
 
     def validate_national_code(self, value):

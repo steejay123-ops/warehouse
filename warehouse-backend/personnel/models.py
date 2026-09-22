@@ -640,7 +640,7 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     approval_status = models.CharField(
         max_length=30,
         choices=APPROVAL_STATUS_CHOICES,
-        default='approved',
+        default='draft',
         db_index=True,
         verbose_name="وضعیت تایید"
     )
@@ -788,9 +788,16 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
         # پدینگ خودکار کد ملی به ۱۰ رقم
         if self.national_code:
             self.national_code = self.national_code.strip().zfill(10)
-        # محاسبه خودکار مزد مبنا در صورت خالی بودن
-        if not self.base_daily_rate or self.base_daily_rate == 0:
-            self.base_daily_rate = (self.daily_base_wage or 0) + (self.daily_seniority_bonus or 0)
+        # محاسبه خودکار و همگام مزد مبنا از مجموع مزد روزانه و سنوات
+        try:
+            wage = int(self.daily_base_wage or 0)
+        except (ValueError, TypeError):
+            wage = 0
+        try:
+            bonus = int(self.daily_seniority_bonus or 0)
+        except (ValueError, TypeError):
+            bonus = 0
+        self.base_daily_rate = wage + bonus
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -891,7 +898,7 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     approval_status = models.CharField(
         max_length=30,
         choices=APPROVAL_STATUS_CHOICES,
-        default='approved',
+        default='draft',
         db_index=True,
         verbose_name="وضعیت تایید"
     )

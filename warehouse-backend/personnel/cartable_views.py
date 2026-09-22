@@ -181,19 +181,19 @@ class AccountantCartableAPIView(APIView):
             raise PermissionDenied("دسترسی به کارتابل حسابداری مجاز نمی‌باشد.")
 
         personnel_qs = PersonnelProfile.objects.filter(
-            approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'manager_approved', WorkflowStatuses.SUPERVISOR_APPROVED]
+            approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant', WorkflowStatuses.SUPERVISOR_APPROVED, 'supervisor_approved', 'manager_approved']
         ).select_related('user')
 
         vehicles_qs = VehicleDriverProfile.objects.filter(
-            approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'manager_approved', WorkflowStatuses.SUPERVISOR_APPROVED]
+            approval_status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant', WorkflowStatuses.SUPERVISOR_APPROVED, 'supervisor_approved', 'manager_approved']
         ).select_related('user')
 
         p_changes = PersonnelChangeRequest.objects.filter(
-            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_finance']
+            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant', WorkflowStatuses.SUPERVISOR_APPROVED, 'supervisor_approved', 'pending_finance']
         ).select_related('personnel', 'requested_by')
 
         v_changes = VehicleChangeRequest.objects.filter(
-            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_finance']
+            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant', WorkflowStatuses.SUPERVISOR_APPROVED, 'supervisor_approved', 'pending_finance']
         ).select_related('vehicle', 'requested_by')
 
         periods = MonthlyWorkPeriod.objects.filter(
@@ -268,11 +268,11 @@ class ManagerCartableAPIView(APIView):
         ).select_related('user')
 
         p_changes = PersonnelChangeRequest.objects.filter(
-            status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager']
+            status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager', WorkflowStatuses.ACCOUNTANT_APPROVED, 'accountant_approved']
         ).select_related('personnel', 'requested_by')
 
         v_changes = VehicleChangeRequest.objects.filter(
-            status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager']
+            status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager', WorkflowStatuses.ACCOUNTANT_APPROVED, 'accountant_approved']
         ).select_related('vehicle', 'requested_by')
 
         periods = MonthlyWorkPeriod.objects.filter(

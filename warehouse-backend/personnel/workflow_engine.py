@@ -366,6 +366,12 @@ def request_workflow_revision(instance, user, reason: str, target_status: str = 
         locked_instance.revision_requested_at = now
 
     locked_instance.save()
+    if hasattr(locked_instance, 'personnel') and locked_instance.personnel:
+        locked_instance.personnel.has_pending_changes = False
+        locked_instance.personnel.save(update_fields=['has_pending_changes'])
+    if hasattr(locked_instance, 'vehicle') and locked_instance.vehicle:
+        locked_instance.vehicle.has_pending_changes = False
+        locked_instance.vehicle.save(update_fields=['has_pending_changes'])
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} marked REVISION_REQUIRED by {user.username}. Reason: {reason}")
     return locked_instance
 
@@ -394,6 +400,12 @@ def reject_workflow(instance, user, reason: str):
         locked_instance.rejection_reason = reason.strip()
 
     locked_instance.save()
+    if hasattr(locked_instance, 'personnel') and locked_instance.personnel:
+        locked_instance.personnel.has_pending_changes = False
+        locked_instance.personnel.save(update_fields=['has_pending_changes'])
+    if hasattr(locked_instance, 'vehicle') and locked_instance.vehicle:
+        locked_instance.vehicle.has_pending_changes = False
+        locked_instance.vehicle.save(update_fields=['has_pending_changes'])
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} REJECTED by {user.username}. Reason: {reason}")
     return locked_instance
 
@@ -448,8 +460,8 @@ def execute_treasury_disbursement(instance, user, tracking_code: str, batch_id: 
             occurred_at=now,
             payload={'tracking_code': tracking_code, 'batch_id': batch_id, 'payment_method': payment_method, 'user_id': user.pk}
         )
-    except Exception as ex:
-        logger.warning(f"[WorkflowEngine] Error emitting accounting event: {ex}")
+    except Exception as e:
+        logger.warning(f"[WorkflowEngine] Failed to emit accounting event for {locked_instance}: {e}")
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} PAID & SETTLED by {user.username}. Tracking: {tracking_code}")
     return locked_instance
 
@@ -476,7 +488,7 @@ def _apply_personnel_changes(change_request):
     """
     personnel = change_request.personnel
     for field_name, new_val in change_request.proposed_changes.items():
-        if hasattr(personnel, field_name) and field_name not in ['id', 'pk', 'national_code']:
+        if hasattr(personnel, field_name) and field_name not in ['id', 'pk', 'national_code', 'approval_status', 'created_at', 'created_by', 'section']:
             setattr(personnel, field_name, new_val)
     personnel.has_pending_changes = False
     personnel.save()

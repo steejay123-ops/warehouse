@@ -59,6 +59,26 @@ describe('EmployeeNewVehicleHubComponent Real DOM & Browser Spec (Type 1 Vitest 
       writable: true
     });
 
+    let localStore: Record<string, string> = {};
+    const mockLocalStorage = {
+      getItem: (key: string) => localStore[key] || null,
+      setItem: (key: string, val: string) => { localStore[key] = String(val); },
+      removeItem: (key: string) => { delete localStore[key]; },
+      clear: () => { localStore = {}; }
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: mockLocalStorage,
+      writable: true,
+      configurable: true
+    });
+    if (typeof globalThis !== 'undefined') {
+      Object.defineProperty(globalThis, 'localStorage', {
+        value: mockLocalStorage,
+        writable: true,
+        configurable: true
+      });
+    }
+
     await ɵresolveComponentResources(async (url) => {
       const filename = path.basename(url);
       const localPath = path.resolve(__dirname, filename);
@@ -209,6 +229,7 @@ describe('EmployeeNewVehicleHubComponent Real DOM & Browser Spec (Type 1 Vitest 
   });
 
   afterEach(() => {
+    localStorage.clear();
     TestBed.resetTestingModule();
   });
 
@@ -450,6 +471,166 @@ describe('EmployeeNewVehicleHubComponent Real DOM & Browser Spec (Type 1 Vitest 
       const greenBadges = Array.from(diffModal.querySelectorAll('.text-emerald-700'));
       expect(greenBadges.length).toBeGreaterThan(0);
       expect(greenBadges.some(el => el.textContent?.includes('محسن کریمی‌راد'))).toBe(true);
+    });
+  });
+
+  describe('۹. هماهنگی ناهمگام بخش و پارامترهای آدرس (STATE-01: Section & QueryParams Coordination)', () => {
+    it('اگر پارامتر section_id قبل از تکمیل لود بخش‌ها برسد، باید به درستی ذخیره شده و پس از لود بخش فعال گردد', () => {
+      component.mySections = [];
+      component.selectedSectionId = null;
+      component['pendingSectionId'] = 10;
+
+      component.mySections = sampleSections;
+      (component as any).pickDefaultSection();
+
+      expect(component.selectedSectionId).toBe(10);
+      expect(component.selectedSection?.name).toBe('بخش ترابری سنگین');
+      expect(component['pendingSectionId']).toBeNull();
+    });
+  });
+
+  describe('۱۰. کش‌کردن پیش‌نویس فرم در حافظه محلی (DATA-02: Form Draft LocalStorage)', () => {
+    it('باید اطلاعات وارد شده در فرم پیش‌نویس را در LocalStorage ذخیره کند و با باز شدن مجدد مودال بازیابی نماید', () => {
+      component.selectedSectionId = 10;
+      component.openNewVehicleModal();
+      component.newVehicle.driver_name = 'محمود کاظمی';
+      component.platePart1 = '44';
+      component.platePart2 = 'ب';
+      component.platePart3 = '789';
+      component.platePart4 = '63';
+      component.saveDraftToStorage();
+
+      const raw = localStorage.getItem('vehicle_draft_form_10');
+      expect(raw).not.toBeNull();
+      const parsed = JSON.parse(raw!);
+      expect(parsed.newVehicle.driver_name).toBe('محمود کاظمی');
+      expect(parsed.platePart1).toBe('44');
+
+      // باز کردن مجدد مودال و بازیابی خودکار
+      component.resetForm();
+      expect(component.newVehicle.driver_name).toBe('');
+      component.openNewVehicleModal();
+      expect(component.newVehicle.driver_name).toBe('محمود کاظمی');
+      expect(component.platePart1).toBe('44');
+      expect(component.platePart3).toBe('789');
+    });
+
+    it('پس از ثبت موفق خودرو جدید، باید پیش‌نویس ذخیره‌شده از LocalStorage پاک شود', () => {
+      component.selectedSectionId = 10;
+      component.openNewVehicleModal();
+      component.newVehicle.driver_name = 'محمود کاظمی';
+      component.newVehicle.plate_number = '44 ب 789 ایران 63';
+      component.saveDraftToStorage();
+      expect(localStorage.getItem('vehicle_draft_form_10')).not.toBeNull();
+
+      component.saveVehicle('draft');
+      expect(localStorage.getItem('vehicle_draft_form_10')).toBeNull();
+    });
+  });
+
+  describe('۱۱. جلوگیری از نشت حافظه اشتراک‌های RxJS (LEAK-01: RxJS Subscription Management)', () => {
+    it('جستجوی مجدد پرسنل باید اشتراک قبلی را لغو کرده و در onDestroy تمامی اشتراک‌ها تمیز شوند', () => {
+      const searchSubject = new Subject<any>();
+      mockPersonnelApi.getPersonnelProfiles.mockReturnValue(searchSubject);
+
+      component.openNewVehicleModal();
+      component.newVehicle.driver_national_code = '0078901235';
+      component.onNationalCodeChange();
+
+      const sub1 = component['personnelSearchSub'];
+      expect(sub1).toBeDefined();
+      expect(sub1?.closed).toBe(false);
+
+      // اجرای مجدد جستجو باید سابسکرایب قبلی را لغو کند
+      component.onNationalCodeChange();
+      expect(sub1?.closed).toBe(true);
+
+      const sub2 = component['personnelSearchSub'];
+      expect(sub2).toBeDefined();
+      expect(sub2?.closed).toBe(false);
+
+      component.ngOnDestroy();
+      expect(sub2?.closed).toBe(true);
+      expect(component['queryParamsSub']?.closed).toBe(true);
+    });
+  });
+
+  describe('۱۲. ارگونومی جهش فوکوس خودکار پلاک ۴ بخشی (UI-01: Auto-Tab Plate Inputs)', () => {
+    it('با ورود ۲ رقم در بخش ۱، فوکوس باید به حرف یا بخش ۳ هدایت شود', () => {
+      component.openNewVehicleModal();
+      fixture.detectChanges();
+
+      const p2SelectSpy = vi.fn();
+      component.p2Select = { nativeElement: { focus: p2SelectSpy } } as any;
+
+      component.platePart1 = '12';
+      component.onPlatePart1Input({});
+      expect(p2SelectSpy).toHaveBeenCalled();
+    });
+
+    it('با ورود ۳ رقم در بخش ۳، فوکوس باید به بخش ۴ (کد ایران) منتقل شود', () => {
+      component.openNewVehicleModal();
+      fixture.detectChanges();
+
+      const p4InputSpy = vi.fn();
+      component.p4Input = { nativeElement: { focus: p4InputSpy } } as any;
+
+      component.platePart3 = '456';
+      component.onPlatePart3Input({});
+      expect(p4InputSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('۱۳. نمایش مشخصات مالک در نمای موبایل و دسکتاپ (UI-02: Owner Info in Mobile & Desktop)', () => {
+    it('در صورت تفکیک راننده و مالک، مشخصات هویتی و تماسی مالک باید در هر دو نمای کارتی و جدول نمایش داده شود', () => {
+      fixture.detectChanges();
+      const nativeEl: HTMLElement = fixture.nativeElement;
+
+      // بررسی نمای دسکتاپ
+      const ownerDesktopTag = nativeEl.querySelector('.text-amber-800.bg-amber-50');
+      expect(ownerDesktopTag).not.toBeNull();
+      expect(ownerDesktopTag?.textContent).toContain('مالک: رضا کمالی');
+
+      // بررسی نمای کارتی موبایل
+      const mobileCards = nativeEl.querySelectorAll('.block.md\\:hidden > div > div');
+      const mobileText = Array.from(mobileCards).map(c => c.textContent).join(' ');
+      expect(mobileText).toContain('رضا کمالی');
+      expect(mobileText).toContain('09123334455');
+    });
+  });
+
+  describe('۱۴. استانداردهای دسترسی‌پذیری مودال‌ها (UI-04: Accessibility & Escape Handling)', () => {
+    it('مودال‌های ثبت خودرو و Diff باید دارای ویژگی‌های role="dialog" و aria-modal="true" باشند', () => {
+      component.openNewVehicleModal();
+      fixture.detectChanges();
+
+      const modalEl = fixture.nativeElement.querySelector('.fixed.inset-0.z-50') as HTMLElement;
+      expect(modalEl.getAttribute('role')).toBe('dialog');
+      expect(modalEl.getAttribute('aria-modal')).toBe('true');
+      expect(modalEl.getAttribute('aria-labelledby')).toBe('newVehicleModalTitle');
+    });
+
+    it('فشردن کلید Escape باید مودال فعال را ببندد', () => {
+      component.openNewVehicleModal();
+      expect(component.isNewVehicleModalOpen).toBe(true);
+
+      component.handleEscape();
+      expect(component.isNewVehicleModalOpen).toBe(false);
+    });
+  });
+
+  describe('۱۵. فوکوس مجدد فیلد جستجو هنگام پاک‌سازی (UI-05: Search Input Autofocus on Clear)', () => {
+    it('فراخوانی clearSearch باید فیلد ورودی جستجو را مجدداً فوکوس کند', async () => {
+      const searchFocusSpy = vi.fn();
+      component.searchInput = { nativeElement: { focus: searchFocusSpy } } as any;
+
+      component.searchQuery = 'تست';
+      component.clearSearch();
+      expect(component.searchQuery).toBe('');
+
+      // منتظر اتمام setTimeout
+      await new Promise(r => setTimeout(r, 10));
+      expect(searchFocusSpy).toHaveBeenCalled();
     });
   });
 });

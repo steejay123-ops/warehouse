@@ -95,13 +95,22 @@ function addToken(req: HttpRequest<unknown>, token: string, sessionTab?: Session
     ? sessionTab.tabId
     : ((typeof window !== 'undefined' && sessionStorage.getItem('wh_tab_session_id')) || 'tab_main');
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'X-Active-Role': activeRole,
+    'X-Active-App': activeApp,
+    'X-Client-Tab-Id': clientTabId,
+  };
+
+  const activeCompanyId = typeof window !== 'undefined'
+    ? (sessionStorage.getItem('active_company_id') || localStorage.getItem('active_company_id'))
+    : null;
+  if (activeCompanyId) {
+    headers['X-Company-ID'] = activeCompanyId;
+  }
+
   return req.clone({
-    setHeaders: {
-      Authorization: `Bearer ${token}`,
-      'X-Active-Role': activeRole,
-      'X-Active-App': activeApp,
-      'X-Client-Tab-Id': clientTabId,
-    },
+    setHeaders: headers,
   });
 }
 

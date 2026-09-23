@@ -245,10 +245,10 @@
   <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-50 relative">
     
     <!-- Top Header -->
-    <header class="bg-white border-b border-slate-200 p-4 h-[70px] flex items-center justify-between shadow-sm relative z-[45] transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
+    <header class="bg-white border-b border-slate-200 px-3 sm:px-4 py-2 sm:py-4 h-[64px] sm:h-[70px] flex items-center justify-between shadow-sm relative z-[45] transition-all" [style.borderTop]="store.isWarehouseContext() ? '4px solid ' + (currentWarehouse?.color || '#4f46e5') : ''">
       
       <!-- Right Side (RTL Start): Mobile Toggle, User, Notifications, Progress -->
-      <div class="flex items-center gap-2 md:gap-4 flex-1 justify-start shrink-0">
+      <div class="flex items-center gap-1.5 sm:gap-3 flex-1 justify-start min-w-0 shrink-0">
         <button (click)="openSidebar()" class="md:hidden p-2 rounded-lg hover:bg-slate-50 text-slate-600 shrink-0 cursor-pointer" title="نمایش منو" aria-label="نمایش منو">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
@@ -258,6 +258,9 @@
         
         <!-- User Menu Dropdown (Unified Shared Component) -->
         <app-user-menu theme="indigo"></app-user-menu>
+
+        <!-- سوئیچر سریع شرکت کاری فعال -->
+        <app-company-switcher class="shrink-0"></app-company-switcher>
 
         <!-- ─── پیام‌رسان سازمانی انبار ─── -->
         <button 
@@ -286,7 +289,7 @@
       </div>
       
       <!-- Left Side (RTL End): Warehouse Badge + App & Role Switcher + Nav History (انتهای سمت چپ) -->
-      <div class="flex items-center gap-2 flex-1 min-w-0 justify-end">
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-initial min-w-0 justify-end shrink-0">
         <div *ngIf="store.isWarehouseContext()" class="hidden xl:flex items-center gap-2 px-4 py-2 rounded-xl shadow-md transition-all shrink-0" [style.background]="currentWarehouse?.color || '#4f46e5'">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
            <span class="text-[12px] font-black text-white shrink-0">{{currentWarehouse?.name}}</span>
@@ -405,4 +408,7 @@
 
 <!-- کشوی پیام‌رسان سازمانی -->
 <app-chat-drawer />
+
+<!-- مودال هوشمند انتخاب شرکت کاری هنگام ورود یا تغییر -->
+<app-company-selection-modal></app-company-selection-modal>
 

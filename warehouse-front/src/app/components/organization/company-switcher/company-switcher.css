@@ -1,0 +1,4 @@
+/* Company Switcher Styles */
+:host {
+  display: inline-block;
+}

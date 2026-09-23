@@ -7,20 +7,20 @@
       [disabled]="!persona.isMultiRole()"
       [class.cursor-pointer]="persona.isMultiRole()"
       [class.cursor-default]="!persona.isMultiRole()"
-      class="role-trigger-btn flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-black shadow-2xs active:scale-95 disabled:active:scale-100 shrink-0"
+      class="role-trigger-btn flex items-center gap-1 sm:gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border transition-all text-xs font-black shadow-2xs active:scale-95 disabled:active:scale-100 shrink-0"
       [style.background]="persona.currentPersona().badgeColor + '15'"
       [style.borderColor]="persona.currentPersona().badgeColor + '40'"
       [style.color]="persona.currentPersona().badgeColor"
-      [title]="persona.isMultiRole() ? 'کلیک برای تغییر نقش فعال در سامانه مالی' : 'نقش فعال شما در سامانه مالی'"
+      [title]="persona.isMultiRole() ? 'کلیک برای تغییر نقش فعال در سامانه مالی: ' + persona.currentPersona().title : 'نقش فعال شما: ' + persona.currentPersona().title"
     >
-      <span class="text-sm">{{ persona.currentPersona().icon }}</span>
-      <span class="max-w-[85px] sm:max-w-[130px] truncate font-extrabold text-[11px]">{{ persona.currentPersona().title }}</span>
+      <span class="text-sm shrink-0">{{ persona.currentPersona().icon }}</span>
+      <span class="hidden sm:inline max-w-[85px] sm:max-w-[130px] truncate font-extrabold text-[11px]">{{ persona.currentPersona().title }}</span>
 
       <!-- نشانگر چندنقشه‌ای و دراپ‌داون -->
       <svg
         *ngIf="persona.isMultiRole()"
-        width="13"
-        height="13"
+        width="11"
+        height="11"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -79,7 +79,7 @@
       [disabled]="!persona.canSwitchApps()"
       [class.cursor-pointer]="persona.canSwitchApps()"
       [class.cursor-default]="!persona.canSwitchApps()"
-      class="app-trigger-btn flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:active:scale-100 shrink-0 select-none"
+      class="app-trigger-btn flex items-center gap-1 sm:gap-1.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all active:scale-95 disabled:active:scale-100 shrink-0 select-none"
       [ngClass]="persona.activeApp() === 'warehouse' 
         ? 'border-indigo-200/90 dark:border-indigo-800/70 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' + (persona.canSwitchApps() ? ' hover:bg-indigo-100/80' : '') 
         : (persona.activeApp() === 'operations'

@@ -1,0 +1,79 @@
+<div *ngIf="companyService.isModalOpen$ | async" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-all" dir="rtl">
+  <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+    
+    <!-- Modal Header -->
+    <div class="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center font-black text-xl shadow-xs">
+          🏢
+        </div>
+        <div>
+          <h3 class="text-base md:text-lg font-black text-slate-800">انتخاب شرکت کاری</h3>
+          <p class="text-xs text-slate-500 font-medium mt-0.5">لطفاً فضای کاری شرکت مورد نظر خود را جهت ادامه فعالیت مشخص فرمایید</p>
+        </div>
+      </div>
+      <button 
+        *ngIf="companyService.activeCompany" 
+        (click)="onClose()" 
+        class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors cursor-pointer"
+        title="انصراف و بستن"
+        aria-label="بستن">
+        ✕
+      </button>
+    </div>
+
+    <!-- Modal Body: Company Cards -->
+    <div class="p-5 md:p-6 overflow-y-auto space-y-3 flex-1">
+      <div *ngIf="(companyService.availableCompanies$ | async)?.length === 0" class="text-center py-10 text-slate-400 text-sm font-bold">
+        هیچ شرکتی برای دسترسی حساب کاربری شما یافت نشد.
+      </div>
+
+      <div 
+        *ngFor="let company of companyService.availableCompanies$ | async"
+        (click)="onSelect(company)"
+        [ngClass]="companyService.activeCompany?.id === company.id ? 'border-indigo-600 bg-indigo-50/40 ring-2 ring-indigo-500/20' : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50/70'"
+        class="p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 group">
+        
+        <div class="flex items-center gap-3.5 min-w-0">
+          <!-- Logo or Initial -->
+          <div class="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-base shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+            {{ company.code }}
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-black text-slate-900 text-sm md:text-base truncate">{{ company.name }}</span>
+              <span *ngIf="companyService.activeCompany?.id === company.id" class="text-[10px] font-black bg-indigo-600 text-white px-2 py-0.5 rounded-full shrink-0">
+                شرکت فعال جاری
+              </span>
+            </div>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 font-medium mt-1">
+              <span *ngIf="company.national_id">شناسه ملی: <strong class="font-mono text-slate-700">{{ company.national_id }}</strong></span>
+              <span *ngIf="company.economic_code">کد اقتصادی: <strong class="font-mono text-slate-700">{{ company.economic_code }}</strong></span>
+              <span *ngIf="company.projects_count !== undefined">تعداد پروژه‌ها: <strong class="text-indigo-600 font-bold">{{ company.projects_count }}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="shrink-0 flex items-center">
+          <span 
+            [ngClass]="companyService.activeCompany?.id === company.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white'"
+            class="w-9 h-9 rounded-xl flex items-center justify-center transition-all shadow-xs">
+            ➔
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+      <span>پس از انتخاب، تمامی منوها، پروژه‌ها و پرسنل به این شرکت محدود خواهند شد.</span>
+      <button 
+        *ngIf="companyService.activeCompany" 
+        (click)="onClose()" 
+        class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors font-bold cursor-pointer">
+        انصراف
+      </button>
+    </div>
+
+  </div>
+</div>

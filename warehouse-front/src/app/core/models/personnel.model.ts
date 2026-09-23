@@ -648,6 +648,9 @@ export interface MonthlyGridResponse {
 
 export interface FinancialProject {
   id?: number;
+  company?: number | null;
+  company_name?: string;
+  company_code?: string;
   code: string;
   name: string;
   description?: string;

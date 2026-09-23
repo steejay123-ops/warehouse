@@ -23,6 +23,9 @@ import { CommunicationService } from '../../core/services/communication.service'
 import { WebSocketService } from '../../core/http/websocket.service';
 import { AppPersonaService } from '../../core/services/app-persona.service';
 import { AppRoleSwitcherComponent } from '../../shared/components/app-role-switcher/app-role-switcher.component';
+import { CompanySwitcherComponent } from '../organization/company-switcher/company-switcher';
+import { CompanySelectionModalComponent } from '../organization/company-selection-modal/company-selection-modal';
+import { ActiveCompanyService } from '../../core/services/active-company.service';
 import { environment } from '../../../environments/environment';
 
 import { WAREHOUSE_SYSTEM_NAV_ITEMS, WAREHOUSE_CONTEXT_NAV_ITEMS } from '../../modules/warehouse/nav-items';
@@ -31,7 +34,17 @@ import { ModuleRegistryService } from '../../core/modules/module-registry.servic
 
 @Component({
   selector: 'app-layout',
-  imports: [CommonModule, FormsModule, RouterOutlet, UserMenuComponent, OfflinePendingBadgeComponent, ChatDrawerComponent, AppRoleSwitcherComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterOutlet,
+    UserMenuComponent,
+    OfflinePendingBadgeComponent,
+    ChatDrawerComponent,
+    AppRoleSwitcherComponent,
+    CompanySwitcherComponent,
+    CompanySelectionModalComponent
+  ],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
 })
@@ -40,6 +53,7 @@ export class Layout implements OnInit, OnDestroy {
   public wsService = inject(WebSocketService);
   public personaService = inject(AppPersonaService);
   public moduleRegistry = inject(ModuleRegistryService);
+  public activeCompanyService = inject(ActiveCompanyService);
 
   get appTitle(): string {
     if (this.personaService.activeApp() === 'personnel') {
@@ -557,7 +571,7 @@ export class Layout implements OnInit, OnDestroy {
     const accountantTabs = ['accountant-payroll', 'accountant-fleet', 'accountant-invoices', 'accountant-petty-cash', 'accountant-diskettes', 'accountant-counterparties'];
     const managerTabs = ['manager-dashboard', 'manager-approvals', 'manager-budget', 'manager-contracts', 'manager-reports'];
     const treasurerTabs = ['treasurer-disbursements', 'treasurer-invoices', 'treasurer-bank-accounts', 'treasurer-cheques', 'treasurer-reconciliation'];
-    const allAccountingTabs = ['employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'counterparties', 'finance-audit', ...employeeTabs, ...supervisorTabs, ...accountantTabs, ...managerTabs, ...treasurerTabs];
+    const allAccountingTabs = ['companies', 'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance', 'personnel', 'payroll', 'fleet-settlement', 'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury', 'profiles', 'personnel-profiles', 'base-settings', 'counterparties', 'finance-audit', ...employeeTabs, ...supervisorTabs, ...accountantTabs, ...managerTabs, ...treasurerTabs];
 
     if (allAccountingTabs.includes(initialTab)) {
       this.isAccountingMenuOpen = true;
@@ -617,6 +631,9 @@ export class Layout implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    // بارگذاری شرکت‌های مجاز کاربر و انتخاب خودکار / نمایش مودال انتخاب
+    this.activeCompanyService.loadAvailableCompanies().subscribe();
+
     // دریافت لیست انبارها از بک‌اند (با خودترمیمی آنی در صورت حذف یا نامعتبر شدن انبار فعال)
     if (this.moduleRegistry.isModuleInstalled('warehouse')) {
       this.whService.getAll().subscribe({
@@ -1101,7 +1118,7 @@ export class Layout implements OnInit, OnDestroy {
       return;
     }
     const accountingTabs = [
-      'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
+      'companies', 'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
       'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement',
       'counterparties',
@@ -1284,6 +1301,7 @@ export class Layout implements OnInit, OnDestroy {
       'treasurer-bank-accounts': 'مدیریت حساب‌های بانکی و صندوق‌ها (پنل خزانه‌دار)',
       'treasurer-cheques': 'مدیریت چک‌های صیادی و تقویم سررسید (پنل خزانه‌دار)',
       'treasurer-reconciliation': 'مغایرت‌گیری بانکی و تقویم نقدینگی (پنل خزانه‌دار)',
+      companies: 'مدیریت شرکت‌ها و هلدینگ',
       'projects-and-sections': 'مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها',
       'counterparties': 'مدیریت طرف‌حساب‌های مالی و تجاری',
       'finance-audit': 'رهگیری و ممیزی مالی و اداری',

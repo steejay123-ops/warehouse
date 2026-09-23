@@ -4,6 +4,8 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
 from .models import (
+    Company,
+    UserCompanyAccess,
     FinancialProject,
     ProjectSection,
     UserSectionAssignment,
@@ -761,10 +763,58 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
 
 
 # ==============================================================================
-# سریالایزرهای ساختار سازمانی، پروژه، بخش، طرف‌حساب و فاکتور هزینه
+# سریالایزرهای ساختار سازمانی، شرکت، پروژه، بخش، طرف‌حساب و فاکتور هزینه
 # ==============================================================================
 
+class CompanySerializer(serializers.ModelSerializer):
+    projects_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Company
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_projects_count(self, obj):
+        if hasattr(obj, 'projects_count'):
+            return obj.projects_count
+        return obj.projects.count()
+
+    def validate_code(self, value):
+        if not value:
+            raise serializers.ValidationError("کد یکتای شرکت الزامی است.")
+        return value.strip().upper()
+
+    def validate_national_id(self, value):
+        if not value:
+            return value
+        cleaned = normalize_digits(str(value)).strip()
+        if cleaned and not cleaned.isdigit():
+            raise serializers.ValidationError("شناسه ملی باید فقط شامل ارقام عددی باشد.")
+        if cleaned and len(cleaned) != 11:
+            raise serializers.ValidationError("شناسه ملی شرکت باید دقیقاً ۱۱ رقم باشد.")
+        return cleaned
+
+
+class UserCompanyAccessSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_full_name = serializers.SerializerMethodField()
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    company_code = serializers.CharField(source='company.code', read_only=True)
+
+    class Meta:
+        model = UserCompanyAccess
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+    def get_user_full_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
+
+
 class FinancialProjectSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    company_code = serializers.CharField(source='company.code', read_only=True)
     sections_count = serializers.SerializerMethodField()
 
     class Meta:

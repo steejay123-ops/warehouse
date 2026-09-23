@@ -82,13 +82,47 @@ class _WarehouseCompatMixin(models.Model):
         return obj
 
 # ==============================================================================
-# 0. مدل‌های ساختار سازمانی، پروژه، بخش و فاکتور هزینه‌ای (مستقل از انبارگردانی)
+# 0. مدل‌های ساختار سازمانی، شرکت، پروژه، بخش و فاکتور هزینه‌ای (مستقل از انبارگردانی)
 # ==============================================================================
+
+class Company(models.Model):
+    """
+    موجودیت حقوقی شرکت (هلدینگ و شرکت‌های زیرمجموعه)
+    """
+    code = models.CharField(max_length=50, unique=True, verbose_name="کد یکتای شرکت")
+    name = models.CharField(max_length=200, verbose_name="نام کامل شرکت")
+    national_id = models.CharField(max_length=20, blank=True, null=True, verbose_name="شناسه ملی ۱۱ رقمی")
+    economic_code = models.CharField(max_length=50, blank=True, null=True, verbose_name="کد اقتصادی")
+    registration_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره ثبت")
+    phone = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره تلفن")
+    address = models.TextField(blank=True, null=True, verbose_name="نشانی دفتر مرکزی")
+    ceo_name = models.CharField(max_length=150, blank=True, null=True, verbose_name="نام مدیرعامل")
+    logo = models.ImageField(upload_to='company_logos/', blank=True, null=True, verbose_name="لوگوی شرکت")
+    is_active = models.BooleanField(default=True, verbose_name="وضعیت فعال")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین ویرایش")
+
+    class Meta:
+        verbose_name = "شرکت"
+        verbose_name_plural = "شرکت‌ها"
+        ordering = ['code']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
 
 class FinancialProject(models.Model):
     """
     پروژه مالی و عملیاتی مستقل (مرکز هزینه و عملیات)
     """
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='projects',
+        verbose_name="شرکت متبوع"
+    )
     code = models.CharField(max_length=50, unique=True, verbose_name="کد پروژه")
     name = models.CharField(max_length=200, verbose_name="نام پروژه")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
@@ -171,6 +205,34 @@ class UserSectionAssignment(models.Model):
 
     def __str__(self):
         return f"{self.user} -> {self.section.name} ({self.get_role_display()})"
+
+
+class UserCompanyAccess(models.Model):
+    """
+    تخصیص صریح یا ضمنی دسترسی کاربر به یک یا چند شرکت
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='company_accesses',
+        verbose_name="کاربر"
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='user_accesses',
+        verbose_name="شرکت"
+    )
+    is_default = models.BooleanField(default=False, verbose_name="شرکت پیش‌فرض")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'company')
+        verbose_name = "دسترسی کاربر به شرکت"
+        verbose_name_plural = "دسترسی‌های کاربران به شرکت‌ها"
+
+    def __str__(self):
+        return f"{self.user} -> {self.company.name}"
 
 
 class Counterparty(models.Model):
@@ -1800,13 +1862,21 @@ class PayrollYearlySettings(models.Model):
     effective_from = models.CharField(max_length=7, default='1405/01', db_index=True, verbose_name="ماه شروع اعتبار (مثال ۱۴۰۵/۰۱)")
     effective_to = models.CharField(max_length=7, null=True, blank=True, db_index=True, verbose_name="ماه پایان اعتبار (خالی=جاری)")
     version_title = models.CharField(max_length=150, default="احکام مصوب فروردین", verbose_name="عنوان نسخه احکام")
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='payroll_yearly_settings',
+        verbose_name="شرکت متبوع"
+    )
     project = models.ForeignKey(
         FinancialProject,
         on_delete=models.PROTECT,
         null=True,
         blank=True,
         related_name='payroll_yearly_settings',
-        verbose_name="پروژه مالی/عملیاتی (خالی=سراسری سازمان)"
+        verbose_name="پروژه مالی/عملیاتی (خالی=سراسری شرکت)"
     )
     title = models.CharField(max_length=150, default="تنظیمات پایه و قانون کار", verbose_name="عنوان دوره تنظیمات")
     is_active = models.BooleanField(default=True, verbose_name="سال مالی پیش‌فرض فعال")

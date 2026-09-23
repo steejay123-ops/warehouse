@@ -26,6 +26,8 @@ from accounts.permissions import (
 from accounts.views import OptionalPageNumberPagination
 
 from .models import (
+    Company,
+    UserCompanyAccess,
     FinancialProject,
     ProjectSection,
     UserSectionAssignment,
@@ -51,6 +53,8 @@ from .models import (
 )
 from .serializers import (
     normalize_plate,
+    CompanySerializer,
+    UserCompanyAccessSerializer,
     FinancialProjectSerializer,
     ProjectSectionSerializer,
     UserSectionAssignmentSerializer,
@@ -6006,8 +6010,118 @@ def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=No
         logging.getLogger(__name__).warning(f"[WebSocket] Error broadcasting org_structure_updated: {e}")
 
 
-# ویوست‌های مدیریت ساختار سازمانی، پروژه، بخش، طرف‌حساب و فاکتور
+# ویوست‌های مدیریت ساختار سازمانی، شرکت، پروژه، بخش، طرف‌حساب و فاکتور
 # ══════════════════════════════════════════════════════════════════════════════
+
+def get_user_allowed_companies(user):
+    """
+    محاسبه شرکت‌های مجاز کاربر (ترکیبی: سوپریوزر = همه، عادی = انتساب صریح یا عضویت در بخش‌های پروژه‌های آن شرکت)
+    """
+    if not user or not user.is_authenticated:
+        return Company.objects.none()
+    if user.is_superuser:
+        return Company.objects.filter(is_active=True)
+
+    direct_ids = UserCompanyAccess.objects.filter(user=user).values_list('company_id', flat=True)
+    derived_ids = UserSectionAssignment.objects.filter(
+        user=user, is_active=True, section__project__company__isnull=False
+    ).values_list('section__project__company_id', flat=True)
+
+    allowed_ids = set(direct_ids).union(set(derived_ids))
+    return Company.objects.filter(id__in=allowed_ids, is_active=True)
+
+
+class CompanyViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت شرکت‌ها (هلدینگ و شرکت‌های تابعه)
+    """
+    queryset = Company.objects.all().annotate(projects_count=Count('projects'))
+    serializer_class = CompanySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Company.objects.all().annotate(projects_count=Count('projects'))
+
+        if not user.is_superuser and self.action != 'user_available':
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(id__in=allowed_ids)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+
+        search = self.request.query_params.get('search')
+        if search:
+            search_clean = normalize_digits(str(search)).strip()
+            qs = qs.filter(
+                Q(name__icontains=search) |
+                Q(code__icontains=search_clean) |
+                Q(national_id__icontains=search_clean) |
+                Q(ceo_name__icontains=search)
+            )
+        return qs.order_by('code')
+
+    def perform_create(self, serializer):
+        if not (self.request.user.is_superuser or self.request.user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به ایجاد شرکت جدید هستند.")
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('company', 'create', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        if not (self.request.user.is_superuser or self.request.user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به ویرایش اطلاعات شرکت هستند.")
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
+        broadcast_org_structure_updated('company', 'update', instance.id, instance.name, None, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        if not (self.request.user.is_superuser or self.request.user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به حذف شرکت هستند.")
+        if instance.projects.exists():
+            raise serializers.ValidationError("این شرکت دارای پروژه‌های ثبت‌شده است و نمی‌توان آن را حذف کرد.")
+        instance_id = instance.id
+        instance_name = instance.name
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company', 'delete', instance_id, instance_name, None, tab_id, self.request.user.id)
+
+    @action(detail=False, methods=['get'], url_path='user-available')
+    def user_available(self, request):
+        """
+        لیست شرکت‌های در دسترس کاربر جاری برای نمایش در مودال ورود و هدر سوئیچر
+        """
+        user = request.user
+        companies = get_user_allowed_companies(user)
+        serializer = self.get_serializer(companies, many=True)
+        return Response({
+            'companies': serializer.data,
+            'is_superuser': user.is_superuser,
+            'count': companies.count()
+        })
+
+
+class UserCompanyAccessViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت انتساب دسترسی کاربران به شرکت‌ها
+    """
+    queryset = UserCompanyAccess.objects.all().select_related('user', 'company')
+    serializer_class = UserCompanyAccessSerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user_id = self.request.query_params.get('user_id')
+        company_id = self.request.query_params.get('company_id')
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        if company_id:
+            qs = qs.filter(company_id=company_id)
+        return qs.order_by('-created_at')
+
 
 class FinancialProjectViewSet(viewsets.ModelViewSet):
     """
@@ -6020,6 +6134,20 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+
+        # عایق‌سازی شرکت: فیلتر بر مبنای شرکت انتخابی یا هدر
+        company_param = self.request.query_params.get('company_id') or self.request.query_params.get('company') or self.request.headers.get('X-Company-ID')
+        if company_param:
+            try:
+                qs = qs.filter(company_id=int(company_param))
+            except (ValueError, TypeError):
+                pass
+        elif not user.is_superuser:
+            # اگر پارامتری ارسال نشده بود و کاربر سوپریوزر نبود، فقط پروژه‌های شرکت‌های مجاز کاربر را نمایش بده
+            allowed_company_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(Q(company_id__in=allowed_company_ids) | Q(company__isnull=True))
+
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')

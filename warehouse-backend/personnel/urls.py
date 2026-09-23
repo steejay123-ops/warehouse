@@ -1,6 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    CompanyViewSet,
+    UserCompanyAccessViewSet,
     FinancialProjectViewSet,
     ProjectSectionViewSet,
     UserSectionAssignmentViewSet,
@@ -30,6 +32,8 @@ from .cartable_views import (
 from .sync_views import PersonnelSyncPullView
 
 router = DefaultRouter()
+router.register(r'companies', CompanyViewSet, basename='companies')
+router.register(r'user-company-access', UserCompanyAccessViewSet, basename='user-company-access')
 router.register(r'financial-projects', FinancialProjectViewSet, basename='financial-projects')
 router.register(r'project-sections', ProjectSectionViewSet, basename='project-sections')
 router.register(r'user-section-assignments', UserSectionAssignmentViewSet, basename='user-section-assignments')

@@ -50,6 +50,7 @@ from .models import (
     MonthlyPayrollRecord
 )
 from .serializers import (
+    normalize_plate,
     FinancialProjectSerializer,
     ProjectSectionSerializer,
     UserSectionAssignmentSerializer,
@@ -996,8 +997,38 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
 
 
 
+def log_vehicle_audit(user, action, target_instance, details=None):
+    try:
+        AuditLog = apps.get_model('accounts', 'AuditLog')
+        AuditLog.objects.create(
+            user=user if user and user.is_authenticated else None,
+            actor_username=user.username if user and user.is_authenticated else 'system',
+            actor_name=f"{user.first_name} {user.last_name}".strip() or user.username if user and user.is_authenticated else 'سیستم',
+            module='fleet',
+            action=action,
+            severity='info' if action not in ['REJECT', 'REJECT_CHANGE_REQ', 'DELETE'] else 'warning',
+            target_model=target_instance.__class__.__name__,
+            target_object_id=str(target_instance.pk),
+            target_repr=str(target_instance),
+            details=details or {}
+        )
+    except Exception:
+        pass
+
+
 class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
-    queryset = VehicleDriverProfile.objects.all().select_related('user')
+    queryset = VehicleDriverProfile.objects.all().select_related(
+        'user',
+        'supervisor_approved_by',
+        'accountant_approved_by',
+        'manager_approved_by',
+        'treasury_paid_by',
+        'revision_requested_by',
+        'auto_passed_by',
+        'created_by',
+        'section',
+        'project',
+    ).prefetch_related('change_requests')
     serializer_class = VehicleDriverProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None
@@ -1093,76 +1124,89 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
-        instance = self.get_object()
         user = request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
         is_fin = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_finance')
 
-        # قفل ویرایش مستقیم برای رکوردهای در جریان حسابداری و مدیریت
-        if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['pending_accountant', 'pending_manager']:
-            return Response(
-                {'error': f'این پرونده در وضعیت «{instance.get_approval_status_display()}» قرار دارد و اطلاعات آن تا پایان گردش کار قابل تغییر مستقیم نیست.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # اگر اپراتور رکوردی که تایید شده یا در تایید مدیر است را تغییر دهد:
-        if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['approved', 'manager_approved']:
+        with transaction.atomic():
+            instance = VehicleDriverProfile.objects.select_for_update().get(pk=self.kwargs['pk'])
+
+            # قفل ویرایش مستقیم برای رکوردهای در جریان حسابداری و مدیریت
+            if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['pending_accountant', 'pending_manager']:
+                return Response(
+                    {'error': f'این پرونده در وضعیت «{instance.get_approval_status_display()}» قرار دارد و اطلاعات آن تا پایان گردش کار قابل تغییر مستقیم نیست.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # اگر اپراتور رکوردی که تایید شده یا در تایید مدیر است را تغییر دهد:
+            if not (user.is_superuser or (is_mgr and is_fin)) and instance.approval_status in ['approved', 'manager_approved']:
+                # جلوگیری از ایجاد درخواست تغییرات تکراری تا زمان تعیین تکلیف قبلی (CONCUR-01)
+                has_pending = VehicleChangeRequest.objects.filter(
+                    vehicle=instance,
+                    status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'supervisor_approved', 'accountant_approved', 'manager_approved']
+                ).exists()
+                if has_pending:
+                    return Response(
+                        {'error': 'این خودرو دارای درخواست تغییرات در حال بررسی است. تا زمان تعیین تکلیف درخواست قبلی امکان ثبت تغییرات جدید وجود ندارد.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                serializer = self.get_serializer(instance, data=request.data, partial=partial)
+                serializer.is_valid(raise_exception=True)
+                
+                diff = {}
+                old_diff = {}
+                excluded_fields = {'id', 'pk', 'approval_status', 'created_at', 'created_by', 'plate_number', 'section'}
+                for k, v in serializer.validated_data.items():
+                    if k in excluded_fields:
+                        continue
+                    old_v = getattr(instance, k, None)
+                    if hasattr(old_v, 'id'):
+                        old_val_rep = old_v.id
+                    else:
+                        old_val_rep = str(old_v) if old_v is not None else None
+                    new_val_rep = v.id if hasattr(v, 'id') else (str(v) if v is not None else None)
+                    if old_val_rep != new_val_rep:
+                        diff[k] = new_val_rep
+                        old_diff[k] = old_val_rep
+                
+                if diff:
+                    cr = VehicleChangeRequest.objects.create(
+                        vehicle=instance,
+                        requested_by=user,
+                        proposed_changes=diff,
+                        previous_values=old_diff,
+                        status='pending_supervisor'
+                    )
+                    instance.has_pending_changes = True
+                    instance.save(update_fields=['has_pending_changes'])
+                    return Response({
+                        'message': 'درخواست تغییرات خودرو با موفقیت ثبت شد و جهت بررسی در کارتابل سرپرست قرار گرفت. اطلاعات قبلی تا زمان تصویب نهایی معتبر باقی می‌ماند.',
+                        'change_request_id': cr.id,
+                        'data': self.get_serializer(instance).data
+                    }, status=status.HTTP_202_ACCEPTED)
+                return Response(self.get_serializer(instance).data)
+
+            # ویرایش رکوردهای پیش‌نویس یا عودت‌داده‌شده:
             serializer = self.get_serializer(instance, data=request.data, partial=partial)
             serializer.is_valid(raise_exception=True)
-            
-            diff = {}
-            old_diff = {}
-            excluded_fields = {'id', 'pk', 'approval_status', 'created_at', 'created_by', 'plate_number', 'section'}
-            for k, v in serializer.validated_data.items():
-                if k in excluded_fields:
-                    continue
-                old_v = getattr(instance, k, None)
-                if hasattr(old_v, 'id'):
-                    old_val_rep = old_v.id
-                else:
-                    old_val_rep = str(old_v) if old_v is not None else None
-                new_val_rep = v.id if hasattr(v, 'id') else (str(v) if v is not None else None)
-                if old_val_rep != new_val_rep:
-                    diff[k] = new_val_rep
-                    old_diff[k] = old_val_rep
-            
-            if diff:
-                cr = VehicleChangeRequest.objects.create(
-                    vehicle=instance,
-                    requested_by=user,
-                    proposed_changes=diff,
-                    previous_values=old_diff,
-                    status='pending_supervisor'
-                )
-                instance.has_pending_changes = True
-                instance.save(update_fields=['has_pending_changes'])
-                return Response({
-                    'message': 'درخواست تغییرات خودرو با موفقیت ثبت شد و جهت بررسی در کارتابل سرپرست قرار گرفت. اطلاعات قبلی تا زمان تصویب نهایی معتبر باقی می‌ماند.',
-                    'change_request_id': cr.id,
-                    'data': self.get_serializer(instance).data
-                }, status=status.HTTP_202_ACCEPTED)
-            return Response(self.get_serializer(instance).data)
 
-        # ویرایش رکوردهای پیش‌نویس یا عودت‌داده‌شده:
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
+            extra_kwargs = {}
+            section = serializer.validated_data.get('section', instance.section)
+            if section and hasattr(section, 'project') and section.project:
+                if not serializer.validated_data.get('project') and not instance.project_id:
+                    extra_kwargs['project'] = section.project
 
-        extra_kwargs = {}
-        section = serializer.validated_data.get('section', instance.section)
-        if section and hasattr(section, 'project') and section.project:
-            if not serializer.validated_data.get('project') and not instance.project_id:
-                extra_kwargs['project'] = section.project
+            req_status = request.data.get('approval_status')
+            if not (user.is_superuser or is_mgr):
+                if req_status in ['draft', 'pending_supervisor']:
+                    extra_kwargs['approval_status'] = req_status
+                    if req_status == 'pending_supervisor':
+                        extra_kwargs['rejection_reason'] = None  # پاکسازی دلیل عودت در ارسال مجدد به سرپرست
 
-        req_status = request.data.get('approval_status')
-        if not (user.is_superuser or is_mgr):
-            if req_status in ['draft', 'pending_supervisor']:
-                extra_kwargs['approval_status'] = req_status
-                if req_status == 'pending_supervisor':
-                    extra_kwargs['rejection_reason'] = None  # پاکسازی دلیل عودت در ارسال مجدد به سرپرست
-
-        updated_instance = serializer.save(**extra_kwargs)
-        broadcast_vehicle_update(updated_instance, action_type='updated', message=f'پرونده خودرو «{updated_instance.plate_number}» به‌روزرسانی شد.', sender_id=user.id if user else None)
-        return Response(self.get_serializer(updated_instance).data)
+            updated_instance = serializer.save(**extra_kwargs)
+            broadcast_vehicle_update(updated_instance, action_type='updated', message=f'پرونده خودرو «{updated_instance.plate_number}» به‌روزرسانی شد.', sender_id=user.id if user else None)
+            return Response(self.get_serializer(updated_instance).data)
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -1195,6 +1239,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             
         plate_number = instance.plate_number
         self.perform_destroy(instance)
+        log_vehicle_audit(user, 'DELETE', instance, {'plate_number': plate_number})
         broadcast_vehicle_update(instance, action_type='deleted', message=f'خودرو «{plate_number}» حذف شد.', sender_id=user.id if user else None)
         return Response({'message': f'خودرو «{plate_number}» با موفقیت از سامانه حذف گردید.'}, status=status.HTTP_200_OK)
 
@@ -1220,6 +1265,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        log_vehicle_audit(user, 'APPROVE_SUPERVISOR', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید سرپرست رسید و به حسابداری ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده خودرو به حسابداری ارسال گردید.',
@@ -1242,6 +1288,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        log_vehicle_audit(user, 'APPROVE_FINANCE', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید مالی رسید و به مدیر ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید مالی با موفقیت ثبت شد و پرونده خودرو جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
@@ -1280,6 +1327,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.rejection_reason = None
         instance.is_active = True
         instance.save()
+        log_vehicle_audit(user, 'APPROVE_MANAGER', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
         broadcast_vehicle_update(instance, action_type='updated', message=f'خودرو «{instance.plate_number}» با راننده «{instance.driver_name}» تصویب و فعال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.',
@@ -1308,6 +1356,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'rejected'
         instance.rejection_reason = reason
         instance.save()
+        log_vehicle_audit(user, 'REJECT', instance, {'plate_number': instance.plate_number, 'reason': reason})
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» رد شد: {reason}', sender_id=user.id if user else None)
         return Response({
             'message': 'پرونده خودرو/راننده رد شد.',
@@ -1336,6 +1385,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.approval_status = 'revision_required'
         instance.rejection_reason = reason
         instance.save()
+        log_vehicle_audit(user, 'REQUEST_REVISION', instance, {'plate_number': instance.plate_number, 'reason': reason})
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» جهت اصلاح عودت داده شد: {reason}', sender_id=user.id if user else None)
         return Response({
             'message': 'پرونده جهت بازنگری و اصلاح به اپراتور ارجاع داده شد.',
@@ -1399,7 +1449,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
         # ردیف نمونه راهنما
         sample_row = [
-            1, '12الف345ایران63', 'رضا اکبری', '0010376488', '09123456789',
+            1, '12 الف 345 ایران 63', 'رضا اکبری', '0010376488', '09123456789',
             'رضا اکبری', '0010376488', '09123456789',
             'وانت نیسان', 'استیجاری', 4500000, 'IR120170000000123456789012', 'بانک ملی ایران', '0101234567001'
         ]
@@ -1482,6 +1532,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             'تریلی': 'trailer', 'کشنده': 'trailer', 'trailer': 'trailer',
             'وانت بار': 'pickup', 'وانت': 'pickup', 'pickup': 'pickup',
             'کامیون': 'truck', 'تک': 'truck', 'جفت': 'truck', 'truck': 'truck',
+            'لیفتراک': 'forklift', 'forklift': 'forklift',
             'سواری': 'sedan', 'sedan': 'sedan',
             'سایر': 'other', 'other': 'other'
         }
@@ -1496,6 +1547,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         skipped_count = 0
         errors = []
         parsed_vehicles = []
+        seen_file_plates = {}
 
         # بررسی سرستون‌های ردیف ۲ جهت نگاشت منعطف ستون‌ها
         col_map = {}
@@ -1511,7 +1563,19 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             if not plate_raw or not str(plate_raw).strip():
                 continue
 
-            plate = str(plate_raw).strip()
+            plate = normalize_plate(str(plate_raw).strip())
+            if not plate:
+                continue
+
+            if plate in seen_file_plates:
+                errors.append({
+                    'row': row_idx,
+                    'field': 'شماره پلاک',
+                    'message': f'شماره پلاک «{plate}» در ردیف {seen_file_plates[plate]} نیز تکرار شده است (پلاک تکراری در فایل اکسل).'
+                })
+                continue
+            seen_file_plates[plate] = row_idx
+
             driver_name = str(target_sheet.cell(row=row_idx, column=col_map.get('driver_name', 3)).value or '').strip()
             if not driver_name:
                 errors.append({'row': row_idx, 'field': 'نام راننده', 'message': f'نام راننده برای پلاک {plate} الزامی است.'})
@@ -1525,7 +1589,8 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             else:
                 nat_code = None
 
-            phone = str(target_sheet.cell(row=row_idx, column=col_map.get('driver_phone', 5)).value or '').strip() or None
+            phone_raw = str(target_sheet.cell(row=row_idx, column=col_map.get('driver_phone', 5)).value or '').strip()
+            phone = normalize_digits(phone_raw) if phone_raw else None
             
             if has_owner_cols:
                 owner_name = str(target_sheet.cell(row=row_idx, column=col_map.get('owner_name', 6)).value or '').strip() or None
@@ -1536,7 +1601,8 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
                     owner_nat = clean_o_nat.zfill(10) if clean_o_nat else None
                 else:
                     owner_nat = None
-                owner_phone = str(target_sheet.cell(row=row_idx, column=col_map.get('owner_phone', 8)).value or '').strip() or None
+                owner_phone_raw = str(target_sheet.cell(row=row_idx, column=col_map.get('owner_phone', 8)).value or '').strip()
+                owner_phone = normalize_digits(owner_phone_raw) if owner_phone_raw else None
                 is_driver_owner = bool(not owner_nat or owner_nat == nat_code)
 
                 vtype_col = col_map.get('vehicle_type', 9)
@@ -1567,6 +1633,8 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             rate_raw = target_sheet.cell(row=row_idx, column=rate_col).value
             try:
                 rate = Decimal(str(rate_raw or 0).replace(',', '').strip())
+                if rate < 0:
+                    rate = Decimal(0)
             except Exception:
                 rate = Decimal(0)
 
@@ -1704,10 +1772,13 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         """
         خروجی رسمی ۲ ردیفه اطلاعات ناوگان و رانندگان
         """
+        import io
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from django.http import HttpResponse
+        from django.utils import timezone
 
-        qs = self.get_queryset()
+        qs = self.filter_queryset(self.get_queryset())
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -1715,13 +1786,17 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         ws.views.sheetView[0].rightToLeft = True
 
         headers_fa = [
-            'ردیف', 'شماره پلاک', 'نوع خودرو', 'نام راننده', 'کد ملی راننده',
-            'شماره تماس', 'نرخ پایه سرویس (ریال)', 'شماره حساب', 'شماره شبا',
+            'ردیف', 'شماره پلاک', 'نوع خودرو', 'نوع مالکیت',
+            'نام راننده', 'کد ملی راننده', 'شماره همراه راننده',
+            'مالک شخص راننده است', 'نام مالک', 'کد ملی مالک', 'شماره همراه مالک',
+            'نرخ پایه سرویس (ریال)', 'شماره حساب', 'شماره شبا',
             'نام بانک', 'وضعیت تایید پرونده', 'وضعیت فعال'
         ]
         headers_en = [
-            'row_num', 'plate_number', 'vehicle_type_display', 'driver_name', 'driver_national_code',
-            'driver_phone', 'default_service_rate', 'account_number', 'sheba_number',
+            'row_num', 'plate_number', 'vehicle_type_display', 'ownership_type_display',
+            'driver_name', 'driver_national_code', 'driver_phone',
+            'is_driver_owner', 'owner_name', 'owner_national_code', 'owner_phone',
+            'default_service_rate', 'account_number', 'sheba_number',
             'bank_name', 'approval_status_display', 'is_active'
         ]
 
@@ -1758,13 +1833,19 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
 
         for idx, v in enumerate(qs, start=1):
             curr_row = idx + 2
+            is_owner = v.is_driver_owner if v.is_driver_owner is not None else True
             row_data = [
                 idx,
                 v.plate_number,
                 v.get_vehicle_type_display() if hasattr(v, 'get_vehicle_type_display') else v.vehicle_type,
+                v.get_ownership_type_display() if hasattr(v, 'get_ownership_type_display') else (v.ownership_type or '-'),
                 v.driver_name,
                 v.driver_national_code or '-',
                 v.driver_phone or '-',
+                'بله' if is_owner else 'خیر',
+                v.owner_name or (v.driver_name if is_owner else '-'),
+                v.owner_national_code or (v.driver_national_code if is_owner else '-'),
+                v.owner_phone or (v.driver_phone if is_owner else '-'),
                 float(v.default_service_rate or 0),
                 v.account_number or '-',
                 v.sheba_number or '-',
@@ -1777,12 +1858,12 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             for col_idx in range(1, len(row_data) + 1):
                 c = ws.cell(row=curr_row, column=col_idx)
                 c.border = thin_border
-                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 4] else 'right', vertical='center')
-                if col_idx in [1, 2, 5, 6, 7, 8, 9]:
+                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 4, 5, 9, 15] else 'right', vertical='center')
+                if col_idx in [1, 2, 6, 7, 10, 11, 12, 13, 14]:
                     c.font = data_font_num
                 else:
                     c.font = data_font
-                if col_idx == 7:
+                if col_idx == 12:
                     c.number_format = '#,##0'
 
         for col in ws.columns:
@@ -1941,6 +2022,21 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        is_global_auditor = bool(
+            user and (
+                user.is_superuser
+                or user.has_perm('accounts.perm_approve_fleet_manager')
+                or user.has_perm('accounts.can_act_as_manager')
+                or user.has_perm('accounts.perm_approve_fleet_finance')
+            )
+        )
+        if not is_global_auditor and user and user.is_authenticated:
+            user_section_ids = list(
+                UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
+            )
+            qs = qs.filter(Q(vehicle__section_id__in=user_section_ids) | Q(requested_by=user))
+
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -1970,6 +2066,7 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
         cr.supervisor_reviewed_by = user
         cr.supervisor_reviewed_at = timezone.now()
         cr.save()
+        log_vehicle_audit(user, 'APPROVE_SUPERVISOR_CHANGE_REQ', cr.vehicle, {'change_request_id': cr.id})
         return Response({'message': 'درخواست تغییرات خودرو به تایید سرپرست رسید و به کارتابل حسابداری ارسال شد.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='approve-finance')
@@ -1987,6 +2084,7 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
         cr.accountant_reviewed_by = user
         cr.accountant_reviewed_at = timezone.now()
         cr.save()
+        log_vehicle_audit(user, 'APPROVE_FINANCE_CHANGE_REQ', cr.vehicle, {'change_request_id': cr.id})
         return Response({'message': 'درخواست تغییرات خودرو به تایید مالی رسید و به کارتابل مدیر ارسال شد.', 'data': self.get_serializer(cr).data})
 
     @action(detail=True, methods=['post'], url_path='approve-manager')
@@ -2030,6 +2128,7 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
                 cr.accountant_reviewed_at = timezone.now()
             cr.save()
 
+            log_vehicle_audit(user, 'APPROVE_MANAGER_CHANGE_REQ', vehicle, {'change_request_id': cr.id, 'changes': cr.proposed_changes})
             broadcast_vehicle_update(vehicle, action_type='updated', message=f'تغییرات خودرو «{vehicle.plate_number}» توسط مدیر تایید و اعمال گردید.', sender_id=user.id if user else None)
 
         return Response({'message': 'درخواست تغییرات خودرو توسط مدیر تصویب و اعمال گردید.', 'data': self.get_serializer(cr).data})
@@ -2049,6 +2148,9 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("دسترسی رد این درخواست را ندارید.")
         
         reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({'error': 'ثبت دلیل رد الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         cr = self.get_object()
         cr.status = 'rejected'
         cr.rejection_reason = reason
@@ -2062,6 +2164,7 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
             cr.vehicle.has_pending_changes = False
             cr.vehicle.save(update_fields=['has_pending_changes'])
 
+        log_vehicle_audit(user, 'REJECT_CHANGE_REQ', cr.vehicle, {'change_request_id': cr.id, 'reason': reason})
         broadcast_vehicle_update(cr.vehicle, action_type='updated', message=f'درخواست تغییرات خودرو «{cr.vehicle.plate_number}» رد شد: {reason}', sender_id=user.id if user else None)
 
         return Response({'message': 'درخواست تغییرات خودرو رد شد.', 'data': self.get_serializer(cr).data})

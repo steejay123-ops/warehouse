@@ -1,6 +1,8 @@
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.validators import MinValueValidator
 
 
 class _WarehouseCompatQuerySet(models.QuerySet):
@@ -827,6 +829,7 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
         ('sedan', 'سواری'),
         ('truck', 'کامیون تک/جفت'),
         ('trailer', 'تریلی'),
+        ('forklift', 'لیفتراک'),
         ('other', 'سایر'),
     )
 
@@ -856,7 +859,13 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     owner_national_code = models.CharField(max_length=10, blank=True, null=True, verbose_name="کد ملی مالک")
     owner_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره تماس مالک")
     
-    default_service_rate = models.DecimalField(max_digits=14, decimal_places=0, default=0, verbose_name="نرخ پایه پیش‌فرض به ازای هر سرویس (ریال)")
+    default_service_rate = models.DecimalField(
+        max_digits=14,
+        decimal_places=0,
+        default=0,
+        validators=[MinValueValidator(Decimal(0))],
+        verbose_name="نرخ پایه پیش‌فرض به ازای هر سرویس (ریال)"
+    )
     
     bank_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام بانک")
     account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
@@ -1027,6 +1036,12 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
         verbose_name = "خودرو و راننده"
         verbose_name_plural = "ناوگان و خودروها"
         ordering = ['driver_name']
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(default_service_rate__gte=0),
+                name='vehicle_default_rate_gte_0'
+            )
+        ]
 
     def __str__(self):
         return f"{self.driver_name} - {self.get_vehicle_type_display()} ({self.plate_number})"

@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from rest_framework import serializers
 from django.db import transaction
@@ -28,6 +29,32 @@ from .models import (
 )
 from .sheba_utils import validate_sheba, clean_sheba, get_bank_from_sheba
 from common.date_utils import normalize_digits
+
+
+def normalize_iranian_phone(phone_str):
+    if not phone_str:
+        return ''
+    norm = normalize_digits(str(phone_str)).strip()
+    digits = re.sub(r'\D', '', norm)
+    if digits.startswith('98') and len(digits) == 12:
+        digits = '0' + digits[2:]
+    elif digits.startswith('0098'):
+        digits = '0' + digits[4:]
+    elif len(digits) == 10 and digits.startswith('9'):
+        digits = '0' + digits
+    return digits
+
+
+def normalize_plate(plate_str):
+    if not plate_str:
+        return ''
+    norm = normalize_digits(str(plate_str)).strip()
+    match = re.match(r'^(\d{2})\s*([^\d\s]+)\s*(\d{3})\s*(?:ایران|-)?\s*(\d{2})$', norm)
+    if match:
+        p1, p2, p3, p4 = match.groups()
+        return f"{p1} {p2} {p3} ایران {p4}"
+    return re.sub(r'\s+', ' ', norm).strip()
+
 
 
 class VehicleTripAuditLogSerializer(serializers.ModelSerializer):
@@ -323,7 +350,8 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
             'manager_approved_by', 'manager_approved_at',
             'treasury_paid_by', 'treasury_paid_at',
             'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
-            'revision_requested_by', 'revision_requested_at'
+            'revision_requested_by', 'revision_requested_at',
+            'has_pending_changes'
         ]
 
     def get_assigned_warehouse_name(self, obj):
@@ -368,9 +396,16 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     def get_pending_change_request(self, obj):
         if not getattr(obj, 'has_pending_changes', False):
             return None
-        cr = obj.change_requests.filter(
-            status__in=['pending_supervisor', 'pending_accountant', 'pending_manager', 'supervisor_approved', 'accountant_approved', 'manager_approved']
-        ).order_by('-created_at').first()
+        valid_statuses = {'pending_supervisor', 'pending_accountant', 'pending_manager', 'supervisor_approved', 'accountant_approved', 'manager_approved'}
+        if hasattr(obj, '_prefetched_objects_cache') and 'change_requests' in obj._prefetched_objects_cache:
+            crs = [cr for cr in obj.change_requests.all() if cr.status in valid_statuses]
+            if crs:
+                crs.sort(key=lambda x: x.created_at or timezone.now(), reverse=True)
+                cr = crs[0]
+            else:
+                cr = None
+        else:
+            cr = obj.change_requests.filter(status__in=valid_statuses).order_by('-created_at').first()
         if cr:
             return {
                 'id': cr.id,
@@ -380,6 +415,34 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
                 'created_at': cr.created_at.isoformat() if cr.created_at else None,
             }
         return None
+
+    def validate_plate_number(self, value):
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("شماره پلاک الزامی است.")
+        normalized = normalize_plate(value)
+        instance_id = self.instance.id if self.instance else None
+        qs = VehicleDriverProfile.objects.filter(plate_number=normalized)
+        if instance_id:
+            qs = qs.exclude(id=instance_id)
+        if qs.exists():
+            raise serializers.ValidationError(f"خودرویی با شماره پلاک «{normalized}» قبلاً در سامانه ثبت شده است.")
+        return normalized
+
+    def validate_driver_phone(self, value):
+        if not value or not str(value).strip():
+            return value
+        cleaned = normalize_iranian_phone(value)
+        if not re.match(r'^09\d{9}$', cleaned):
+            raise serializers.ValidationError("شماره تماس راننده نامعتبر است. شماره موبایل باید ۱۱ رقم بوده و با ۰۹ شروع شود.")
+        return cleaned
+
+    def validate_owner_phone(self, value):
+        if not value or not str(value).strip():
+            return value
+        cleaned = normalize_iranian_phone(value)
+        if not re.match(r'^09\d{9}$', cleaned):
+            raise serializers.ValidationError("شماره تماس مالک نامعتبر است. شماره موبایل باید ۱۱ رقم بوده و با ۰۹ شروع شود.")
+        return cleaned
 
     def validate_driver_national_code(self, value):
         if not value or not str(value).strip():

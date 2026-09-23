@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -32,11 +32,19 @@ export type VehicleStatusFilter = 'all' | 'draft' | 'pending_supervisor' | 'revi
 export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
   readonly Math = Math;
 
+  // ─── مراجع المان‌های DOM جهت ارگونومی و هدایت فوکوس (UI-01 & UI-05) ───
+  @ViewChild('searchInput') searchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('p1Input') p1Input?: ElementRef<HTMLInputElement>;
+  @ViewChild('p2Select') p2Select?: ElementRef<HTMLSelectElement>;
+  @ViewChild('p3Input') p3Input?: ElementRef<HTMLInputElement>;
+  @ViewChild('p4Input') p4Input?: ElementRef<HTMLInputElement>;
+
   // ─── مدیریت بخش و ایزولاسیون قلمرو (Guardian G1: Section Isolation) ───
   mySections: ProjectSection[] = [];
   selectedSectionId: number | null = null;
   selectedSection: ProjectSection | null = null;
   isLoadingSections: boolean = false;
+  private pendingSectionId: number | null = null;
 
   // ─── جدول خودروهای اخیراً ثبت‌شده بخش ───
   recentVehicles: VehicleDriverProfile[] = [];
@@ -49,6 +57,8 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
   private searchSubject = new Subject<string>();
   private searchSub?: Subscription;
   private wsSub?: Subscription;
+  private queryParamsSub?: Subscription;
+  private personnelSearchSub?: Subscription;
 
   // ─── مودال مقایسه و مشاهده تغییرات معلق (Diff Viewer Modal) ───
   isPendingDiffModalOpen: boolean = false;
@@ -192,16 +202,19 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.loadMySections();
     this.setupWebSocket();
-    this.route.queryParams.subscribe(params => {
+    this.queryParamsSub = this.route.queryParams.subscribe(params => {
       if (params['section_id']) {
         const sId = Number(params['section_id']);
-        if (!isNaN(sId) && sId !== this.selectedSectionId) {
-          this.selectedSectionId = sId;
-          this.selectedSection = this.mySections.find(s => s.id === sId) || null;
-          if (this.selectedSectionId) {
-            this.loadRecentVehicles();
+        if (!isNaN(sId)) {
+          if (this.mySections.length > 0) {
+            if (sId !== this.selectedSectionId && this.mySections.some(s => s.id === sId)) {
+              this.selectedSectionId = sId;
+              this.selectedSection = this.mySections.find(s => s.id === sId) || null;
+              this.loadRecentVehicles();
+            }
+          } else {
+            this.pendingSectionId = sId;
           }
         }
       }
@@ -212,11 +225,14 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
         this.searchQuery = params['search'] || '';
       }
     });
+    this.loadMySections();
   }
 
   ngOnDestroy(): void {
     this.searchSub?.unsubscribe();
     this.wsSub?.unsubscribe();
+    this.queryParamsSub?.unsubscribe();
+    this.personnelSearchSub?.unsubscribe();
   }
 
   private setupSearchDebounce(): void {
@@ -275,10 +291,13 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
 
   private pickDefaultSection(): void {
     if (this.mySections.length > 0) {
-      if (!this.selectedSectionId || !this.mySections.some(s => s.id === this.selectedSectionId)) {
+      if (this.pendingSectionId && this.mySections.some(s => s.id === this.pendingSectionId)) {
+        this.selectedSectionId = this.pendingSectionId;
+      } else if (!this.selectedSectionId || !this.mySections.some(s => s.id === this.selectedSectionId)) {
         this.selectedSectionId = this.mySections[0]?.id ?? null;
       }
       this.selectedSection = this.mySections.find(s => s.id === this.selectedSectionId) || null;
+      this.pendingSectionId = null;
       if (this.selectedSectionId) {
         this.loadRecentVehicles();
       }
@@ -387,6 +406,57 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       queryParamsHandling: 'merge'
     });
     this.searchSubject.next('');
+    setTimeout(() => {
+      this.searchInput?.nativeElement.focus();
+    }, 0);
+  }
+
+  // ─── مدیریت پیش‌نویس ذخیره‌شده فرم در حافظه محلی (DATA-02) ───
+  getDraftStorageKey(): string {
+    return `vehicle_draft_form_${this.selectedSectionId || 'default'}`;
+  }
+
+  saveDraftToStorage(): void {
+    if (this.editingId || this.isReadOnlyMode) return;
+    try {
+      const draft = {
+        newVehicle: this.newVehicle,
+        platePart1: this.platePart1,
+        platePart2: this.platePart2,
+        platePart3: this.platePart3,
+        platePart4: this.platePart4,
+        rateFormattedDisplay: this.rateFormattedDisplay
+      };
+      localStorage.setItem(this.getDraftStorageKey(), JSON.stringify(draft));
+    } catch {}
+  }
+
+  loadDraftFromStorage(): boolean {
+    if (this.editingId) return false;
+    try {
+      const raw = localStorage.getItem(this.getDraftStorageKey());
+      if (!raw) return false;
+      const draft = JSON.parse(raw);
+      if (draft && draft.newVehicle) {
+        this.newVehicle = { ...this.newVehicle, ...draft.newVehicle };
+        this.platePart1 = draft.platePart1 || '';
+        this.platePart2 = draft.platePart2 || 'الف';
+        this.platePart3 = draft.platePart3 || '';
+        this.platePart4 = draft.platePart4 || '63';
+        this.rateFormattedDisplay = draft.rateFormattedDisplay || '';
+        if (this.newVehicle.sheba_number) {
+          this.onShebaChange();
+        }
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+
+  clearDraftFromStorage(): void {
+    try {
+      localStorage.removeItem(this.getDraftStorageKey());
+    } catch {}
   }
 
   getCleanTelUrl(phone?: string): string {
@@ -471,6 +541,10 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     this.editingId = null;
     this.rateFormattedDisplay = '';
     this.resetForm();
+    const hasDraft = this.loadDraftFromStorage();
+    if (hasDraft) {
+      this.toast.show('info', 'پیش‌نویس ذخیره‌شده فرم خودرو بازیابی گردید.');
+    }
     this.isNewVehicleModalOpen = true;
     this.cdr.detectChanges();
   }
@@ -552,6 +626,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       this.newVehicle.owner_phone = '';
       this.ownerNationalCodeError = null;
     }
+    this.saveDraftToStorage();
   }
 
   // ─── تحلیل و ترکیب ۴ بخشی پلاک ملی ایران ───
@@ -580,6 +655,36 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
 
   onPlatePartChange(): void {
     this.updatePlateFromParts();
+    this.saveDraftToStorage();
+  }
+
+  onPlatePart1Input(event: any): void {
+    this.updatePlateFromParts();
+    this.saveDraftToStorage();
+    const val = normalizeDigits(this.platePart1).replace(/\D/g, '');
+    if (val.length >= 2) {
+      this.p2Select?.nativeElement.focus();
+    }
+  }
+
+  onPlatePart2Change(): void {
+    this.updatePlateFromParts();
+    this.saveDraftToStorage();
+    this.p3Input?.nativeElement.focus();
+  }
+
+  onPlatePart3Input(event: any): void {
+    this.updatePlateFromParts();
+    this.saveDraftToStorage();
+    const val = normalizeDigits(this.platePart3).replace(/\D/g, '');
+    if (val.length >= 3) {
+      this.p4Input?.nativeElement.focus();
+    }
+  }
+
+  onPlatePart4Input(event: any): void {
+    this.updatePlateFromParts();
+    this.saveDraftToStorage();
   }
 
   updatePlateFromParts(): void {
@@ -607,6 +712,10 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     }
     if (this.isNewVehicleModalOpen) {
       this.closeNewVehicleModal();
+      return;
+    }
+    if (this.isExcelModalOpen) {
+      this.closeExcelModal();
     }
   }
 
@@ -619,6 +728,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const num = Number(cleanDigits) || 0;
     this.newVehicle.default_service_rate = num;
     this.rateFormattedDisplay = num > 0 ? num.toLocaleString('fa-IR') : '';
+    this.saveDraftToStorage();
     if (inputEl && typeof event !== 'string') {
       const digitsBeforeCursor = normalizeDigits(oldVal.slice(0, oldSel)).replace(/\D/g, '').length;
       inputEl.value = this.rateFormattedDisplay;
@@ -656,6 +766,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       if (res.accountNumber) {
         this.newVehicle.account_number = res.accountNumber;
       }
+      this.saveDraftToStorage();
       if (inputEl && typeof event !== 'string') {
         inputEl.value = this.shebaDigitsDisplay;
         let newPos = 0;
@@ -694,6 +805,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const raw = this.newVehicle.sheba_number || '';
     if (!raw.trim()) {
       this.shebaValidationResult = null;
+      this.saveDraftToStorage();
       return;
     }
     const clean = cleanShebaInput(raw);
@@ -704,6 +816,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
         this.newVehicle.account_number = extractAccountNumberFromSheba(clean);
       }
     }
+    this.saveDraftToStorage();
   }
 
   // ─── اعتبارسنجی الگوریتم ۱۰ رقمی کد ملی راننده (Mod 11) و انطباق با پرسنل موجود ───
@@ -712,6 +825,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     if (!raw) {
       this.nationalCodeError = null;
       this.matchedPersonnelNotice = null;
+      this.saveDraftToStorage();
       return;
     }
     const code = normalizeDigits(raw).replace(/\D/g, '');
@@ -720,11 +834,13 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     if (code.length !== 10) {
       this.nationalCodeError = 'کد ملی باید دقیقاً ۱۰ رقم عددی باشد.';
       this.matchedPersonnelNotice = null;
+      this.saveDraftToStorage();
       return;
     }
     if (/^(\d)\1{9}$/.test(code)) {
       this.nationalCodeError = 'کد ملی نامعتبر است (ارقام تکراری).';
       this.matchedPersonnelNotice = null;
+      this.saveDraftToStorage();
       return;
     }
     const digits = code.split('').map(Number);
@@ -737,6 +853,8 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const isValid = (rem < 2 && checksum === rem) || (rem >= 2 && checksum === 11 - rem);
     this.nationalCodeError = isValid ? null : 'ساختار کد ملی نامعتبر است (خطای رقم کنترلی).';
 
+    this.saveDraftToStorage();
+
     if (isValid) {
       this.searchMatchingPersonnel(code);
     } else {
@@ -744,9 +862,10 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     }
   }
 
-  // ─── جستجوی هوشمند در لیست پرسنل موجود شرکت جهت پیش‌پر کردن اطلاعات راننده ───
+  // ─── جستجوی هوشمند در لیست پرسنل موجود شرکت جهت پیش‌پر کردن اطلاعات راننده (LEAK-01) ───
   private searchMatchingPersonnel(nationalCode: string): void {
-    this.personnelApi.getPersonnelProfiles({ search: nationalCode }).subscribe({
+    this.personnelSearchSub?.unsubscribe();
+    this.personnelSearchSub = this.personnelApi.getPersonnelProfiles({ search: nationalCode }).subscribe({
       next: (res) => {
         const found = res?.find(p => p.national_code === nationalCode);
         if (found) {
@@ -761,6 +880,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
             this.newVehicle.sheba_number = found.sheba_number;
             this.onShebaChange();
           }
+          this.saveDraftToStorage();
           this.cdr.detectChanges();
         } else {
           this.matchedPersonnelNotice = null;
@@ -777,6 +897,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const raw = (this.newVehicle.owner_national_code || '').trim();
     if (!raw) {
       this.ownerNationalCodeError = null;
+      this.saveDraftToStorage();
       return;
     }
     const code = normalizeDigits(raw).replace(/\D/g, '');
@@ -784,10 +905,12 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
 
     if (code.length !== 10) {
       this.ownerNationalCodeError = 'کد ملی مالک باید دقیقاً ۱۰ رقم عددی باشد.';
+      this.saveDraftToStorage();
       return;
     }
     if (/^(\d)\1{9}$/.test(code)) {
       this.ownerNationalCodeError = 'کد ملی مالک نامعتبر است (ارقام تکراری).';
+      this.saveDraftToStorage();
       return;
     }
     const digits = code.split('').map(Number);
@@ -799,6 +922,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const rem = sum % 11;
     const isValid = (rem < 2 && checksum === rem) || (rem >= 2 && checksum === 11 - rem);
     this.ownerNationalCodeError = isValid ? null : 'ساختار کد ملی مالک نامعتبر است (خطای رقم کنترلی).';
+    this.saveDraftToStorage();
   }
 
   // ─── معادل تومان نرخ پیش‌فرض ───
@@ -894,6 +1018,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       this.personnelApi.createVehicleProfile(payload).subscribe({
         next: (created: VehicleDriverProfile) => {
           this.isSaving = false;
+          this.clearDraftFromStorage();
           if (targetStatus === 'pending_supervisor') {
             this.toast.show('success', `خودرو «${created.plate_number}» ثبت و به کارتابل سرپرست ارسال گردید.`);
           } else {

@@ -168,6 +168,7 @@
       <div class="relative w-full sm:w-80">
         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
         <input
+          #searchInput
           type="text"
           [(ngModel)]="searchQuery"
           (ngModelChange)="onSearchChange()"
@@ -236,6 +237,10 @@
                 <a *ngIf="v.driver_phone" [href]="getCleanTelUrl(v.driver_phone)" class="text-indigo-600 hover:underline">
                   {{ v.driver_phone }} 📞
                 </a>
+              </div>
+              <div *ngIf="!v.is_driver_owner && v.owner_name" class="mt-1 text-[10px] text-amber-800 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1">
+                <span>🔑 مالک: {{ v.owner_name }}</span>
+                <span *ngIf="v.owner_phone" class="font-mono">({{ v.owner_phone }})</span>
               </div>
             </td>
 
@@ -444,6 +449,21 @@
           <span class="font-bold text-slate-900 font-mono">{{ formatNumber(v.default_service_rate) }} ریال</span>
         </div>
 
+        <!-- مشخصات مالک در صورت تفکیک راننده و مالک (UI-02) -->
+        <div *ngIf="!v.is_driver_owner && v.owner_name" class="p-2 bg-amber-50/70 border border-amber-200/60 rounded-xl text-[11px] text-amber-900 flex items-center justify-between">
+          <div class="flex items-center gap-1">
+            <span class="text-xs">🔑</span>
+            <span class="font-bold">مالک:</span>
+            <span>{{ v.owner_name }}</span>
+            <span *ngIf="v.owner_national_code" class="text-[10px] text-slate-500 font-mono">({{ v.owner_national_code }})</span>
+          </div>
+          <div *ngIf="v.owner_phone" class="font-mono text-[10px]">
+            <a [href]="getCleanTelUrl(v.owner_phone)" class="text-amber-800 hover:underline">
+              {{ v.owner_phone }} 📞
+            </a>
+          </div>
+        </div>
+
         <div *ngIf="v.approval_status === 'revision_required' && v.rejection_reason" class="p-2 bg-orange-50 border border-orange-200 rounded-xl text-[10px] text-orange-800">
           ⚠️ علت عودت: {{ v.rejection_reason }}
         </div>
@@ -511,6 +531,9 @@
 
   <!-- ── ۳. مودال ثبت، ویرایش و مشاهده پرونده خودرو (Add/Edit/View Vehicle Modal) ── -->
   <div *ngIf="isNewVehicleModalOpen"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="newVehicleModalTitle"
        (click)="closeNewVehicleModal()"
        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-hidden">
     <div (click)="$event.stopPropagation()"
@@ -519,7 +542,7 @@
       <!-- هدر مودال -->
       <div class="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
         <div>
-          <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+          <h3 id="newVehicleModalTitle" class="text-sm font-black text-slate-800 flex items-center gap-2">
             <span>{{ modalHeaderTitle }}</span>
             <span *ngIf="isApprovedRecord" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
               خودرو مصوب (ایجاد پیشنهاد تغییرات)
@@ -577,17 +600,18 @@
             <span class="text-[10px] text-slate-500">طرح استاندارد پلاک ایران</span>
           </div>
 
-          <!-- ویجت ورودی ۴ قسمتی -->
+          <!-- ویجت ورودی ۴ قسمتی با فوکوس خودکار (UI-01) -->
           <div class="grid grid-cols-4 gap-2" dir="ltr">
             
             <!-- بخش ۱: دو رقم اول (مثلا ۱۲) -->
             <div>
               <input
+                #p1Input
                 type="text"
                 maxlength="2"
                 [disabled]="isReadOnlyMode"
                 [(ngModel)]="platePart1"
-                (input)="onPlatePartChange()"
+                (input)="onPlatePart1Input($event)"
                 placeholder="12"
                 class="w-full py-2 text-center text-sm font-mono font-black bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none shadow-2xs disabled:bg-slate-100 disabled:text-slate-500" />
               <span class="block text-center text-[9px] text-slate-400 mt-1">۲ رقم</span>
@@ -596,9 +620,10 @@
             <!-- بخش ۲: حرف فارسی (مثلا ج) -->
             <div>
               <select
+                #p2Select
                 [disabled]="isReadOnlyMode"
                 [(ngModel)]="platePart2"
-                (change)="onPlatePartChange()"
+                (change)="onPlatePart2Change()"
                 class="w-full py-2 text-center text-sm font-black bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none shadow-2xs cursor-pointer disabled:bg-slate-100 disabled:text-slate-500">
                 <option *ngFor="let l of plateLetters" [value]="l">{{ l }}</option>
               </select>
@@ -608,11 +633,12 @@
             <!-- بخش ۳: سه رقم (مثلا ۳۴۵) -->
             <div>
               <input
+                #p3Input
                 type="text"
                 maxlength="3"
                 [disabled]="isReadOnlyMode"
                 [(ngModel)]="platePart3"
-                (input)="onPlatePartChange()"
+                (input)="onPlatePart3Input($event)"
                 placeholder="345"
                 class="w-full py-2 text-center text-sm font-mono font-black bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none shadow-2xs disabled:bg-slate-100 disabled:text-slate-500" />
               <span class="block text-center text-[9px] text-slate-400 mt-1">۳ رقم</span>
@@ -621,11 +647,12 @@
             <!-- بخش ۴: کد ایران (مثلا ۶۳) -->
             <div>
               <input
+                #p4Input
                 type="text"
                 maxlength="2"
                 [disabled]="isReadOnlyMode"
                 [(ngModel)]="platePart4"
-                (input)="onPlatePartChange()"
+                (input)="onPlatePart4Input($event)"
                 placeholder="63"
                 class="w-full py-2 text-center text-sm font-mono font-black bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none shadow-2xs disabled:bg-slate-100 disabled:text-slate-500" />
               <span class="block text-center text-[9px] text-slate-400 mt-1">ایران (کد)</span>
@@ -915,13 +942,16 @@
 
   <!-- ── ۴. مودال مشاهده تغییرات معلق (Pending Diff Viewer Modal) ── -->
   <div *ngIf="isPendingDiffModalOpen && pendingDiffVehicle"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="pendingDiffModalTitle"
        (click)="closePendingDiffModal()"
        class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-hidden">
     <div (click)="$event.stopPropagation()"
          class="bg-white rounded-t-3xl sm:rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
       <div class="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between bg-amber-50/70">
         <div>
-          <h3 class="text-sm font-black text-amber-900 flex items-center gap-2">
+          <h3 id="pendingDiffModalTitle" class="text-sm font-black text-amber-900 flex items-center gap-2">
             <span>درخواست تغییرات معلق خودرو</span>
             <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-white text-slate-800 border border-amber-200">
               {{ pendingDiffVehicle.plate_number }}

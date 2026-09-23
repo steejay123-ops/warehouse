@@ -1052,4 +1052,10 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
       this.toast.show('info', text);
     }
   }
+
+  navigateToVehicle(): void {
+    this.router.navigate(['/app/finance/employee-new-vehicle'], {
+      queryParams: this.selectedSectionId ? { section_id: this.selectedSectionId } : {}
+    });
+  }
 }

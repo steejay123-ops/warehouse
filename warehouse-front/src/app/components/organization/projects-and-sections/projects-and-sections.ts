@@ -11,6 +11,7 @@ import { AccountsHttpService, User, ImportResult } from '../../../core/http/acco
 import { WebSocketService } from '../../../core/http/websocket.service';
 import { OfflineSyncService } from '../../../core/services/offline-sync.service';
 import { ExcelImportModal } from '../../../shared/components/excel-import-modal/excel-import-modal';
+import { ActiveCompanyService } from '../../../core/services/active-company.service';
 import {
   FinancialProject,
   ProjectSection,
@@ -227,7 +228,8 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    public activeCompanyService: ActiveCompanyService
   ) {}
 
   ngOnInit(): void {
@@ -235,6 +237,14 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.setupRealtimeListeners();
     this.setupRouteQuerySync();
     this.loadCollapsedSectionsState();
+
+    // همگام‌سازی فهرست پروژه‌ها با تغییر شرکت فعال
+    this.subs.push(
+      this.activeCompanyService.activeCompany$.subscribe(() => {
+        this.loadProjects();
+      })
+    );
+
     this.loadAllData();
   }
 
@@ -884,12 +894,16 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const payload = {
+    const payload: any = {
       ...this.newProject,
       code,
       name,
       description: this.newProject.description?.trim() || ''
     };
+
+    if (!this.editingProject && this.activeCompanyService.activeCompanyId) {
+      payload.company = this.activeCompanyService.activeCompanyId;
+    }
 
     if (this.editingProject?.id) {
       const editId = this.editingProject.id;

@@ -43,18 +43,20 @@
             <span>💰 مدیریت تن‌خواه</span>
           </button>
 
+          <div class="h-4 w-px bg-slate-300 mx-1 self-center hidden sm:block"></div>
+
           <button
             (click)="switchTab('new_vehicle')"
-            [ngClass]="activeTab === 'new_vehicle' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            [ngClass]="activeTab === 'new_vehicle' ? 'bg-white text-amber-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
             class="px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <span>🚗 معرفی خودرو</span>
+            <span>🚗 تعریف خودرو</span>
           </button>
 
           <button
             (click)="switchTab('new_personnel')"
-            [ngClass]="activeTab === 'new_personnel' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            [ngClass]="activeTab === 'new_personnel' ? 'bg-white text-purple-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
             class="px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <span>👤 معرفی پرسنل</span>
+            <span>👥 تعریف پرسنل</span>
           </button>
         </div>
 

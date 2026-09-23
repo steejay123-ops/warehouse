@@ -8,7 +8,8 @@ export interface NavItem {
 }
 
 export const ACCOUNTING_NAV_ITEMS: NavItem[] = [
-  { id: 'projects-and-sections', label: '🏢 پروژه‌ها و بخش‌ها', icon: 'briefcase', permission: 'view_sys_projects', module: 'accounting', isAccounting: true },
+  { id: 'companies', label: '🏢 مدیریت شرکت‌ها', icon: 'briefcase', permission: 'view_sys_projects', module: 'accounting', isAccounting: true },
+  { id: 'projects-and-sections', label: '📂 پروژه‌ها و بخش‌ها', icon: 'folder', permission: 'view_sys_projects', module: 'accounting', isAccounting: true },
   { id: 'employee-portal', label: '👤 پنل ثبت کارمند (بخش‌ها)', icon: 'clipboard', permission: 'view_sys_personnel_attendance', module: 'accounting', isAccounting: true },
   { id: 'attendance', label: '📋 ثبت کارکرد پرسنل و ناوگان', icon: 'check-square', permission: 'view_sys_personnel_attendance', module: 'accounting', isAccounting: true },
   { id: 'manager-approvals', label: '👑 کارتابل تاییدات مدیر', icon: 'check-circle', permission: 'view_sys_personnel', module: 'accounting', isAccounting: true },
@@ -26,7 +27,7 @@ export const EMPLOYEE_NAV_ITEMS: NavItem[] = [
   { id: 'employee-fleet', label: '🚚 کارکرد ماشین‌آلات', icon: 'truck', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
   { id: 'employee-invoices', label: '🧾 ثبت فاکتور هزینه', icon: 'dollar-sign', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
   { id: 'employee-petty-cash', label: '💰 مدیریت تن‌خواه', icon: 'credit-card', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
-  { id: 'employee-new-vehicle', label: '🚗 تعریف خودرو (پیش‌نویس)', icon: 'truck', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
+  { id: 'employee-new-vehicle', label: '🚗 تعریف خودرو', icon: 'truck', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
   { id: 'employee-new-personnel', label: '👥 تعریف پرسنل', icon: 'users', permission: 'can_act_as_operator', module: 'accounting', isAccounting: true },
 ];
 

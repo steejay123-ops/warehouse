@@ -4,8 +4,26 @@
   <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
     <div class="bg-white p-2 sm:p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2">
       
-      <!-- سمت راست: دراپ‌داون انتخاب بخش فعال (Guardian G1: Section Isolation) -->
-      <div class="flex items-center gap-1.5 min-w-0">
+      <!-- سمت راست: انتخاب بخش و سوئیچر ماژولار پرسنل / خودرو -->
+      <div class="flex items-center gap-2 min-w-0 flex-wrap">
+        <!-- کپسول سوئیچر ماژولار (تفکیک شفاف پرسنل و خودرو) -->
+        <div class="flex bg-slate-100/90 p-0.5 rounded-xl border border-slate-200/80 items-center shrink-0">
+          <button
+            type="button"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-white text-purple-700 shadow-2xs cursor-default">
+            <span>👥</span>
+            <span>تعریف پرسنل</span>
+          </button>
+          <button
+            type="button"
+            (click)="navigateToVehicle()"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            title="رفتن به صفحه تعریف خودرو">
+            <span>🚗</span>
+            <span>تعریف خودرو</span>
+          </button>
+        </div>
+
         <div *ngIf="mySections.length > 0" class="flex items-center gap-1 bg-slate-100/90 py-1 px-2 sm:py-1.5 sm:px-3 rounded-xl border border-slate-200/80 min-w-0">
           <span class="text-[10px] sm:text-[11px] font-bold text-slate-500 shrink-0">بخش:</span>
           <select
@@ -950,6 +968,7 @@
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-1.5 flex-wrap">
             <span class="text-xs font-mono text-slate-400">#{{ formatNumber(idx + 1) }}</span>
+            <span class="text-purple-600 text-xs">👤</span>
             <span class="font-black text-slate-900 text-xs">{{ p.full_name || (p.first_name + ' ' + p.last_name) }}</span>
             <span *ngIf="p.father_name" class="text-[10px] text-slate-500 font-medium">({{ p.father_name }})</span>
             <a *ngIf="p.attachment"

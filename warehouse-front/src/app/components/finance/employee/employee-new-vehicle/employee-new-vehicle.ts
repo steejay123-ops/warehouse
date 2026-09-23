@@ -1258,4 +1258,10 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     const clean = sheba.replace(/\s+/g, '').toUpperCase();
     return clean.replace(/(.{4})/g, '$1 ').trim();
   }
+
+  navigateToPersonnel(): void {
+    this.router.navigate(['/app/finance/employee-new-personnel'], {
+      queryParams: this.selectedSectionId ? { section_id: this.selectedSectionId } : {}
+    });
+  }
 }

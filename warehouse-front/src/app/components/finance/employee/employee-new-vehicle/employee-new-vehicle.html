@@ -6,6 +6,24 @@
       
       <!-- سمت راست: انتخابگر بخش فعال و ناوبری زیرتب‌ها در کپسول محصور -->
       <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- کپسول سوئیچر ماژولار (تفکیک شفاف پرسنل و خودرو) -->
+        <div class="flex bg-slate-100/90 p-0.5 rounded-xl border border-slate-200/80 items-center shrink-0">
+          <button
+            type="button"
+            (click)="navigateToPersonnel()"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+            title="رفتن به صفحه تعریف پرسنل">
+            <span>👥</span>
+            <span>تعریف پرسنل</span>
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-white text-amber-800 shadow-2xs cursor-default">
+            <span>🚗</span>
+            <span>تعریف خودرو</span>
+          </button>
+        </div>
+
         <!-- انتخابگر بخش فعال (Guardian G1: Section Isolation) -->
         <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-100/90 py-1 px-2.5 rounded-xl border border-slate-200/80">
           <span class="text-[11px] font-bold text-slate-500">بخش فعال:</span>
@@ -427,10 +445,24 @@
     <!-- نمای کارتی برای موبایل (md:hidden) -->
     <div class="block md:hidden divide-y divide-slate-100">
       <div *ngFor="let v of filteredVehicles" class="p-3.5 space-y-2.5">
-        <div class="flex items-center justify-between">
-          <div class="inline-flex items-center bg-slate-900 text-white rounded-lg px-2 py-0.5 font-mono text-xs font-bold border border-slate-800" dir="ltr">
+        <!-- بنر شاخص خودرو (تفکیک شفاف از پرسنل) -->
+        <div class="flex items-center justify-between bg-amber-50/70 p-2 rounded-xl border border-amber-200/60">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="text-xs">🚗</span>
+            <span class="font-black text-xs text-amber-950">{{ getVehicleTypeLabel(v.vehicle_type) }}</span>
+            <span class="text-[10px] text-amber-800/80 font-medium">({{ getOwnershipTypeLabel(v.ownership_type) }})</span>
+          </div>
+          <div class="inline-flex items-center bg-slate-900 text-white rounded-lg px-2 py-0.5 font-mono text-xs font-bold border border-slate-800 shadow-2xs" dir="ltr">
             <span class="text-sky-400 font-black text-[9px] mr-1">IR</span>
             <span>{{ v.plate_number }}</span>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-1">
+            <span class="text-slate-400 text-[11px]">👤 راننده:</span>
+            <span class="font-bold text-slate-800">{{ v.driver_name }}</span>
+            <span *ngIf="v.driver_national_code" class="text-[10px] text-slate-500 font-mono">({{ v.driver_national_code }})</span>
           </div>
           <span [ngClass]="getStatusBadgeClass(v.approval_status)"
                 class="px-2 py-0.5 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 shadow-2xs">
@@ -439,13 +471,15 @@
           </span>
         </div>
 
-        <div class="flex items-center justify-between text-xs">
-          <span class="font-bold text-slate-800">{{ v.driver_name }}</span>
-          <span class="text-slate-500 font-mono">{{ getVehicleTypeLabel(v.vehicle_type) }}</span>
+        <div *ngIf="v.driver_phone" class="flex items-center justify-between text-[11px] text-slate-600">
+          <span class="text-slate-400">همراه راننده:</span>
+          <a [href]="getCleanTelUrl(v.driver_phone)" class="font-mono font-bold text-indigo-600 hover:underline">
+            {{ v.driver_phone }} 📞
+          </a>
         </div>
 
         <div class="flex items-center justify-between text-[11px] text-slate-600">
-          <span>نرخ سرویس:</span>
+          <span class="text-slate-400">نرخ پایه سرویس:</span>
           <span class="font-bold text-slate-900 font-mono">{{ formatNumber(v.default_service_rate) }} ریال</span>
         </div>
 

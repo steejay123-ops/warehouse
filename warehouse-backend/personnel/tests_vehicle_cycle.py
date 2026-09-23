@@ -237,7 +237,7 @@ class VehicleLifecycleTests(TestCase):
         self.assertTrue(res_dry.data["success"])
         self.assertTrue(res_dry.data["dry_run"])
         self.assertEqual(res_dry.data["summary"]["created"], 1)
-        self.assertFalse(VehicleDriverProfile.objects.filter(plate_number="12الف345ایران63").exists())
+        self.assertFalse(VehicleDriverProfile.objects.filter(plate_number="12 الف 345 ایران 63").exists())
 
         # ۳. اعمال قطعی
         excel_file_real = SimpleUploadedFile("template.xlsx", tpl_res.content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -252,7 +252,7 @@ class VehicleLifecycleTests(TestCase):
         self.assertEqual(res_commit.data["created_count"], 1)
 
         # بررسی در دیتابیس
-        v = VehicleDriverProfile.objects.filter(plate_number="12الف345ایران63").first()
+        v = VehicleDriverProfile.objects.filter(plate_number="12 الف 345 ایران 63").first()
         self.assertIsNotNone(v)
         self.assertEqual(v.driver_name, "رضا اکبری")
         self.assertEqual(v.approval_status, "draft")
@@ -301,3 +301,60 @@ class VehicleLifecycleTests(TestCase):
         res_bad = self.client.post("/api/personnel/vehicles/", bad_payload, format="json")
         self.assertEqual(res_bad.status_code, 400)
         self.assertIn("owner_national_code", res_bad.data)
+
+    def test_export_excel_includes_owner_columns(self):
+        """
+        تست وجود ستون‌های مالک و نوع مالکیت در خروجی رسمی اکسل ناوگان
+        """
+        import io
+        import openpyxl
+
+        self.client.force_authenticate(user=self.operator)
+        VehicleDriverProfile.objects.create(
+            plate_number="55 ع 333 ایران 63",
+            vehicle_type="khavar",
+            ownership_type="contract",
+            driver_name="محمود کاظمی",
+            driver_national_code="0010376488",
+            driver_phone="09121112233",
+            is_driver_owner=False,
+            owner_name="جواد احمدی",
+            owner_national_code="0078901235",
+            owner_phone="09124445566",
+            default_service_rate=Decimal("2500000"),
+            section=self.section_a,
+            approval_status="approved",
+            is_active=True
+        )
+
+        res = self.client.get(f"/api/personnel/vehicles/export-excel/?section_id={self.section_a.id}")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+        wb = openpyxl.load_workbook(io.BytesIO(res.content))
+        ws = wb.active
+        self.assertEqual(ws.title, "ناوگان و رانندگان")
+
+        # بررسی سطرهای هدر
+        headers_fa = [cell.value for cell in ws[1]]
+        headers_en = [cell.value for cell in ws[2]]
+
+        self.assertIn("مالک شخص راننده است", headers_fa)
+        self.assertIn("نام مالک", headers_fa)
+        self.assertIn("کد ملی مالک", headers_fa)
+        self.assertIn("شماره همراه مالک", headers_fa)
+        self.assertIn("نوع مالکیت", headers_fa)
+
+        self.assertIn("is_driver_owner", headers_en)
+        self.assertIn("owner_name", headers_en)
+        self.assertIn("owner_national_code", headers_en)
+        self.assertIn("owner_phone", headers_en)
+        self.assertIn("ownership_type_display", headers_en)
+
+        # بررسی مقادیر ردیف داده
+        data_row = [cell.value for cell in ws[3]]
+        self.assertIn("55 ع 333 ایران 63", data_row)
+        self.assertIn("خیر", data_row)
+        self.assertIn("جواد احمدی", data_row)
+        self.assertIn("0078901235", data_row)
+        self.assertIn("09124445566", data_row)

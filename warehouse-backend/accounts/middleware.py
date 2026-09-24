@@ -11,6 +11,7 @@ _current_active_role_var = contextvars.ContextVar('current_active_role', default
 # فاز ۳ §۳.۵ — مقدار پیش‌فرضِ `active_app` اکنون کدِ ماژول است (نه 'personnel').
 _current_active_app_var = contextvars.ContextVar('current_active_app', default='accounting')
 _current_client_tab_id_var = contextvars.ContextVar('current_client_tab_id', default=None)
+_current_company_var = contextvars.ContextVar('current_company', default=None)
 
 def get_client_ip(request):
     """
@@ -63,6 +64,12 @@ def get_current_client_tab_id():
 
 def set_current_client_tab_id(tab_id):
     return _current_client_tab_id_var.set(tab_id)
+
+def get_current_company():
+    return _current_company_var.get()
+
+def set_current_company(company_id):
+    return _current_company_var.set(company_id)
 
 
 def get_user_allowed_apps(user) -> list[str]:
@@ -198,10 +205,21 @@ class AuditContextMiddleware:
         if wh_header and str(wh_header).isdigit():
             warehouse_id = int(wh_header)
 
+        # استخراج شرکت فعال از هدر یا کوئری سفارشی
+        company_header = request.META.get('HTTP_X_COMPANY_ID')
+        company_id = None
+        if company_header and str(company_header).isdigit():
+            company_id = int(company_header)
+        elif request.GET.get('company_id') and str(request.GET.get('company_id')).isdigit():
+            company_id = int(request.GET.get('company_id'))
+        elif request.GET.get('company') and str(request.GET.get('company')).isdigit():
+            company_id = int(request.GET.get('company'))
+
         t_user = _current_user_var.set(user)
         t_ip = _current_ip_var.set(ip)
         t_ua = _current_user_agent_var.set(ua)
         t_wh = _current_warehouse_var.set(warehouse_id)
+        t_comp = _current_company_var.set(company_id)
 
         try:
             response = self.get_response(request)
@@ -214,6 +232,7 @@ class AuditContextMiddleware:
             _current_ip_var.reset(t_ip)
             _current_user_agent_var.reset(t_ua)
             _current_warehouse_var.reset(t_wh)
+            _current_company_var.reset(t_comp)
 
 
 class ActiveRoleMiddleware:

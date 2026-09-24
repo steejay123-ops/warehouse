@@ -16,12 +16,14 @@ from .models import (
     DailyAttendance
 )
 
-def get_effective_payroll_settings(year_month: str, project_id: int = None) -> PayrollYearlySettings:
+def get_effective_payroll_settings(year_month: str, project_id: int = None, company_id: int = None) -> PayrollYearlySettings:
     """
-    واکشی هوشمند تنظیمات احکام حقوق منطبق بر ماه دوره و پروژه پرسنل:
+    واکشی هوشمند تنظیمات احکام حقوق منطبق بر ماه دوره، پروژه و شرکت متبوع:
     1. ابتدا تطبیق با تنظیمات اختصاصی پروژه در بازه موثر
-    2. در صورت عدم تعریف، ارث‌بری از تنظیمات سراسری سازمان در همان بازه
-    3. در صورت عدم تطبیق، فال‌بک به تنظیمات فعال سال مالی
+    2. در صورت عدم تعریف، ارث‌بری هوشمند از تنظیمات شرکت متبوع در همان بازه
+    3. در صورت عدم تعریف، ارث‌بری از تنظیمات سراسری سازمان (بدون پروژه و شرکت)
+    4. در صورت عدم تعریف، فال‌بک به هر رکورد سراسری معتبر در بازه
+    5. در نهایت، فال‌بک به تنظیمات فعال سال مالی
     """
     year_str = year_month.split('/')[0] if '/' in year_month else '1405'
 
@@ -36,9 +38,29 @@ def get_effective_payroll_settings(year_month: str, project_id: int = None) -> P
         if proj_setting:
             return proj_setting
 
-    # 2. ارث‌بری هوشمند از تنظیمات سراسری سازمان در همان بازه
+        # در صورت نبود تنظیمات پروژه، در صورت عدم ارسال صریح company_id، شرکت پروژه را می‌یابیم
+        if not company_id:
+            from .models import FinancialProject
+            proj_company_id = FinancialProject.objects.filter(id=project_id).values_list('company_id', flat=True).first()
+            if proj_company_id:
+                company_id = proj_company_id
+
+    # 2. ارث‌بری از تنظیمات اختصاصی شرکت در همان بازه
+    if company_id:
+        company_setting = PayrollYearlySettings.objects.filter(
+            company_id=company_id,
+            project__isnull=True,
+            effective_from__lte=year_month
+        ).filter(
+            Q(effective_to__gte=year_month) | Q(effective_to__isnull=True)
+        ).order_by('-effective_from').first()
+        if company_setting:
+            return company_setting
+
+    # 3. ارث‌بری از تنظیمات سراسری سازمان در همان بازه (بدون پروژه و بدون شرکت)
     global_setting = PayrollYearlySettings.objects.filter(
         project__isnull=True,
+        company__isnull=True,
         effective_from__lte=year_month
     ).filter(
         Q(effective_to__gte=year_month) | Q(effective_to__isnull=True)
@@ -46,7 +68,17 @@ def get_effective_payroll_settings(year_month: str, project_id: int = None) -> P
     if global_setting:
         return global_setting
 
-    # 3. فال‌بک نهایی به تنظیمات فعال سال
+    # 4. فال‌بک به هر تنظیم سراسری در بازه زمانی (جهت سازگاری با رکوردهای قدیمی)
+    fallback_global = PayrollYearlySettings.objects.filter(
+        project__isnull=True,
+        effective_from__lte=year_month
+    ).filter(
+        Q(effective_to__gte=year_month) | Q(effective_to__isnull=True)
+    ).order_by('-effective_from').first()
+    if fallback_global:
+        return fallback_global
+
+    # 5. فال‌بک نهایی به تنظیمات فعال سال مالی
     fallback = PayrollYearlySettings.objects.filter(fiscal_year=year_str, is_active=True).first()
     if not fallback:
         fallback = PayrollYearlySettings.objects.filter(is_active=True).first()

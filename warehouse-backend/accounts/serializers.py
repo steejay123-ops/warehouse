@@ -579,17 +579,23 @@ class AuditLogListSerializer(serializers.ModelSerializer):
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     severity_display = serializers.CharField(source='get_severity_display', read_only=True)
     has_diff = serializers.SerializerMethodField()
+    company_id = serializers.SerializerMethodField()
 
     class Meta:
         model = AuditLog
         fields = [
             'id', 'user', 'actor_username', 'actor_name', 'user_display', 'user_role',
-            'warehouse', 'warehouse_id', 'warehouse_name',
+            'warehouse', 'warehouse_id', 'warehouse_name', 'company_id',
             'module', 'module_display', 'action', 'action_display',
             'severity', 'severity_display', 'target_model', 'target_object_id',
             'target_repr', 'has_diff', 'details', 'ip_address', 'created_at'
         ]
         read_only_fields = fields
+
+    def get_company_id(self, obj):
+        if obj.details and isinstance(obj.details, dict):
+            return obj.details.get('company_id')
+        return None
 
     def get_warehouse_name(self, obj):
         if not obj.warehouse_id:

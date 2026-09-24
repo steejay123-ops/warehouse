@@ -20,6 +20,18 @@ class Warehouse(models.Model):
     
     description = models.TextField(blank=True, null=True)
     operator_company = models.CharField(max_length=255, blank=True, null=True)
+    company_id = models.IntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="شناسه شرکت مالک انبار"
+    )
+    company_name = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        verbose_name="نام شرکت مالک"
+    )
     color = models.CharField(max_length=20, default='#6366f1')
     
     created_at = models.DateTimeField(auto_now_add=True)

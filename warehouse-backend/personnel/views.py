@@ -94,6 +94,51 @@ from .fleet_excel_engine import export_fleet_monthly_excel, import_fleet_monthly
 from .fleet_settlement_engine import calculate_monthly_fleet_settlement, generate_fleet_bank_meli_excel
 
 
+def get_user_allowed_companies(user):
+    """
+    محاسبه شرکت‌های مجاز کاربر (ترکیبی: سوپریوزر = همه، عادی = انتساب صریح یا عضویت در بخش‌های پروژه‌های آن شرکت)
+    """
+    if not user or not user.is_authenticated:
+        return Company.objects.none()
+    if user.is_superuser:
+        return Company.objects.filter(is_active=True)
+
+    direct_ids = UserCompanyAccess.objects.filter(user=user).values_list('company_id', flat=True)
+    derived_ids = UserSectionAssignment.objects.filter(
+        user=user, is_active=True, section__project__company__isnull=False
+    ).values_list('section__project__company_id', flat=True)
+
+    allowed_ids = set(direct_ids).union(set(derived_ids))
+    return Company.objects.filter(id__in=allowed_ids, is_active=True)
+
+
+def get_request_company_id(request):
+    """
+    استخراج شناسه شرکت از هدر یا کوئری‌پارامتر
+    """
+    return request.query_params.get('company_id') or request.query_params.get('company') or request.headers.get('X-Company-ID')
+
+
+def validate_user_company_access(user, company_id):
+    """
+    اعتبارسنجی دسترسی کاربر به شناسه شرکت داده‌شده. در صورت عدم دسترسی، PermissionDenied پرتاب می‌شود.
+    """
+    if not company_id:
+        return None
+    try:
+        cid = int(company_id)
+    except (ValueError, TypeError):
+        return None
+    if not user or not user.is_authenticated:
+        raise PermissionDenied("کاربر احراز هویت نشده است.")
+    if user.is_superuser:
+        return cid
+    allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+    if cid not in allowed_ids:
+        raise PermissionDenied("شما به اطلاعات و پروژه‌های این شرکت دسترسی ندارید.")
+    return cid
+
+
 def broadcast_personnel_update(personnel, action_type='updated', message=None, sender_id=None, client_tab_id=None):
     """
     ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده پرسنل به کانال وب‌سوکت سراسری
@@ -187,6 +232,11 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 UserSectionAssignment.objects.filter(user=user, is_active=True).values_list('section_id', flat=True)
             )
             qs = qs.filter(Q(section_id__in=user_section_ids) | Q(created_by=user))
+
+        # فیلتر کانتکست شرکت فعال (Multi-Tenant Company Scope):
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(section__project__company_id=cid)
 
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
@@ -1057,6 +1107,11 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             )
             qs = qs.filter(Q(section_id__in=user_section_ids) | Q(created_by=user))
 
+        # فیلتر کانتکست شرکت فعال (Multi-Tenant Company Scope):
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(section__project__company_id=cid)
+
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True))
@@ -1895,6 +1950,9 @@ class PersonnelChangeRequestViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(personnel__section__project__company_id=cid)
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -2027,6 +2085,9 @@ class VehicleChangeRequestViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(vehicle__section__project__company_id=cid)
         is_global_auditor = bool(
             user and (
                 user.is_superuser
@@ -2328,6 +2389,9 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         personnel_id = self.request.query_params.get('personnel_id')
         if personnel_id:
             qs = qs.filter(personnel_id=personnel_id)
+        cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(Q(section__project__company_id=cid) | Q(personnel__section__project__company_id=cid))
         return qs
 
     @action(detail=False, methods=['get'], url_path='matrix')
@@ -3847,6 +3911,9 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
         vehicle_id = self.request.query_params.get('vehicle_id')
         if vehicle_id:
             qs = qs.filter(vehicle_id=vehicle_id)
+        cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(Q(section__project__company_id=cid) | Q(vehicle__section__project__company_id=cid))
         return qs
 
     @action(detail=False, methods=['get'], url_path='matrix')
@@ -4928,6 +4995,9 @@ class PayrollYearlySettingsViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(Q(company_id=cid) | Q(project__company_id=cid))
         p_id = safe_int(self.request.query_params.get('project_id'))
         if p_id is not None:
             return qs.filter(project_id=p_id)
@@ -6013,24 +6083,6 @@ def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=No
 # ویوست‌های مدیریت ساختار سازمانی، شرکت، پروژه، بخش، طرف‌حساب و فاکتور
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_user_allowed_companies(user):
-    """
-    محاسبه شرکت‌های مجاز کاربر (ترکیبی: سوپریوزر = همه، عادی = انتساب صریح یا عضویت در بخش‌های پروژه‌های آن شرکت)
-    """
-    if not user or not user.is_authenticated:
-        return Company.objects.none()
-    if user.is_superuser:
-        return Company.objects.filter(is_active=True)
-
-    direct_ids = UserCompanyAccess.objects.filter(user=user).values_list('company_id', flat=True)
-    derived_ids = UserSectionAssignment.objects.filter(
-        user=user, is_active=True, section__project__company__isnull=False
-    ).values_list('section__project__company_id', flat=True)
-
-    allowed_ids = set(direct_ids).union(set(derived_ids))
-    return Company.objects.filter(id__in=allowed_ids, is_active=True)
-
-
 class CompanyViewSet(viewsets.ModelViewSet):
     """
     مدیریت شرکت‌ها (هلدینگ و شرکت‌های تابعه)
@@ -6038,6 +6090,7 @@ class CompanyViewSet(viewsets.ModelViewSet):
     queryset = Company.objects.all().annotate(projects_count=Count('projects'))
     serializer_class = CompanySerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
     pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
@@ -6102,6 +6155,105 @@ class CompanyViewSet(viewsets.ModelViewSet):
             'count': companies.count()
         })
 
+    @action(detail=False, methods=['get'], url_path='export-excel')
+    def export_excel(self, request):
+        """
+        خروجی اکسل استاندارد ۲ ردیفه اطلاعات شرکت‌ها منطبق بر استانداردهای مهندسی
+        """
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        qs = self.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "شرکت‌های هلدینگ"
+        ws.views.sheetView[0].rightToLeft = True
+
+        headers_fa = [
+            'ردیف', 'کد یکتا', 'نام کامل شرکت', 'شناسه ملی', 'کد اقتصادی',
+            'شماره ثبت', 'تلفن تماس', 'مدیرعامل', 'تعداد پروژه‌ها', 'وضعیت', 'نشانی دفتر مرکزی'
+        ]
+        headers_en = [
+            'row_num', 'code', 'name', 'national_id', 'economic_code',
+            'registration_number', 'phone', 'ceo_name', 'projects_count', 'is_active', 'address'
+        ]
+
+        title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
+        key_font = Font(name='Segoe UI', size=8, italic=True, color='94A3B8')
+        title_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+        key_fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+
+        thin_border = Border(
+            left=Side(style='thin', color='E2E8F0'),
+            right=Side(style='thin', color='E2E8F0'),
+            top=Side(style='thin', color='E2E8F0'),
+            bottom=Side(style='thin', color='E2E8F0')
+        )
+
+        ws.append(headers_fa)
+        ws.append(headers_en)
+
+        for col_idx in range(1, len(headers_fa) + 1):
+            cell_fa = ws.cell(row=1, column=col_idx)
+            cell_fa.font = title_font
+            cell_fa.fill = title_fill
+            cell_fa.alignment = Alignment(horizontal='center', vertical='center')
+
+            cell_en = ws.cell(row=2, column=col_idx)
+            cell_en.font = key_font
+            cell_en.fill = key_fill
+            cell_en.alignment = Alignment(horizontal='center', vertical='center')
+
+        ws.row_dimensions[1].height = 26
+        ws.row_dimensions[2].height = 16
+        ws.freeze_panes = 'A3'
+
+        data_font = Font(name='B Nazanin', size=10)
+        data_font_num = Font(name='Segoe UI', size=10)
+
+        for idx, comp in enumerate(qs, start=1):
+            p_count = comp.projects_count if hasattr(comp, 'projects_count') else comp.projects.count()
+            ws.append([
+                idx,
+                comp.code,
+                comp.name,
+                comp.national_id or '',
+                comp.economic_code or '',
+                comp.registration_number or '',
+                comp.phone or '',
+                comp.ceo_name or '',
+                p_count,
+                'فعال' if comp.is_active else 'غیرفعال',
+                comp.address or ''
+            ])
+            curr_row = idx + 2
+            ws.row_dimensions[curr_row].height = 20
+            for col_idx in range(1, len(headers_fa) + 1):
+                c = ws.cell(row=curr_row, column=col_idx)
+                c.border = thin_border
+                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 11] else 'right', vertical='center')
+                if col_idx in [1, 2, 4, 5, 6, 7, 9]:
+                    c.font = data_font_num
+                else:
+                    c.font = data_font
+
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or '')) for cell in col)
+            col_letter = openpyxl.utils.get_column_letter(col[0].column)
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 12)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        filename = f"companies_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        response = HttpResponse(
+            buf.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
 
 class UserCompanyAccessViewSet(viewsets.ModelViewSet):
     """
@@ -6109,7 +6261,7 @@ class UserCompanyAccessViewSet(viewsets.ModelViewSet):
     """
     queryset = UserCompanyAccess.objects.all().select_related('user', 'company')
     serializer_class = UserCompanyAccessSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, IsOrgStructureManagerOrReadOnly]
     pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
@@ -6136,17 +6288,28 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         user = self.request.user
 
-        # عایق‌سازی شرکت: فیلتر بر مبنای شرکت انتخابی یا هدر
+        # عایق‌سازی شرکت و رفع رخنه امنیتی BOLA:
+        if not user.is_authenticated:
+            return qs.none()
+
         company_param = self.request.query_params.get('company_id') or self.request.query_params.get('company') or self.request.headers.get('X-Company-ID')
-        if company_param:
+        if not user.is_superuser:
+            allowed_company_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if company_param:
+                try:
+                    cid = int(company_param)
+                    if cid not in allowed_company_ids:
+                        raise PermissionDenied("شما به اطلاعات و پروژه‌های این شرکت دسترسی ندارید.")
+                    qs = qs.filter(company_id=cid)
+                except (ValueError, TypeError):
+                    pass
+            else:
+                qs = qs.filter(Q(company_id__in=allowed_company_ids) | Q(company__isnull=True))
+        elif company_param:
             try:
                 qs = qs.filter(company_id=int(company_param))
             except (ValueError, TypeError):
                 pass
-        elif not user.is_superuser:
-            # اگر پارامتری ارسال نشده بود و کاربر سوپریوزر نبود، فقط پروژه‌های شرکت‌های مجاز کاربر را نمایش بده
-            allowed_company_ids = get_user_allowed_companies(user).values_list('id', flat=True)
-            qs = qs.filter(Q(company_id__in=allowed_company_ids) | Q(company__isnull=True))
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -6158,16 +6321,33 @@ class FinancialProjectViewSet(viewsets.ModelViewSet):
         return qs.order_by('code')
 
     def perform_create(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company')
+        if company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if company.id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ایجاد پروژه برای این شرکت نیستید.")
         instance = serializer.save()
         tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
         broadcast_org_structure_updated('project', 'create', instance.id, instance.name, None, tab_id, self.request.user.id)
 
     def perform_update(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company') or serializer.instance.company
+        if company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if company.id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ویرایش پروژه در این شرکت نیستید.")
         instance = serializer.save()
         tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
         broadcast_org_structure_updated('project', 'update', instance.id, instance.name, None, tab_id, self.request.user.id)
 
     def perform_destroy(self, instance):
+        user = self.request.user
+        if instance.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if instance.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به حذف پروژه این شرکت نیستید.")
         instance_id = instance.id
         instance_name = instance.name
 
@@ -6225,6 +6405,14 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(project__company_id=cid)
+        elif not user.is_superuser and user.is_authenticated:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            qs = qs.filter(Q(project__company_id__in=allowed_ids) | Q(project__company__isnull=True))
+
         project_id = self.request.query_params.get('project_id') or self.request.query_params.get('project')
         if project_id:
             try:
@@ -6241,16 +6429,33 @@ class ProjectSectionViewSet(viewsets.ModelViewSet):
         return qs.order_by('project__code', 'code')
 
     def perform_create(self, serializer):
+        user = self.request.user
+        project = serializer.validated_data.get('project')
+        if project and project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ایجاد بخش برای پروژه‌های این شرکت نیستید.")
         instance = serializer.save()
         tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
         broadcast_org_structure_updated('section', 'create', instance.id, instance.name, instance.project_id, tab_id, self.request.user.id)
 
     def perform_update(self, serializer):
+        user = self.request.user
+        project = serializer.validated_data.get('project') or self.get_object().project
+        if project and project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ویرایش بخش در پروژه‌های این شرکت نیستید.")
         instance = serializer.save()
         tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
         broadcast_org_structure_updated('section', 'update', instance.id, instance.name, instance.project_id, tab_id, self.request.user.id)
 
     def perform_destroy(self, instance):
+        user = self.request.user
+        if instance.project and instance.project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if instance.project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به حذف بخش‌های این شرکت نیستید.")
         instance_id = instance.id
         instance_name = instance.name
         project_id = instance.project_id
@@ -6412,8 +6617,23 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Response([], status=status.HTTP_200_OK)
 
+        company_param = request.query_params.get('company_id') or request.query_params.get('company') or request.headers.get('X-Company-ID')
+        target_company_id = None
+        if company_param:
+            try:
+                target_company_id = int(company_param)
+            except (ValueError, TypeError):
+                pass
+
+        if not user.is_superuser and target_company_id:
+            allowed_cids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if target_company_id not in allowed_cids:
+                return Response([], status=status.HTTP_200_OK)
+
         if user.is_superuser or user.is_staff:
             sections = ProjectSection.objects.filter(is_active=True, project__is_active=True).select_related('project')
+            if target_company_id:
+                sections = sections.filter(project__company_id=target_company_id)
             return Response(ProjectSectionSerializer(sections, many=True).data)
 
         assignments = UserSectionAssignment.objects.filter(
@@ -6422,6 +6642,9 @@ class UserSectionAssignmentViewSet(viewsets.ModelViewSet):
             section__is_active=True,
             section__project__is_active=True
         ).select_related('section', 'section__project')
+
+        if target_company_id:
+            assignments = assignments.filter(section__project__company_id=target_company_id)
 
         sections = [a.section for a in assignments]
         unique_sections = {s.id: s for s in sections}.values()
@@ -6664,6 +6887,10 @@ class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(section__project__company_id=cid)
         section_id = self.request.query_params.get('section_id')
         if section_id:
             qs = qs.filter(section_id=section_id)
@@ -6680,6 +6907,11 @@ class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
+        section = serializer.validated_data.get('section')
+        if section and section.project and section.project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if section.project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ثبت فاکتور برای این شرکت نیستید.")
         # Guardian G2: employee-submitted invoices must always be created in 'draft' status
         if not user.is_superuser:
             serializer.save(created_by=user, status='draft')
@@ -6813,13 +7045,16 @@ class PettyCashAccountViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(section__project__company_id=cid)
         section_id = self.request.query_params.get('section_id')
         if section_id:
             qs = qs.filter(section_id=section_id)
         custodian_id = self.request.query_params.get('custodian_id')
         if custodian_id:
             qs = qs.filter(custodian_id=custodian_id)
-        user = self.request.user
         # کارمندان عادی فقط حساب تنخواه خود را مشاهده می‌کنند
         if not user.is_superuser:
             is_manager = UserSectionAssignment.objects.filter(
@@ -6830,6 +7065,15 @@ class PettyCashAccountViewSet(viewsets.ModelViewSet):
             if not is_manager:
                 qs = qs.filter(custodian=user)
         return qs.order_by('section', 'custodian')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        section = serializer.validated_data.get('section')
+        if section and section.project and section.project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if section.project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به تعریف حساب تنخواه برای این شرکت نیستید.")
+        serializer.save()
 
 
 class PettyCashTransactionViewSet(viewsets.ModelViewSet):
@@ -6846,6 +7090,10 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        cid = validate_user_company_access(user, get_request_company_id(self.request))
+        if cid:
+            qs = qs.filter(section__project__company_id=cid)
         section_id = self.request.query_params.get('section_id')
         if section_id:
             qs = qs.filter(section_id=section_id)
@@ -6868,7 +7116,6 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
                 Q(description__icontains=search)
             )
 
-        user = self.request.user
         # اگر کاربر دسترسی مدیریتی نداشته باشد، فقط اسناد تنخواه خودش در بخش را می‌بیند
         if not user.is_superuser and not custodian_id:
             is_manager = UserSectionAssignment.objects.filter(
@@ -6884,6 +7131,10 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         section = serializer.validated_data.get('section')
+        if section and section.project and section.project.company and not user.is_superuser:
+            allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if section.project.company_id not in allowed_ids:
+                raise PermissionDenied("شما مجاز به ثبت سند تنخواه برای این شرکت نیستید.")
         custodian = serializer.validated_data.get('custodian') or user
 
         # اتصال خودکار یا ایجاد حساب تنخواه برای بخش و کاربر

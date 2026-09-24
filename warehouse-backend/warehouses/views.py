@@ -14,13 +14,29 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        return Warehouse.objects.annotate(
+        qs = Warehouse.objects.annotate(
             annotated_total_quantity=Count('items'),
             annotated_counted_quantity=Count(
                 'items',
                 filter=~Q(items__field_status__in=['waiting', 'counting', 'در انتظار شمارش'])
             )
         )
+        req = self.request
+        # تفکیک و عایق‌سازی چندشرکتی انبارها بر مبنای هدر یا کوئری‌پارامتر همراه با اعتبارسنجی امنیتی دسترسی (BOLA Protection)
+        company_id = req.headers.get('X-Company-ID') or req.META.get('HTTP_X_COMPANY_ID') or req.query_params.get('company_id')
+        
+        if company_id:
+            from personnel.views import validate_user_company_access
+            cid = validate_user_company_access(req.user, company_id)
+            if cid:
+                qs = qs.filter(company_id=cid)
+        elif req.user and req.user.is_authenticated and not req.user.is_superuser:
+            # کاربر عادی بدون فیلتر شرکت صریح، فقط انبارهای شرکت‌های مجاز خود را می‌بیند
+            from personnel.views import get_user_allowed_companies
+            allowed_cids = get_user_allowed_companies(req.user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_cids)
+            
+        return qs
 
     def get_permissions(self):
         from rest_framework.permissions import IsAuthenticated
@@ -39,7 +55,21 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         from accounts.audit_utils import log_audit_event
-        instance = serializer.save()
+        from personnel.models import Company
+        from personnel.views import validate_user_company_access
+
+        # استخراج شرکت فعال جهت انتساب خودکار انبار ثبت‌شده به شرکت با اعتبارسنجی دسترسی کاربر
+        company_id = self.request.headers.get('X-Company-ID') or self.request.META.get('HTTP_X_COMPANY_ID') or self.request.data.get('company_id')
+        extra_kwargs = {}
+        if company_id:
+            cid = validate_user_company_access(self.request.user, company_id)
+            if cid:
+                extra_kwargs['company_id'] = cid
+                comp = Company.objects.filter(id=cid).first()
+                if comp:
+                    extra_kwargs['company_name'] = comp.name
+
+        instance = serializer.save(**extra_kwargs)
         log_audit_event(
             module='warehouses',
             action='CREATE',
@@ -48,7 +78,7 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             target_repr=f"انبار: {instance.name}",
             severity='info',
             warehouse=instance,
-            after_state={'id': instance.id, 'name': instance.name, 'code': instance.code, 'is_active': instance.is_active}
+            after_state={'id': instance.id, 'name': instance.name, 'code': instance.code, 'is_active': instance.is_active, 'company_id': instance.company_id}
         )
         broadcast_warehouse_mutation(instance.id, 'CREATE', instance.name)
 

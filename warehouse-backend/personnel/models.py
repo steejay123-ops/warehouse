@@ -99,6 +99,10 @@ class Company(models.Model):
     ceo_name = models.CharField(max_length=150, blank=True, null=True, verbose_name="نام مدیرعامل")
     logo = models.ImageField(upload_to='company_logos/', blank=True, null=True, verbose_name="لوگوی شرکت")
     is_active = models.BooleanField(default=True, verbose_name="وضعیت فعال")
+    has_warehouse_module = models.BooleanField(
+        default=True,
+        verbose_name="دسترسی به سامانه انبارداری و انبارگردانی"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین ویرایش")
 
@@ -1948,8 +1952,13 @@ class PayrollYearlySettings(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['fiscal_year', 'effective_from'],
-                condition=models.Q(project__isnull=True),
+                condition=models.Q(project__isnull=True, company__isnull=True),
                 name='unique_global_effective_period_setting'
+            ),
+            models.UniqueConstraint(
+                fields=['company', 'fiscal_year', 'effective_from'],
+                condition=models.Q(project__isnull=True, company__isnull=False),
+                name='unique_company_effective_period_setting'
             ),
             models.UniqueConstraint(
                 fields=['project', 'fiscal_year', 'effective_from'],
@@ -2381,8 +2390,45 @@ def emit_accounting_event(source_instance, event_type: str, occurred_at=None, pa
             import logging
             logging.getLogger(__name__).warning(f"[AccountingOutbox] Error generating journal lines: {e}")
 
+    company_id = (payload or {}).get('company_id')
+    company_name = (payload or {}).get('company_name')
+
+    if not company_id:
+        if hasattr(source_instance, 'company_id') and source_instance.company_id:
+            company_id = source_instance.company_id
+        elif hasattr(source_instance, 'company') and source_instance.company:
+            company_id = getattr(source_instance.company, 'id', None)
+            if not company_name and hasattr(source_instance.company, 'name'):
+                company_name = source_instance.company.name
+        elif hasattr(source_instance, 'project') and source_instance.project:
+            company_id = getattr(source_instance.project, 'company_id', None)
+            if not company_name and hasattr(source_instance.project, 'company') and source_instance.project.company:
+                company_name = getattr(source_instance.project.company, 'name', None)
+        elif hasattr(source_instance, 'section') and source_instance.section:
+            sec = source_instance.section
+            if hasattr(sec, 'project') and sec.project:
+                company_id = getattr(sec.project, 'company_id', None)
+                if not company_name and hasattr(sec.project, 'company') and sec.project.company:
+                    company_name = getattr(sec.project.company, 'name', None)
+        elif hasattr(source_instance, 'account') and source_instance.account:
+            acc = source_instance.account
+            if hasattr(acc, 'section') and acc.section and hasattr(acc.section, 'project') and acc.section.project:
+                company_id = getattr(acc.section.project, 'company_id', None)
+                if not company_name and hasattr(acc.section.project, 'company') and acc.section.project.company:
+                    company_name = getattr(acc.section.project.company, 'name', None)
+
+    if company_id and not company_name:
+        try:
+            c_name = Company.objects.filter(id=company_id).values_list('name', flat=True).first()
+            if c_name:
+                company_name = c_name
+        except Exception:
+            pass
+
     final_payload = {
         **(payload or {}),
+        'company_id': company_id,
+        'company_name': company_name,
         'journal_lines': journal_lines,
     }
     return AccountingEvent.objects.create(

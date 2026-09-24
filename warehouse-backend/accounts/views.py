@@ -1846,6 +1846,14 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
         if user_id:
             qs = qs.filter(user_id=user_id)
 
+        company_id = params.get('company_id') or params.get('company')
+        if not company_id and req and req.META.get('HTTP_X_COMPANY_ID'):
+            company_id = req.META.get('HTTP_X_COMPANY_ID')
+        if company_id and str(company_id).isdigit():
+            c_int = int(company_id)
+            from django.db.models import Q
+            qs = qs.filter(Q(details__company_id=c_int) | Q(details__company_id=str(c_int)))
+
         # فیلتر اختصاصی بر اساس قلمرو سامانه (Domain App-Scope Filtering)
         app_scope = params.get('app_scope')
         if app_scope and str(app_scope).lower().strip() != 'all':

@@ -4,7 +4,7 @@ from datetime import datetime, date
 import uuid
 
 from .models import AuditLog, UserLoginLog
-from .middleware import get_current_user, get_current_ip, get_current_user_agent, get_current_warehouse
+from .middleware import get_current_user, get_current_ip, get_current_user_agent, get_current_warehouse, get_current_company
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +98,11 @@ def log_audit_event(
     details=None,
     ip_address=None,
     warehouse_id=None,
+    company_id=None,
     **kwargs
 ):
     """
-    ثبت آسان و ایمن یک رویداد ممیزی در سامانه
+    ثبت آسان و ایمن یک رویداد ممیزی در سامانه با پشتیبانی از کانتکست چندشرکتی
     """
     try:
         actor_user = user or get_current_user()
@@ -123,9 +124,20 @@ def log_audit_event(
         if target_wh_id is not None:
             target_wh_id = getattr(target_wh_id, 'id', target_wh_id)
 
+        # استخراج و ثبت شناسه شرکت فعال در جزئیات رویداد
+        target_company_id = company_id if company_id is not None else kwargs.get('company_id')
+        if target_company_id is None and isinstance(details, dict):
+            target_company_id = details.get('company_id')
+        if target_company_id is None:
+            target_company_id = get_current_company()
+
         clean_before = sanitize_sensitive_data(before_state) if before_state else None
         clean_after = sanitize_sensitive_data(after_state) if after_state else None
         clean_details = sanitize_sensitive_data(details or {})
+        if target_company_id is not None:
+            if not isinstance(clean_details, dict):
+                clean_details = {'data': clean_details}
+            clean_details['company_id'] = target_company_id
 
         actor_username = None
         actor_name = None

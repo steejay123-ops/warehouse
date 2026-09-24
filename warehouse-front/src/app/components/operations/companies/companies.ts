@@ -5,8 +5,9 @@ import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 import { CompanyApiService } from '../../../core/api/company-api.service';
 import { ActiveCompanyService } from '../../../core/services/active-company.service';
+import { AccountsHttpService, User } from '../../../core/http/accounts-http.service';
 import { ToastService } from '../../../shared/components/toast/toast.component';
-import { Company } from '../../../core/models/company.model';
+import { Company, UserCompanyAccess } from '../../../core/models/company.model';
 
 @Component({
   selector: 'app-companies-management',
@@ -18,17 +19,23 @@ import { Company } from '../../../core/models/company.model';
 export class CompaniesManagementComponent implements OnInit, OnDestroy {
   private api = inject(CompanyApiService);
   public activeCompanyService = inject(ActiveCompanyService);
+  private accountsHttp = inject(AccountsHttpService, { optional: true });
   private toast = inject(ToastService);
   private cdr = inject(ChangeDetectorRef);
   private destroy$ = new Subject<void>();
 
   companies: Company[] = [];
   filteredCompanies: Company[] = [];
+  systemUsers: User[] = [];
   isLoading = false;
 
   // فیلتر جستجوی زنده درجا
   searchQuery = '';
   private searchSubject = new Subject<string>();
+
+  // مدیریت آپلود لوگو
+  selectedLogoFile: File | null = null;
+  logoPreviewUrl: string | null = null;
 
   // وضعیت مدال ثبت و ویرایش
   companyModal: {
@@ -46,6 +53,8 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
       address: string;
       ceo_name: string;
       is_active: boolean;
+      has_warehouse_module: boolean;
+      logo?: string | null;
     };
     errors: { [key: string]: string };
   } = {
@@ -54,6 +63,25 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
     isSubmitting: false,
     data: this.getEmptyCompanyData(),
     errors: {}
+  };
+
+  // وضعیت مدال مدیریت دسترسی کاربران (UserCompanyAccess)
+  userAccessModal: {
+    isOpen: boolean;
+    company: Company | null;
+    accesses: UserCompanyAccess[];
+    isLoading: boolean;
+    selectedUserId: number | null;
+    isDefault: boolean;
+    isSubmitting: boolean;
+  } = {
+    isOpen: false,
+    company: null,
+    accesses: [],
+    isLoading: false,
+    selectedUserId: null,
+    isDefault: false,
+    isSubmitting: false
   };
 
   // وضعیت مدال تایید حذف
@@ -133,7 +161,22 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  onLogoFileSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (file) {
+      this.selectedLogoFile = file;
+      const reader = new FileReader();
+      reader.onload = () => {
+        this.logoPreviewUrl = reader.result as string;
+        this.cdr.markForCheck();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
   openCreateModal(): void {
+    this.selectedLogoFile = null;
+    this.logoPreviewUrl = null;
     this.companyModal = {
       isOpen: true,
       isEdit: false,
@@ -145,6 +188,8 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
   }
 
   openEditModal(company: Company): void {
+    this.selectedLogoFile = null;
+    this.logoPreviewUrl = company.logo || null;
     this.companyModal = {
       isOpen: true,
       isEdit: true,
@@ -159,7 +204,9 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
         phone: company.phone || '',
         address: company.address || '',
         ceo_name: company.ceo_name || '',
-        is_active: company.is_active
+        is_active: company.is_active,
+        has_warehouse_module: company.has_warehouse_module !== false,
+        logo: company.logo || null
       },
       errors: {}
     };
@@ -168,6 +215,8 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
 
   closeCompanyModal(): void {
     this.companyModal.isOpen = false;
+    this.selectedLogoFile = null;
+    this.logoPreviewUrl = null;
     this.cdr.markForCheck();
   }
 
@@ -213,16 +262,24 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
       phone: this.companyModal.data.phone.trim() || null,
       address: this.companyModal.data.address.trim() || null,
       ceo_name: this.companyModal.data.ceo_name.trim() || null,
-      is_active: this.companyModal.data.is_active
+      is_active: this.companyModal.data.is_active,
+      has_warehouse_module: this.companyModal.data.has_warehouse_module
     };
 
     if (this.companyModal.isEdit && this.companyModal.data.id) {
-      this.api.update(this.companyModal.data.id, payload).subscribe({
+      const companyId = this.companyModal.data.id;
+      this.api.update(companyId, payload).subscribe({
         next: (updated) => {
           this.companyModal.isSubmitting = false;
           this.companyModal.isOpen = false;
           this.toast.success(`اطلاعات شرکت «${updated.name}» با موفقیت ویرایش شد.`);
-          this.loadCompanies();
+          if (this.selectedLogoFile) {
+            this.api.uploadLogo(companyId, this.selectedLogoFile).subscribe({
+              next: () => this.loadCompanies()
+            });
+          } else {
+            this.loadCompanies();
+          }
           this.activeCompanyService.loadAvailableCompanies().subscribe();
         },
         error: (err) => {
@@ -237,7 +294,13 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
           this.companyModal.isSubmitting = false;
           this.companyModal.isOpen = false;
           this.toast.success(`شرکت «${created.name}» با موفقیت ثبت شد.`);
-          this.loadCompanies();
+          if (this.selectedLogoFile && created.id) {
+            this.api.uploadLogo(created.id, this.selectedLogoFile).subscribe({
+              next: () => this.loadCompanies()
+            });
+          } else {
+            this.loadCompanies();
+          }
           this.activeCompanyService.loadAvailableCompanies().subscribe();
         },
         error: (err) => {
@@ -286,11 +349,125 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
   }
 
   exportExcel(): void {
-    this.toast.info('خروجی اکسل فهرست شرکت‌ها در حال آماده‌سازی است...');
+    this.isLoading = true;
+    this.api.exportExcel().subscribe({
+      next: (blob) => {
+        this.isLoading = false;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `companies_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        this.toast.success('فایل اکسل شرکت‌ها با موفقیت دانلود شد.');
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.isLoading = false;
+        this.toast.error('خطا در دریافت فایل اکسل شرکت‌ها.');
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   importExcel(): void {
     this.toast.info('بارگذاری دسته‌ای از اکسل برای شرکت‌ها بزودی فعال می‌شود.');
+  }
+
+  // ─── مدیریت دسترسی کاربران به شرکت (UserCompanyAccess) ───
+  openUserAccessModal(company: Company): void {
+    this.userAccessModal = {
+      isOpen: true,
+      company,
+      accesses: [],
+      isLoading: true,
+      selectedUserId: null,
+      isDefault: false,
+      isSubmitting: false
+    };
+    this.loadUserAccesses(company.id);
+    if (this.systemUsers.length === 0) {
+      this.loadSystemUsers();
+    }
+    this.cdr.markForCheck();
+  }
+
+  closeUserAccessModal(): void {
+    this.userAccessModal.isOpen = false;
+    this.userAccessModal.company = null;
+    this.cdr.markForCheck();
+  }
+
+  loadUserAccesses(companyId: number): void {
+    this.userAccessModal.isLoading = true;
+    this.api.getUserAccesses({ company_id: companyId }).subscribe({
+      next: (res) => {
+        this.userAccessModal.isLoading = false;
+        this.userAccessModal.accesses = Array.isArray(res) ? res : (res as any)?.results || [];
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.userAccessModal.isLoading = false;
+        this.toast.error('خطا در دریافت دسترسی‌های کاربران');
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  loadSystemUsers(): void {
+    if (!this.accountsHttp) return;
+    this.accountsHttp.getUsers().subscribe({
+      next: (users) => {
+        this.systemUsers = users;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت لیست کاربران');
+      }
+    });
+  }
+
+  addUserAccess(): void {
+    if (!this.userAccessModal.selectedUserId || !this.userAccessModal.company) {
+      this.toast.warning('لطفاً یک کاربر را انتخاب نمایید.');
+      return;
+    }
+    this.userAccessModal.isSubmitting = true;
+    this.api.createUserAccess({
+      user: this.userAccessModal.selectedUserId,
+      company: this.userAccessModal.company.id,
+      is_default: this.userAccessModal.isDefault
+    }).subscribe({
+      next: () => {
+        this.userAccessModal.isSubmitting = false;
+        this.userAccessModal.selectedUserId = null;
+        this.toast.success('دسترسی کاربر به شرکت با موفقیت ثبت شد.');
+        this.loadUserAccesses(this.userAccessModal.company!.id);
+      },
+      error: (err) => {
+        this.userAccessModal.isSubmitting = false;
+        const msg = err.error?.detail || err.error?.non_field_errors?.[0] || 'خطا در ثبت دسترسی کاربر';
+        this.toast.error(msg);
+      }
+    });
+  }
+
+  removeUserAccess(accessId?: number): void {
+    if (!accessId) return;
+    if (!confirm('آیا از لغو دسترسی این کاربر اطمینان دارید؟')) return;
+    this.api.deleteUserAccess(accessId).subscribe({
+      next: () => {
+        this.toast.success('دسترسی کاربر لغو شد.');
+        if (this.userAccessModal.company) {
+          this.loadUserAccesses(this.userAccessModal.company.id);
+        }
+      },
+      error: () => {
+        this.toast.error('خطا در لغو دسترسی');
+      }
+    });
   }
 
   private getEmptyCompanyData() {
@@ -303,7 +480,8 @@ export class CompaniesManagementComponent implements OnInit, OnDestroy {
       phone: '',
       address: '',
       ceo_name: '',
-      is_active: true
+      is_active: true,
+      has_warehouse_module: true
     };
   }
 }

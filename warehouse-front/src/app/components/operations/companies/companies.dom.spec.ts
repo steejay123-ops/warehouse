@@ -14,6 +14,7 @@ import { CompaniesManagementComponent } from './companies';
 import { CompanyApiService } from '../../../core/api/company-api.service';
 import { ActiveCompanyService } from '../../../core/services/active-company.service';
 import { ToastService } from '../../../shared/components/toast/toast.component';
+import { AccountsHttpService } from '../../../core/http/accounts-http.service';
 import { Company } from '../../../core/models/company.model';
 
 try {
@@ -25,6 +26,7 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
   let component: CompaniesManagementComponent;
   let mockCompanyApi: any;
   let mockActiveCompanyService: any;
+  let mockAccountsHttp: any;
   let mockToast: any;
 
   const sampleCompanies: Company[] = [
@@ -98,7 +100,12 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       create: vi.fn().mockImplementation((data: any) => of({ id: 3, ...data, projects_count: 0 })),
       update: vi.fn().mockImplementation((id: number, data: any) => of({ id, ...data })),
       delete: vi.fn().mockReturnValue(of(void 0)),
-      getUserAvailable: vi.fn().mockReturnValue(of({ companies: sampleCompanies, is_superuser: true }))
+      getUserAvailable: vi.fn().mockReturnValue(of({ companies: sampleCompanies, is_superuser: true })),
+      getUserAccesses: vi.fn().mockReturnValue(of([])),
+      createUserAccess: vi.fn().mockReturnValue(of({})),
+      deleteUserAccess: vi.fn().mockReturnValue(of({})),
+      exportExcel: vi.fn().mockReturnValue(of(new Blob())),
+      uploadLogo: vi.fn().mockReturnValue(of({}))
     };
 
     mockActiveCompanyService = {
@@ -111,6 +118,10 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       selectCompany: vi.fn(),
       openSwitchModal: vi.fn(),
       closeSwitchModal: vi.fn()
+    };
+
+    mockAccountsHttp = {
+      getUsers: vi.fn().mockReturnValue(of([]))
     };
 
     mockToast = {
@@ -126,6 +137,7 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       providers: [
         { provide: CompanyApiService, useValue: mockCompanyApi },
         { provide: ActiveCompanyService, useValue: mockActiveCompanyService },
+        { provide: AccountsHttpService, useValue: mockAccountsHttp },
         { provide: ToastService, useValue: mockToast }
       ]
     }).compileComponents();

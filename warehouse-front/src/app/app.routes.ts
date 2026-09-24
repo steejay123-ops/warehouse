@@ -7,7 +7,7 @@ import { Layout } from './components/layout/layout';
 import { AppLauncherComponent } from './components/app-launcher/app-launcher';
 import { ChangePassword } from './components/change-password/change-password';
 import { VerifyCard } from './components/verify-card/verify-card';
-import { AuthGuard, AuthGuardChild, WarehouseModuleMatchGuard, AccountingModuleMatchGuard } from './core/auth/auth.guard';
+import { AuthGuard, AuthGuardChild, WarehouseModuleMatchGuard, WarehouseCompanyGuard, AccountingModuleMatchGuard } from './core/auth/auth.guard';
 import { OperationsGuard, OperationsGuardChild } from './core/guards/operations.guard';
 import { OperationsLayoutComponent } from './components/operations/operations-layout/operations-layout';
 import { OperationsCockpitComponent } from './components/operations/operations-cockpit/operations-cockpit';
@@ -15,6 +15,7 @@ import { SettingsBackupTabComponent } from './components/settings/tabs/settings-
 import { OperationsSyncMonitorComponent } from './components/operations/operations-sync-monitor/operations-sync-monitor';
 import { OperationsRbacGovernanceComponent } from './components/operations/operations-rbac-governance/operations-rbac-governance';
 import { Users } from './components/users/users';
+import { CompaniesManagementComponent } from './components/operations/companies/companies';
 import { Audit } from './components/audit/audit';
 import { HealthDashboardComponent } from './components/health-dashboard/health-dashboard';
 import { ModuleRegistryService } from './core/modules/module-registry.service';
@@ -34,7 +35,7 @@ export const routes: Routes = [
     path: 'app/warehouse',
     component: Layout,
     canMatch: [WarehouseModuleMatchGuard],
-    canActivate: [AuthGuard],
+    canActivate: [AuthGuard, WarehouseCompanyGuard],
     canActivateChild: [AuthGuardChild],
     loadChildren: () => import('./modules/warehouse/warehouse.routes').then(m => m.WAREHOUSE_ROUTES)
   },
@@ -60,6 +61,7 @@ export const routes: Routes = [
       { path: 'snapshots', component: SettingsBackupTabComponent, data: { reuse: true } },
       { path: 'backup', redirectTo: 'snapshots', pathMatch: 'full' },
       { path: 'users', component: Users, data: { reuse: true } },
+      { path: 'companies', component: CompaniesManagementComponent, data: { reuse: true } },
       { path: 'health', component: HealthDashboardComponent, data: { appScope: 'operations', reuse: false } },
       { path: 'audit', component: Audit, data: { appScope: 'security', reuse: true } },
       { path: 'sync-monitor', component: OperationsSyncMonitorComponent, data: { reuse: true } },

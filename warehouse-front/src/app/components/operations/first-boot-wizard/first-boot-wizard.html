@@ -1,0 +1,179 @@
+<div *ngIf="companyService.isFirstBoot$ | async" class="first-boot-overlay fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all select-none" dir="rtl">
+  <div class="first-boot-card bg-white rounded-3xl border border-slate-200/90 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+    
+    <!-- سربرگ گرادیانی ویزارد -->
+    <div class="p-6 bg-gradient-to-r from-indigo-700 via-indigo-600 to-violet-700 text-white relative shrink-0">
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-3xl shadow-inner shrink-0">
+          🏢
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full border border-white/20">
+              راه‌اندازی نخستین • First Boot
+            </span>
+          </div>
+          <h2 class="text-base sm:text-lg font-black mt-1 text-white">راه‌اندازی ساختار سازمانی هلدینگ</h2>
+          <p class="text-xs text-indigo-100 font-medium mt-0.5 opacity-90">تعریف و استقرار اولین شرکت حقوقی جهت فعال‌سازی سامانه‌ها</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- بدنه فرم ویزارد -->
+    <div class="p-6 overflow-y-auto space-y-4 flex-1">
+      <!-- راهنمای اولیه -->
+      <div class="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-100 text-xs text-indigo-900 leading-relaxed font-medium flex items-start gap-2.5">
+        <span class="text-lg shrink-0">💡</span>
+        <span>
+          هیچ شرکت حقوقی در پایگاه داده یافت نشد. به عنوان مدیر ارشد سیستم، لطفاً مشخصات شرکت اصلی (مادر) را وارد فرمایید تا ساختار کاری و انبارهای مربوطه فعال گردند.
+        </span>
+      </div>
+
+      <!-- پیام خطا در صورت وجود -->
+      <div *ngIf="errorMessage" class="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-bold flex items-center gap-2 animate-in fade-in">
+        <span>⚠️</span>
+        <span class="flex-1">{{ errorMessage }}</span>
+      </div>
+
+      <form (ngSubmit)="onSubmit()" class="space-y-3.5">
+        <!-- فیلد ۱: نام کامل شرکت -->
+        <div>
+          <label for="fb-company-name" class="block text-xs font-black text-slate-700 mb-1">
+            نام کامل شرکت <span class="text-rose-500">*</span>
+          </label>
+          <input
+            id="fb-company-name"
+            type="text"
+            [(ngModel)]="formData.name"
+            name="name"
+            placeholder="مثال: شرکت توسعه تجارت و انبارداری پارس"
+            required
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-hidden transition-all bg-slate-50/50 focus:bg-white"
+          />
+        </div>
+
+        <!-- فیلد ۲: کد شناسه اختصاری -->
+        <div>
+          <label for="fb-company-code" class="block text-xs font-black text-slate-700 mb-1">
+            کد اختصاری شرکت (لاتین ۲ تا ۶ حرف) <span class="text-rose-500">*</span>
+          </label>
+          <input
+            id="fb-company-code"
+            type="text"
+            [(ngModel)]="formData.code"
+            name="code"
+            placeholder="مثال: PTS"
+            maxlength="10"
+            required
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 text-xs font-black font-mono uppercase text-slate-800 placeholder:text-slate-400 outline-hidden transition-all bg-slate-50/50 focus:bg-white text-left"
+            dir="ltr"
+          />
+          <p class="text-[10px] text-slate-400 font-medium mt-1">این کد در پیشوند شماره اسناد، پرونده‌ها و کدهای انبارداری مورد استفاده قرار می‌گیرد.</p>
+        </div>
+
+        <!-- فیلد ۳ و ۴: شناسه ملی و کد اقتصادی -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="fb-national-id" class="block text-xs font-black text-slate-700 mb-1">
+              شناسه ملی (۱۱ رقم)
+            </label>
+            <input
+              id="fb-national-id"
+              type="text"
+              [(ngModel)]="formData.national_id"
+              name="national_id"
+              placeholder="مثال: 10103456789"
+              maxlength="11"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold font-mono text-slate-800 placeholder:text-slate-400 outline-hidden transition-all bg-slate-50/50 focus:bg-white text-left"
+              dir="ltr"
+            />
+          </div>
+
+          <div>
+            <label for="fb-economic-code" class="block text-xs font-black text-slate-700 mb-1">
+              کد اقتصادی
+            </label>
+            <input
+              id="fb-economic-code"
+              type="text"
+              [(ngModel)]="formData.economic_code"
+              name="economic_code"
+              placeholder="مثال: 411456789123"
+              maxlength="14"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold font-mono text-slate-800 placeholder:text-slate-400 outline-hidden transition-all bg-slate-50/50 focus:bg-white text-left"
+              dir="ltr"
+            />
+          </div>
+        </div>
+
+        <!-- فیلد ۵: نشانی -->
+        <div>
+          <label for="fb-company-address" class="block text-xs font-black text-slate-700 mb-1">
+            نشانی دفتر مرکزی / انبار
+          </label>
+          <input
+            id="fb-company-address"
+            type="text"
+            [(ngModel)]="formData.address"
+            name="address"
+            placeholder="مثال: تهران، جاده مخصوص کرج، کیلومتر ۱۲"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 text-xs font-bold text-slate-800 placeholder:text-slate-400 outline-hidden transition-all bg-slate-50/50 focus:bg-white"
+          />
+        </div>
+
+        <!-- فیلد ۶: کارت تعاملی فعال‌سازی ماژول انبارداری -->
+        <div
+          (click)="toggleWarehouseModule()"
+          [ngClass]="formData.has_warehouse_module ? 'border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500/30' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-100/60'"
+          class="p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 group select-none mt-2"
+        >
+          <div class="flex items-center gap-3 min-w-0">
+            <div
+              [ngClass]="formData.has_warehouse_module ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'"
+              class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 transition-colors shadow-2xs"
+            >
+              📦
+            </div>
+            <div class="min-w-0">
+              <span class="block text-xs font-black text-slate-900 group-hover:text-indigo-600 transition-colors">
+                فعال‌سازی سامانه انبارداری و انبارگردانی
+              </span>
+              <span class="text-[10px] text-slate-500 font-medium block mt-0.5">
+                دسترسی به کاردکس، اسناد باسکول، گمرک و شمارش دوره‌ای کالا
+              </span>
+            </div>
+          </div>
+
+          <div class="shrink-0 flex items-center">
+            <input
+              type="checkbox"
+              [(ngModel)]="formData.has_warehouse_module"
+              name="has_warehouse_module"
+              (click)="$event.stopPropagation()"
+              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+            />
+          </div>
+        </div>
+
+        <!-- دکمه اقدام نهایی -->
+        <div class="pt-3">
+          <button
+            type="submit"
+            [disabled]="isSubmitting || !formData.name || !formData.code"
+            class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 active:scale-98 disabled:opacity-50 disabled:pointer-events-none text-white text-xs font-black shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <span *ngIf="isSubmitting" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            <span>{{ isSubmitting ? 'در حال ثبت و راه‌اندازی...' : 'ثبت و راه‌اندازی اولین شرکت سازمان' }}</span>
+            <span *ngIf="!isSubmitting">➔</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- پاورقی ویزارد -->
+    <div class="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-center text-[10px] text-slate-400 font-mono font-bold">
+      هلدینگ هوشمند انبارداری و حسابداری • نسخه ۴.۶
+    </div>
+
+  </div>
+</div>

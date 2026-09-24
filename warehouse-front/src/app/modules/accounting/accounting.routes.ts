@@ -7,7 +7,6 @@ import { ManagerApprovals } from '../../components/personnel/manager-approvals/m
 import { TreasuryCartable } from '../../components/personnel/treasury-cartable/treasury-cartable';
 import { PersonnelProfilesHub } from '../../components/personnel/personnel-profiles/personnel-profiles';
 import { BaseSettings } from '../../components/personnel/base-settings/base-settings';
-import { CompaniesManagementComponent } from '../../components/finance/companies/companies';
 import { ProjectsAndSectionsComponent } from '../../components/organization/projects-and-sections/projects-and-sections';
 import { CounterpartiesComponent } from '../../components/finance/counterparties/counterparties';
 import { EmployeePortalComponent } from '../../components/finance/employee-portal/employee-portal';
@@ -113,7 +112,7 @@ export const ACCOUNTING_ROUTES: Routes = [
   { path: 'treasury', component: TreasuryCartable, data: { reuse: true } },
   { path: 'profiles', component: PersonnelProfilesHub, data: { reuse: true } },
   { path: 'personnel-profiles', component: PersonnelProfilesHub, data: { reuse: true } },
-  { path: 'companies', component: CompaniesManagementComponent, data: { reuse: true } },
+  { path: 'companies', redirectTo: '/app/operations/companies', pathMatch: 'full' },
   { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
   { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
   { path: 'counterparties', component: CounterpartiesComponent, data: { reuse: true } },

@@ -8,7 +8,6 @@ export interface NavItem {
 }
 
 export const ACCOUNTING_NAV_ITEMS: NavItem[] = [
-  { id: 'companies', label: '🏢 مدیریت شرکت‌ها', icon: 'briefcase', permission: 'view_sys_projects', module: 'accounting', isAccounting: true },
   { id: 'projects-and-sections', label: '📂 پروژه‌ها و بخش‌ها', icon: 'folder', permission: 'view_sys_projects', module: 'accounting', isAccounting: true },
   { id: 'employee-portal', label: '👤 پنل ثبت کارمند (بخش‌ها)', icon: 'clipboard', permission: 'view_sys_personnel_attendance', module: 'accounting', isAccounting: true },
   { id: 'attendance', label: '📋 ثبت کارکرد پرسنل و ناوگان', icon: 'check-square', permission: 'view_sys_personnel_attendance', module: 'accounting', isAccounting: true },

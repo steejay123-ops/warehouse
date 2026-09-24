@@ -26,6 +26,7 @@ import { AppRoleSwitcherComponent } from '../../shared/components/app-role-switc
 import { CompanySwitcherComponent } from '../organization/company-switcher/company-switcher';
 import { CompanySelectionModalComponent } from '../organization/company-selection-modal/company-selection-modal';
 import { ActiveCompanyService } from '../../core/services/active-company.service';
+import { FirstBootWizardComponent } from '../operations/first-boot-wizard/first-boot-wizard';
 import { environment } from '../../../environments/environment';
 
 import { WAREHOUSE_SYSTEM_NAV_ITEMS, WAREHOUSE_CONTEXT_NAV_ITEMS } from '../../modules/warehouse/nav-items';
@@ -43,7 +44,8 @@ import { ModuleRegistryService } from '../../core/modules/module-registry.servic
     ChatDrawerComponent,
     AppRoleSwitcherComponent,
     CompanySwitcherComponent,
-    CompanySelectionModalComponent
+    CompanySelectionModalComponent,
+    FirstBootWizardComponent
   ],
   templateUrl: './layout.html',
   styleUrl: './layout.css'
@@ -633,6 +635,36 @@ export class Layout implements OnInit, OnDestroy {
   ngOnInit() {
     // بارگذاری شرکت‌های مجاز کاربر و انتخاب خودکار / نمایش مودال انتخاب
     this.activeCompanyService.loadAvailableCompanies().subscribe();
+
+    // شنود تغییر شرکت کاری جهت بارگذاری منحصربه‌فرد انبارهای شرکت جدید و ارزیابی دسترسی
+    this.offlineSubs.push(
+      this.activeCompanyService.activeCompany$.subscribe((company) => {
+        if (!company) return;
+        this.personaService.sanitizeActiveRole();
+
+        const currentUrl = (this.router.url || '').split('?')[0];
+        if (currentUrl.startsWith('/app/warehouse') && company.has_warehouse_module === false) {
+          this.toast.show(
+            'warning',
+            `شرکت «${company.name}» فاقد سامانه انبارداری است. هدایت به سامانه مالی انجام شد.`
+          );
+          this.router.navigate(['/app/finance']);
+          return;
+        }
+
+        if (this.moduleRegistry.isModuleInstalled('warehouse') && company.has_warehouse_module !== false) {
+          this.whService.getAll().subscribe({
+            next: (data) => this.handleWarehousesLoaded(data),
+            error: () => {}
+          });
+
+          // در صورت حضور در صفحات عمیق انبارداری (مانند شمارشگر یا اسناد)، بازگشت به داشبورد انبار جهت نوسازی کامل کانتکست
+          if (currentUrl.startsWith('/app/warehouse') && currentUrl !== '/app/warehouse/dashboard') {
+            this.router.navigate(['/app/warehouse/dashboard']);
+          }
+        }
+      })
+    );
 
     // دریافت لیست انبارها از بک‌اند (با خودترمیمی آنی در صورت حذف یا نامعتبر شدن انبار فعال)
     if (this.moduleRegistry.isModuleInstalled('warehouse')) {

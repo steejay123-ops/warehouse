@@ -3,13 +3,36 @@ import { Router, CanActivateFn, CanActivateChildFn, CanMatchFn } from '@angular/
 import { AuthService } from './auth.service';
 import { ModuleRegistryService } from '../modules/module-registry.service';
 import { AppPersonaService } from '../services/app-persona.service';
+import { ActiveCompanyService } from '../services/active-company.service';
 
 /**
- * گارد تطبیق ماژول انبارداری — در صورت عدم نصب، از روت عبور می‌کند
+ * گارد تطبیق ماژول انبارداری — در صورت عدم نصب یا عدم فعال بودن ماژول برای شرکت، از روت عبور می‌کند
  */
 export const WarehouseModuleMatchGuard: CanMatchFn = () => {
   const moduleRegistry = inject(ModuleRegistryService);
-  return moduleRegistry.isModuleInstalled('warehouse');
+  const activeCompany = inject(ActiveCompanyService, { optional: true });
+
+  if (!moduleRegistry.isModuleInstalled('warehouse')) {
+    return false;
+  }
+  if (activeCompany && !activeCompany.hasWarehouseModule) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * گارد فعال بودن ماژول انبارداری برای شرکت فعال — هدایت مستقیم به پرتال لانچر
+ */
+export const WarehouseCompanyGuard: CanActivateFn = () => {
+  const activeCompany = inject(ActiveCompanyService, { optional: true });
+  const router = inject(Router);
+
+  if (activeCompany && !activeCompany.hasWarehouseModule) {
+    router.navigate(['/app/launcher']);
+    return false;
+  }
+  return true;
 };
 
 /**

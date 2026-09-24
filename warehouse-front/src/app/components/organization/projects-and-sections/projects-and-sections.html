@@ -102,7 +102,7 @@
         <button *ngIf="editingProject" (click)="cancelEditProject()" class="text-xs text-slate-400 hover:text-rose-500 transition-colors cursor-pointer">انصراف از ویرایش</button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3.5">
         <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">کد پروژه (یکتا):</label>
           <input type="text" [(ngModel)]="newProject.code" (keydown.enter)="saveProject()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono font-bold" placeholder="مثلاً PRJ-SHIRAZ" />
@@ -112,16 +112,25 @@
           <input type="text" [(ngModel)]="newProject.name" (keydown.enter)="saveProject()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold" placeholder="مثلاً پروژه مرکزی شیراز" />
         </div>
         <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1.5">شرکت متبوع:</label>
+          <select [(ngModel)]="newProject.company" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 cursor-pointer">
+            <option [ngValue]="null">-- پیش‌فرض (شرکت فعال) --</option>
+            <option *ngFor="let c of activeCompanyService?.availableCompanies" [ngValue]="c.id">
+              🏢 {{ c.name }} ({{ c.code }})
+            </option>
+          </select>
+        </div>
+        <div>
           <label class="block text-xs font-bold text-slate-600 mb-1.5">توضیحات و شرح عملیات:</label>
           <input type="text" [(ngModel)]="newProject.description" (keydown.enter)="saveProject()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs" placeholder="توضیحات اختیاری..." />
         </div>
         <div class="flex items-end gap-3">
-          <label class="flex items-center gap-2 cursor-pointer pb-2 text-xs font-bold text-slate-700">
+          <label class="flex items-center gap-2 cursor-pointer pb-2 text-xs font-bold text-slate-700 shrink-0">
             <input type="checkbox" [(ngModel)]="newProject.is_active" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4" />
-            <span>پروژه فعال است</span>
+            <span>فعال</span>
           </label>
-          <button (click)="saveProject()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer">
-            {{ editingProject ? 'بروزرسانی پروژه' : 'ثبت پروژه' }}
+          <button (click)="saveProject()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-xs transition-all cursor-pointer">
+            {{ editingProject ? 'بروزرسانی' : 'ثبت پروژه' }}
           </button>
         </div>
       </div>

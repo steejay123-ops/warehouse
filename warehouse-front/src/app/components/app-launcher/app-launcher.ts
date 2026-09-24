@@ -18,10 +18,12 @@ export interface AppLauncherCard {
   themeColor: 'indigo' | 'emerald' | 'cyan';
 }
 
+import { FirstBootWizardComponent } from '../operations/first-boot-wizard/first-boot-wizard';
+
 @Component({
   selector: 'app-launcher',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FirstBootWizardComponent],
   templateUrl: './app-launcher.html'
 })
 export class AppLauncherComponent implements OnInit {

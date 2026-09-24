@@ -10,6 +10,7 @@ export interface Company {
   ceo_name?: string | null;
   logo?: string | null;
   is_active: boolean;
+  has_warehouse_module?: boolean;
   projects_count?: number;
   created_at?: string;
   updated_at?: string;

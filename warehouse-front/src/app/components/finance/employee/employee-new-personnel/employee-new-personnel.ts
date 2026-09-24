@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -12,6 +12,7 @@ import { ToastService } from '../../../../shared/components/toast/toast.componen
 import { normalizeDigits } from '../../../../core/utils/date-utils';
 import { ExcelImportModal } from '../../../../shared/components/excel-import-modal/excel-import-modal';
 import { ImportResult } from '../../../../core/http/accounts-http.service';
+import { ActiveCompanyService } from '../../../../core/services/active-company.service';
 import {
   cleanShebaInput,
   validateSheba,
@@ -124,6 +125,8 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     { value: 'daily', label: 'روزمزد (مبنا ۱۰ ساعت)' }
   ];
 
+  private companySub?: Subscription;
+
   constructor(
     public auth: AuthService,
     private personnelApi: PersonnelApiService,
@@ -131,7 +134,8 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    @Optional() public activeCompanyService?: ActiveCompanyService
   ) {
     this.setupSearchDebounce();
   }
@@ -140,6 +144,16 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     this.loadMySections();
     this.loadJobTitles();
     this.setupWebSocket();
+
+    if (this.activeCompanyService?.activeCompany$) {
+      this.companySub = this.activeCompanyService.activeCompany$.subscribe(() => {
+        this.loadMySections();
+        if (this.selectedSectionId) {
+          this.loadRecentPersonnel();
+        }
+      });
+    }
+
     this.route.queryParams.subscribe(params => {
       if (params['section_id']) {
         const sId = Number(params['section_id']);
@@ -163,6 +177,7 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.searchSub?.unsubscribe();
     this.wsSub?.unsubscribe();
+    this.companySub?.unsubscribe();
   }
 
   private setupSearchDebounce(): void {

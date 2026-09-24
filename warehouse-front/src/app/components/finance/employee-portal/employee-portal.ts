@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -16,6 +16,7 @@ import { PersonnelApiService } from '../../../core/api/personnel-api.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ToastService } from '../../../services/toast.service';
 import { cleanShebaInput, validateSheba } from '../../../core/utils/sheba-utils';
+import { ActiveCompanyService } from '../../../core/services/active-company.service';
 
 export type PortalTab = 'attendance' | 'fleet' | 'invoices' | 'petty_cash' | 'new_vehicle' | 'new_personnel';
 
@@ -122,12 +123,21 @@ export class EmployeePortalComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    @Optional() public activeCompanyService?: ActiveCompanyService
   ) {}
 
   ngOnInit(): void {
     this.initTodayShamsi();
     this.loadMySections();
+
+    if (this.activeCompanyService?.activeCompany$) {
+      this.subs.push(
+        this.activeCompanyService.activeCompany$.subscribe(() => {
+          this.loadMySections();
+        })
+      );
+    }
 
     // Query params sync
     this.subs.push(

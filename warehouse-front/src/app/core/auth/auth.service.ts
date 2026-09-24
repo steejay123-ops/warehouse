@@ -418,6 +418,12 @@ export class AuthService {
     this.removeItem(TOKEN_KEY);
     this.removeItem(REFRESH_KEY);
     this.removeItem(USER_KEY);
+    this.removeItem('active_company_id');
+    this.removeItem('active_company_data');
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('active_company_id');
+      sessionStorage.removeItem('active_company_data');
+    }
     this._user.set(null);
   }
 

@@ -45,4 +45,29 @@ export class CompanyApiService {
   getUserAvailable(): Observable<UserAvailableCompaniesResponse> {
     return this.http.get<UserAvailableCompaniesResponse>(`${this.endpoint}/user-available/`);
   }
+
+  exportExcel(): Observable<Blob> {
+    return this.http.get(`${this.endpoint}/export-excel/`, { responseType: 'blob' });
+  }
+
+  uploadLogo(id: number, file: File): Observable<Company> {
+    const formData = new FormData();
+    formData.append('logo', file);
+    return this.http.patch<Company>(`${this.endpoint}/${id}/`, formData);
+  }
+
+  getUserAccesses(params?: { user_id?: number; company_id?: number }): Observable<any[]> {
+    let httpParams = new HttpParams();
+    if (params?.user_id) httpParams = httpParams.set('user_id', String(params.user_id));
+    if (params?.company_id) httpParams = httpParams.set('company_id', String(params.company_id));
+    return this.http.get<any[]>(`${environment.apiUrl}/personnel/user-company-access/`, { params: httpParams });
+  }
+
+  createUserAccess(payload: { user: number; company: number; is_default?: boolean }): Observable<any> {
+    return this.http.post<any>(`${environment.apiUrl}/personnel/user-company-access/`, payload);
+  }
+
+  deleteUserAccess(id: number): Observable<void> {
+    return this.http.delete<void>(`${environment.apiUrl}/personnel/user-company-access/${id}/`);
+  }
 }

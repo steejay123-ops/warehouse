@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -229,7 +229,7 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
     private router: Router,
-    public activeCompanyService: ActiveCompanyService
+    @Optional() public activeCompanyService?: ActiveCompanyService
   ) {}
 
   ngOnInit(): void {
@@ -238,12 +238,16 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
     this.setupRouteQuerySync();
     this.loadCollapsedSectionsState();
 
-    // همگام‌سازی فهرست پروژه‌ها با تغییر شرکت فعال
-    this.subs.push(
-      this.activeCompanyService.activeCompany$.subscribe(() => {
-        this.loadProjects();
-      })
-    );
+    // همگام‌سازی فهرست پروژه‌ها، بخش‌ها و انتساب‌ها با تغییر شرکت فعال
+    if (this.activeCompanyService?.activeCompany$) {
+      this.subs.push(
+        this.activeCompanyService.activeCompany$.subscribe(() => {
+          this.loadProjects();
+          this.loadSections();
+          this.loadAssignments(true);
+        })
+      );
+    }
 
     this.loadAllData();
   }
@@ -901,7 +905,9 @@ export class ProjectsAndSectionsComponent implements OnInit, OnDestroy {
       description: this.newProject.description?.trim() || ''
     };
 
-    if (!this.editingProject && this.activeCompanyService.activeCompanyId) {
+    if (this.newProject.company) {
+      payload.company = this.newProject.company;
+    } else if (!this.editingProject && this.activeCompanyService?.activeCompanyId) {
       payload.company = this.activeCompanyService.activeCompanyId;
     }
 

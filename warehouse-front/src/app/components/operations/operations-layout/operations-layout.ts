@@ -10,6 +10,7 @@ import { AppRoleSwitcherComponent } from '../../../shared/components/app-role-sw
 import { OfflinePendingBadgeComponent } from '../../../shared/components/offline-pending-badge/offline-pending-badge.component';
 import { ChatDrawerComponent } from '../../communications/chat-drawer/chat-drawer.component';
 import { UserMenuComponent } from '../../../shared/components/user-menu/user-menu.component';
+import { FirstBootWizardComponent } from '../first-boot-wizard/first-boot-wizard';
 import { filter, Subscription } from 'rxjs';
 
 interface NavItem {
@@ -31,7 +32,8 @@ interface NavItem {
     AppRoleSwitcherComponent,
     OfflinePendingBadgeComponent,
     ChatDrawerComponent,
-    UserMenuComponent
+    UserMenuComponent,
+    FirstBootWizardComponent
   ],
   templateUrl: './operations-layout.html',
   styleUrl: './operations-layout.css'
@@ -70,6 +72,12 @@ export class OperationsLayoutComponent implements OnInit, OnDestroy {
       label: 'مدیریت کاربران و نقش‌ها',
       route: '/app/operations/users',
       icon: '👤'
+    },
+    {
+      id: 'companies',
+      label: 'مدیریت شرکت‌ها و هلدینگ',
+      route: '/app/operations/companies',
+      icon: '🏢'
     },
     {
       id: 'health',

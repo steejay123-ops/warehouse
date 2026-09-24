@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { tap, catchError, map } from 'rxjs/operators';
@@ -14,6 +14,7 @@ export class ActiveCompanyService {
 
   private activeCompanySubject = new BehaviorSubject<Company | null>(null);
   public activeCompany$ = this.activeCompanySubject.asObservable();
+  public activeCompanySignal = signal<Company | null>(null);
 
   private availableCompaniesSubject = new BehaviorSubject<Company[]>([]);
   public availableCompanies$ = this.availableCompaniesSubject.asObservable();
@@ -24,8 +25,17 @@ export class ActiveCompanyService {
   private isSuperuserSubject = new BehaviorSubject<boolean>(false);
   public isSuperuser$ = this.isSuperuserSubject.asObservable();
 
+  private isFirstBootSubject = new BehaviorSubject<boolean>(false);
+  public isFirstBoot$ = this.isFirstBootSubject.asObservable();
+  public isFirstBootSignal = signal<boolean>(false);
+
   private isLoadingSubject = new BehaviorSubject<boolean>(false);
   public isLoading$ = this.isLoadingSubject.asObservable();
+
+  public hasWarehouseModuleSignal = computed<boolean>(() => {
+    const c = this.activeCompanySignal();
+    return !c || c.has_warehouse_module !== false;
+  });
 
   constructor() {
     this.restoreActiveCompany();
@@ -47,6 +57,24 @@ export class ActiveCompanyService {
     return this.isSuperuserSubject.value;
   }
 
+  get hasWarehouseModule(): boolean {
+    return this.hasWarehouseModuleSignal();
+  }
+
+  public hasWarehouseModule$ = this.activeCompany$.pipe(
+    map((c) => !c || c.has_warehouse_module !== false)
+  );
+
+  public openFirstBootWizard(): void {
+    this.isFirstBootSubject.next(true);
+    this.isFirstBootSignal.set(true);
+  }
+
+  public closeFirstBootWizard(): void {
+    this.isFirstBootSubject.next(false);
+    this.isFirstBootSignal.set(false);
+  }
+
   private restoreActiveCompany(): void {
     if (typeof window === 'undefined') return;
 
@@ -56,6 +84,7 @@ export class ActiveCompanyService {
         const parsed = JSON.parse(saved) as Company;
         if (parsed && parsed.id) {
           this.activeCompanySubject.next(parsed);
+          this.activeCompanySignal.set(parsed);
         }
       }
     } catch {
@@ -75,8 +104,15 @@ export class ActiveCompanyService {
         if (companies.length === 0) {
           this.selectCompany(null);
           this.isModalOpenSubject.next(false);
+          // در صورتی که دیتابیس خام باشد و هیچ شرکتی وجود نداشته باشد، ویزارد راه‌اندازی اول باز می‌شود
+          if (res.is_superuser) {
+            this.openFirstBootWizard();
+          }
           return;
         }
+
+        // اگر شرکت وجود دارد، ویزارد اجرای اول بسته می‌شود
+        this.closeFirstBootWizard();
 
         // اگر کاربر فقط به ۱ شرکت دسترسی دارد: مستقیم و خودکار همان شرکت فعال می‌شود
         if (companies.length === 1) {
@@ -108,6 +144,7 @@ export class ActiveCompanyService {
 
   public selectCompany(company: Company | null): void {
     this.activeCompanySubject.next(company);
+    this.activeCompanySignal.set(company);
     this.isModalOpenSubject.next(false);
 
     if (typeof window !== 'undefined') {
@@ -137,5 +174,11 @@ export class ActiveCompanyService {
     if (this.activeCompany || this.availableCompanies.length <= 1) {
       this.isModalOpenSubject.next(false);
     }
+  }
+
+  public clearActiveCompany(): void {
+    this.selectCompany(null);
+    this.availableCompaniesSubject.next([]);
+    this.isSuperuserSubject.next(false);
   }
 }

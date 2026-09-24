@@ -4,6 +4,7 @@ import { Router, NavigationEnd } from '@angular/router';
 import { WebSocketService } from '../http/websocket.service';
 import { SessionTabService } from './session-tab.service';
 import { ModuleRegistryService } from '../modules/module-registry.service';
+import { ActiveCompanyService } from './active-company.service';
 import { filter } from 'rxjs';
 
 export type AppModuleType = 'warehouse' | 'personnel' | 'operations' | string;
@@ -158,6 +159,7 @@ export class AppPersonaService {
   private ws = inject(WebSocketService);
   private sessionTab = inject(SessionTabService);
   public moduleRegistry = inject(ModuleRegistryService);
+  private activeCompanyService = inject(ActiveCompanyService, { optional: true });
 
   // سیگنال ماژول فعال (انبارداری یا مالی)
   public activeApp = signal<AppModuleType>(
@@ -196,6 +198,11 @@ export class AppPersonaService {
   });
 
   public canAccessApp(app: AppModuleType): boolean {
+    // اگر سامانه انبارداری است و شرکت فعال فاقد ماژول انبارداری است، دسترسی مسدود می‌شود
+    if (app === 'warehouse' && this.activeCompanyService && !this.activeCompanyService.hasWarehouseModule) {
+      return false;
+    }
+
     const spec = this.moduleRegistry.getSpec(app);
     if (!spec) return false;
     return this.moduleRegistry.userHasAccessToModule(

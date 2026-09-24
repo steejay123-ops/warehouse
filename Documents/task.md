@@ -139,7 +139,32 @@
 - [ ] <!-- id: CMP.4 --> **فاز ۴: پورتال اختصاصی مدیریت شرکت‌ها** (کامپوننت /app/finance/companies، هدر استیکی، دکمه‌های ۳ گانه، جدول کارتی با سرچ زنده و مودال ثبت با لوگو)
 - [ ] <!-- id: CMP.5 --> **فاز ۵: آزمون‌های یکپارچگی و صحه‌گذاری نهایی** (تست بک‌اند مایگریشن و دیسکت‌های بیمه شیراز/تهران، تست‌های DOM نوع ۱ بر پایه Vitest، و تست بیلد تایپ‌اسکریپت)
 
+---
+
+# 📦 فهرست وظایف استقرار اتصال انبارها به شرکت، ماژولار بودن انبار و انتقال به مرکز عملیات
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/company_warehouse_multitenant_plan.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/company_warehouse_multitenant_plan.md)
+* **سند تفصیلی تسک:** [`Documents/Company_Multi_Tenant_Architecture/task_company_warehouse_multitenant.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_warehouse_multitenant.md)
+* **وضعیت:** ✅ با موفقیت ۱۰۰٪ پیاده‌سازی و صحه‌گذاری شد
+
+### 🔹 فازهای پنج‌گانه اتصال انبار و مرکز عملیات:
+- [x] <!-- id: WHS.1 --> **فاز ۱: بک‌اند، مدل‌های داده و مایگریشن امن** (افزودن `company_id` به انبار، `has_warehouse_module` به شرکت، مایگریشن خودکار اتصال ۹ انبار به فارس عالیش، فیلتر `WarehouseViewSet.get_queryset` بر پایه `HTTP_X_COMPANY_ID`)
+- [x] <!-- id: WHS.2 --> **فاز ۲: انتقال پورتال مدیریت شرکت‌ها به مرکز عملیات** (انتقال کامپوننت به `/app/operations/companies`، ریدایرکت روت قبلی، آیتم سایدبار عملیات و چک‌باکس ماژول انبارداری در فرم شرکت)
+- [x] <!-- id: WHS.3 --> **فاز ۳: ماژولار بودن انبارداری و پویایی منوی بالای صفحه** (`hasWarehouseModule()` در `ActiveCompanyService`، پنهان‌سازی مشروط تب انبارگردانی در `AppRoleSwitcher`، گارد روتینگ `WarehouseModuleGuard`)
+- [x] <!-- id: WHS.4 --> **فاز ۴: ویزارد راه‌اندازی در اجرای اول برنامه** (کامپوننت `FirstBootWizardComponent`، تشخیص وضعیت بدون شرکت بودن در ورود سوپریوزر و ثبت اولین شرکت)
+- [x] <!-- id: WHS.5 --> **فاز ۵: آزمون‌های یکپارچگی و صحه‌گذاری نهایی** (تست جنگو ایزولاسیون انبارها، تست‌های DOM نوع ۱ Vitest، و تایید بیلد فرانت‌اند با صفر خطا)
+
+---
+
+# 📑 فهرست وظایف طرح جامع شناسنامه حقوقی، بایگانی مدارک و پروفایل پیشرفته شرکت‌ها
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/company_legal_profile_and_documents_plan.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/company_legal_profile_and_documents_plan.md)
+* **سند تفصیلی تسک:** [`Documents/Company_Multi_Tenant_Architecture/task_company_legal_profile.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_legal_profile.md)
+* **وضعیت:** ⏳ در انتظار تایید صریح کاربر (هیچ کدی پیش از تایید تغییر نمی‌کند)
+
+### 🔹 فازهای پنج‌گانه شناسنامه حقوقی، بایگانی مدارک و نظارت:
+- [ ] <!-- id: CLP.1 --> **فاز ۱: بک‌اند، مدل‌های داده و مایگریشن اسکیما** (گسترش فیلدهای مدل Company، مدل CompanyDocument با فیلدهای انقضا و محرمانگی، و مایگریشن پایگاه داده)
+- [ ] <!-- id: CLP.2 --> **فاز ۲: کنترلرها، امنیت رسانه‌ها و وب‌سرویس** (حفاظت مسیرهای دانلود در media_urls.py، سریالایزر مدارک، CompanyDocumentViewSet با اعتبارسنجی BOLA، اکشن expiring_documents و ارتقای خروجی اکسل)
+- [ ] <!-- id: CLP.3 --> **فاز ۳: استودیوی مودال ۵ تبی و مدیریت اسناد در فرانت‌اند** (تایپ‌های تایپ‌اسکریپت، متدهای سرویس، استودیوی مودال ۵ تبی در پورتال شرکت‌ها، تب آرشیو مدارک با دراپ‌زون و وضعیت انقضا)
+- [ ] <!-- id: CLP.4 --> **فاز ۴: سیستم هشدار انقضا، ستون سلامت و ویجت داشبورد** (ستون سلامت اسناد در جدول شرکت‌ها، ویجت پایش سررسید مدارک هلدینگ در مرکز عملیات با روزشمار تا انقضا)
+- [ ] <!-- id: CLP.5 --> **فاز ۵: آزمون‌های یکپارچگی، تست‌های Vitest DOM و صحه‌گذاری** (تست جنگو آپلود و امنیت مدارک، تست‌های DOM نوع ۱ Vitest، تایید کامپایل `npx tsc --noEmit` و ثبت مستندات تحویل)
+
 </div>
-
-
-

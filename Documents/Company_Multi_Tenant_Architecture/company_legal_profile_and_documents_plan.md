@@ -309,15 +309,40 @@ graph TD
 
 | ردیف | لایه معماری | مسیر فایل | ماهیت تغییرات |
 | :---: | :---: | :--- | :--- |
-| ۱ | **بک‌اند** | `warehouse-backend/personnel/models.py` | گسترش مدل `Company` و افزودن مدل جامع `CompanyDocument` |
+| ۱ | **بک‌اند** | `warehouse-backend/personnel/models.py` | گسترش مدل `Company` و افزودن مدل‌های `CompanyDocument` و `CompanyBankAccount` |
 | ۲ | **بک‌اند** | `warehouse-backend/common/media_urls.py` | افزودن پیشوندهای مدارک شرکت به لیست مسیرهای محافظت‌شده |
-| ۳ | **بک‌اند** | `warehouse-backend/personnel/serializers.py` | ایجاد `CompanyDocumentSerializer` و فیلدهای جدید `CompanySerializer` |
-| ۴ | **بک‌اند** | `warehouse-backend/personnel/views.py` | پیاده‌سازی `CompanyDocumentViewSet` و اکشن `expiring_documents` |
-| ۵ | **بک‌اند** | `warehouse-backend/personnel/urls.py` | ثبت روت اختصاصی `company-documents` در روتر جنگو |
-| ۶ | **بک‌اند** | `warehouse-backend/personnel/test_company_documents.py` | آزمون‌های جامع یکپارچگی و امنیت مدارک |
-| ۷ | **فرانت‌اند** | `warehouse-front/src/app/core/models/company.model.ts` | تعریف اینترفیس `CompanyDocument` و گسترش تایپ‌های `Company` |
-| ۸ | **فرانت‌اند** | `warehouse-front/src/app/core/api/company-api.service.ts` | متدهای بارگذاری، واکشی و حذف مدارک شرکتی |
-| ۹ | **فرانت‌اند** | `warehouse-front/src/app/components/operations/companies/*` | استودیوی ۵ تبی، تب بایگانی مدارک و ستون سلامت اسناد |
-| ۱۰ | **فرانت‌اند** | `warehouse-front/src/app/components/operations/operations-cockpit/*` | ویجت پایش سررسید مدارک و روزنامه‌های رسمی هلدینگ |
+| ۳ | **بک‌اند** | `warehouse-backend/personnel/serializers.py` | ایجاد `CompanyDocumentSerializer`، `CompanyBankAccountSerializer` و سریالایزر شرکت |
+| ۴ | **بک‌اند** | `warehouse-backend/personnel/views.py` | کنترلرهای `CompanyDocumentViewSet`، `CompanyBankAccountViewSet` و مانیتورینگ |
+| ۵ | **بک‌اند** | `warehouse-backend/personnel/urls.py` | ثبت روت‌های اختصاصی مدارک و حساب‌های بانکی شرکت در روتر |
+| ۶ | **بک‌اند** | `warehouse-backend/personnel/test_company_documents.py` | آزمون‌های جامع یکپارچگی، امنیت مدارک و چندشبایی |
+| ۷ | **فرانت‌اند** | `warehouse-front/src/app/core/models/company.model.ts` | تعریف اینترفیس‌های `CompanyDocument` و `CompanyBankAccount` |
+| ۸ | **فرانت‌اند** | `warehouse-front/src/app/core/api/company-api.service.ts` | متدهای مدیریت اسناد و حساب‌های بانکی شرکتی |
+| ۹ | **فرانت‌اند** | `warehouse-front/src/app/shared/components/user-menu/*` | سوئیچر و نمایش شرکت‌های مجاز داخل منوی پروفایل کاربر |
+| ۱۰ | **فرانت‌اند** | `warehouse-front/src/app/components/operations/companies/*` | استودیوی ۶ تبی با ابعاد ثابت، تقویم شمسی، چندشبایی و کمبوباکس جستجوپذیر |
+| ۱۱ | **فرانت‌اند** | `warehouse-front/src/app/components/operations/operations-cockpit/*` | ویجت پایش سررسید مدارک و روزنامه‌های رسمی هلدینگ |
+
+---
+
+## ۶. مصوبات تکمیلی فاز توسعه ۲.۱ (Approved Enhancements v2.1)
+در جلسه مصاحبه تخصصی معماری (`/grill-me`) مورخ مهر ۱۴۰۵، ارتقاهای فنی زیر با تایید کاربر مصوب گردید:
+
+1. **تقویم شمسی جلالی استاندارد (`NgPersianDatepickerModule`):**
+   - جایگزینی کلیه ورودی‌های متنی تاریخ با تقویم شمسی جلالی در تمامی بخش‌های استودیو (تاریخ ثبت شرکت، انقضای هیئت‌مدیره، تاریخ صدور و تاریخ انقضای اسناد).
+2. **پشتیبانی از چند شماره شبا برای هر شرکت (`CompanyBankAccount`):**
+   - ایجاد جدول رابطه‌ای اختصاصی با فیلدهای نام بانک، شماره حساب، شماره شبا، عنوان حساب (حقوق، تنخواه، بازرگانی، درآمد)، وضعیت فعال بودن و نشانگر حساب اصلی (`is_primary`).
+   - همگام‌سازی خودکار حساب اصلی با فیلدهای `primary_iban` و `primary_account_number` روی مدل شرکت جهت سازگاری رو به عقب.
+3. **موتور اعتبارسنجی پیشرفته شبا و استخراج حساب (`sheba-utils.ts`):**
+   - دقیقاً منطبق بر فرم پرسنل: اعتبارسنجی ISO 7064 Mod 97-10، قالب‌بندی خودکار ۲۴ رقمی، تشخیص نام و آیکون رسمی ۳۲ بانک کشور، استخراج خودکار شماره حساب و دکمه کپی شبا با فیدبک بصری.
+4. **تلفیق دسترسی شرکت‌ها در منوی کاربری (ترکیب دوگانه):**
+   - نمایش شرکت فعال و لیست شرکت‌های مجاز کاربر داخل دراپ‌داون پروفایل کاربر (`app-user-menu`) در کنار حفظ نشانگر و سوئیچر اختصاصی بالای صفحه (`app-company-switcher`).
+5. **کمبوباکس‌های جستجوپذیر (Searchable Combobox):**
+   - امکان تایپ و فیلتر آنی در لیست‌های انتخابی (بانک‌ها، نوع شرکت، نوع سند و کاربران سیستم).
+6. **تثبیت ابعاد استودیو و جلوگیری از پرش عمودی:**
+   - تعیین ابعاد ثابت و ایستا برای کانتینر استودیو (`h-[88vh] max-h-[780px] min-h-[600px]`) همراه با اسکرول مجزا در بدنه داخلی هر تب جهت حذف کامل پرش ارتفاع هنگام تعویض تب‌ها.
+7. **امکانات ارزش‌افزوده تصویب‌شده:**
+   - پیش‌نمایش درجا (In-Place Preview) فایل‌های PDF و تصاویر مدارک در یک لایت‌باکس شناور.
+   - تلفیق تب ششم «مدیریت دسترسی کاربران» در استودیو جهت حذف مودال‌های تودرتو.
+   - فیلتر و جستجوی زنده در جدول اسناد بایگانی‌شده شرکت.
 
 </div>
+

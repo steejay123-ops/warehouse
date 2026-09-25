@@ -33,7 +33,13 @@ from django.views.static import serve
 
 # پیشوندهایی که دسترسی به آن‌ها امضا لازم دارد. بقیه مسیرهای رسانه (لوگو،
 # پیوست‌های قدیمی) رفتار قبلی خود را نگه می‌دارند تا چیزی نشکند.
-PROTECTED_PREFIXES = ('item_photos/', 'chat_attachments/', 'comment_attachments/')
+PROTECTED_PREFIXES = (
+    'item_photos/',
+    'chat_attachments/',
+    'comment_attachments/',
+    'company_documents/',
+    'company_core_docs/'
+)
 
 # طول پنجره اعتبار/پایداری امضا (۷ روز برای چت و رسانه‌ها)
 _WINDOW_SECONDS = 7 * 24 * 60 * 60

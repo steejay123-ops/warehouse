@@ -5,6 +5,8 @@ from django.db import transaction
 from django.utils import timezone
 from .models import (
     Company,
+    CompanyDocument,
+    CompanyBankAccount,
     UserCompanyAccess,
     FinancialProject,
     ProjectSection,
@@ -768,6 +770,9 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
 
 class CompanySerializer(serializers.ModelSerializer):
     projects_count = serializers.SerializerMethodField()
+    documents_count = serializers.SerializerMethodField()
+    documents_health_status = serializers.SerializerMethodField()
+    bank_accounts = serializers.SerializerMethodField()
 
     class Meta:
         model = Company
@@ -778,6 +783,33 @@ class CompanySerializer(serializers.ModelSerializer):
         if hasattr(obj, 'projects_count'):
             return obj.projects_count
         return obj.projects.count()
+
+    def get_documents_count(self, obj):
+        if hasattr(obj, 'documents_count'):
+            return obj.documents_count
+        return obj.documents.count()
+
+    def get_documents_health_status(self, obj):
+        """
+        خلاصه وضعیت سلامت مدارک:
+        expired: دست‌کم یک مدرک منقضی شده
+        expiring_soon: دست‌کم یک مدرک کمتر از ۳۰ روز مانده به انقضا
+        valid: همه مدارک معتبرند
+        no_documents: فاقد مدرک
+        """
+        docs = obj.documents.all()
+        if not docs.exists():
+            return 'no_documents'
+        statuses = [d.expiry_status for d in docs]
+        if 'expired' in statuses:
+            return 'expired'
+        if 'expiring_soon' in statuses:
+            return 'expiring_soon'
+        return 'valid'
+
+    def get_bank_accounts(self, obj):
+        accounts = obj.bank_accounts.filter(is_active=True)
+        return CompanyBankAccountSerializer(accounts, many=True).data
 
     def validate_code(self, value):
         if not value:
@@ -793,6 +825,61 @@ class CompanySerializer(serializers.ModelSerializer):
         if cleaned and len(cleaned) != 11:
             raise serializers.ValidationError("شناسه ملی شرکت باید دقیقاً ۱۱ رقم باشد.")
         return cleaned
+
+
+class CompanyDocumentSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    expiry_status = serializers.ReadOnlyField()
+    days_until_expiry = serializers.ReadOnlyField()
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyDocument
+        fields = [
+            'id', 'company', 'company_name', 'document_type', 'document_type_display',
+            'title', 'file', 'file_url', 'file_size', 'issue_date', 'expiry_date',
+            'expiry_status', 'days_until_expiry', 'is_confidential',
+            'description', 'uploaded_by', 'uploaded_by_name',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['file_size', 'uploaded_by', 'created_at', 'updated_at']
+
+    def get_uploaded_by_name(self, obj):
+        if obj.uploaded_by:
+            return f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip() or obj.uploaded_by.username
+        return None
+
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
+
+
+class CompanyBankAccountSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+
+    class Meta:
+        model = CompanyBankAccount
+        fields = [
+            'id', 'company', 'company_name', 'bank_name', 'account_number',
+            'sheba_number', 'account_title', 'is_primary', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate_sheba_number(self, value):
+        if not value:
+            raise serializers.ValidationError("شماره شبا الزامی است.")
+        clean = clean_sheba(value)
+        is_valid, msg, _ = validate_sheba(clean)
+        if not is_valid:
+            raise serializers.ValidationError(msg or "شماره شبا نامعتبر است.")
+        return clean
 
 
 class UserCompanyAccessSerializer(serializers.ModelSerializer):

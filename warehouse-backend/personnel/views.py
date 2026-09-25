@@ -27,6 +27,8 @@ from accounts.views import OptionalPageNumberPagination
 
 from .models import (
     Company,
+    CompanyDocument,
+    CompanyBankAccount,
     UserCompanyAccess,
     FinancialProject,
     ProjectSection,
@@ -54,6 +56,8 @@ from .models import (
 from .serializers import (
     normalize_plate,
     CompanySerializer,
+    CompanyDocumentSerializer,
+    CompanyBankAccountSerializer,
     UserCompanyAccessSerializer,
     FinancialProjectSerializer,
     ProjectSectionSerializer,
@@ -6155,6 +6159,30 @@ class CompanyViewSet(viewsets.ModelViewSet):
             'count': companies.count()
         })
 
+    @action(detail=False, methods=['get'], url_path='expiring-documents')
+    def expiring_documents(self, request):
+        """
+        لیست کلیه مدارک منقضی شده یا در آستانه انقضا (کمتر از ۳۰ روز) برای تمام شرکت‌های مجاز کاربر
+        جهت نمایش در ویجت پایش سررسید مدارک داشبورد مرکز عملیات
+        """
+        from datetime import timedelta
+        user = request.user
+        qs = CompanyDocument.objects.select_related('company', 'uploaded_by').filter(expiry_date__isnull=False)
+
+        if not user.is_superuser:
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_ids, is_confidential=False)
+
+        today = timezone.now().date()
+        threshold = today + timedelta(days=30)
+        expiring_qs = qs.filter(expiry_date__lte=threshold).order_by('expiry_date')
+
+        serializer = CompanyDocumentSerializer(expiring_qs, many=True, context={'request': request})
+        return Response({
+            'count': expiring_qs.count(),
+            'results': serializer.data
+        })
+
     @action(detail=False, methods=['get'], url_path='export-excel')
     def export_excel(self, request):
         """
@@ -6171,12 +6199,14 @@ class CompanyViewSet(viewsets.ModelViewSet):
         ws.views.sheetView[0].rightToLeft = True
 
         headers_fa = [
-            'ردیف', 'کد یکتا', 'نام کامل شرکت', 'شناسه ملی', 'کد اقتصادی',
-            'شماره ثبت', 'تلفن تماس', 'مدیرعامل', 'تعداد پروژه‌ها', 'وضعیت', 'نشانی دفتر مرکزی'
+            'ردیف', 'کد یکتا', 'نام کامل شرکت', 'نوع شرکت', 'شناسه ملی', 'کد اقتصادی',
+            'شماره ثبت', 'تلفن تماس', 'مدیرعامل', 'رئیس هیئت‌مدیره', 'کد کارگاه بیمه',
+            'شناسه مودیان', 'شماره شبا رسمی', 'تعداد پروژه‌ها', 'تعداد اسناد', 'وضعیت', 'نشانی دفتر مرکزی'
         ]
         headers_en = [
-            'row_num', 'code', 'name', 'national_id', 'economic_code',
-            'registration_number', 'phone', 'ceo_name', 'projects_count', 'is_active', 'address'
+            'row_num', 'code', 'name', 'company_type', 'national_id', 'economic_code',
+            'registration_number', 'phone', 'ceo_name', 'board_chairman', 'workshop_code',
+            'tax_memory_id', 'primary_iban', 'projects_count', 'documents_count', 'is_active', 'address'
         ]
 
         title_font = Font(name='B Nazanin', size=11, bold=True, color='FFFFFF')
@@ -6214,16 +6244,23 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
         for idx, comp in enumerate(qs, start=1):
             p_count = comp.projects_count if hasattr(comp, 'projects_count') else comp.projects.count()
+            d_count = comp.documents.count()
             ws.append([
                 idx,
                 comp.code,
                 comp.name,
+                comp.get_company_type_display(),
                 comp.national_id or '',
                 comp.economic_code or '',
                 comp.registration_number or '',
                 comp.phone or '',
                 comp.ceo_name or '',
+                comp.board_chairman or '',
+                comp.workshop_code or '',
+                comp.tax_memory_id or '',
+                comp.primary_iban or '',
                 p_count,
+                d_count,
                 'فعال' if comp.is_active else 'غیرفعال',
                 comp.address or ''
             ])
@@ -6232,8 +6269,8 @@ class CompanyViewSet(viewsets.ModelViewSet):
             for col_idx in range(1, len(headers_fa) + 1):
                 c = ws.cell(row=curr_row, column=col_idx)
                 c.border = thin_border
-                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 11] else 'right', vertical='center')
-                if col_idx in [1, 2, 4, 5, 6, 7, 9]:
+                c.alignment = Alignment(horizontal='center' if col_idx not in [3, 17] else 'right', vertical='center')
+                if col_idx in [1, 2, 5, 6, 7, 8, 11, 12, 13, 14, 15]:
                     c.font = data_font_num
                 else:
                     c.font = data_font
@@ -6253,6 +6290,170 @@ class CompanyViewSet(viewsets.ModelViewSet):
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+class CompanyDocumentViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت اسناد، مدارک و مجوزهای رسمی شرکت‌ها با پشتیبانی از آپلود فایل،
+    اعتبارسنجی BOLA و حفاظت از اسناد محرمانه
+    """
+    queryset = CompanyDocument.objects.all().select_related('company', 'uploaded_by')
+    serializer_class = CompanyDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CompanyDocument.objects.select_related('company', 'uploaded_by')
+
+        company_id = self.request.query_params.get('company_id') or get_request_company_id(self.request)
+        if company_id:
+            cid = validate_user_company_access(user, company_id)
+            if cid:
+                qs = qs.filter(company_id=cid)
+        elif not user.is_superuser:
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_ids)
+
+        # عدم نمایش اسناد محرمانه به کاربران غیرسوپریوزر/غیرادمین
+        if not (user.is_superuser or user.is_staff):
+            qs = qs.filter(is_confidential=False)
+
+        doc_type = self.request.query_params.get('document_type')
+        if doc_type:
+            qs = qs.filter(document_type=doc_type)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search))
+
+        return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company')
+        if not company:
+            raise serializers.ValidationError({"company": "انتخاب شرکت الزامی است."})
+
+        # بررسی دسترسی کاربر به این شرکت
+        validate_user_company_access(user, company.id)
+
+        # اگر سند محرمانه علامت زده شده، کاربر باید مدیر ارشد باشد
+        is_confidential = serializer.validated_data.get('is_confidential', False)
+        if is_confidential and not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به بارگذاری اسناد محرمانه هستند.")
+
+        file_obj = self.request.FILES.get('file')
+        file_size = file_obj.size if file_obj else 0
+
+        instance = serializer.save(uploaded_by=user, file_size=file_size)
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_document', 'create', instance.id, instance.title, instance.company_id, tab_id, user.id)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        validate_user_company_access(user, instance.company_id)
+
+        file_obj = self.request.FILES.get('file')
+        kwargs = {}
+        if file_obj:
+            kwargs['file_size'] = file_obj.size
+
+        updated_instance = serializer.save(**kwargs)
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_document', 'update', updated_instance.id, updated_instance.title, updated_instance.company_id, tab_id, user.id)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        validate_user_company_access(user, instance.company_id)
+        if not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به حذف مدارک رسمی شرکت هستند.")
+
+        instance_id = instance.id
+        instance_title = instance.title
+        comp_id = instance.company_id
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_document', 'delete', instance_id, instance_title, comp_id, tab_id, user.id)
+
+
+class CompanyBankAccountViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت حساب‌های بانکی و شماره‌های شبای شرکت‌ها با پشتیبانی از چند حسابی،
+    تعیین حساب اصلی و تفکیک سازمانی
+    """
+    queryset = CompanyBankAccount.objects.all().select_related('company')
+    serializer_class = CompanyBankAccountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CompanyBankAccount.objects.select_related('company')
+
+        company_id = self.request.query_params.get('company_id') or get_request_company_id(self.request)
+        if company_id:
+            cid = validate_user_company_access(user, company_id)
+            if cid:
+                qs = qs.filter(company_id=cid)
+        elif not user.is_superuser:
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_ids)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(bank_name__icontains=search) |
+                Q(account_number__icontains=search) |
+                Q(sheba_number__icontains=search) |
+                Q(account_title__icontains=search)
+            )
+
+        return qs.order_by('-is_primary', '-created_at')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company')
+        if not company:
+            raise serializers.ValidationError({"company": "انتخاب شرکت الزامی است."})
+
+        validate_user_company_access(user, company.id)
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_bank_account', 'create', instance.id, instance.sheba_number, instance.company_id, tab_id, user.id)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        validate_user_company_access(user, instance.company_id)
+        updated_instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_bank_account', 'update', updated_instance.id, updated_instance.sheba_number, updated_instance.company_id, tab_id, user.id)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        validate_user_company_access(user, instance.company_id)
+        instance_id = instance.id
+        sheba = instance.sheba_number
+        comp_id = instance.company_id
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_bank_account', 'delete', instance_id, sheba, comp_id, tab_id, user.id)
+
+    @action(detail=True, methods=['post'], url_path='set-primary')
+    def set_primary(self, request, pk=None):
+        """
+        تنظیم یک حساب بانکی به عنوان حساب پیش‌فرض/اصلی شرکت
+        """
+        account = self.get_object()
+        validate_user_company_access(request.user, account.company_id)
+        account.is_primary = True
+        account.save()
+        tab_id = request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_bank_account', 'update', account.id, account.sheba_number, account.company_id, tab_id, request.user.id)
+        return Response(CompanyBankAccountSerializer(account).data, status=status.HTTP_200_OK)
 
 
 class UserCompanyAccessViewSet(viewsets.ModelViewSet):

@@ -103,6 +103,56 @@ class Company(models.Model):
         default=True,
         verbose_name="دسترسی به سامانه انبارداری و انبارگردانی"
     )
+
+    # فیلدهای حقوقی و ثبتی تکمیلی
+    company_type = models.CharField(
+        max_length=50,
+        choices=[
+            ('private_joint_stock', 'سهامی خاص'),
+            ('public_joint_stock', 'سهامی عام'),
+            ('limited_liability', 'با مسئولیت محدود'),
+            ('cooperative', 'تعاونی'),
+            ('holding', 'هلدینگ / شرکت مادر'),
+            ('other', 'سایر')
+        ],
+        default='private_joint_stock',
+        verbose_name="نوع شرکت"
+    )
+    registration_date = models.DateField(null=True, blank=True, verbose_name="تاریخ ثبت")
+    registered_capital = models.BigIntegerField(null=True, blank=True, verbose_name="سرمایه ثبتی (ریال)")
+    shares_count = models.BigIntegerField(null=True, blank=True, verbose_name="تعداد سهام")
+    share_nominal_value = models.BigIntegerField(null=True, blank=True, verbose_name="ارزش اسمی هر سهم (ریال)")
+    fiscal_year_start_month = models.IntegerField(default=1, verbose_name="ماه شروع سال مالی (۱ تا ۱۲)")
+
+    # ارکان حاکمیتی و صاحبان امضا (ماده ۱۰۹ و ۱۱۸ لایحه اصلاحی قانون تجارت)
+    board_chairman = models.CharField(max_length=150, null=True, blank=True, verbose_name="رئیس هیئت‌مدیره")
+    board_vice_chairman = models.CharField(max_length=150, null=True, blank=True, verbose_name="نایب‌رئیس هیئت‌مدیره")
+    main_inspector = models.CharField(max_length=150, null=True, blank=True, verbose_name="بازرس اصلی")
+    alternate_inspector = models.CharField(max_length=150, null=True, blank=True, verbose_name="بازرس علی‌البدل")
+    authorized_signers = models.TextField(null=True, blank=True, verbose_name="صاحبان امضای مجاز و حدود اختیارات")
+    board_term_expiry = models.DateField(null=True, blank=True, verbose_name="تاریخ انقضای دوره تصدی هیئت‌مدیره")
+
+    # تنظیمات کارگاهی بیمه تأمین اجتماعی (منطبق بر دیسکت DSKKAR00.DBF)
+    workshop_code = models.CharField(max_length=20, null=True, blank=True, verbose_name="کد کارگاه تأمین اجتماعی (۱۰ رقم)")
+    social_security_branch_code = models.CharField(max_length=20, null=True, blank=True, verbose_name="کد شعبه تأمین اجتماعی")
+    social_security_branch_name = models.CharField(max_length=100, null=True, blank=True, verbose_name="نام شعبه تأمین اجتماعی")
+    contract_row = models.CharField(max_length=20, null=True, blank=True, verbose_name="ردیف پیمان بیمه")
+    employer_name = models.CharField(max_length=150, null=True, blank=True, verbose_name="نام کارفرما در لیست بیمه")
+
+    # تنظیمات سامانه مودیان مالیاتی و نشانی قانونی
+    postal_code = models.CharField(max_length=20, null=True, blank=True, verbose_name="کد پستی ۱۰ رقمی اقامتگاه قانونی")
+    tax_memory_id = models.CharField(max_length=20, null=True, blank=True, verbose_name="شناسه یکتای حافظه مالیاتی (۶ کاراکتر)")
+    tax_economic_code = models.CharField(max_length=50, null=True, blank=True, verbose_name="کد اقتصادی جدید ۱۶ رقمی")
+
+    # اطلاعات خزانه‌داری، بانکی و تسویه پایا
+    primary_bank_name = models.CharField(max_length=100, null=True, blank=True, verbose_name="نام بانک اصلی")
+    primary_account_number = models.CharField(max_length=50, null=True, blank=True, verbose_name="شماره حساب رسمی")
+    primary_iban = models.CharField(max_length=34, null=True, blank=True, verbose_name="شماره شبا رسمی (IR...)")
+
+    # دسترسی سریع به دو سند مادر
+    articles_of_association = models.FileField(upload_to='company_core_docs/', null=True, blank=True, verbose_name="فایل اساسنامه")
+    latest_gazette = models.FileField(upload_to='company_core_docs/', null=True, blank=True, verbose_name="فایل آخرین روزنامه رسمی")
+
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین ویرایش")
 
@@ -113,6 +163,142 @@ class Company(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.code})"
+
+
+class CompanyDocument(models.Model):
+    """
+    بایگانی و آرشیو مدارک، اسناد، مجوزها و قراردادهای شرکت
+    """
+    DOCUMENT_TYPES = [
+        ('statute', 'اساسنامه شرکت'),
+        ('establishment_gazette', 'روزنامه رسمی تأسیس'),
+        ('changes_gazette', 'روزنامه رسمی آخرین تغییرات هیئت‌مدیره'),
+        ('auditors_gazette', 'روزنامه رسمی تمدید بازرسان'),
+        ('capital_gazette', 'روزنامه رسمی تغییرات سرمایه و آدرس'),
+        ('vat_certificate', 'گواهی ثبت‌نام ارزش افزوده'),
+        ('tax_clearance', 'مفاصاحساب مالیاتی / بیمه‌ای'),
+        ('commercial_card', 'کارت بازرگانی'),
+        ('contractor_qualification', 'گواهی رتبه‌بندی / صلاحیت پیمانکاری (ساجار)'),
+        ('labor_safety_certificate', 'گواهی صلاحیت ایمنی پیمانکاران (اداره کار)'),
+        ('operating_license', 'پروانه بهره‌برداری / جواز فعالیت'),
+        ('lease_contract', 'سند مالکیت / اجاره‌نامه رسمی'),
+        ('master_agreement', 'قرارداد مادر یا تفاهم‌نامه'),
+        ('other', 'سایر مدارک و اسناد رسمی')
+    ]
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='documents', verbose_name="شرکت متبوع")
+    document_type = models.CharField(max_length=50, choices=DOCUMENT_TYPES, default='other', verbose_name="نوع مدرک")
+    title = models.CharField(max_length=200, verbose_name="عنوان مدرک")
+    file = models.FileField(upload_to='company_documents/', verbose_name="فایل ضمیمه")
+    file_size = models.BigIntegerField(default=0, verbose_name="اندازه فایل به بایت")
+    issue_date = models.DateField(null=True, blank=True, verbose_name="تاریخ صدور")
+    expiry_date = models.DateField(null=True, blank=True, verbose_name="تاریخ انقضا")
+    is_confidential = models.BooleanField(default=False, verbose_name="سند محرمانه (صرفاً مدیران ارشد)")
+    description = models.TextField(blank=True, null=True, verbose_name="توضیحات و نکات")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="کاربر بارگذاری‌کننده")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین ویرایش")
+
+    class Meta:
+        verbose_name = "مدرک شرکت"
+        verbose_name_plural = "مدارک و اسناد شرکت‌ها"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.company.name} - {self.get_document_type_display()} - {self.title}"
+
+    @property
+    def expiry_status(self):
+        """
+        محاسبه وضعیت انقضا:
+        permanent: بدون تاریخ انقضا
+        expired: منقضی شده
+        expiring_soon: کمتر از ۳۰ روز مانده
+        valid: معتبر
+        """
+        if not self.expiry_date:
+            return 'permanent'
+        from django.utils import timezone
+        today = timezone.now().date()
+        diff = (self.expiry_date - today).days
+        if diff < 0:
+            return 'expired'
+        elif diff <= 30:
+            return 'expiring_soon'
+        return 'valid'
+
+    @property
+    def days_until_expiry(self):
+        if not self.expiry_date:
+            return None
+        from django.utils import timezone
+        return (self.expiry_date - timezone.now().date()).days
+
+
+class CompanyBankAccount(models.Model):
+    """
+    حساب‌های بانکی و شماره‌های شبای رسمی شرکت (پشتیبانی از چند حسابی)
+    """
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='bank_accounts',
+        verbose_name="شرکت متبوع"
+    )
+    bank_name = models.CharField(max_length=100, verbose_name="نام بانک")
+    account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
+    sheba_number = models.CharField(max_length=34, verbose_name="شماره شبا (IR...)")
+    account_title = models.CharField(max_length=150, blank=True, null=True, verbose_name="عنوان/کاربرد حساب (مثلاً: واریز حقوق، تنخواه، بازرگانی)")
+    is_primary = models.BooleanField(default=False, verbose_name="حساب اصلی / پیش‌فرض تسویه حقوق")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ آخرین ویرایش")
+
+    class Meta:
+        verbose_name = "حساب بانکی شرکت"
+        verbose_name_plural = "حساب‌های بانکی شرکت‌ها"
+        ordering = ['-is_primary', '-created_at']
+
+    def __str__(self):
+        return f"{self.company.name} - {self.bank_name} ({self.sheba_number})"
+
+    def save(self, *args, **kwargs):
+        # پاک‌سازی و نرمال‌سازی شبا
+        if self.sheba_number:
+            raw = self.sheba_number.strip().upper()
+            if not raw.startswith('IR') and raw.isdigit() and len(raw) == 24:
+                raw = f"IR{raw}"
+            self.sheba_number = raw
+
+        # اگر اولین حساب این شرکت است، خودکار اصلی شود
+        if not self.pk and not CompanyBankAccount.objects.filter(company=self.company).exists():
+            self.is_primary = True
+
+        super().save(*args, **kwargs)
+
+        if self.is_primary:
+            CompanyBankAccount.objects.filter(company=self.company, is_primary=True).exclude(pk=self.pk).update(is_primary=False)
+            Company.objects.filter(pk=self.company_id).update(
+                primary_bank_name=self.bank_name,
+                primary_account_number=self.account_number,
+                primary_iban=self.sheba_number
+            )
+
+    def delete(self, *args, **kwargs):
+        comp_id = self.company_id
+        was_primary = self.is_primary
+        super().delete(*args, **kwargs)
+        if was_primary:
+            remaining = CompanyBankAccount.objects.filter(company_id=comp_id).first()
+            if remaining:
+                remaining.is_primary = True
+                remaining.save()
+            else:
+                Company.objects.filter(pk=comp_id).update(
+                    primary_bank_name=None,
+                    primary_account_number=None,
+                    primary_iban=None
+                )
 
 
 class FinancialProject(models.Model):

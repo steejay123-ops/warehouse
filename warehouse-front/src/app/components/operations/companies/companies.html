@@ -18,7 +18,7 @@
               {{ companies.length }} شرکت
             </span>
           </div>
-          <p class="text-[11px] text-slate-500 font-medium mt-0.5">تعریف شرکت‌ها، مشخصات حقوقی و بازرگانی و قلمرو پروژه‌ها</p>
+          <p class="text-[11px] text-slate-500 font-medium mt-0.5">شناسنامه حقوقی، بایگانی مدارک و مجوزها، تنظیمات کارگاهی بیمه و سامانه مودیان</p>
         </div>
       </div>
 
@@ -87,16 +87,16 @@
       <div class="relative w-full md:w-80">
         <span class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-slate-400 text-xs">🔍</span>
         <input 
-          type="text"
-          [(ngModel)]="searchQuery"
-          (ngModelChange)="onSearchChange()"
-          placeholder="جستجو در نام، کد، شناسه ملی، مدیرعامل..."
+          type="text" 
+          [(ngModel)]="searchQuery" 
+          (ngModelChange)="onSearchChange()" 
+          placeholder="جستجو در نام، کد، شناسه ملی، مدیرعامل، کارگاه..."
           class="w-full pr-8 pl-8 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
         />
         <button 
-          *ngIf="searchQuery"
-          type="button"
-          (click)="clearSearch()"
+          *ngIf="searchQuery" 
+          type="button" 
+          (click)="clearSearch()" 
           class="absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400 hover:text-slate-600 text-xs cursor-pointer">
           ✕
         </button>
@@ -112,10 +112,10 @@
             <th class="py-3 px-3.5">کد</th>
             <th class="py-3 px-3.5">نام شرکت</th>
             <th class="py-3 px-3.5">شناسه ملی</th>
-            <th class="py-3 px-3.5">کد اقتصادی</th>
+            <th class="py-3 px-3.5">کد کارگاه بیمه</th>
             <th class="py-3 px-3.5">مدیرعامل</th>
-            <th class="py-3 px-3.5">تلفن تماس</th>
-            <th class="py-3 px-3.5 text-center">تعداد پروژه‌ها</th>
+            <th class="py-3 px-3.5 text-center">پروژه‌ها</th>
+            <th class="py-3 px-3.5 text-center">سلامت مدارک</th>
             <th class="py-3 px-3.5 text-center">سامانه انبار</th>
             <th class="py-3 px-3.5 text-center">وضعیت</th>
             <th class="py-3 px-3.5 text-center w-28">عملیات</th>
@@ -151,14 +151,42 @@
               </div>
             </td>
             <td class="py-3 px-3.5 font-mono text-slate-600">{{ company.national_id || '—' }}</td>
-            <td class="py-3 px-3.5 font-mono text-slate-600">{{ company.economic_code || '—' }}</td>
+            <td class="py-3 px-3.5 font-mono text-slate-600">{{ company.workshop_code || '—' }}</td>
             <td class="py-3 px-3.5 text-slate-700">{{ company.ceo_name || '—' }}</td>
-            <td class="py-3 px-3.5 font-mono text-slate-600" dir="ltr">{{ company.phone || '—' }}</td>
             <td class="py-3 px-3.5 text-center">
               <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full text-[11px]">
                 {{ company.projects_count || 0 }} پروژه
               </span>
             </td>
+
+            <!-- ستون سلامت اسناد و مدارک رسمی -->
+            <td class="py-3 px-3.5 text-center">
+              <span *ngIf="company.documents_health_status === 'valid'" 
+                    class="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full text-[10px]"
+                    title="کلیه مدارک رسمی معتبر هستند">
+                <span>🟢</span>
+                <span>{{ company.documents_count || 0 }} مدرک معتبر</span>
+              </span>
+              <span *ngIf="company.documents_health_status === 'expiring_soon'" 
+                    class="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px]"
+                    title="هشدار: دست‌کم یک مدرک کمتر از ۳۰ روز مانده به انقضا">
+                <span>⚠️</span>
+                <span>در آستانه انقضا ({{ company.documents_count }})</span>
+              </span>
+              <span *ngIf="company.documents_health_status === 'expired'" 
+                    class="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full text-[10px]"
+                    title="اخطار: دست‌کم یک مدرک منقضی شده است!">
+                <span>⛔</span>
+                <span>منقضی شده ({{ company.documents_count }})</span>
+              </span>
+              <span *ngIf="!company.documents_health_status || company.documents_health_status === 'no_documents'" 
+                    class="inline-flex items-center gap-1 font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full text-[10px]">
+                <span>—</span>
+                <span>فاقد مدرک</span>
+              </span>
+            </td>
+
+            <!-- ستون سامانه انبارداری -->
             <td class="py-3 px-3.5 text-center">
               <span 
                 *ngIf="company.has_warehouse_module !== false" 
@@ -175,6 +203,8 @@
                 <span>غیرفعال</span>
               </span>
             </td>
+
+            <!-- وضعیت فعال بودن -->
             <td class="py-3 px-3.5 text-center">
               <span 
                 [ngClass]="company.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-rose-50 text-rose-700 border-rose-200/80'"
@@ -182,6 +212,8 @@
                 {{ company.is_active ? 'فعال' : 'غیرفعال' }}
               </span>
             </td>
+
+            <!-- ستون عملیات و استودیو -->
             <td class="py-3 px-3.5 text-center">
               <div class="flex items-center justify-center gap-1">
                 <!-- دکمه مدیریت دسترسی کاربران -->
@@ -193,13 +225,13 @@
                   دسترسی‌ها
                 </button>
 
-                <!-- دکمه ویرایش -->
+                <!-- دکمه ویرایش و ورود به استودیو -->
                 <button 
                   type="button"
                   (click)="openEditModal(company)"
                   class="px-2 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-                  title="ویرایش مشخصات شرکت">
-                  ویرایش
+                  title="ویرایش مشخصات و مدارک شرکت">
+                  استودیو
                 </button>
 
                 <!-- دکمه حذف -->
@@ -220,197 +252,1249 @@
   </div>
 
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <!-- ۳. مودال ثبت و ویرایش شرکت                                                -->
+  <!-- ۳. استودیوی مودال ۶ تبی ثبت، ویرایش، اسناد، شبا و شناسنامه حقوقی شرکت‌ها     -->
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <div *ngIf="companyModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
-    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh]">
+  <div *ngIf="companyModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl h-[88vh] max-h-[780px] min-h-[600px] overflow-hidden flex flex-col">
       
-      <!-- Modal Header -->
-      <div class="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+      <!-- Modal Top Header -->
+      <div class="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
         <div class="flex items-center gap-2.5">
-          <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+          <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg">
             🏢
           </div>
           <div>
             <h3 class="text-sm md:text-base font-black text-slate-800">
-              {{ companyModal.isEdit ? 'ویرایش مشخصات شرکت' : 'ثبت شرکت جدید' }}
+              {{ companyModal.isEdit ? 'استودیوی شناسنامه حقوقی و مدارک «' + companyModal.data.name + '»' : 'ثبت شرکت حقوقی جدید' }}
             </h3>
-            <p class="text-[11px] text-slate-500 font-medium">مشخصات حقوقی، ثبتی و بازرگانی شرکت را وارد نمایید</p>
+            <p class="text-[11px] text-slate-500 font-medium">پروفایل ثبتی، بایگانی اسناد، هیئت‌مدیره، کارگاه بیمه، حساب‌های بانکی و دسترسی کاربران</p>
           </div>
         </div>
         <button 
-          (click)="closeCompanyModal()"
+          type="button" 
+          (click)="closeCompanyModal()" 
           class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
           ✕
         </button>
       </div>
 
-      <!-- Modal Body (Form) -->
-      <div class="p-4 md:p-5 overflow-y-auto space-y-3.5 flex-1">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          
-          <!-- کد یکتا -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">کد شرکت <span class="text-rose-500">*</span></label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.code" 
-              placeholder="مثال: PTS یا FA" 
-              class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase font-mono"
-              [ngClass]="companyModal.errors['code'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
-            />
-            <span *ngIf="companyModal.errors['code']" class="text-[10px] text-rose-600 font-bold mt-1 block">
-              {{ companyModal.errors['code'] }}
-            </span>
-          </div>
+      <!-- Subtab Navigation Bar (6 Standard Tabs) -->
+      <div class="bg-slate-100/90 p-1.5 border-b border-slate-200/80 overflow-x-auto flex items-center gap-1.5 shrink-0">
+        <button 
+          type="button" 
+          (click)="setModalTab('identity')" 
+          [ngClass]="activeModalTab === 'identity' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>🏛️</span>
+          <span>مشخصات هویتی و ثبتی</span>
+        </button>
 
-          <!-- نام شرکت -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">نام کامل شرکت <span class="text-rose-500">*</span></label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.name" 
-              placeholder="مثال: پاینده توان ساینا" 
-              class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              [ngClass]="companyModal.errors['name'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
-            />
-            <span *ngIf="companyModal.errors['name']" class="text-[10px] text-rose-600 font-bold mt-1 block">
-              {{ companyModal.errors['name'] }}
-            </span>
-          </div>
+        <button 
+          type="button" 
+          (click)="setModalTab('documents')" 
+          [ngClass]="activeModalTab === 'documents' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>📁</span>
+          <span>بایگانی مدارک</span>
+          <span *ngIf="companyDocuments.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-600 font-bold">
+            {{ companyDocuments.length }}
+          </span>
+        </button>
 
-          <!-- شناسه ملی ۱۱ رقمی -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">شناسه ملی (۱۱ رقم)</label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.national_id" 
-              placeholder="۱۴۰۰۸۱۲۳۴۵۶" 
-              maxlength="11"
-              class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-              [ngClass]="companyModal.errors['national_id'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
-            />
-            <span *ngIf="companyModal.errors['national_id']" class="text-[10px] text-rose-600 font-bold mt-1 block">
-              {{ companyModal.errors['national_id'] }}
-            </span>
-          </div>
+        <button 
+          type="button" 
+          (click)="setModalTab('governance')" 
+          [ngClass]="activeModalTab === 'governance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>👔</span>
+          <span>هیئت‌مدیره و امضا</span>
+        </button>
 
-          <!-- کد اقتصادی -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">کد اقتصادی</label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.economic_code" 
-              placeholder="شماره اقتصادی ۱۲ رقمی" 
-              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-            />
-          </div>
+        <button 
+          type="button" 
+          (click)="setModalTab('fiscal_insurance')" 
+          [ngClass]="activeModalTab === 'fiscal_insurance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>⚖️</span>
+          <span>بیمه و مودیان</span>
+        </button>
 
-          <!-- شماره ثبت -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">شماره ثبت</label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.registration_number" 
-              placeholder="شماره ثبت در اداره ثبت شرکت‌ها" 
-              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-            />
-          </div>
+        <button 
+          type="button" 
+          (click)="setModalTab('treasury')" 
+          [ngClass]="activeModalTab === 'treasury' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>💳</span>
+          <span>بانک و شبا</span>
+          <span *ngIf="companyBankAccounts.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-600 font-bold">
+            {{ companyBankAccounts.length }}
+          </span>
+        </button>
 
-          <!-- نام مدیرعامل -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">نام مدیرعامل</label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.ceo_name" 
-              placeholder="نام و نام خانوادگی مدیرعامل" 
-              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
-          </div>
+        <button 
+          type="button" 
+          (click)="setModalTab('access')" 
+          [ngClass]="activeModalTab === 'access' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>👥</span>
+          <span>دسترسی کاربران</span>
+          <span *ngIf="studioAccesses.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-slate-200 text-slate-700 font-bold">
+            {{ studioAccesses.length }}
+          </span>
+        </button>
+      </div>
 
-          <!-- تلفن تماس -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">تلفن تماس دفتر مرکزی</label>
-            <input 
-              type="text" 
-              [(ngModel)]="companyModal.data.phone" 
-              placeholder="۰۷۱-۳۲۲۲۰۰۰۰" 
-              dir="ltr"
-              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-            />
-          </div>
-
-          <!-- وضعیت فعال -->
-          <div class="flex items-center gap-2 pt-6">
-            <input 
-              type="checkbox" 
-              id="co_active"
-              [(ngModel)]="companyModal.data.is_active" 
-              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-            />
-            <label for="co_active" class="text-xs font-bold text-slate-700 cursor-pointer select-none">
-              شرکت فعال است و در پروژه‌ها قابل استفاده می‌باشد
-            </label>
-          </div>
-
-          <!-- دسترسی به سامانه انبارداری -->
-          <div class="flex items-center gap-2 p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 col-span-1 md:col-span-2">
-            <input 
-              type="checkbox" 
-              id="co_has_warehouse"
-              [(ngModel)]="companyModal.data.has_warehouse_module" 
-              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-indigo-300 cursor-pointer"
-            />
-            <label for="co_has_warehouse" class="text-xs font-bold text-slate-700 cursor-pointer select-none flex items-center gap-1.5">
-              <span>📦</span>
-              <span>فعال بودن سامانه انبارداری، انبارگردانی و کاردکس کالا برای این شرکت</span>
-            </label>
-          </div>
-
-        </div>
-
-        <!-- نشانی دفتر مرکزی -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">نشانی دفتر مرکزی</label>
-          <textarea 
-            [(ngModel)]="companyModal.data.address" 
-            rows="2" 
-            placeholder="استان، شهر، خیابان، پلاک، طبقه..."
-            class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"></textarea>
-        </div>
-
-        <!-- لوگوی شرکت -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1">لوگوی شرکت (تصویر)</label>
-          <div class="flex items-center gap-3">
-            <div *ngIf="logoPreviewUrl" class="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center shrink-0">
-              <img [src]="logoPreviewUrl" alt="پیش‌نمایش لوگو" class="w-full h-full object-contain" />
+      <!-- Modal Body (Content per Tab) -->
+      <div class="p-4 md:p-6 overflow-y-auto flex-1 space-y-4">
+        
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۱: مشخصات هویتی و ثبتی                                          -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'identity'" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <!-- کد یکتای شرکت -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد شرکت <span class="text-rose-500">*</span></label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.code" 
+                placeholder="مثال: PTS یا FA" 
+                class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 uppercase font-mono"
+                [ngClass]="companyModal.errors['code'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
+              />
+              <span *ngIf="companyModal.errors['code']" class="text-[10px] text-rose-600 font-bold mt-1 block">
+                {{ companyModal.errors['code'] }}
+              </span>
             </div>
-            <label class="flex-1 flex items-center justify-center px-3 py-2 border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl cursor-pointer bg-slate-50 hover:bg-indigo-50/20 transition-all text-xs text-slate-600">
-              <span>{{ selectedLogoFile ? selectedLogoFile.name : (logoPreviewUrl ? 'تغییر تصویر لوگو' : 'انتخاب تصویر لوگو (PNG/JPG)') }}</span>
+
+            <!-- نام کامل شرکت -->
+            <div class="md:col-span-2">
+              <label class="block text-xs font-bold text-slate-700 mb-1">نام کامل شرکت <span class="text-rose-500">*</span></label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.name" 
+                placeholder="مثال: پاینده توان ساینا" 
+                class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                [ngClass]="companyModal.errors['name'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
+              />
+              <span *ngIf="companyModal.errors['name']" class="text-[10px] text-rose-600 font-bold mt-1 block">
+                {{ companyModal.errors['name'] }}
+              </span>
+            </div>
+
+            <!-- نوع شرکت -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نوع شخصیت حقوقی</label>
+              <select 
+                [(ngModel)]="companyModal.data.company_type" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white">
+                <option value="private_joint_stock">سهامی خاص</option>
+                <option value="public_joint_stock">سهامی عام</option>
+                <option value="limited_liability">با مسئولیت محدود</option>
+                <option value="cooperative">تعاونی</option>
+                <option value="holding">هلدینگ / شرکت مادر</option>
+                <option value="other">سایر</option>
+              </select>
+            </div>
+
+            <!-- شناسه ملی ۱۱ رقمی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">شناسه ملی (۱۱ رقم)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.national_id" 
+                placeholder="۱۴۰۰۸۱۲۳۴۵۶" 
+                maxlength="11"
+                class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+                [ngClass]="companyModal.errors['national_id'] ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white'"
+              />
+              <span *ngIf="companyModal.errors['national_id']" class="text-[10px] text-rose-600 font-bold mt-1 block">
+                {{ companyModal.errors['national_id'] }}
+              </span>
+            </div>
+
+            <!-- شماره ثبت -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">شماره ثبت</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.registration_number" 
+                placeholder="شماره ثبت در اداره ثبت شرکت‌ها" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- تاریخ ثبت شرکت (تقویم شمسی جلالی) -->
+            <div class="relative">
+              <label class="block text-xs font-bold text-slate-700 mb-1">تاریخ ثبت شرکت (جلالی)</label>
+              <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
+                <input 
+                  type="text" 
+                  [(ngModel)]="companyModal.data.registration_date" 
+                  placeholder="۱۴۰۱/۰۵/۱۰" 
+                  class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
+                />
+                <button 
+                  type="button" 
+                  (click)="isRegDatePickerOpen = !isRegDatePickerOpen"
+                  title="انتخاب از تقویم شمسی"
+                  class="text-slate-400 hover:text-indigo-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                  📅
+                </button>
+              </div>
+              <div *ngIf="isRegDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
+                <ng-persian-datepicker 
+                  [dateInitValue]="false" 
+                  (dateOnSelect)="onRegDateSelect($event)">
+                </ng-persian-datepicker>
+              </div>
+            </div>
+
+            <!-- سرمایه ثبتی (ریال) -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">سرمایه ثبتی (ریال)</label>
+              <input 
+                type="number" 
+                [(ngModel)]="companyModal.data.registered_capital" 
+                placeholder="مثال: ۱۰,۰۰۰,۰۰۰,۰۰۰" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- تعداد سهام -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">تعداد سهام</label>
+              <input 
+                type="number" 
+                [(ngModel)]="companyModal.data.shares_count" 
+                placeholder="مثال: ۱,۰۰۰,۰۰۰" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- تلفن تماس -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">تلفن تماس دفتر مرکزی</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.phone" 
+                placeholder="۰۷۱-۳۲۲۲۰۰۰۰" 
+                dir="ltr"
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- کد پستی ۱۰ رقمی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد پستی ۱۰ رقمی اقامتگاه</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.postal_code" 
+                placeholder="۷۱۳۴۸۱۲۳۴۵" 
+                maxlength="10"
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+          </div>
+
+          <!-- نشانی دفتر مرکزی -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">نشانی رسمی اقامتگاه قانونی (طبق اساسنامه)</label>
+            <textarea 
+              [(ngModel)]="companyModal.data.address" 
+              rows="2" 
+              placeholder="استان، شهر، خیابان، پلاک، طبقه..."
+              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"></textarea>
+          </div>
+
+          <!-- لوگوی شرکت -->
+          <div class="p-3 bg-slate-50/60 rounded-2xl border border-slate-200 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div *ngIf="logoPreviewUrl" class="w-12 h-12 rounded-xl border border-slate-200 overflow-hidden bg-white flex items-center justify-center shrink-0">
+                <img [src]="logoPreviewUrl" alt="پیش‌نمایش لوگو" class="w-full h-full object-contain" />
+              </div>
+              <div *ngIf="!logoPreviewUrl" class="w-12 h-12 rounded-xl border border-dashed border-slate-300 bg-white flex items-center justify-center text-slate-400 text-lg shrink-0">
+                🏢
+              </div>
+              <div>
+                <span class="text-xs font-bold text-slate-700 block">لوگوی رسمی شرکت</span>
+                <span class="text-[11px] text-slate-400">فرمت‌های PNG، JPG و SVG با پس‌زمینه شفاف پیشنهاد می‌شود</span>
+              </div>
+            </div>
+
+            <label class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/30 text-xs font-bold text-slate-600 transition-all cursor-pointer">
+              <span>{{ selectedLogoFile ? selectedLogoFile.name : 'انتخاب تصویر' }}</span>
               <input type="file" accept="image/*" (change)="onLogoFileSelected($event)" class="hidden" />
             </label>
+          </div>
+
+          <!-- چک‌باکس‌های وضعیت و ماژول انبارداری -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+            <div class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <input 
+                type="checkbox" 
+                id="co_active"
+                [(ngModel)]="companyModal.data.is_active" 
+                class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+              />
+              <label for="co_active" class="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                شرکت فعال است و در پروژه‌ها قابل استفاده می‌باشد
+              </label>
+            </div>
+
+            <div class="flex items-center gap-2 p-3 bg-indigo-50/60 rounded-xl border border-indigo-100">
+              <input 
+                type="checkbox" 
+                id="co_has_warehouse"
+                [(ngModel)]="companyModal.data.has_warehouse_module" 
+                class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-indigo-300 cursor-pointer"
+              />
+              <label for="co_has_warehouse" class="text-xs font-bold text-slate-700 cursor-pointer select-none flex items-center gap-1.5">
+                <span>📦</span>
+                <span>فعال بودن سامانه انبارداری و انبارگردانی برای این شرکت</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۲: بایگانی و آرشیو مدارک حقوقی                                  -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'documents'" class="space-y-5">
+          
+          <div *ngIf="!companyModal.data.id" class="p-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div class="text-2xl mb-2">📁</div>
+            <h4 class="text-xs font-black text-slate-700">بایگانی اسناد و مجوزهای شرکت</h4>
+            <p class="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
+              جهت بارگذاری اساسنامه، روزنامه‌های رسمی، گواهی ارزش افزوده و سایر مجوزها، لطفاً ابتدا شرکت را در تب اول ذخیره فرمایید.
+            </p>
+          </div>
+
+          <div *ngIf="companyModal.data.id" class="space-y-5">
+            
+            <!-- ۲ کارت دسترسی سریع به دو سند مادر (اساسنامه و روزنامه رسمی) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              
+              <!-- کارت اساسنامه شرکت -->
+              <div class="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 flex flex-col justify-between gap-3">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold">📜</span>
+                    <div>
+                      <h4 class="text-xs font-black text-slate-800">اساسنامه رسمی شرکت</h4>
+                      <p class="text-[10px] text-slate-500">سند مادر تأسیس، ارکان و حدود اختیارات</p>
+                    </div>
+                  </div>
+                  <span *ngIf="companyModal.data.articles_of_association" class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+                    بارگذاری شده
+                  </span>
+                  <span *ngIf="!companyModal.data.articles_of_association" class="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                    فاقد فایل
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                  <a *ngIf="companyModal.data.articles_of_association" 
+                     [href]="companyModal.data.articles_of_association" 
+                     target="_blank" 
+                     class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                    <span>📥</span>
+                    <span>دانلود یا مشاهده اساسنامه</span>
+                  </a>
+                  <span *ngIf="!companyModal.data.articles_of_association" class="text-[11px] text-slate-400">هنوز فایلی ثبت نشده است</span>
+
+                  <label class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs">
+                    <span>{{ companyModal.data.articles_of_association ? 'جایگزینی' : 'بارگذاری فایل' }}</span>
+                    <input type="file" (change)="onCoreDocSelected($event, 'articles_of_association')" class="hidden" />
+                  </label>
+                </div>
+              </div>
+
+              <!-- کارت آخرین روزنامه رسمی -->
+              <div class="p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 flex flex-col justify-between gap-3">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm font-bold">📰</span>
+                    <div>
+                      <h4 class="text-xs font-black text-slate-800">آخرین روزنامه رسمی</h4>
+                      <p class="text-[10px] text-slate-500">آگهی تغییرات هیئت‌مدیره و صاحبان امضا</p>
+                    </div>
+                  </div>
+                  <span *ngIf="companyModal.data.latest_gazette" class="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+                    بارگذاری شده
+                  </span>
+                  <span *ngIf="!companyModal.data.latest_gazette" class="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                    فاقد فایل
+                  </span>
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                  <a *ngIf="companyModal.data.latest_gazette" 
+                     [href]="companyModal.data.latest_gazette" 
+                     target="_blank" 
+                     class="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+                    <span>📥</span>
+                    <span>دانلود یا مشاهده روزنامه رسمی</span>
+                  </a>
+                  <span *ngIf="!companyModal.data.latest_gazette" class="text-[11px] text-slate-400">هنوز فایلی ثبت نشده است</span>
+
+                  <label class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs">
+                    <span>{{ companyModal.data.latest_gazette ? 'جایگزینی' : 'بارگذاری فایل' }}</span>
+                    <input type="file" (change)="onCoreDocSelected($event, 'latest_gazette')" class="hidden" />
+                  </label>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- فرم بارگذاری مدرک جدید به آرشیو جامع -->
+            <div class="p-4 bg-slate-50/60 rounded-2xl border border-slate-200 space-y-3">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-slate-800">+ بارگذاری و بایگانی مدرک جدید</span>
+                <span class="text-[10px] text-slate-500 font-medium">(ارزش افزوده، کارت بازرگانی، رتبه‌بندی، پروانه‌ها و قراردادها)</span>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <!-- نوع مدرک -->
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">نوع سند</label>
+                  <select 
+                    [(ngModel)]="newDoc.document_type" 
+                    class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                    <option *ngFor="let t of documentTypesList" [value]="t.value">{{ t.label }}</option>
+                  </select>
+                </div>
+
+                <!-- عنوان مدرک -->
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">عنوان مدرک</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newDoc.title" 
+                    placeholder="مثال: گواهی صلاحیت پیمانکاری رتبه ۳"
+                    class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </div>
+
+                <!-- تاریخ صدور (جلالی) -->
+                <div class="relative">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ صدور (جلالی)</label>
+                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="newDoc.issue_date" 
+                      placeholder="۱۴۰۱/۰۵/۱۰" 
+                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      (click)="isDocIssueDatePickerOpen = !isDocIssueDatePickerOpen"
+                      title="انتخاب تقویم شمسی"
+                      class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                      📅
+                    </button>
+                  </div>
+                  <div *ngIf="isDocIssueDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
+                    <ng-persian-datepicker 
+                      [dateInitValue]="false" 
+                      (dateOnSelect)="onDocIssueDateSelect($event)">
+                    </ng-persian-datepicker>
+                  </div>
+                </div>
+
+                <!-- تاریخ انقضا (سررسید جلالی) -->
+                <div class="relative">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ سررسید (جلالی)</label>
+                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="newDoc.expiry_date" 
+                      placeholder="۱۴۰۳/۰۵/۱۰" 
+                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      (click)="isDocExpiryDatePickerOpen = !isDocExpiryDatePickerOpen"
+                      title="انتخاب تقویم شمسی"
+                      class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                      📅
+                    </button>
+                  </div>
+                  <div *ngIf="isDocExpiryDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
+                    <ng-persian-datepicker 
+                      [dateInitValue]="false" 
+                      (dateOnSelect)="onDocExpiryDateSelect($event)">
+                    </ng-persian-datepicker>
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+                <!-- انتخاب فایل ضمیمه -->
+                <div class="md:col-span-2">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">فایل مدرک (PDF، تصویر یا فشرده)</label>
+                  <input 
+                    type="file" 
+                    (change)="onDocFileSelected($event)" 
+                    class="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                  />
+                </div>
+
+                <!-- پرچم سند محرمانه -->
+                <div class="flex items-center gap-2 pt-4">
+                  <input 
+                    type="checkbox" 
+                    id="new_doc_conf" 
+                    [(ngModel)]="newDoc.is_confidential" 
+                    class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  />
+                  <label for="new_doc_conf" class="text-xs font-bold text-slate-700 cursor-pointer select-none flex items-center gap-1">
+                    <span>🔒</span>
+                    <span>سند محرمانه (صرفاً مدیران ارشد)</span>
+                  </label>
+                </div>
+
+                <!-- دکمه بارگذاری و ثبت در آرشیو -->
+                <div class="pt-3">
+                  <button 
+                    type="button" 
+                    (click)="uploadNewDocument()" 
+                    [disabled]="isUploadingDoc || !newDoc.file"
+                    class="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                    <span *ngIf="isUploadingDoc">در حال بارگذاری...</span>
+                    <span *ngIf="!isUploadingDoc">ثبت در بایگانی</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- جدول اسناد بایگانی‌شده همراه با فیلتر زنده -->
+            <div>
+              <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-black text-slate-800">فهرست اسناد بایگانی‌شده این شرکت</span>
+                  <span class="text-[10px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full font-bold">
+                    {{ filteredDocuments.length }} از {{ companyDocuments.length }} سند
+                  </span>
+                </div>
+
+                <!-- نوار جستجو و فیلتر درجا اسناد -->
+                <div class="flex items-center gap-2">
+                  <div class="relative w-48">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="docSearchQuery" 
+                      (ngModelChange)="onDocFilterChange()" 
+                      placeholder="جستجو در اسناد..." 
+                      class="w-full pr-7 pl-2 py-1 text-[11px] bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <span class="absolute right-2 top-1.5 text-[10px] text-slate-400">🔍</span>
+                  </div>
+
+                  <select 
+                    [(ngModel)]="selectedDocTypeFilter" 
+                    (ngModelChange)="onDocFilterChange()" 
+                    class="text-[11px] bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 focus:outline-none">
+                    <option value="">همه انواع اسناد</option>
+                    <option *ngFor="let t of documentTypesList" [value]="t.value">{{ t.label }}</option>
+                  </select>
+
+                  <button 
+                    *ngIf="docSearchQuery || selectedDocTypeFilter" 
+                    type="button" 
+                    (click)="clearDocFilter()" 
+                    class="text-[10px] text-slate-400 hover:text-slate-700 px-1 py-1 rounded bg-slate-200/60"
+                    title="پاک‌سازی فیلتر">
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div *ngIf="isLoadingDocuments" class="py-8 text-center text-xs text-slate-400">
+                در حال بارگذاری اسناد...
+              </div>
+
+              <div *ngIf="!isLoadingDocuments && filteredDocuments.length === 0" class="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+                هیچ سندی با معیارهای انتخابی یافت نشد.
+              </div>
+
+              <div *ngIf="!isLoadingDocuments && filteredDocuments.length > 0" class="overflow-x-auto rounded-2xl border border-slate-200">
+                <table class="w-full text-right text-xs">
+                  <thead class="bg-slate-100/80 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th class="py-2.5 px-3 w-10 text-center">ردیف</th>
+                      <th class="py-2.5 px-3">نوع مدرک</th>
+                      <th class="py-2.5 px-3">عنوان مدرک</th>
+                      <th class="py-2.5 px-3 text-center">تاریخ انقضا</th>
+                      <th class="py-2.5 px-3 text-center">وضعیت اعتبار</th>
+                      <th class="py-2.5 px-3 text-center">سطح</th>
+                      <th class="py-2.5 px-3 text-center">اندازه</th>
+                      <th class="py-2.5 px-3 text-center w-28">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr *ngFor="let doc of filteredDocuments; let idx = index" class="hover:bg-slate-50 transition-colors">
+                      <td class="py-2.5 px-3 text-center font-mono text-slate-400">{{ idx + 1 }}</td>
+                      <td class="py-2.5 px-3 font-bold text-slate-800">{{ doc.document_type_display || doc.document_type }}</td>
+                      <td class="py-2.5 px-3 font-medium text-slate-700">{{ doc.title }}</td>
+                      <td class="py-2.5 px-3 text-center font-mono text-slate-600">{{ doc.expiry_date || '—' }}</td>
+                      <td class="py-2.5 px-3 text-center">
+                        <span [ngClass]="getDocStatusClass(doc.expiry_status)" class="border px-2 py-0.5 rounded-full text-[10px] font-bold">
+                          {{ getDocStatusLabel(doc.expiry_status) }}
+                        </span>
+                      </td>
+                      <td class="py-2.5 px-3 text-center">
+                        <span *ngIf="doc.is_confidential" class="text-[10px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.2 rounded-md font-bold" title="سند محرمانه">
+                          🔒 محرمانه
+                        </span>
+                        <span *ngIf="!doc.is_confidential" class="text-[10px] text-slate-400">
+                          عمومی
+                        </span>
+                      </td>
+                      <td class="py-2.5 px-3 text-center font-mono text-[11px] text-slate-500">{{ formatBytes(doc.file_size) }}</td>
+                      <td class="py-2.5 px-3 text-center">
+                        <div class="flex items-center justify-center gap-1.5">
+                          <!-- پیش‌نمایش درجا -->
+                          <button 
+                            type="button" 
+                            (click)="openPreview(doc)" 
+                            class="text-slate-600 hover:text-indigo-600 font-bold text-[11px] p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer" 
+                            title="پیش‌نمایش درجا">
+                            👁️
+                          </button>
+                          <!-- دانلود فایل -->
+                          <a 
+                            [href]="doc.file_url || doc.file" 
+                            target="_blank" 
+                            class="text-indigo-600 hover:text-indigo-800 font-bold text-[11px] p-1 rounded hover:bg-slate-100 transition-colors" 
+                            title="دانلود فایل">
+                            📥
+                          </a>
+                          <!-- حذف مدرک -->
+                          <button 
+                            type="button" 
+                            (click)="deleteCompanyDocument(doc)" 
+                            class="text-rose-500 hover:text-rose-700 font-bold text-[11px] p-1 rounded hover:bg-rose-50 transition-colors cursor-pointer" 
+                            title="حذف مدرک">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۳: هیئت‌مدیره و صاحبان امضا                                      -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'governance'" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <!-- نام مدیرعامل -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نام مدیرعامل</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.ceo_name" 
+                placeholder="نام و نام خانوادگی مدیرعامل" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- رئیس هیئت‌مدیره -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">رئیس هیئت‌مدیره</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.board_chairman" 
+                placeholder="نام و نام خانوادگی رئیس هیئت‌مدیره" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- نایب‌رئیس هیئت‌مدیره -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نایب‌رئیس هیئت‌مدیره</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.board_vice_chairman" 
+                placeholder="نام و نام خانوادگی نایب‌رئیس" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- تاریخ انقضای دوره تصدی هیئت‌مدیره (۲ ساله جلالی) -->
+            <div class="relative">
+              <label class="block text-xs font-bold text-slate-700 mb-1">تاریخ انقضای هیئت‌مدیره (جلالی)</label>
+              <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
+                <input 
+                  type="text" 
+                  [(ngModel)]="companyModal.data.board_term_expiry" 
+                  placeholder="۱۴۰۴/۰۳/۱۵" 
+                  class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
+                />
+                <button 
+                  type="button" 
+                  (click)="isBoardDatePickerOpen = !isBoardDatePickerOpen"
+                  title="انتخاب تقویم شمسی"
+                  class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                  📅
+                </button>
+              </div>
+              <div *ngIf="isBoardDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
+                <ng-persian-datepicker 
+                  [dateInitValue]="false" 
+                  (dateOnSelect)="onBoardExpiryDateSelect($event)">
+                </ng-persian-datepicker>
+              </div>
+            </div>
+
+            <!-- بازرس اصلی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">بازرس اصلی شرکت</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.main_inspector" 
+                placeholder="نام بازرس یا موسسه حسابرسی" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- بازرس علی‌البدل -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">بازرس علی‌البدل شرکت</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.alternate_inspector" 
+                placeholder="نام بازرس علی‌البدل" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+          </div>
+
+          <!-- صاحبان امضای مجاز و حدود اختیارات -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">صاحبان امضای مجاز و نحوه امضا اسناد تعهدآور</label>
+            <textarea 
+              [(ngModel)]="companyModal.data.authorized_signers" 
+              rows="3" 
+              placeholder="مثال: کلیه اسناد و اوراق بهادار با امضای مشترک مدیرعامل و رئیس هیئت‌مدیره همراه با مهر شرکت معتبر است..."
+              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"></textarea>
+          </div>
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۴: کارگاه بیمه و سامانه مودیان                                  -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'fiscal_insurance'" class="space-y-4">
+          <div class="p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
+            ℹ️ فیلدهای زیر مستقیماً در تولید دیسکت‌های ماهانه بیمه تأمین اجتماعی (DSKKAR00.DBF) و اتصال به کارپوشه سامانه مودیان مالیاتی مورد استفاده قرار می‌گیرند.
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <!-- کد کارگاه تأمین اجتماعی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد کارگاه بیمه (۱۰ رقم)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.workshop_code" 
+                placeholder="مثال: ۲۳۹۸۰۱۲۳۴۵" 
+                maxlength="10"
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- نام شعبه تأمین اجتماعی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نام شعبه تأمین اجتماعی</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.social_security_branch_name" 
+                placeholder="مثال: شعبه ۲ شیراز" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- کد شعبه تأمین اجتماعی -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد شعبه تأمین اجتماعی</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.social_security_branch_code" 
+                placeholder="مثال: ۰۲۳۴" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- ردیف پیمان بیمه -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">ردیف پیمان تأمین اجتماعی</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.contract_row" 
+                placeholder="مثال: ۰۰۰ یا ۰۲" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- نام کارفرما در لیست بیمه -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نام کارفرما در دیسکت بیمه</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.employer_name" 
+                placeholder="نام شخص حقیقی یا مدیرعامل" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <!-- کد اقتصادی قدیم -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد اقتصادی قدیم (۱۲ رقم)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.economic_code" 
+                placeholder="کد اقتصادی ۱۲ رقمی" 
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+
+            <!-- شناسه یکتای حافظه مالیاتی (سامانه مودیان) -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">شناسه یکتای حافظه مالیاتی (۶ کاراکتر)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.tax_memory_id" 
+                placeholder="مثال: A12B34" 
+                maxlength="6"
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono uppercase"
+              />
+            </div>
+
+            <!-- کد اقتصادی جدید ۱۶ رقمی -->
+            <div class="md:col-span-2">
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد اقتصادی جدید سامانه مودیان (۱۶ رقم)</label>
+              <input 
+                type="text" 
+                [(ngModel)]="companyModal.data.tax_economic_code" 
+                placeholder="شناسه ملی ۱۱ رقمی + ۵ رقم کد شعبه" 
+                maxlength="16"
+                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۵: خزانه‌داری، مدیریت چند شماره شبا و حساب‌های بانکی رسمی شرکت         -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'treasury'" class="space-y-4">
+          
+          <!-- ماه شروع سال مالی شرکت -->
+          <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <span class="text-xs font-black text-slate-800 block">دوره و تقویم مالی شرکت</span>
+              <span class="text-[11px] text-slate-500">تعیین ماه آغاز سال مالی جهت بستن حساب‌ها و گزارشات قانونی</span>
+            </div>
+            <div class="w-full md:w-64">
+              <select 
+                [(ngModel)]="companyModal.data.fiscal_year_start_month" 
+                class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white font-bold">
+                <option [ngValue]="1">فروردین (تقویم هجری شمسی عادی)</option>
+                <option [ngValue]="7">مهرماه (سال‌های مالی پاییزه)</option>
+                <option [ngValue]="10">دی‌ماه (منطبق بر سال میلادی ۱ ژانویه)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- بخش مدیریت چند شماره شبا و کارت‌های حساب‌های بانکی -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-slate-800">حساب‌های بانکی و شماره‌های شبای رسمی شرکت</span>
+                <span class="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
+                  {{ companyBankAccounts.length }} حساب ثبت‌شده
+                </span>
+              </div>
+              <div *ngIf="!companyModal.data.id" class="text-[11px] text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">
+                ⚠️ پس از ثبت اولیه شرکت، امکان تعریف چند شماره شبا فعال می‌گردد.
+              </div>
+            </div>
+
+            <!-- وضعیت در حال بارگذاری حساب‌ها -->
+            <div *ngIf="isLoadingBankAccounts" class="py-6 text-center text-xs text-slate-400">
+              در حال بارگذاری حساب‌های بانکی...
+            </div>
+
+            <!-- فهرست کارت‌های حساب بانکی شرکت -->
+            <div *ngIf="!isLoadingBankAccounts && companyBankAccounts.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div *ngFor="let acc of companyBankAccounts" 
+                   class="bg-white border rounded-2xl p-3.5 flex flex-col justify-between transition-all hover:shadow-xs relative overflow-hidden"
+                   [ngClass]="acc.is_primary ? 'border-amber-300 ring-2 ring-amber-400/20 bg-linear-to-b from-amber-50/30 to-white' : 'border-slate-200'">
+                
+                <!-- برچسب حساب اصلی -->
+                <div class="flex items-center justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base font-bold">🏛️</span>
+                    <span class="text-xs font-black text-slate-800">{{ acc.bank_name }}</span>
+                    <span *ngIf="acc.account_title" class="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md font-medium">
+                      {{ acc.account_title }}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span *ngIf="acc.is_primary" class="text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                      <span>⭐</span>
+                      <span>حساب اصلی حقوق و تسویه</span>
+                    </span>
+                    <button 
+                      *ngIf="!acc.is_primary" 
+                      type="button" 
+                      (click)="setPrimaryAccount(acc)"
+                      title="تنظیم به عنوان حساب اصلی شرکت"
+                      class="text-[10px] font-bold text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-slate-200 px-2 py-0.5 rounded-full transition-all cursor-pointer">
+                      تنظیم به عنوان اصلی
+                    </button>
+                  </div>
+                </div>
+
+                <!-- نمایش شماره شبا با کپی سریع -->
+                <div class="bg-slate-50 rounded-xl p-2.5 my-1 border border-slate-100 flex items-center justify-between">
+                  <div class="font-mono text-xs font-bold text-slate-800 tracking-wider text-left dir-ltr select-all">
+                    {{ acc.sheba_number }}
+                  </div>
+                  <button 
+                    type="button" 
+                    (click)="copySheba(acc.sheba_number, acc.id || acc.sheba_number)"
+                    [title]="copiedShebaId === (acc.id || acc.sheba_number) ? 'کپی شد!' : 'کپی شماره شبا'"
+                    class="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                    [ngClass]="copiedShebaId === (acc.id || acc.sheba_number) ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'">
+                    <span *ngIf="copiedShebaId === (acc.id || acc.sheba_number)">✓ کپی شد</span>
+                    <span *ngIf="copiedShebaId !== (acc.id || acc.sheba_number)">📋 کپی</span>
+                  </button>
+                </div>
+
+                <!-- مشخصات شماره حساب و دکمه‌های عملیات -->
+                <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                  <div class="flex items-center gap-1.5">
+                    <span>شماره حساب:</span>
+                    <span class="font-mono font-bold text-slate-700">{{ acc.account_number || '—' }}</span>
+                  </div>
+
+                  <div class="flex items-center gap-1">
+                    <button 
+                      type="button" 
+                      (click)="editAccount(acc)" 
+                      class="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 font-bold cursor-pointer" 
+                      title="ویرایش این حساب">
+                      ✏️ ویرایش
+                    </button>
+                    <button 
+                      type="button" 
+                      (click)="deleteBankAccount(acc)" 
+                      class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 font-bold cursor-pointer" 
+                      title="حذف این حساب">
+                      🗑️ حذف
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- فرم ثبت یا ویرایش حساب بانکی -->
+            <div *ngIf="companyModal.data.id" class="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 mt-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-black text-slate-800">
+                  {{ isEditingAccount ? '✏️ ویرایش اطلاعات حساب بانکی' : '➕ افزودن حساب بانکی / شبای جدید' }}
+                </span>
+                <button 
+                  *ngIf="isEditingAccount" 
+                  type="button" 
+                  (click)="cancelEditAccount()" 
+                  class="text-[11px] text-slate-500 hover:text-slate-800 font-bold cursor-pointer">
+                  انصراف از ویرایش ✕
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <!-- فیلد شماره شبا با اعتبارسنجی زنده -->
+                <div class="md:col-span-2">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">
+                    شماره شبا (۲۴ رقم بدون نیاز به تایپ IR) <span class="text-rose-500">*</span>
+                  </label>
+                  <div class="relative">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="newAccount.sheba_number" 
+                      (ngModelChange)="onShebaInput($event)"
+                      placeholder="IR12 0120 0000 0000 1234 5678 90" 
+                      maxlength="34"
+                      dir="ltr"
+                      class="w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono tracking-wider text-center"
+                      [ngClass]="shebaValidationResult ? (shebaValidationResult.isValid ? 'border-emerald-300 bg-emerald-50/20' : 'border-rose-300 bg-rose-50/20') : 'border-slate-200 bg-white'"
+                    />
+                    <button 
+                      *ngIf="newAccount.sheba_number" 
+                      type="button" 
+                      (click)="copySheba(newAccount.sheba_number, 'new_sheba')"
+                      class="absolute left-2 top-1.5 text-xs text-slate-400 hover:text-slate-700 px-2 py-0.5 rounded bg-slate-100 cursor-pointer"
+                      title="کپی شبا">
+                      📋
+                    </button>
+                  </div>
+
+                  <!-- فیدبک بصری اعتبارسنجی شبا -->
+                  <div *ngIf="shebaValidationResult" class="mt-1 text-[11px] flex items-center gap-1.5 font-bold">
+                    <span *ngIf="shebaValidationResult.isValid" class="text-emerald-700 flex items-center gap-1">
+                      <span>✓</span>
+                      <span>{{ shebaValidationResult.bank?.name || 'بانک معتبر' }}</span>
+                      <span *ngIf="shebaValidationResult.accountNumber" class="text-slate-500 font-mono font-normal">
+                        (شماره حساب استخراج‌شده: {{ shebaValidationResult.accountNumber }})
+                      </span>
+                    </span>
+                    <span *ngIf="!shebaValidationResult.isValid" class="text-rose-600 flex items-center gap-1">
+                      <span>✕</span>
+                      <span>{{ shebaValidationResult.errorMessage }}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- انتخاب نام بانک از لیست ۳۲ بانک کشور با کمبوباکس جستجوپذیر -->
+                <div class="relative">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">بانک عامل <span class="text-rose-500">*</span></label>
+                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="newAccount.bank_name" 
+                      (focus)="isBankDropdownOpen = true"
+                      placeholder="انتخاب یا تایپ نام بانک..." 
+                      class="w-full text-xs text-slate-800 bg-transparent focus:outline-none"
+                    />
+                    <button 
+                      type="button" 
+                      (click)="isBankDropdownOpen = !isBankDropdownOpen"
+                      class="text-slate-400 hover:text-slate-600 text-xs p-0.5 cursor-pointer">
+                      ▼
+                    </button>
+                  </div>
+
+                  <!-- منوی دراپ‌داون بانک‌ها با سرچ -->
+                  <div *ngIf="isBankDropdownOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl w-full p-2 max-h-48 overflow-y-auto">
+                    <input 
+                      type="text" 
+                      [(ngModel)]="bankSearchQuery" 
+                      placeholder="جستجوی سریع بانک..." 
+                      class="w-full px-2 py-1 mb-1 text-xs border border-slate-200 rounded-lg focus:outline-none bg-slate-50"
+                    />
+                    <div class="divide-y divide-slate-100">
+                      <button 
+                        *ngFor="let bank of filterBanks()" 
+                        type="button" 
+                        (click)="selectBankForAccount(bank)"
+                        class="w-full text-right px-2 py-1.5 text-xs hover:bg-indigo-50 hover:text-indigo-700 rounded-lg flex items-center justify-between cursor-pointer transition-colors">
+                        <span class="font-bold">{{ bank.name }}</span>
+                        <span class="text-[10px] text-slate-400 font-mono">{{ bank.code }}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- شماره حساب بانکی -->
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره حساب بانکی</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newAccount.account_number" 
+                    (input)="onAccountNumberInput()"
+                    placeholder="استخراج خودکار از شبا یا تایپ شماره حساب" 
+                    class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono bg-white"
+                  />
+                </div>
+
+                <!-- عنوان و کاربرد حساب -->
+                <div>
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">عنوان / کاربرد حساب</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="newAccount.account_title" 
+                    placeholder="مثلاً: تنخواه، واریز حقوق، بازرگانی" 
+                    class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white"
+                  />
+                </div>
+
+                <!-- چک‌باکس حساب اصلی -->
+                <div class="flex items-center gap-2 pt-5">
+                  <input 
+                    type="checkbox" 
+                    id="new_acc_primary" 
+                    [(ngModel)]="newAccount.is_primary" 
+                    class="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 border-slate-300 cursor-pointer"
+                  />
+                  <label for="new_acc_primary" class="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                    ⭐ حساب پیش‌فرض و اصلی شرکت جهت واریز حقوق و تسویه‌حساب‌ها
+                  </label>
+                </div>
+              </div>
+
+              <!-- دکمه ثبت حساب -->
+              <div class="flex justify-end pt-1">
+                <button 
+                  type="button" 
+                  (click)="saveBankAccount()" 
+                  [disabled]="isSavingBankAccount || !newAccount.sheba_number"
+                  class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                  <span *ngIf="isSavingBankAccount">در حال ذخیره‌سازی...</span>
+                  <span *ngIf="!isSavingBankAccount">{{ isEditingAccount ? 'ثبت تغییرات حساب' : 'افزودن حساب به شرکت' }}</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۶: مدیریت دسترسی کاربران به این شرکت (استودیوی دسترسی)             -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'access'" class="space-y-4">
+          <div class="p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
+            👥 در این تب می‌توانید مشخص نمایید کدام کاربران سامانه به اطلاعات، انبارها و پروژه‌های این شرکت دسترسی داشته باشند.
+          </div>
+
+          <div *ngIf="!companyModal.data.id" class="py-8 text-center text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-2xl">
+            ⚠️ جهت انتساب دسترسی کاربران، لطفاً ابتدا مشخصات اولیه شرکت را ذخیره فرمایید.
+          </div>
+
+          <div *ngIf="companyModal.data.id" class="space-y-4">
+            <!-- فرم افزودن کاربر به شرکت -->
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                <!-- کمبوباکس انتخاب کاربر با جستجو -->
+                <div class="md:col-span-2">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">انتخاب کاربر سیستم</label>
+                  <select 
+                    [(ngModel)]="studioSelectedUserId" 
+                    class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white font-medium">
+                    <option [ngValue]="null">-- انتخاب کاربر از لیست سامانه --</option>
+                    <option *ngFor="let u of filterSystemUsers()" [ngValue]="u.id">
+                      {{ (u.first_name + ' ' + u.last_name).trim() || u.username }} ({{ u.username }})
+                    </option>
+                  </select>
+                </div>
+
+                <!-- شرکت پیش‌فرض کاربر -->
+                <div class="flex items-center gap-2 pt-4">
+                  <input 
+                    type="checkbox" 
+                    id="studio_acc_def" 
+                    [(ngModel)]="studioIsDefaultAccess" 
+                    class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                  />
+                  <label for="studio_acc_def" class="text-xs font-bold text-slate-700 cursor-pointer select-none">
+                    شرکت پیش‌فرض لاگین کاربر باشد
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <button 
+                  type="button" 
+                  (click)="addStudioAccess()" 
+                  [disabled]="!studioSelectedUserId"
+                  class="w-full md:w-auto px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
+                  تخصیص دسترسی
+                </button>
+              </div>
+            </div>
+
+            <!-- جدول کاربران مجاز این شرکت -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-black text-slate-800">کاربران دارای دسترسی فعال به این شرکت</span>
+                <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                  {{ studioAccesses.length }} کاربر
+                </span>
+              </div>
+
+              <div *ngIf="isLoadingStudioAccesses" class="py-6 text-center text-xs text-slate-400">
+                در حال دریافت لیست کاربران...
+              </div>
+
+              <div *ngIf="!isLoadingStudioAccesses && studioAccesses.length === 0" class="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+                تاکنون کاربری به این شرکت اختصاص داده نشده است (صرفاً مدیران ارشد سیستم به آن دسترسی دارند).
+              </div>
+
+              <div *ngIf="!isLoadingStudioAccesses && studioAccesses.length > 0" class="overflow-x-auto rounded-2xl border border-slate-200">
+                <table class="w-full text-right text-xs">
+                  <thead class="bg-slate-100/80 text-slate-600 font-bold border-b border-slate-200">
+                    <tr>
+                      <th class="py-2.5 px-3 w-10 text-center">ردیف</th>
+                      <th class="py-2.5 px-3">نام و نام خانوادگی</th>
+                      <th class="py-2.5 px-3">نام کاربری</th>
+                      <th class="py-2.5 px-3 text-center">وضعیت پیش‌فرض</th>
+                      <th class="py-2.5 px-3 text-center">تاریخ انتساب</th>
+                      <th class="py-2.5 px-3 text-center w-20">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    <tr *ngFor="let acc of studioAccesses; let idx = index" class="hover:bg-slate-50 transition-colors">
+                      <td class="py-2.5 px-3 text-center font-mono text-slate-400">{{ idx + 1 }}</td>
+                      <td class="py-2.5 px-3 font-bold text-slate-800">{{ acc.user_full_name || 'کاربر سیستم' }}</td>
+                      <td class="py-2.5 px-3 font-mono text-slate-600">{{ acc.username }}</td>
+                      <td class="py-2.5 px-3 text-center">
+                        <span *ngIf="acc.is_default" class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                          ✓ پیش‌فرض
+                        </span>
+                        <span *ngIf="!acc.is_default" class="text-[10px] text-slate-400">—</span>
+                      </td>
+                      <td class="py-2.5 px-3 text-center font-mono text-[11px] text-slate-500">{{ acc.created_at || '—' }}</td>
+                      <td class="py-2.5 px-3 text-center">
+                        <button 
+                          type="button" 
+                          (click)="removeStudioAccess(acc.id)" 
+                          class="text-rose-500 hover:text-rose-700 p-1 font-bold text-xs rounded hover:bg-rose-50 transition-colors cursor-pointer" 
+                          title="لغو دسترسی کاربر">
+                          🗑️ لغو
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </div>
 
       </div>
 
       <!-- Modal Footer -->
-      <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2">
-        <button 
-          type="button" 
-          (click)="closeCompanyModal()" 
-          class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 text-xs font-bold transition-colors cursor-pointer">
-          انصراف
-        </button>
-        <button 
-          type="button" 
-          (click)="submitCompanyForm()" 
-          [disabled]="companyModal.isSubmitting"
-          class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-          <span *ngIf="companyModal.isSubmitting">در حال ذخیره‌سازی...</span>
-          <span *ngIf="!companyModal.isSubmitting">{{ companyModal.isEdit ? 'ثبت ویرایش' : 'ثبت شرکت' }}</span>
-        </button>
+      <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+        <div class="text-[11px] text-slate-400">
+          <span *ngIf="companyModal.isEdit">شناسه سیستم: #{{ companyModal.data.id }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button 
+            type="button" 
+            (click)="closeCompanyModal()" 
+            class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 text-xs font-bold transition-colors cursor-pointer">
+            انصراف
+          </button>
+          <button 
+            type="button" 
+            (click)="submitCompanyForm()" 
+            [disabled]="companyModal.isSubmitting"
+            class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
+            <span *ngIf="companyModal.isSubmitting">در حال ذخیره‌سازی...</span>
+            <span *ngIf="!companyModal.isSubmitting">{{ companyModal.isEdit ? 'ثبت ویرایش شناسنامه' : 'ثبت شرکت' }}</span>
+          </button>
+        </div>
       </div>
 
     </div>
@@ -467,7 +1551,7 @@
           </div>
         </div>
         <button 
-          (click)="closeUserAccessModal()"
+          (click)="closeUserAccessModal()" 
           class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer">
           ✕
         </button>
@@ -555,4 +1639,35 @@
     </div>
   </div>
 
+  <!-- ═════════════════════════════════════════════════════════════════════════ -->
+  <!-- ۶. مودال لایت‌باکس پیش‌نمایش درجا مدارک و اسناد (In-Place Preview Lightbox)  -->
+  <!-- ═════════════════════════════════════════════════════════════════════════ -->
+  <div *ngIf="previewModal.isOpen" class="fixed inset-0 z-60 flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-md transition-all">
+    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col">
+      <!-- Header -->
+      <div class="p-3.5 md:p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="text-base">📄</span>
+          <span class="text-xs md:text-sm font-black text-slate-800">{{ previewModal.title }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <a [href]="previewModal.fileUrl" target="_blank" download class="px-3 py-1 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold flex items-center gap-1 transition-all">
+            <span>📥</span>
+            <span>دانلود اصل فایل</span>
+          </a>
+          <button type="button" (click)="closePreview()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview Body -->
+      <div class="flex-1 bg-slate-900/5 p-2 overflow-auto flex items-center justify-center">
+        <iframe *ngIf="previewModal.isPdf" [src]="previewModal.fileUrl" class="w-full h-full rounded-xl border border-slate-200 bg-white"></iframe>
+        <img *ngIf="!previewModal.isPdf" [src]="previewModal.fileUrl" class="max-h-full max-w-full rounded-xl shadow-md object-contain" [alt]="previewModal.title" />
+      </div>
+    </div>
+  </div>
+
 </div>
+

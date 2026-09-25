@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { SystemHealthService } from '../../../core/services/system-health.service';
 import { SettingsService } from '../../../services/settings';
+import { CompanyApiService } from '../../../core/api/company-api.service';
+import { CompanyDocument } from '../../../core/models/company.model';
 import { ToastService } from '../../../shared/components/toast/toast.component';
 import { downloadLocalDatabaseSnapshotFile } from '../../../core/services/offline-db';
 
@@ -17,6 +19,7 @@ export class OperationsCockpitComponent implements OnInit {
   private router = inject(Router);
   public healthService = inject(SystemHealthService);
   private settingsService = inject(SettingsService);
+  private companyApi = inject(CompanyApiService);
   private toast = inject(ToastService);
 
   public isCreatingSnapshot = signal<boolean>(false);
@@ -24,8 +27,13 @@ export class OperationsCockpitComponent implements OnInit {
   public lastSnapshotTime = signal<string>('نامشخص');
   public lastSnapshotSize = signal<string>('۰ مگابایت');
 
+  // مدارک هلدینگ در آستانه انقضا یا منقضی شده
+  public expiringDocs = signal<CompanyDocument[]>([]);
+  public isLoadingExpiringDocs = signal<boolean>(false);
+
   ngOnInit(): void {
     this.loadSnapshotSummary();
+    this.loadExpiringDocuments();
     this.healthService.runFullDiagnostic(false).catch(() => {});
   }
 
@@ -38,6 +46,19 @@ export class OperationsCockpitComponent implements OnInit {
       },
       error: () => {
         // Fallback gracefully
+      }
+    });
+  }
+
+  public loadExpiringDocuments(): void {
+    this.isLoadingExpiringDocs.set(true);
+    this.companyApi.getExpiringDocuments().subscribe({
+      next: (res) => {
+        this.isLoadingExpiringDocs.set(false);
+        this.expiringDocs.set(res?.results || []);
+      },
+      error: () => {
+        this.isLoadingExpiringDocs.set(false);
       }
     });
   }

@@ -19,6 +19,8 @@ import { AvatarCropperModal } from '../avatar-cropper-modal/avatar-cropper-modal
 import { DeepSyncContextMode, DeepSyncModalComponent } from '../deep-sync-modal/deep-sync-modal.component';
 import { AppPersonaService } from '../../../core/services/app-persona.service';
 import { PersonnelApiService } from '../../../core/api/personnel-api.service';
+import { ActiveCompanyService } from '../../../core/services/active-company.service';
+import { Company } from '../../../core/models/company.model';
 
 @Component({
   selector: 'app-user-menu',
@@ -48,8 +50,10 @@ export class UserMenuComponent implements OnInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   private personaService = inject(AppPersonaService, { optional: true });
   private personnelApi = inject(PersonnelApiService, { optional: true });
+  public activeCompanyService = inject(ActiveCompanyService, { optional: true });
 
   public isUserMenuOpen = false;
+  public isCompanySubmenuOpen = false;
   public isAvatarModalOpen = false;
   public isSavingAvatar = false;
   public get isCheckingAppUpdate(): boolean {
@@ -395,16 +399,6 @@ export class UserMenuComponent implements OnInit, OnDestroy {
     this.subs.forEach(s => s.unsubscribe());
   }
 
-  public toggleUserMenu(): void {
-    this.isUserMenuOpen = !this.isUserMenuOpen;
-    this.cdr.detectChanges();
-  }
-
-  public closeUserMenu(): void {
-    this.isUserMenuOpen = false;
-    this.cdr.detectChanges();
-  }
-
   public openAvatarModal(): void {
     this.isAvatarModalOpen = true;
     this.closeUserMenu();
@@ -719,7 +713,45 @@ export class UserMenuComponent implements OnInit, OnDestroy {
     this.router.navigate(['/app/launcher']);
   }
 
+  public toggleUserMenu(): void {
+    this.isUserMenuOpen = !this.isUserMenuOpen;
+    if (!this.isUserMenuOpen) {
+      this.isCompanySubmenuOpen = false;
+    }
+    this.cdr.detectChanges();
+  }
+
+  public closeUserMenu(): void {
+    this.isUserMenuOpen = false;
+    this.isCompanySubmenuOpen = false;
+    this.cdr.detectChanges();
+  }
+
+  public toggleCompanySubmenu(event?: MouseEvent): void {
+    if (event) event.stopPropagation();
+    this.isCompanySubmenuOpen = !this.isCompanySubmenuOpen;
+    this.cdr.detectChanges();
+  }
+
+  public selectCompanyFromMenu(company: Company | null): void {
+    if (this.activeCompanyService) {
+      this.activeCompanyService.selectCompany(company);
+      this.isCompanySubmenuOpen = false;
+      this.closeUserMenu();
+      this.toast.info(`شرکت فعال به «${company ? company.name : 'همه شرکت‌ها'}» تغییر یافت.`);
+    }
+  }
+
+  public openCompanySelectionModal(): void {
+    if (this.activeCompanyService) {
+      this.activeCompanyService.openSwitchModal();
+      this.isCompanySubmenuOpen = false;
+      this.closeUserMenu();
+    }
+  }
+
   public logout(): void {
     this.auth.logout();
   }
 }
+

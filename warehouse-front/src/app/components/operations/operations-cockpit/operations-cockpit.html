@@ -51,6 +51,69 @@
     </div>
   </div>
 
+  <!-- ویجت پایش سررسید مدارک و روزنامه‌های رسمی هلدینگ -->
+  <div class="rounded-2xl p-5 bg-white border border-slate-200 shadow-xs" [class.border-amber-300]="expiringDocs().length > 0">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold"
+             [ngClass]="expiringDocs().length > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'">
+          {{ expiringDocs().length > 0 ? '⚠️' : '🛡️' }}
+        </div>
+        <div>
+          <h3 class="text-sm font-black text-slate-800">دیده‌بان پایش سررسید مدارک و روزنامه‌های رسمی هلدینگ</h3>
+          <p class="text-[11px] text-slate-500">نظارت بر انقضای آگهی‌های هیئت‌مدیره، کارت‌های بازرگانی و مجوزهای قانونی شرکت‌ها</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span *ngIf="expiringDocs().length > 0" class="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+          {{ expiringDocs().length }} سند در آستانه انقضا یا منقضی
+        </span>
+        <span *ngIf="expiringDocs().length === 0" class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+          تمامی مدارک شرکت‌ها معتبر هستند
+        </span>
+        <button 
+          type="button" 
+          (click)="navigateTo('/app/operations/companies')" 
+          class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all cursor-pointer">
+          مدیریت شرکت‌ها ←
+        </button>
+      </div>
+    </div>
+
+    <!-- لیست مدارک نیازمند توجه -->
+    <div *ngIf="expiringDocs().length > 0" class="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden mt-3">
+      <div *ngFor="let doc of expiringDocs()" class="p-3 bg-slate-50/50 hover:bg-slate-50 flex items-center justify-between gap-3 transition-colors">
+        <div class="flex items-center gap-3">
+          <span class="text-base">{{ doc.expiry_status === 'expired' ? '⛔' : '⏳' }}</span>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-black text-slate-800">{{ doc.company_name }}</span>
+              <span class="text-[10px] text-slate-500 font-bold bg-slate-200/80 px-2 py-0.2 rounded-md">{{ doc.document_type_display }}</span>
+            </div>
+            <div class="text-[11px] text-slate-600 mt-0.5">{{ doc.title }}</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="text-left font-mono">
+            <div class="text-xs font-black" [ngClass]="doc.expiry_status === 'expired' ? 'text-rose-600' : 'text-amber-600'">
+              {{ doc.expiry_status === 'expired' ? 'منقضی شده' : (doc.days_until_expiry + ' روز مانده') }}
+            </div>
+            <div class="text-[10px] text-slate-400">انقضا: {{ doc.expiry_date }}</div>
+          </div>
+
+          <button 
+            type="button" 
+            (click)="navigateTo('/app/operations/companies')" 
+            class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-indigo-50 text-[11px] font-bold text-indigo-700 shadow-2xs transition-colors cursor-pointer">
+            اقدام سریع
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- گرید کارت‌های ۵گانه ارکان عملیاتی با تم روشن سازمانی -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 

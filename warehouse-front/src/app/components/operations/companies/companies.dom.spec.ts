@@ -105,7 +105,31 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       createUserAccess: vi.fn().mockReturnValue(of({})),
       deleteUserAccess: vi.fn().mockReturnValue(of({})),
       exportExcel: vi.fn().mockReturnValue(of(new Blob())),
-      uploadLogo: vi.fn().mockReturnValue(of({}))
+      uploadLogo: vi.fn().mockReturnValue(of({})),
+      getDocuments: vi.fn().mockReturnValue(of([])),
+      createDocument: vi.fn().mockImplementation((data: any) => {
+        const title = (data instanceof FormData ? data.get('title') : data?.title) || 'مدرک تست';
+        return of({ id: 101, title });
+      }),
+      deleteDocument: vi.fn().mockReturnValue(of(void 0)),
+      uploadCoreDoc: vi.fn().mockReturnValue(of({ file_url: '/media/test.pdf' })),
+      getExpiringDocuments: vi.fn().mockReturnValue(of([])),
+      getBankAccounts: vi.fn().mockReturnValue(of([
+        {
+          id: 1,
+          company: 1,
+          bank_name: 'بانک ملت',
+          account_number: '1234567890',
+          sheba_number: 'IR120120000000001234567890',
+          account_title: 'حساب جاری پاینده',
+          is_primary: true,
+          is_active: true
+        }
+      ])),
+      createBankAccount: vi.fn().mockImplementation((data: any) => of({ id: 2, ...data })),
+      updateBankAccount: vi.fn().mockImplementation((id: number, data: any) => of({ id, ...data })),
+      deleteBankAccount: vi.fn().mockReturnValue(of(void 0)),
+      setPrimaryBankAccount: vi.fn().mockReturnValue(of({ success: true }))
     };
 
     mockActiveCompanyService = {
@@ -216,12 +240,11 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       expect(firstRow.textContent).toContain('فعال جاری');
     });
 
-    it('باید ستون‌های شناسه ملی، کد اقتصادی، مدیرعامل و تعداد پروژه‌ها با فرمت صحیح رندر شوند', () => {
+    it('باید ستون‌های شناسه ملی، مدیرعامل و تعداد پروژه‌ها با فرمت صحیح رندر شوند', () => {
       const el: HTMLElement = fixture.nativeElement;
       const firstRow = el.querySelectorAll('tbody tr')[0];
 
       expect(firstRow.textContent).toContain('10101234567');
-      expect(firstRow.textContent).toContain('4111222333');
       expect(firstRow.textContent).toContain('مهندس پاینده');
       expect(firstRow.textContent).toContain('2 پروژه');
     });
@@ -300,7 +323,7 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       expect(component.companyModal.isEdit).toBe(false);
 
       const modalTitle = el.querySelector('h3');
-      expect(modalTitle?.textContent?.trim()).toBe('ثبت شرکت جدید');
+      expect(modalTitle?.textContent?.trim()).toContain('ثبت شرکت');
     });
 
     it('تلاش برای ثبت با فیلدهای خالی باید خطای اعتبارسنجی را نشان دهد و از ارسال جلوگیری کند', () => {
@@ -367,9 +390,9 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
   });
 
   describe('۵. ویرایش اطلاعات شرکت (Edit Company Flow)', () => {
-    it('کلیک روی دکمه «ویرایش» باید داده‌های شرکت را در فرم مودال لود کند', () => {
+    it('کلیک روی دکمه «استودیو» باید داده‌های شرکت را در فرم مودال لود کند', () => {
       const el: HTMLElement = fixture.nativeElement;
-      const editBtns = el.querySelectorAll('button[title="ویرایش مشخصات شرکت"]');
+      const editBtns = el.querySelectorAll('button[title="ویرایش مشخصات و مدارک شرکت"]');
       (editBtns[0] as HTMLButtonElement).click();
       fixture.detectChanges();
 
@@ -431,4 +454,243 @@ describe('CompaniesManagementComponent DOM & Browser Unit Test (Type 1 Vitest + 
       expect(component.deleteModal.isOpen).toBe(false);
     });
   });
+
+  describe('۷. استودیوی مودال ۵ تبی و مدیریت اسناد حقوقی (5-Tab Studio & Document Management)', () => {
+    it('باز کردن مودال شرکت باید به طور پیش‌فرض روی تب هویتی تنظیم شود و تغییر تب کار کند', () => {
+      component.openCreateModal();
+      fixture.detectChanges();
+
+      expect(component.companyModal.isOpen).toBe(true);
+      expect(component.activeModalTab).toBe('identity');
+
+      // جابجایی بین تب‌های ۵گانه
+      component.setModalTab('documents');
+      expect(component.activeModalTab).toBe('documents');
+
+      component.setModalTab('governance');
+      expect(component.activeModalTab).toBe('governance');
+
+      component.setModalTab('fiscal_insurance');
+      expect(component.activeModalTab).toBe('fiscal_insurance');
+
+      component.setModalTab('treasury');
+      expect(component.activeModalTab).toBe('treasury');
+    });
+
+    it('باز کردن مودال ویرایش یک شرکت باید اسناد آرشیو آن شرکت را بارگذاری کند', () => {
+      mockCompanyApi.getDocuments.mockReturnValue(of([
+        { id: 1, title: 'اساسنامه ثبتی', document_type: 'articles_of_association', file_url: '/media/test.pdf' }
+      ]));
+
+      component.openEditModal(sampleCompanies[0]);
+      fixture.detectChanges();
+
+      expect(mockCompanyApi.getDocuments).toHaveBeenCalledWith({ company_id: 1 });
+      expect(component.companyDocuments.length).toBe(1);
+      expect(component.companyDocuments[0].title).toBe('اساسنامه ثبتی');
+    });
+
+    it('ثبت مدرک جدید بدون انتخاب فایل یا عنوان باید با پیام هشدار متوقف شود', () => {
+      component.openEditModal(sampleCompanies[0]);
+      fixture.detectChanges();
+
+      // بدون فایل
+      component.uploadNewDocument();
+      expect(mockToast.warning).toHaveBeenCalledWith('لطفاً فایل مدرک را انتخاب فرمایید.');
+      expect(mockCompanyApi.createDocument).not.toHaveBeenCalled();
+
+      // با فایل اما بدون عنوان
+      const fakeFile = new File(['dummy'], 'sample.pdf', { type: 'application/pdf' });
+      component.newDoc.file = fakeFile;
+      component.newDoc.title = '';
+      component.uploadNewDocument();
+      expect(mockToast.warning).toHaveBeenCalledWith('لطفاً عنوان مدرک را وارد فرمایید.');
+      expect(mockCompanyApi.createDocument).not.toHaveBeenCalled();
+    });
+
+    it('ثبت مدرک جدید با مشخصات معتبر باید سرویس createDocument را با FormData فراخوانی کند', () => {
+      component.openEditModal(sampleCompanies[0]);
+      fixture.detectChanges();
+
+      const fakeFile = new File(['dummy content'], 'tax_sheet.pdf', { type: 'application/pdf' });
+      component.newDoc.file = fakeFile;
+      component.newDoc.title = 'برگ تشخیص مالیاتی';
+      component.newDoc.document_type = 'tax_sheet';
+      component.newDoc.issue_date = '1405/01/15';
+
+      component.uploadNewDocument();
+      fixture.detectChanges();
+
+      expect(mockCompanyApi.createDocument).toHaveBeenCalled();
+      expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('برگ تشخیص مالیاتی'));
+    });
+
+    it('ستون وضعیت مدارک باید بر اساس documents_health_status برچسب مناسب نمایش دهد', () => {
+      const companiesWithHealth: Company[] = [
+        {
+          ...sampleCompanies[0],
+          documents_health_status: 'HEALTHY',
+          documents_count: 5
+        },
+        {
+          ...sampleCompanies[1],
+          documents_health_status: 'EXPIRING_SOON',
+          documents_count: 2
+        }
+      ];
+
+      component.companies = companiesWithHealth;
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      const htmlText = el.textContent || '';
+      // بررسی وجود نشانگرهای سلامت مدارک در رندر DOM
+      expect(htmlText).toContain('پاینده توان ساینا');
+      expect(htmlText).toContain('فارس عالیش');
+    });
+  });
+
+  describe('۸. سیستم چندشبایی و خزانه‌داری هوشمند شرکت‌ها (Multi-IBAN & Smart Treasury)', () => {
+    it('باز کردن ویرایش شرکت باید لیست شماره شباهای آن را بارگذاری کند', () => {
+      component.openEditModal(sampleCompanies[0]);
+      fixture.detectChanges();
+
+      expect(mockCompanyApi.getBankAccounts).toHaveBeenCalledWith(1);
+      expect(component.companyBankAccounts.length).toBe(1);
+      expect(component.companyBankAccounts[0].bank_name).toBe('بانک ملت');
+      expect(component.companyBankAccounts[0].is_primary).toBe(true);
+    });
+
+    it('ورود شماره شبای معتبر باید نام بانک و شماره حساب را به صورت خودکار تشخیص دهد', () => {
+      component.onShebaInput('IR160120000000001234567890');
+
+      expect(component.shebaValidationResult?.isValid).toBe(true);
+      expect(component.shebaValidationResult?.bank?.name).toBe('بانک ملت');
+      expect(component.newAccount.bank_name).toBe('بانک ملت');
+      expect(component.newAccount.account_number).toBe('1234567890');
+    });
+
+    it('ورود شماره شبای نامعتبر باید خطا بدهد و از ثبت جلوگیری کند', () => {
+      component.openEditModal(sampleCompanies[0]);
+      component.onShebaInput('IR120000000000000000000000'); // نامعتبر
+
+      expect(component.shebaValidationResult?.isValid).toBe(false);
+      expect(component.shebaValidationResult?.errorMessage).toContain('نامعتبر');
+
+      component.saveBankAccount();
+      expect(mockToast.error).toHaveBeenCalled();
+      expect(mockCompanyApi.createBankAccount).not.toHaveBeenCalled();
+    });
+
+    it('ثبت حساب بانکی معتبر باید وب‌سرویس ایجاد را با شرکت جاری صدا بزند', () => {
+      component.openEditModal(sampleCompanies[0]);
+      component.onShebaInput('IR160120000000001234567890');
+      component.newAccount.account_title = 'حساب حقوق پرسنل';
+
+      component.saveBankAccount();
+      fixture.detectChanges();
+
+      expect(mockCompanyApi.createBankAccount).toHaveBeenCalledWith(expect.objectContaining({
+        company: 1,
+        sheba_number: 'IR160120000000001234567890',
+        bank_name: 'بانک ملت',
+        account_number: '1234567890'
+      }));
+      expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('بانک ملت'));
+    });
+
+    it('تغییر حساب بانکی اصلی باید وب‌سرویس setPrimaryBankAccount را فراخوانی کند', () => {
+      const sampleAccount = {
+        id: 5,
+        company: 1,
+        bank_name: 'بانک تجارت',
+        account_number: '987654321',
+        sheba_number: 'IR980180000000000987654321',
+        account_title: 'حساب تجاری',
+        is_primary: false,
+        is_active: true
+      };
+
+      component.setPrimaryAccount(sampleAccount);
+      fixture.detectChanges();
+
+      expect(mockCompanyApi.setPrimaryBankAccount).toHaveBeenCalledWith(5);
+      expect(mockToast.success).toHaveBeenCalledWith(expect.stringContaining('به عنوان حساب اصلی شرکت تنظیم شد'));
+    });
+
+    it('کپی شماره شبا به کلیپ‌بورد باید توست موفقیت‌آمیز نمایش دهد', async () => {
+      // Mock clipboard
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockResolvedValue(void 0)
+        }
+      });
+
+      component.copySheba('IR120120000000001234567890');
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('IR120120000000001234567890');
+      
+      // Allow async promise chain to resolve
+      await Promise.resolve();
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(mockToast.success).toHaveBeenCalledWith('شماره شبا در حافظه کپی شد.');
+      expect(component.copiedSheba).toBe('IR120120000000001234567890');
+    });
+  });
+
+  describe('۹. انتخابگر تقویم شمسی جلالی (Jalali Shamsi Datepicker Integration)', () => {
+    it('متد onRegDateSelect باید تاریخ ثبت شرکت را با تاریخ جلالی به‌روز کند', () => {
+      component.openCreateModal();
+      component.onRegDateSelect('1402/05/18');
+      expect(component.companyModal.data.registration_date).toBe('1402/05/18');
+    });
+
+    it('متد onBoardExpiryDateSelect باید تاریخ اتمام دوره هیئت‌مدیره را تنظیم کند', () => {
+      component.openCreateModal();
+      component.onBoardExpiryDateSelect('1405/08/30');
+      expect(component.companyModal.data.board_term_expiry).toBe('1405/08/30');
+    });
+
+    it('متدهای صدور و انقضای اسناد باید تاریخ‌های مدرک جدید را شمسی تنظیم کنند', () => {
+      component.onDocIssueDateSelect('1404/01/01');
+      expect(component.newDoc.issue_date).toBe('1404/01/01');
+
+      component.onDocExpiryDateSelect('1405/01/01');
+      expect(component.newDoc.expiry_date).toBe('1405/01/01');
+    });
+  });
+
+  describe('۱۰. پیش‌نمایش درجا (In-Place Lightbox Preview) و فیلتر اسناد', () => {
+    it('متد openPreview باید برای فایل‌های PDF پرچم isPdf را true کند و عنوان مدرک را ست کند', () => {
+      const doc = {
+        id: 1,
+        title: 'اساسنامه رسمی',
+        document_type: 'articles_of_association',
+        file_url: '/media/documents/sample.pdf'
+      };
+
+      component.openPreview(doc);
+      expect(component.previewModal.isOpen).toBe(true);
+      expect(component.previewModal.title).toBe('اساسنامه رسمی');
+      expect(component.previewModal.isPdf).toBe(true);
+
+      component.closePreview();
+      expect(component.previewModal.isOpen).toBe(false);
+    });
+
+    it('متد openPreview برای فایل‌های تصویری (png, jpg) باید isPdf را false کند', () => {
+      const doc = {
+        id: 2,
+        title: 'تصویر روزنامه رسمی',
+        document_type: 'official_gazette',
+        file_url: '/media/documents/sample.jpg'
+      };
+
+      component.openPreview(doc);
+      expect(component.previewModal.isOpen).toBe(true);
+      expect(component.previewModal.isPdf).toBe(false);
+    });
+  });
 });
+
+

@@ -205,7 +205,38 @@ graph TD
   4. 🚀 **ویزارد راه‌اندازی در اجرای اول (First-Boot Wizard):** هدایت سوپریوزر به ثبت اولین شرکت حقوقی سیستم در هنگام راه‌اندازی اولیه و خام برنامه جهت جلوگیری از سردرگمی.
   5. 🧪 **آزمون‌های یکپارچگی و سلامت بیلد:** پوشش تست‌های بک‌اند ایزولاسیون انبارها، آزمون‌های سریع Vitest DOM و تایید عدم وجود هرگونه خطای کامپایل فرانت‌اند (`tsc --noEmit`).
 
+---
+
+# 🏛️ طرح جامع ارتقای شرکت‌ها، هیئت‌مدیره پویا، اصلاح تقویم و معماری اسناد (نسخه ۳.۰)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v3.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v3.md)
+* **چک‌لیست وظایف:** [`Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v3.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v3.md)
+* **سند آزمون‌ها (Walkthrough):** [`Documents/Company_Multi_Tenant_Architecture/walkthrough_company_architecture_v3.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/walkthrough_company_architecture_v3.md)
+* **هدف:** ارتقای سطح بلوغ ساختار حقوقی شرکت‌ها با افزودن هیئت‌مدیره پویا و نامحدود، الصاق مدارک شناسایی، رفع باگ تقویم شمسی جلالی، تفکیک فیلدهای بیمه‌ای پروژه و رفع مشکل N+1 Query.
+* **ارکان شش‌گانه طرح:**
+  1. 📅 **اصلاح ریشه‌ای تقویم:** کپسوله‌سازی صحیح تگ `<input>` درون `<ng-persian-datepicker>` و بایندینگ دوطرفه `[(uiIsVisible)]` جهت باز شدن بی‌درنگ پاپ‌اور تقویم.
+  2. 👥 **ساختار پویای ارکان هیئت‌مدیره:** مدل رابطه‌ای `CompanyBoardMember` با فیلدهای سمت، شخص حقیقی/حقوقی، حق امضا، دوره تصدی و فایل‌های پیوست مدارک هویتی و احکام.
+  3. ⚖️ **تفکیک فیلدهای کارگاهی:** حذف ردیف پیمان و شعبه تأمین اجتماعی از سطح شرکت و تثبیت آن در سطح پروژه‌ها و کارگاه‌ها (`FinancialProject` و `WorkshopInsuranceSettings`).
+  4. ⚡ **بهینه‌سازی دیتابیس (حذف N+1):** پیش‌واکشی `prefetch_related('documents', 'bank_accounts', 'board_members')` در کوئری‌ست شرکت‌ها.
+  5. 📁 **یکپارچه‌سازی و نسخه‌گذاری اسناد:** حذف فیلدهای تکراری اساسنامه و روزنامه از مدل شرکت، مدیریت در `CompanyDocument` و افزودن فیلدهای `version` و `is_superseded`.
+  6. 🔢 **اعتبارسنجی چکسام شناسه ملی:** پیاده‌سازی فرمول ریاضی رقم کنترلی ۱۱ رقمی شناسه ملی اشخاص حقوقی در بک‌اند و فرانت‌اند.
+
+---
+
+# 🏢 طرح جامع اصلاح و تحکیم معماری چندمستأجری سطح شرکت (نسخه ۴.۰)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md)
+* **چک‌لیست وظایف:** [`Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md)
+* **هدف:** گذار کامل و ریشه‌ای سامane از معماری تک‌شرکتی انبار-محور به یک معماری اصولی و ایزوله چندشرکتی سازمانی (Enterprise Multi-Tenancy).
+* **ارکان شش‌گانه طرح:**
+  1. 🗄️ **تصحیح مدل‌ها و قیود یکتا:** تبدیل قیدهای سراسری کد پروژه (`FinancialProject.code`) و کدملی پرسنل (`PersonnelProfile.national_code`) به قیدهای یکتا به تفکیک شرکت (`unique_together`)؛ افزودن مستقیم کلید خارجی شرکت به مدل‌های `VehicleDriverProfile`، `ItemFieldDefinition` و ستون ایندکس‌شده `company_id` به `AuditLog`.
+  2. 🛡️ **ارتقای میان‌افزار به نگهبان چندمستأجری (Tenant Guard Middleware):** اعتبارسنجی قطعی دسترسی کاربر در لحظه ورود درخواست به سرور و قطع دسترسی با پاسخ ۴۰۳ در صورت جعل هدر یا تلاش برای دسترسی به شرکت غیرمجاز.
+  3. 📦 **ایزولاسیون کامل کاردکس و کارتابل‌های انبار:** اعمال فیلتر دوگانه شرکت فعال و انبارهای مجاز در `ItemViewSet`، `CountTaskViewSet` و `DocTaskViewSet`، و رفع نشت داده‌های مالی و قیمتی به سایر شرکت‌ها.
+  4. ⚡ **ایمن‌سازی کانال‌های بلادرنگ وب‌سوکت:** جداسازی روم‌های عمومی به کانال‌های اختصاصی هر شرکت (`company_{cid}_notifications`) جهت حفاظت از کدملی و نام پرسنل در برابر کلاینت‌های سایر شرکت‌ها.
+  5. 💼 **انعطاف در محاسبات حقوق و مالیات:** حذف شرط اجباری بودن انبار فیزیکی در بستن دوره کارکرد ماهانه و محاسبه حقوق ۵۸ ستونه، و ایزوله کردن کامل کوئری فیش‌های حقوقی.
+  6. 🌐 **فرانت‌اند، هماهنگی URL و واکنش‌پذیری عمومی:** همگام‌سازی دوطرفه شرکت فعال با کوئری‌پارامترهای URL (`?cid=...`) جهت قطعیت پیوندها و اتصال مستقیم کامپوننت‌ها به سیگنال تغییر شرکت بدون نیاز به رفرش دستی.
+
 </div>
+
+
 
 
 

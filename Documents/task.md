@@ -167,4 +167,34 @@
 - [x] <!-- id: CLP.4 --> **فاز ۴: سیستم هشدار انقضا، ستون سلامت و ویجت داشبورد** (ستون سلامت اسناد در جدول شرکت‌ها، ویجت پایش سررسید مدارک هلدینگ در مرکز عملیات با روزشمار تا انقضا)
 - [x] <!-- id: CLP.5 --> **فاز ۵: آزمون‌های یکپارچگی، تست‌های Vitest DOM و صحه‌گذاری** (تست جنگو آپلود و امنیت مدارک، تست‌های DOM نوع ۱ Vitest، تایید کامپایل `npx tsc --noEmit` و ثبت مستندات تحویل)
 
+---
+
+# 🏛️ فهرست وظایف طرح جامع ارتقای شرکت‌ها، هیئت‌مدیره پویا و معماری اسناد (نسخه ۳.۰)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v3.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v3.md)
+* **سند تفصیلی تسک:** [`Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v3.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v3.md)
+* **وضعیت:** ⏳ در انتظار تایید کاربر (Pending Approval)
+
+### 🔹 فازهای پنج‌گانه ارتقای نسخه ۳:
+- [ ] <!-- id: CMP3.1 --> **فاز ۱: اصلاح باگ تقویم در فرانت‌اند** (کپسوله‌سازی تگ `<input>` درون `<ng-persian-datepicker>` و افزودن `[(uiIsVisible)]` در شرکت‌ها و آرشیو مدارک)
+- [ ] <!-- id: CMP3.2 --> **فاز ۲: ساختار پایگاه‌داده و مدل هیئت‌مدیره** (پیاده‌سازی مدل `CompanyBoardMember` با فیلدهای کامل هویتی، سمتی، حق امضا و آپلود مدارک، و فیلدهای نسخه در `CompanyDocument`)
+- [ ] <!-- id: CMP3.3 --> **فاز ۳: لایه وب‌سرویس، کنترلرها و بهینه‌سازی دیتابیس** (ساخت ویوست `CompanyBoardMemberViewSet`، رفع N+1 با `prefetch_related`، اعتبارسنجی چکسام شناسه ملی ۱۱ رقمی)
+- [ ] <!-- id: CMP3.4 --> **فاز ۴: توسعه واسط کاربری استودیو و پالایش فیلدها** (تب پویای هیئت‌مدیره با جدول و دکمه افزودن، حذف فیلدهای ردیف پیمان و شعبه بیمه از تب مودیان، تست چکسام شناسه ملی)
+- [ ] <!-- id: CMP3.5 --> **فاز ۵: تست‌های جامع و اعتبارسنجی نهایی** (تست‌های سریع DOM نوع ۱ Vitest، تست‌های وب‌سرویس در جنگو، تایید عدم وجود خطا در ترمینال)
+
+---
+
+# 🏢 فهرست وظایف طرح جامع اصلاح و تحکیم معماری چندمستأجری سطح شرکت (نسخه ۴.۰)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md)
+* **سند تفصیلی تسک:** [`Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md)
+* **وضعیت:** ⏳ در انتظار بررسی و تایید کاربر (Pending User Review & Approval)
+
+### 🔹 فازهای شش‌گانه طرح جامع اصلاح چندمستأجری:
+- [ ] <!-- id: MTR.1 --> **فاز ۱: تصحیح مدل‌های داده و قیود یکتا در پایگاه داده** (اصلاح قیدهای یکتای سراسری کد پروژه و کدملی به تفکیک شرکت، افزودن فیلد شرکت به ناوگان، فیلدهای پویا و لاگ ممیزی، و ساخت مایگریشن)
+- [ ] <!-- id: MTR.2 --> **فاز ۲: ارتقای میان‌افزار و امنیت کانتکست چندمستأجری** (پیاده‌سازی گارد ضدجعل در `AuditContextMiddleware`، پاسخ ۴۰۳ برای درخواست‌های نامعتبر، و ماژول کمکی `tenant_scope.py`)
+- [ ] <!-- id: MTR.3 --> **فاز ۳: ایزولاسیون کامل ماژول‌های انبار و کارکرد** (اعمال فیلتر دوگانه شرکت و انبار در `ItemViewSet`، `CountTaskViewSet`، `DocTaskViewSet`، ایزوله کردن فیش حقوقی و تزریق شرکت در ایمپورت اکسل)
+- [ ] <!-- id: MTR.4 --> **فاز ۴: ایمن‌سازی وب‌سوکت و کانال‌های بلادرنگ** (تفکیک روم‌های وب‌سوکت به کانال‌های شرکتی `company_{cid}_notifications` و جلوگیری از نشت کدملی)
+- [ ] <!-- id: MTR.5 --> **فاز ۵: فرانت‌اند، هماهنگی آدرس بار و واکنش‌پذیری عمومی** (همگام‌سازی دوطرفه شرکت فعال با کوئری‌پارامترهای URL، تقویت اینترسپتور، و اتصال مستقیم به سیگنال شرکت)
+- [ ] <!-- id: MTR.6 --> **فاز ۶: اعتبارسنجی نهایی و آزمون جامع سیستم** (تست‌های چندشرکتی بک‌اند، بیلد پروداکشن فرانت‌اند، و تست‌های DOM نوع ۱ Vitest)
+
 </div>
+

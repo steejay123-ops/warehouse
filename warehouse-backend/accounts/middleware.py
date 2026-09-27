@@ -12,6 +12,7 @@ _current_active_role_var = contextvars.ContextVar('current_active_role', default
 _current_active_app_var = contextvars.ContextVar('current_active_app', default='accounting')
 _current_client_tab_id_var = contextvars.ContextVar('current_client_tab_id', default=None)
 _current_company_var = contextvars.ContextVar('current_company', default=None)
+_current_allowed_companies_cache = contextvars.ContextVar('current_allowed_companies_cache', default=None)
 
 def get_client_ip(request):
     """
@@ -70,6 +71,9 @@ def get_current_company():
 
 def set_current_company(company_id):
     return _current_company_var.set(company_id)
+
+def get_allowed_companies_cache():
+    return _current_allowed_companies_cache.get()
 
 
 def get_user_allowed_apps(user) -> list[str]:
@@ -195,6 +199,21 @@ class AuditContextMiddleware:
         user = getattr(request, 'user', None)
         if user and not user.is_authenticated:
             user = None
+
+        if not user:
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if auth_header.startswith('Bearer '):
+                raw_token = auth_header.split(' ', 1)[1].strip()
+                try:
+                    from rest_framework_simplejwt.authentication import JWTAuthentication
+                    jwt_auth = JWTAuthentication()
+                    validated_token = jwt_auth.get_validated_token(raw_token)
+                    resolved_user = jwt_auth.get_user(validated_token)
+                    if resolved_user and resolved_user.is_authenticated:
+                        user = resolved_user
+                        request.user = resolved_user
+                except Exception:
+                    pass
             
         ip = get_client_ip(request)
         ua = request.META.get('HTTP_USER_AGENT', '')
@@ -215,11 +234,30 @@ class AuditContextMiddleware:
         elif request.GET.get('company') and str(request.GET.get('company')).isdigit():
             company_id = int(request.GET.get('company'))
 
+        # اعتبارسنجی امنیتی ضدجعل کانتکست شرکت (Anti-Tenant-Spoofing)
+        if company_id and user and user.is_authenticated and not user.is_superuser:
+            try:
+                from personnel.views import validate_user_company_access
+                validate_user_company_access(user, company_id)
+            except Exception as e:
+                from django.http import JsonResponse
+                logger.warning(f"[Security] User {user.id} attempted unauthorized access to company {company_id}: {e}")
+                return JsonResponse({
+                    'detail': 'شما به اطلاعات و پروژه‌های این شرکت دسترسی ندارید.',
+                    'error': 'tenant_access_denied',
+                    'company_id': company_id
+                }, status=403)
+        elif not company_id and user and user.is_authenticated and not user.is_superuser:
+            primary = getattr(user, 'primary_company', None)
+            if primary:
+                company_id = primary.id
+
         t_user = _current_user_var.set(user)
         t_ip = _current_ip_var.set(ip)
         t_ua = _current_user_agent_var.set(ua)
         t_wh = _current_warehouse_var.set(warehouse_id)
         t_comp = _current_company_var.set(company_id)
+        t_cache = _current_allowed_companies_cache.set({})
 
         try:
             response = self.get_response(request)
@@ -233,6 +271,7 @@ class AuditContextMiddleware:
             _current_user_agent_var.reset(t_ua)
             _current_warehouse_var.reset(t_wh)
             _current_company_var.reset(t_comp)
+            _current_allowed_companies_cache.reset(t_cache)
 
 
 class ActiveRoleMiddleware:

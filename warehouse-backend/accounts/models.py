@@ -29,6 +29,19 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return f"{self.username}"
 
+    @property
+    def primary_company(self):
+        """
+        دریافت شرکت اصلی کاربر از طریق جدول دسترسی‌های سازمانی یا انتساب مستقیم
+        """
+        try:
+            access = self.company_accesses.filter(is_default=True).first() or self.company_accesses.first()
+            if access and access.company:
+                return access.company
+        except Exception:
+            pass
+        return None
+
     class Meta:
         ordering = ['-id']
         permissions = [
@@ -326,6 +339,10 @@ class AuditLog(models.Model):
         null=True, blank=True, db_index=True, db_column='warehouse_id',
         verbose_name="شناسهٔ انبار مرتبط",
     )
+    company_id = models.IntegerField(
+        null=True, blank=True, db_index=True, db_column='company_id',
+        verbose_name="شناسهٔ شرکت مرتبط",
+    )
     module = models.CharField(max_length=50, choices=get_audit_module_choices, default='system', verbose_name="ماژول", db_index=True)
     action = models.CharField(max_length=50, choices=ACTION_CHOICES, default='UPDATE', verbose_name="نوع عملیات", db_index=True)
     severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES, default='info', verbose_name="سطح اهمیت", db_index=True)
@@ -349,11 +366,16 @@ class AuditLog(models.Model):
             models.Index(fields=['module', 'created_at']),
             models.Index(fields=['action', 'created_at']),
             models.Index(fields=['severity', 'created_at']),
+            models.Index(fields=['company_id', 'created_at']),
             models.Index(fields=['warehouse_id', 'created_at']),
             models.Index(fields=['user', 'created_at']),
         ]
 
     def __init__(self, *args, **kwargs):
+        if 'company' in kwargs:
+            comp = kwargs.pop('company')
+            if 'company_id' not in kwargs and comp is not None:
+                kwargs['company_id'] = getattr(comp, 'id', comp)
         if 'warehouse' in kwargs:
             wh = kwargs.pop('warehouse')
             if 'warehouse_id' not in kwargs and wh is not None:

@@ -18,6 +18,14 @@ class ItemFieldDefinition(SyncModelMixin):
         ('date', 'تاریخ (Date)'),
     ]
 
+    company = models.ForeignKey(
+        'personnel.Company',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='item_field_definitions',
+        verbose_name="شرکت متبوع"
+    )
     warehouse = models.ForeignKey(Warehouse, on_delete=models.CASCADE, related_name='field_definitions', verbose_name="انبار", null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name="نام سیستمی (انگلیسی)")
     label = models.CharField(max_length=200, verbose_name="عنوان نمایشی (فارسی)")
@@ -33,10 +41,31 @@ class ItemFieldDefinition(SyncModelMixin):
 
     class Meta:
         ordering = ['created_at']
-        unique_together = ('warehouse', 'name')
         verbose_name = "تعریف فیلد پویا"
         verbose_name_plural = "تعاریف فیلدهای پویا"
         base_manager_name = 'all_objects'  # روابط FK حتی به رکوردهای حذف‌نرم دسترسی داشته باشند
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'warehouse', 'name'],
+                condition=models.Q(company__isnull=False, warehouse__isnull=False),
+                name='unique_company_warehouse_field_def'
+            ),
+            models.UniqueConstraint(
+                fields=['company', 'name'],
+                condition=models.Q(company__isnull=False, warehouse__isnull=True),
+                name='unique_company_field_def'
+            ),
+            models.UniqueConstraint(
+                fields=['warehouse', 'name'],
+                condition=models.Q(company__isnull=True),
+                name='unique_warehouse_field_def'
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.company_id and self.warehouse and self.warehouse.company_id:
+            self.company_id = self.warehouse.company_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.label} ({self.name})"

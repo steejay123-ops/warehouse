@@ -107,6 +107,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'config.urls'
 
+# اجازه به نمایش اسناد و پیش‌نمایش در iframeهای درون‌سامانه
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',

@@ -23,8 +23,9 @@ URL امضاشده را در اختیار دیگری بگذارد، تا پای�
 مقید کردن به کاربر باید رسانه از طریق کوکی HttpOnly سرو شود که تغییر معماری
 ورود را لازم دارد.
 """
+import os
 import time
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from django.conf import settings
 from django.http import HttpResponseForbidden
@@ -45,7 +46,7 @@ PROTECTED_PREFIXES = (
 _WINDOW_SECONDS = 7 * 24 * 60 * 60
 
 _KEY_SALT = 'inventory.media.signed_url.v1'
-_SAFE_INLINE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
+_SAFE_INLINE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf')
 
 
 def _current_expiry() -> int:
@@ -64,7 +65,8 @@ def _signature(path: str, expiry: int) -> str:
 
 
 def is_protected(path: str) -> bool:
-    return any(path.startswith(p) for p in PROTECTED_PREFIXES)
+    unquoted = unquote(path or '').lstrip('/')
+    return any(unquoted.startswith(p) for p in PROTECTED_PREFIXES)
 
 
 def signed_media_url(name: str) -> str:
@@ -75,7 +77,7 @@ def signed_media_url(name: str) -> str:
     """
     if not name:
         return ''
-    path = name.lstrip('/')
+    path = unquote(name or '').lstrip('/')
     base = f"{settings.MEDIA_URL.rstrip('/')}/{quote(path)}"
     if not is_protected(path):
         return base
@@ -84,13 +86,14 @@ def signed_media_url(name: str) -> str:
 
 
 def verify(path: str, expiry_raw: str, signature: str) -> bool:
+    unquoted = unquote(path or '').lstrip('/')
     try:
         expiry = int(expiry_raw)
     except (TypeError, ValueError):
         return False
     if expiry < int(time.time()):
         return False
-    return constant_time_compare(signature or '', _signature(path, expiry))
+    return constant_time_compare(signature or '', _signature(unquoted, expiry))
 
 
 def serve_media(request, path):
@@ -99,21 +102,32 @@ def serve_media(request, path):
 
     مسیرهای محافظت‌شده امضای معتبر می‌خواهند؛ بقیه مثل قبل سرو می‌شوند.
     """
-    normalized = (path or '').lstrip('/')
+    # حتماً مسیر را رمزگشایی می‌کنیم چون در درخواست‌های وب فایل‌های فارسی به صورت URL-encoded (%D8%AF...) می‌آیند
+    normalized = unquote(path or '').lstrip('/')
 
     if is_protected(normalized) and not verify(
         normalized, request.GET.get('e'), request.GET.get('s')
     ):
         return HttpResponseForbidden('لینک تصویر معتبر نیست یا منقضی شده است.')
 
-    response = serve(request, path, document_root=settings.MEDIA_ROOT)
+    # برای سرو دیسک نیز مسیر باید unquote باشد تا نام فارسی روی هارددیسک پیدا شود
+    response = serve(request, normalized, document_root=settings.MEDIA_ROOT)
     response['X-Content-Type-Options'] = 'nosniff'
+    response['X-Frame-Options'] = 'SAMEORIGIN'
 
-    # برای فایل‌های غیرتصویر (مانند PDF, ZIP, TXT) هدر attachment ست می‌شود
+    # برای فایل‌های غیرتصویر و غیر PDF (مانند ZIP, TXT) یا در صورت درخواست دانلود صریح، هدر attachment ست می‌شود
     lower_path = normalized.lower()
-    if not any(lower_path.endswith(ext) for ext in _SAFE_INLINE_EXTENSIONS):
-        filename = quote(normalized.split('/')[-1])
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    force_download = request.GET.get('download') == '1' or request.GET.get('disposition') == 'attachment'
+    
+    raw_filename = normalized.split('/')[-1]
+    encoded_filename = quote(raw_filename.encode('utf-8'))
+    ext = os.path.splitext(raw_filename)[1]
+    ascii_fallback = f"document{ext}"
+
+    if force_download or not any(lower_path.endswith(ext_item) for ext_item in _SAFE_INLINE_EXTENSIONS):
+        response['Content-Disposition'] = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_filename}"
+    elif lower_path.endswith('.pdf'):
+        response['Content-Disposition'] = f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_filename}"
 
     # عکس‌ها با نام یکتا ذخیره می‌شوند و هرگز بازنویسی نمی‌شوند، پس تا سقف
     # اعتبار امضا کش‌شدنی‌اند. این همان چیزی است که مشاهده آفلاین را ممکن می‌کند.

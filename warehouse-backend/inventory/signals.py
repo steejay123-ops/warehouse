@@ -25,15 +25,24 @@ def serialize_doc_task_data(instance):
 
 def broadcast_count_task_update(warehouse_id=None, task_id=None, task_data=None):
     """
-    ارسال بلادرنگ رویداد به‌روزرسانی تسک‌های انبارگردانی به کانال وب‌سوکت سراسری
+    ارسال بلادرنگ رویداد به‌روزرسانی تسک‌های انبارگردانی به کانال وب‌سوکت شرکتی
     """
     try:
         channel_layer = get_channel_layer()
         if channel_layer is not None:
+            cid = None
+            if warehouse_id:
+                try:
+                    from warehouses.models import Warehouse
+                    cid = Warehouse.objects.filter(id=warehouse_id).values_list('company_id', flat=True).first()
+                except Exception:
+                    pass
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'count_task_update',
                 'message': 'به‌روزرسانی در تسک‌های انبارگردانی',
+                'company_id': cid,
             }
             if warehouse_id is not None:
                 payload['warehouse_id'] = warehouse_id
@@ -41,8 +50,10 @@ def broadcast_count_task_update(warehouse_id=None, task_id=None, task_data=None)
                 payload['task_id'] = task_id
             if task_data is not None:
                 payload['task'] = task_data
+
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:
@@ -67,15 +78,24 @@ def count_task_post_delete(sender, instance, **kwargs):
 
 def broadcast_doc_task_update(warehouse_id=None, task_id=None, task_data=None):
     """
-    ارسال بلادرنگ رویداد به‌روزرسانی تسک‌های کارتابل مالی به کانال وب‌سوکت سراسری
+    ارسال بلادرنگ رویداد به‌روزرسانی تسک‌های کارتابل مالی به کانال وب‌سوکت شرکتی
     """
     try:
         channel_layer = get_channel_layer()
         if channel_layer is not None:
+            cid = None
+            if warehouse_id:
+                try:
+                    from warehouses.models import Warehouse
+                    cid = Warehouse.objects.filter(id=warehouse_id).values_list('company_id', flat=True).first()
+                except Exception:
+                    pass
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'doc_task_update',
                 'message': 'به‌روزرسانی در تسک‌های کارتابل مالی',
+                'company_id': cid,
             }
             if warehouse_id is not None:
                 payload['warehouse_id'] = warehouse_id
@@ -83,8 +103,10 @@ def broadcast_doc_task_update(warehouse_id=None, task_id=None, task_data=None):
                 payload['task_id'] = task_id
             if task_data is not None:
                 payload['task'] = task_data
+
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:

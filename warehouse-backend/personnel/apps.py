@@ -12,3 +12,9 @@ class PersonnelConfig(AppConfig):
         from platform_core.registry import register_module
         from platform_core.module_catalog import ACCOUNTING_SPEC
         register_module(ACCOUNTING_SPEC)
+        
+        # بارگذاری سیگنال‌های خودکار همگام‌سازی شرکت و مدارک
+        try:
+            import personnel.signals
+        except ImportError:
+            pass

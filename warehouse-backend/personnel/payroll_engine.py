@@ -472,6 +472,13 @@ class PayrollCalculationEngine:
         personnel_qs = PersonnelProfile.objects.filter(
             Q(is_active=True) | Q(daily_attendances__date_shamsi__startswith=period.year_month, daily_attendances__is_deleted=False)
         ).distinct().order_by('last_name', 'first_name')
+
+        # ایزولاسیون شرکتی: فیلتر پرسنل بر مبنای شرکت دوره
+        if period.company_id:
+            personnel_qs = personnel_qs.filter(
+                Q(company_id=period.company_id) | Q(section__project__company_id=period.company_id)
+            ).distinct()
+
         if period.warehouse:
             wh_personnel = personnel_qs.filter(
                 Q(assigned_warehouse_id=period.warehouse_id) | Q(daily_attendances__warehouse_id=period.warehouse_id, daily_attendances__date_shamsi__startswith=period.year_month)

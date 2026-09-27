@@ -20,11 +20,14 @@ class Warehouse(models.Model):
     
     description = models.TextField(blank=True, null=True)
     operator_company = models.CharField(max_length=255, blank=True, null=True)
-    company_id = models.IntegerField(
+    company = models.ForeignKey(
+        'personnel.Company',
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        db_index=True,
-        verbose_name="شناسه شرکت مالک انبار"
+        db_column='company_id',
+        related_name='warehouses',
+        verbose_name="شرکت مالک انبار"
     )
     company_name = models.CharField(
         max_length=200,
@@ -53,6 +56,10 @@ class Warehouse(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        # ۰. همگام‌سازی خودکار نام شرکت از روی کلید خارجی جهت رفع تداخل داده‌های کهنه
+        if self.company:
+            self.company_name = self.company.name
+
         # ۱. نرمال‌سازی کد: تبدیل رشته خالی یا فاصله‌ای به None جهت ثبت NULL در پایگاه داده
         if self.code is not None:
             self.code = str(self.code).strip()

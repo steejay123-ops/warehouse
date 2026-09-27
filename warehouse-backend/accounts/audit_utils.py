@@ -152,6 +152,7 @@ def log_audit_event(
             user=actor_user,
             actor_username=actor_username,
             actor_name=actor_name,
+            company_id=target_company_id,
             warehouse_id=target_wh_id,
             module=module,
             action=action,

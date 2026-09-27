@@ -7,6 +7,8 @@ from .models import (
     Company,
     CompanyDocument,
     CompanyBankAccount,
+    CompanyBoardMember,
+    CompanyFiscalPeriod,
     UserCompanyAccess,
     FinancialProject,
     ProjectSection,
@@ -31,8 +33,11 @@ from .models import (
     BankExportSettings,
     MonthlyPayrollRecord
 )
+import os
+from datetime import date as dt_date, datetime as dt_datetime
 from .sheba_utils import validate_sheba, clean_sheba, get_bank_from_sheba
-from common.date_utils import normalize_digits
+from common.date_utils import normalize_digits, parse_date_smart, format_to_shamsi_str
+from common.media_urls import signed_media_url
 
 
 def normalize_iranian_phone(phone_str):
@@ -768,11 +773,78 @@ class MonthlyWorkPeriodSerializer(serializers.ModelSerializer):
 # سریالایزرهای ساختار سازمانی، شرکت، پروژه، بخش، طرف‌حساب و فاکتور هزینه
 # ==============================================================================
 
+ALLOWED_DOCUMENT_EXTENSIONS = (
+    '.pdf', '.jpg', '.jpeg', '.png', '.webp', '.zip', '.rar',
+    '.xlsx', '.xls', '.docx', '.doc'
+)
+MAX_DOCUMENT_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB
+
+
+def validate_uploaded_document(file_obj, max_size_bytes=MAX_DOCUMENT_SIZE_BYTES, allowed_exts=ALLOWED_DOCUMENT_EXTENSIONS):
+    """
+    اعتبارسنجی یکپارچه حجم و فرمت فایل‌های اسناد و مدارک شرکت‌ها
+    """
+    if not file_obj:
+        return file_obj
+
+    # ۱. بررسی حجم فایل
+    if hasattr(file_obj, 'size') and file_obj.size > max_size_bytes:
+        max_mb = max_size_bytes // (1024 * 1024)
+        raise serializers.ValidationError(f"حجم فایل نمی‌تواند بیشتر از {max_mb} مگابایت باشد.")
+
+    # ۲. بررسی پسوند فایل
+    name = getattr(file_obj, 'name', '') or ''
+    ext = os.path.splitext(name)[1].lower()
+    if not ext or ext not in allowed_exts:
+        exts_display = ', '.join([e.replace('.', '').upper() for e in allowed_exts])
+        raise serializers.ValidationError(f"فرمت فایل غیرمجاز است ({ext or 'نامشخص'}). پسوندهای مجاز: {exts_display}")
+
+    return file_obj
+
+
+class ShamsiDateField(serializers.Field):
+    """
+    فیلد اختصاصی تاریخ برای پشتیبانی دوطرفه از تاریخ شمسی و میلادی:
+    - در ورودی (to_internal_value): دریافت رشته شمسی (۱۴۰۳/۰۵/۲۰ یا 1403/05/20)، میلادی یا شیء تاریخ و تبدیل به datetime.date
+    - در خروجی (to_representation): رشته استاندارد شمسی YYYY/MM/DD
+    """
+    def __init__(self, output_shamsi=True, **kwargs):
+        self.output_shamsi = output_shamsi
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if data in (None, '', 'null'):
+            return None
+        if isinstance(data, dt_date) and not isinstance(data, dt_datetime):
+            return data
+        if isinstance(data, dt_datetime):
+            return data.date()
+        try:
+            parsed = parse_date_smart(data, as_datetime=False, strict=True)
+            if parsed is None:
+                raise serializers.ValidationError("فرمت تاریخ ارسالی نامعتبر است.")
+            return parsed
+        except serializers.ValidationError:
+            raise
+        except Exception as e:
+            raise serializers.ValidationError(f"تاریخ نامعتبر است: {e}")
+
+    def to_representation(self, value):
+        if not value:
+            return None
+        if self.output_shamsi:
+            return format_to_shamsi_str(value)
+        return str(value)
+
+
 class CompanySerializer(serializers.ModelSerializer):
     projects_count = serializers.SerializerMethodField()
     documents_count = serializers.SerializerMethodField()
     documents_health_status = serializers.SerializerMethodField()
     bank_accounts = serializers.SerializerMethodField()
+    board_members = serializers.SerializerMethodField()
+    registration_date = ShamsiDateField(required=False, allow_null=True)
+    board_term_expiry = ShamsiDateField(required=False, allow_null=True)
 
     class Meta:
         model = Company
@@ -808,8 +880,18 @@ class CompanySerializer(serializers.ModelSerializer):
         return 'valid'
 
     def get_bank_accounts(self, obj):
-        accounts = obj.bank_accounts.filter(is_active=True)
+        if hasattr(obj, '_prefetched_objects_cache') and 'bank_accounts' in obj._prefetched_objects_cache:
+            accounts = [a for a in obj.bank_accounts.all() if a.is_active]
+        else:
+            accounts = obj.bank_accounts.filter(is_active=True)
         return CompanyBankAccountSerializer(accounts, many=True).data
+
+    def get_board_members(self, obj):
+        if hasattr(obj, '_prefetched_objects_cache') and 'board_members' in obj._prefetched_objects_cache:
+            members = [m for m in obj.board_members.all() if m.is_active]
+        else:
+            members = obj.board_members.filter(is_active=True)
+        return CompanyBoardMemberSerializer(members, many=True, context=self.context).data
 
     def validate_code(self, value):
         if not value:
@@ -826,6 +908,23 @@ class CompanySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("شناسه ملی شرکت باید دقیقاً ۱۱ رقم باشد.")
         return cleaned
 
+    def validate_articles_of_association(self, value):
+        return validate_uploaded_document(value)
+
+    def validate_latest_gazette(self, value):
+        return validate_uploaded_document(value)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.articles_of_association and instance.articles_of_association.name:
+            signed_url = signed_media_url(instance.articles_of_association.name)
+            ret['articles_of_association'] = request.build_absolute_uri(signed_url) if request else signed_url
+        if instance.latest_gazette and instance.latest_gazette.name:
+            signed_url = signed_media_url(instance.latest_gazette.name)
+            ret['latest_gazette'] = request.build_absolute_uri(signed_url) if request else signed_url
+        return ret
+
 
 class CompanyDocumentSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.name', read_only=True)
@@ -834,17 +933,22 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
     expiry_status = serializers.ReadOnlyField()
     days_until_expiry = serializers.ReadOnlyField()
     file_url = serializers.SerializerMethodField()
+    issue_date = ShamsiDateField(required=False, allow_null=True)
+    expiry_date = ShamsiDateField(required=False, allow_null=True)
 
     class Meta:
         model = CompanyDocument
         fields = [
             'id', 'company', 'company_name', 'document_type', 'document_type_display',
             'title', 'file', 'file_url', 'file_size', 'issue_date', 'expiry_date',
-            'expiry_status', 'days_until_expiry', 'is_confidential',
+            'expiry_status', 'days_until_expiry', 'is_confidential', 'version', 'is_superseded',
             'description', 'uploaded_by', 'uploaded_by_name',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['file_size', 'uploaded_by', 'created_at', 'updated_at']
+
+    def validate_file(self, value):
+        return validate_uploaded_document(value)
 
     def get_uploaded_by_name(self, obj):
         if obj.uploaded_by:
@@ -852,12 +956,63 @@ class CompanyDocumentSerializer(serializers.ModelSerializer):
         return None
 
     def get_file_url(self, obj):
-        if obj.file:
+        if obj.file and obj.file.name:
             request = self.context.get('request')
+            signed_url = signed_media_url(obj.file.name)
             if request:
-                return request.build_absolute_uri(obj.file.url)
-            return obj.file.url
+                return request.build_absolute_uri(signed_url)
+            return signed_url
         return None
+
+
+
+class CompanyBoardMemberSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    member_type_display = serializers.CharField(source='get_member_type_display', read_only=True)
+    term_start = ShamsiDateField(required=False, allow_null=True)
+    term_expiry = ShamsiDateField(required=False, allow_null=True)
+    has_signature_right = serializers.BooleanField(default=False, required=False)
+    is_active = serializers.BooleanField(default=True, required=False)
+    attached_id_doc_url = serializers.SerializerMethodField()
+    attached_appointment_doc_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyBoardMember
+        fields = [
+            'id', 'company', 'company_name', 'first_name', 'last_name',
+            'national_code', 'member_type', 'member_type_display',
+            'represented_legal_name', 'role', 'role_display',
+            'has_signature_right', 'signature_scope',
+            'term_start', 'term_expiry',
+            'attached_id_doc', 'attached_appointment_doc',
+            'attached_id_doc_url', 'attached_appointment_doc_url',
+            'is_active', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_attached_id_doc_url(self, obj):
+        if obj.attached_id_doc and obj.attached_id_doc.name:
+            request = self.context.get('request')
+            signed_url = signed_media_url(obj.attached_id_doc.name)
+            return request.build_absolute_uri(signed_url) if request else signed_url
+        return None
+
+    def get_attached_appointment_doc_url(self, obj):
+        if obj.attached_appointment_doc and obj.attached_appointment_doc.name:
+            request = self.context.get('request')
+            signed_url = signed_media_url(obj.attached_appointment_doc.name)
+            return request.build_absolute_uri(signed_url) if request else signed_url
+        return None
+
+    def validate_national_code(self, value):
+        if not value:
+            raise serializers.ValidationError("کد ملی الزامی است.")
+        val = normalize_digits(str(value)).strip()
+        if not val.isdigit() or len(val) != 10:
+            raise serializers.ValidationError("کد ملی باید دقیقاً ۱۰ رقم عددی باشد.")
+        return val
+
 
 
 class CompanyBankAccountSerializer(serializers.ModelSerializer):
@@ -887,6 +1042,7 @@ class UserCompanyAccessSerializer(serializers.ModelSerializer):
     user_full_name = serializers.SerializerMethodField()
     company_name = serializers.CharField(source='company.name', read_only=True)
     company_code = serializers.CharField(source='company.code', read_only=True)
+    access_level_display = serializers.CharField(source='get_access_level_display', read_only=True)
 
     class Meta:
         model = UserCompanyAccess
@@ -947,6 +1103,7 @@ class UserSectionAssignmentSerializer(serializers.ModelSerializer):
 
 class CounterpartySerializer(serializers.ModelSerializer):
     counterparty_type_display = serializers.CharField(source='get_counterparty_type_display', read_only=True)
+    company_name = serializers.CharField(source='company.name', read_only=True)
 
     class Meta:
         model = Counterparty
@@ -1043,5 +1200,22 @@ class PettyCashTransactionSerializer(serializers.ModelSerializer):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
         return None
+
+
+class CompanyFiscalPeriodSerializer(serializers.ModelSerializer):
+    company_name = serializers.CharField(source='company.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    closed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyFiscalPeriod
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at', 'closed_at', 'closed_by']
+
+    def get_closed_by_name(self, obj):
+        if obj.closed_by:
+            return f"{obj.closed_by.first_name} {obj.closed_by.last_name}".strip() or obj.closed_by.username
+        return None
+
 
 

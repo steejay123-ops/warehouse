@@ -3,6 +3,7 @@ from .models import Warehouse
 from settings_core.models import SystemSetting
 
 class WarehouseSerializer(serializers.ModelSerializer):
+    company_id = serializers.IntegerField(read_only=False, required=False, allow_null=True)
     total_quantity = serializers.SerializerMethodField()
     counted_quantity = serializers.SerializerMethodField()
     percent = serializers.SerializerMethodField()

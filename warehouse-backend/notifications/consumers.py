@@ -11,6 +11,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         self.group_name = 'global_notifications'
         self.app_group_name = None
         self.client_tab_id = None
+        self.allowed_company_ids = []
 
         # استخراج پارامتر قلمرو فعال (app) و شناسه تب (tab_id) از Query String
         try:
@@ -37,6 +38,16 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                     self.app_group_name,
                     self.channel_name
                 )
+            # ۳. عضویت در کانال‌های تفکیک‌شده شرکتی (Tenant Isolation)
+            user = self.scope.get('user')
+            if user and user.is_authenticated:
+                self.allowed_company_ids = await self.get_user_allowed_companies(user)
+                for cid in self.allowed_company_ids:
+                    await self.channel_layer.group_add(
+                        f'company_{cid}_notifications',
+                        self.channel_name
+                    )
+
             await self.accept()
         except Exception as e:
             logger.error(f"[NotificationConsumer] Connection error: {e}")
@@ -53,6 +64,14 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                     self.app_group_name,
                     self.channel_name
                 )
+            for cid in getattr(self, 'allowed_company_ids', []):
+                try:
+                    await self.channel_layer.group_discard(
+                        f'company_{cid}_notifications',
+                        self.channel_name
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.warning(f"[NotificationConsumer] Disconnect discard error: {e}")
 
@@ -130,6 +149,20 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             logger.warning(f"[NotificationConsumer] Receive error: {e}")
 
     @database_sync_to_async
+    def get_user_allowed_companies(self, user):
+        try:
+            if not user or not user.is_authenticated:
+                return []
+            if getattr(user, 'is_superuser', False):
+                from personnel.models import Company
+                return list(Company.objects.filter(is_active=True).values_list('id', flat=True))
+            from personnel.models import UserCompanyAccess
+            return list(UserCompanyAccess.objects.filter(user=user, is_active=True).values_list('company_id', flat=True))
+        except Exception as e:
+            logger.warning(f"[NotificationConsumer] Error getting allowed companies: {e}")
+            return []
+
+    @database_sync_to_async
     def update_tab_session_app_scope(self, tab_id, app_scope):
         try:
             from accounts.models import UserDeviceSession
@@ -165,6 +198,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 if expected_group != self.app_group_name and event.get('type_str') != 'system_broadcast':
                     return
 
+            # ایزولاسیون قلمرو شرکت: جلوگیری از نشت داده‌های شرکت‌های دیگر به کلاینت
+            event_company_id = event.get('company_id')
+            user = self.scope.get('user')
+            if event_company_id is not None and user and user.is_authenticated and not getattr(user, 'is_superuser', False):
+                if event_company_id not in getattr(self, 'allowed_company_ids', []):
+                    return
+
             message = event.get('message', '')
             type_str = event.get('type_str', 'info')
 
@@ -173,7 +213,13 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 'type': type_str,
                 'event': type_str,
             }
-            for k in ('warehouse_id', 'task_id', 'task', 'log', 'log_id', 'login_log', 'stats', 'date_shamsi', 'year_month', 'attendance_data', 'sender_id', 'client_tab_id', 'app_module', 'session_id', 'revoked_tab_id', 'fleet_data'):
+            for k in (
+                'warehouse_id', 'company_id', 'task_id', 'task', 'log', 'log_id',
+                'login_log', 'stats', 'date_shamsi', 'year_month', 'attendance_data',
+                'sender_id', 'client_tab_id', 'app_module', 'session_id', 'revoked_tab_id',
+                'fleet_data', 'personnel_id', 'vehicle_id', 'action', 'full_name',
+                'driver_name', 'plate_number', 'entity_type', 'approval_status'
+            ):
                 if k in event:
                     out_data[k] = event[k]
 

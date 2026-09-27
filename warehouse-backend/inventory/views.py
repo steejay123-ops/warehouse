@@ -285,9 +285,21 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'label']
 
     def get_queryset(self):
-        return scope_queryset(super().get_queryset(), self.request.user)
+        qs = super().get_queryset()
+        from common.tenant_scope import get_current_tenant_company_id
+        cid = get_current_tenant_company_id(request=self.request, user=self.request.user)
+        if cid:
+            from django.db.models import Q
+            qs = qs.filter(Q(company_id=cid) | Q(warehouse__company_id=cid))
+        return scope_queryset(qs, self.request.user)
 
     def perform_create(self, serializer):
+        from common.tenant_scope import get_current_tenant_company_id
+        cid = get_current_tenant_company_id(request=self.request, user=self.request.user)
+        extra_kwargs = {'created_by': self.request.user}
+        if cid and not serializer.validated_data.get('company'):
+            extra_kwargs['company_id'] = cid
+
         # اگر رکورد حذف‌نرم با همان (انبار، نام) وجود دارد، احیا می‌شود؛
         # وگرنه INSERT به قید unique_together دیتابیس می‌خورد (اعتبارسنجی DRF
         # فقط رکوردهای زنده را می‌بیند).
@@ -298,9 +310,9 @@ class ItemFieldDefinitionViewSet(viewsets.ModelViewSet):
         ).first()
         if tombstone:
             serializer.instance = tombstone
-            instance = serializer.save(created_by=self.request.user, is_deleted=False)
+            instance = serializer.save(is_deleted=False, **extra_kwargs)
         else:
-            instance = serializer.save(created_by=self.request.user)
+            instance = serializer.save(**extra_kwargs)
 
         from accounts.audit_utils import log_audit_event
         log_audit_event(
@@ -463,6 +475,8 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         # photo_prefetch جلوی N+1 عکس‌ها را می‌گیرد: بدون آن هر ردیف یک COUNT و
         # یک SELECT جدا برای بندانگشتی می‌زد (صفحه ۱۰۰ ردیفی = ۲۰۰ کوئری اضافه).
         queryset = super().get_queryset().prefetch_related(photo_prefetch())
+        from common.tenant_scope import scope_tenant_queryset
+        queryset = scope_tenant_queryset(queryset, self.request.user, company_field='warehouse__company_id', request=self.request)
         return scope_queryset(queryset, self.request.user)
 
     def perform_create(self, serializer):
@@ -2848,8 +2862,29 @@ class ItemViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         from django.utils import timezone
         from django.db.models import Q
         
+        company_id = request.headers.get('X-Company-ID') or request.query_params.get('company_id')
         project_id = request.query_params.get('project_id')
+        
         items = Item.objects.all()
+        
+        # ۱. انزوای چندشرکتی انبار: اعمال فیلتر بر مبنای شرکت فعال
+        if company_id:
+            try:
+                cid = int(company_id)
+                items = items.filter(warehouse__company_id=cid)
+            except (ValueError, TypeError):
+                pass
+        elif not request.user.is_superuser:
+            try:
+                from personnel.views import get_user_allowed_companies
+                allowed_comp_ids = list(get_user_allowed_companies(request.user, required_level='workspace_full').values_list('id', flat=True))
+                items = items.filter(warehouse__company_id__in=allowed_comp_ids)
+            except Exception:
+                pass
+
+        # ۲. اعمال اسکوپ کاربر به انبارهای مجاز
+        items = scope_queryset(items, request.user)
+
         if project_id and project_id != 'ALL':
             items = items.filter(warehouse_id=project_id)
             
@@ -3092,6 +3127,9 @@ class CountTaskViewSet(viewsets.ModelViewSet):
         date_filter = self.request.query_params.get('date')
         q_filter = self.request.query_params.get('q')
         
+        from common.tenant_scope import scope_tenant_queryset
+        queryset = scope_tenant_queryset(queryset, user, company_field='item__warehouse__company_id', request=self.request)
+
         if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             try:
                 requested_wh = int(warehouse_id)
@@ -4163,11 +4201,16 @@ class DocTaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = DocTask.objects.filter(item__is_deleted=False).select_related('item', 'doc_worker', 'doc_supervisor', 'created_by', 'modified_by').prefetch_related(photo_prefetch('item__photos'))
         
+        from common.tenant_scope import scope_tenant_queryset
+        queryset = scope_tenant_queryset(queryset, user, company_field='item__warehouse__company_id', request=self.request)
+
         as_role = self.request.query_params.get('as_role')
         warehouse_id = self.request.query_params.get('warehouse_id')
         
         if warehouse_id and str(warehouse_id) not in ['ALL', '-1']:
             queryset = queryset.filter(item__warehouse_id=warehouse_id)
+        else:
+            queryset = scope_queryset(queryset, user, field='item__warehouse_id')
         
         if as_role == 'doc_worker':
             queryset = queryset.filter(doc_worker=user)

@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status, parsers
+from rest_framework import viewsets, permissions, status, parsers, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
@@ -29,6 +29,8 @@ from .models import (
     Company,
     CompanyDocument,
     CompanyBankAccount,
+    CompanyBoardMember,
+    CompanyFiscalPeriod,
     UserCompanyAccess,
     FinancialProject,
     ProjectSection,
@@ -58,6 +60,8 @@ from .serializers import (
     CompanySerializer,
     CompanyDocumentSerializer,
     CompanyBankAccountSerializer,
+    CompanyBoardMemberSerializer,
+    CompanyFiscalPeriodSerializer,
     UserCompanyAccessSerializer,
     FinancialProjectSerializer,
     ProjectSectionSerializer,
@@ -98,22 +102,45 @@ from .fleet_excel_engine import export_fleet_monthly_excel, import_fleet_monthly
 from .fleet_settlement_engine import calculate_monthly_fleet_settlement, generate_fleet_bank_meli_excel
 
 
-def get_user_allowed_companies(user):
+def get_user_allowed_companies(user, required_level='workspace_full'):
     """
     محاسبه شرکت‌های مجاز کاربر (ترکیبی: سوپریوزر = همه، عادی = انتساب صریح یا عضویت در بخش‌های پروژه‌های آن شرکت)
+    دارای حافظه کش در سطح چرخه درخواست کلاینت (Request Scope) جهت جلوگیری از اجرای کوئری‌های تکراری N+1
     """
     if not user or not user.is_authenticated:
         return Company.objects.none()
     if user.is_superuser:
         return Company.objects.filter(is_active=True)
 
-    direct_ids = UserCompanyAccess.objects.filter(user=user).values_list('company_id', flat=True)
-    derived_ids = UserSectionAssignment.objects.filter(
-        user=user, is_active=True, section__project__company__isnull=False
-    ).values_list('section__project__company_id', flat=True)
+    from accounts.middleware import get_allowed_companies_cache
+    req_cache = get_allowed_companies_cache()
+    user_id = getattr(user, 'id', None)
+    cache_key = (user_id, required_level)
+    if req_cache is not None and cache_key in req_cache:
+        return req_cache[cache_key]
 
-    allowed_ids = set(direct_ids).union(set(derived_ids))
-    return Company.objects.filter(id__in=allowed_ids, is_active=True)
+    derived_ids = set(UserSectionAssignment.objects.filter(
+        user=user, is_active=True, section__project__company__isnull=False
+    ).values_list('section__project__company_id', flat=True))
+
+    access_qs = UserCompanyAccess.objects.filter(user=user)
+    if required_level == 'workspace_full':
+        direct_ids = set(access_qs.filter(access_level='workspace_full').values_list('company_id', flat=True))
+        allowed_ids = direct_ids.union(derived_ids)
+    elif required_level == 'docs_write':
+        direct_ids = set(access_qs.filter(access_level__in=['docs_write', 'workspace_full']).values_list('company_id', flat=True))
+        allowed_ids = direct_ids
+    elif required_level == 'docs_read':
+        direct_ids = set(access_qs.filter(access_level__in=['docs_read', 'docs_write', 'workspace_full']).values_list('company_id', flat=True))
+        allowed_ids = direct_ids
+    else:
+        direct_ids = set(access_qs.values_list('company_id', flat=True))
+        allowed_ids = direct_ids.union(derived_ids)
+
+    qs = Company.objects.filter(id__in=allowed_ids, is_active=True)
+    if req_cache is not None:
+        req_cache[cache_key] = qs
+    return qs
 
 
 def get_request_company_id(request):
@@ -123,9 +150,10 @@ def get_request_company_id(request):
     return request.query_params.get('company_id') or request.query_params.get('company') or request.headers.get('X-Company-ID')
 
 
-def validate_user_company_access(user, company_id):
+def validate_user_company_access(user, company_id, required_level='workspace_full'):
     """
     اعتبارسنجی دسترسی کاربر به شناسه شرکت داده‌شده. در صورت عدم دسترسی، PermissionDenied پرتاب می‌شود.
+    پیش‌فرض: required_level='workspace_full' برای جلوگیری از دسترسی کاربران غیرمجاز به اطلاعات پروژه‌ها و انبار.
     """
     if not company_id:
         return None
@@ -137,7 +165,7 @@ def validate_user_company_access(user, company_id):
         raise PermissionDenied("کاربر احراز هویت نشده است.")
     if user.is_superuser:
         return cid
-    allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+    allowed_ids = set(get_user_allowed_companies(user, required_level=required_level).values_list('id', flat=True))
     if cid not in allowed_ids:
         raise PermissionDenied("شما به اطلاعات و پروژه‌های این شرکت دسترسی ندارید.")
     return cid
@@ -145,7 +173,7 @@ def validate_user_company_access(user, company_id):
 
 def broadcast_personnel_update(personnel, action_type='updated', message=None, sender_id=None, client_tab_id=None):
     """
-    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده پرسنل به کانال وب‌سوکت سراسری
+    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده پرسنل به کانال وب‌سوکت اختصاصی شرکت
     """
     try:
         from channels.layers import get_channel_layer
@@ -153,22 +181,27 @@ def broadcast_personnel_update(personnel, action_type='updated', message=None, s
         channel_layer = get_channel_layer()
         if channel_layer is not None:
             full_name = getattr(personnel, 'full_name', '') or f"{getattr(personnel, 'first_name', '')} {getattr(personnel, 'last_name', '')}".strip()
+            cid = getattr(personnel, 'company_id', None)
+            if not cid and hasattr(personnel, 'section') and personnel.section and personnel.section.project:
+                cid = personnel.section.project.company_id
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'personnel_updated',
                 'action': action_type,
                 'personnel_id': getattr(personnel, 'id', None),
+                'company_id': cid,
                 'section_id': getattr(personnel, 'section_id', None),
                 'project_id': getattr(personnel, 'project_id', None),
-                'national_code': getattr(personnel, 'national_code', ''),
                 'full_name': full_name,
                 'approval_status': getattr(personnel, 'approval_status', ''),
                 'message': message or f'پرونده پرسنل «{full_name}» به‌روزرسانی شد.',
                 'sender_id': sender_id,
                 'client_tab_id': client_tab_id,
             }
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:
@@ -178,7 +211,7 @@ def broadcast_personnel_update(personnel, action_type='updated', message=None, s
 
 def broadcast_vehicle_update(vehicle, action_type='updated', message=None, sender_id=None, client_tab_id=None):
     """
-    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده ناوگان/راننده به کانال وب‌سوکت سراسری
+    ارسال بلادرنگ رویدادهای تغییر وضعیت، ثبت یا ویرایش پرونده ناوگان/راننده به کانال وب‌سوکت اختصاصی شرکت
     """
     try:
         from channels.layers import get_channel_layer
@@ -187,11 +220,16 @@ def broadcast_vehicle_update(vehicle, action_type='updated', message=None, sende
         if channel_layer is not None:
             plate_number = getattr(vehicle, 'plate_number', '') or ''
             driver_name = getattr(vehicle, 'driver_name', '') or ''
+            cid = getattr(vehicle, 'company_id', None)
+            if not cid and hasattr(vehicle, 'section') and vehicle.section and vehicle.section.project:
+                cid = vehicle.section.project.company_id
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'vehicle_updated',
                 'action': action_type,
                 'vehicle_id': getattr(vehicle, 'id', None),
+                'company_id': cid,
                 'section_id': getattr(vehicle, 'section_id', None),
                 'project_id': getattr(vehicle, 'project_id', None) if hasattr(vehicle, 'project_id') else None,
                 'plate_number': plate_number,
@@ -201,8 +239,9 @@ def broadcast_vehicle_update(vehicle, action_type='updated', message=None, sende
                 'sender_id': sender_id,
                 'client_tab_id': client_tab_id,
             }
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:
@@ -240,7 +279,7 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         # فیلتر کانتکست شرکت فعال (Multi-Tenant Company Scope):
         cid = validate_user_company_access(user, get_request_company_id(self.request))
         if cid:
-            qs = qs.filter(section__project__company_id=cid)
+            qs = qs.filter(Q(company_id=cid) | Q(section__project__company_id=cid))
 
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
@@ -776,6 +815,9 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                     return str(val).strip() in ['1', 'true', 'True', 'بله']
             return default
 
+        from common.tenant_scope import get_current_tenant_company_id
+        active_cid = get_current_tenant_company_id(request=request, user=request.user)
+
         for r in range(header_row_idx + 1, ws.max_row + 1):
             nat_col = header_map.get('کد ملی')
             if not nat_col:
@@ -855,6 +897,9 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 'contract_type': 'daily',
                 'created_by': request.user if request.user and request.user.is_authenticated else None
             }
+            if active_cid:
+                profile_defaults['company_id'] = active_cid
+
             if warehouse_id and str(warehouse_id).isdigit():
                 profile_defaults['assigned_warehouse_id'] = int(warehouse_id)
             if section_id and str(section_id).isdigit():
@@ -862,13 +907,16 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 sec_obj = ProjectSection.objects.filter(id=int(section_id)).select_related('project').first()
                 if sec_obj and sec_obj.project_id:
                     profile_defaults['project_id'] = sec_obj.project_id
+                    if not profile_defaults.get('company_id') and sec_obj.project and sec_obj.project.company_id:
+                        profile_defaults['company_id'] = sec_obj.project.company_id
 
             valid_rows_data.append((r, nc_clean, profile_defaults))
 
+        exist_filter = {'national_code__in': [x[1] for x in valid_rows_data]}
+        if active_cid:
+            exist_filter['company_id'] = active_cid
         existing_national_codes = set(
-            PersonnelProfile.objects.filter(
-                national_code__in=[x[1] for x in valid_rows_data]
-            ).values_list('national_code', flat=True)
+            PersonnelProfile.objects.filter(**exist_filter).values_list('national_code', flat=True)
         )
 
         for r, nc_clean, p_defaults in valid_rows_data:
@@ -916,15 +964,22 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                         if not is_mgr:
                             p_defaults.pop('approval_status', None)
                             # حفاظت از SoD: دستمزد و شبای پرسنل مصوب نباید از طریق اکسل اپراتور مستقیم تغییر کند
-                            existing_prof = PersonnelProfile.objects.filter(national_code=nc_clean).first()
+                            check_filter = {'national_code': nc_clean}
+                            if p_defaults.get('company_id'):
+                                check_filter['company_id'] = p_defaults['company_id']
+                            existing_prof = PersonnelProfile.objects.filter(**check_filter).first()
                             if existing_prof and existing_prof.approval_status in ['approved', 'manager_approved']:
                                 p_defaults.pop('daily_base_wage', None)
                                 p_defaults.pop('base_daily_rate', None)
                                 p_defaults.pop('sheba_number', None)
                                 p_defaults.pop('account_number', None)
 
+                    lookup_params = {'national_code': nc_clean}
+                    if p_defaults.get('company_id'):
+                        lookup_params['company_id'] = p_defaults['company_id']
+
                     PersonnelProfile.objects.update_or_create(
-                        national_code=nc_clean,
+                        **lookup_params,
                         defaults=p_defaults
                     )
 
@@ -1114,7 +1169,7 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         # فیلتر کانتکست شرکت فعال (Multi-Tenant Company Scope):
         cid = validate_user_company_access(user, get_request_company_id(self.request))
         if cid:
-            qs = qs.filter(section__project__company_id=cid)
+            qs = qs.filter(Q(company_id=cid) | Q(section__project__company_id=cid))
 
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
@@ -1956,7 +2011,7 @@ class PersonnelChangeRequestViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
         if cid:
-            qs = qs.filter(personnel__section__project__company_id=cid)
+            qs = qs.filter(Q(personnel__company_id=cid) | Q(personnel__section__project__company_id=cid))
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -2338,21 +2393,32 @@ def is_date_shamsi_friday(date_shamsi_str):
     return False
 
 
-def broadcast_attendance_updated(warehouse_id=None, date_shamsi=None, year_month=None, message=None, sender_id=None, client_tab_id=None, extra_data=None):
+def broadcast_attendance_updated(warehouse_id=None, date_shamsi=None, year_month=None, message=None, sender_id=None, client_tab_id=None, extra_data=None, company_id=None):
     """
-    ارسال بلادرنگ رویداد ثبت/ویرایش کارکرد به کانال وب‌سوکت سراسری
+    ارسال بلادرنگ رویداد ثبت/ویرایش کارکرد به کانال وب‌سوکت شرکتی
     """
     try:
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         if channel_layer is not None:
+            cid = company_id
+            if not cid and extra_data and isinstance(extra_data, dict):
+                cid = extra_data.get('company_id')
+            if not cid and warehouse_id:
+                try:
+                    from warehouses.models import Warehouse
+                    cid = Warehouse.objects.filter(id=warehouse_id).values_list('company_id', flat=True).first()
+                except Exception:
+                    pass
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'attendance_updated',
                 'message': message or 'کارکرد پرسنل به‌روزرسانی شد.',
                 'date_shamsi': date_shamsi,
                 'year_month': year_month,
+                'company_id': cid,
                 'sender_id': sender_id,
                 'client_tab_id': client_tab_id,
             }
@@ -2361,8 +2427,9 @@ def broadcast_attendance_updated(warehouse_id=None, date_shamsi=None, year_month
             if extra_data and isinstance(extra_data, dict):
                 payload.update(extra_data)
 
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:
@@ -2395,7 +2462,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
             qs = qs.filter(personnel_id=personnel_id)
         cid = validate_user_company_access(self.request.user, get_request_company_id(self.request))
         if cid:
-            qs = qs.filter(Q(section__project__company_id=cid) | Q(personnel__section__project__company_id=cid))
+            qs = qs.filter(Q(company_id=cid) | Q(section__project__company_id=cid) | Q(personnel__company_id=cid) | Q(personnel__section__project__company_id=cid))
         return qs
 
     @action(detail=False, methods=['get'], url_path='matrix')
@@ -2413,14 +2480,18 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         date_shamsi = normalize_attendance_date(raw_date)
         year_month = date_shamsi[:7]
 
-        # بررسی وضعیت قفل دوره
+        from common.tenant_scope import get_current_tenant_company_id
+        company_id = request.query_params.get('company_id') or get_current_tenant_company_id(request=request, user=request.user)
+
+        # بررسی وضعیت قفل دوره بر مبنای انبار یا شرکت
+        period = None
         if warehouse_id:
             period = MonthlyWorkPeriod.objects.filter(warehouse_id=warehouse_id, year_month=year_month).first()
-            is_locked = period.status == 'LOCKED' if period else False
-            period_status = period.status if period else 'OPEN'
-        else:
-            is_locked = False
-            period_status = 'OPEN'
+        elif company_id:
+            period = MonthlyWorkPeriod.objects.filter(company_id=company_id, year_month=year_month).first()
+
+        is_locked = period.status == 'LOCKED' if period else False
+        period_status = period.status if period else 'OPEN'
 
         # لیست پرسنل تاییدشده یا پرسنلی که در این تاریخ کارکرد دارند (مستقل از انبار یا فیلتر انبار خاص)
         if warehouse_id:
@@ -2428,6 +2499,9 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True),
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi=date_shamsi, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
+            if company_id:
+                personnel_list = personnel_list.filter(Q(company_id=company_id) | Q(section__project__company_id=company_id))
+
             attendances_qs = DailyAttendance.objects.filter(
                 Q(warehouse_id=warehouse_id) | Q(personnel__in=personnel_list),
                 date_shamsi=date_shamsi,
@@ -2442,6 +2516,9 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
             personnel_list = PersonnelProfile.objects.filter(
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi=date_shamsi, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
+            if company_id:
+                personnel_list = personnel_list.filter(Q(company_id=company_id) | Q(section__project__company_id=company_id))
+
             attendances_qs = DailyAttendance.objects.filter(
                 date_shamsi=date_shamsi,
                 is_deleted=False
@@ -2452,6 +2529,11 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
         if section_id:
             personnel_list = personnel_list.filter(section_id=section_id)
+
+        # فیلتر کانتکست شرکت فعال در ماتریس کارکرد
+        cid = validate_user_company_access(request.user, get_request_company_id(request))
+        if cid:
+            personnel_list = personnel_list.filter(Q(company_id=cid) | Q(section__project__company_id=cid))
 
         is_today_friday = is_date_shamsi_friday(date_shamsi)
 
@@ -4130,12 +4212,16 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
             channel_layer = get_channel_layer()
             client_tab_id = request.data.get('client_tab_id') or request.headers.get('X-Client-Tab-ID')
             if channel_layer:
+                from common.tenant_scope import get_current_tenant_company_id
+                cid = get_current_tenant_company_id(request=request, user=request.user)
+                target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
                 async_to_sync(channel_layer.group_send)(
-                    'global_notifications',
+                    target_group,
                     {
                         'type': 'send_notification',
                         'type_str': 'fleet_trips_updated',
                         'message': f'تردد ناوگان برای تاریخ {date_shamsi} ثبت/به‌روزرسانی شد.',
+                        'company_id': cid,
                         'warehouse_id': warehouse_id,
                         'section_id': section_id,
                         'date_shamsi': date_shamsi,
@@ -4539,12 +4625,17 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
             from asgiref.sync import async_to_sync
             channel_layer = get_channel_layer()
             if channel_layer:
+                cid = getattr(v_obj, 'company_id', None)
+                if not cid and hasattr(v_obj, 'section') and v_obj.section and v_obj.section.project:
+                    cid = v_obj.section.project.company_id
+                target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
                 async_to_sync(channel_layer.group_send)(
-                    'global_notifications',
+                    target_group,
                     {
                         'type': 'send_notification',
                         'type_str': 'fleet_trips_updated',
                         'message': f'تردد خودرو {v_obj.driver_name} در تاریخ {date_shamsi} به‌روزرسانی شد.',
+                        'company_id': cid,
                         'warehouse_id': warehouse_id,
                         'section_id': section_id,
                         'date_shamsi': date_shamsi,
@@ -4677,12 +4768,16 @@ class VehicleTripViewSet(viewsets.ModelViewSet):
             from asgiref.sync import async_to_sync
             channel_layer = get_channel_layer()
             if channel_layer:
+                from common.tenant_scope import get_current_tenant_company_id
+                cid = get_current_tenant_company_id(request=request, user=request.user)
+                target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
                 async_to_sync(channel_layer.group_send)(
-                    'global_notifications',
+                    target_group,
                     {
                         'type': 'send_notification',
                         'type_str': 'fleet_trips_updated',
                         'message': f'ماتریس ۳۱ روزه ناوگان برای دوره {year_month} ذخیره شد.',
+                        'company_id': cid,
                         'warehouse_id': warehouse_id,
                         'section_id': section_id,
                         'year_month': year_month,
@@ -4755,9 +4850,14 @@ class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        from common.tenant_scope import scope_tenant_queryset
+        qs = scope_tenant_queryset(qs, self.request.user, company_field='company_id', request=self.request)
         warehouse_id = self.request.query_params.get('warehouse_id')
         if warehouse_id:
             qs = qs.filter(warehouse_id=warehouse_id)
+        year_month = self.request.query_params.get('year_month')
+        if year_month:
+            qs = qs.filter(year_month=year_month)
         return qs
 
     @action(detail=True, methods=['post'], url_path='lock')
@@ -4842,14 +4942,26 @@ class MonthlyWorkPeriodViewSet(viewsets.ModelViewSet):
         year_month = request.data.get('year_month')
         action_type = request.data.get('action')
         notes = request.data.get('notes', '')
+        from common.tenant_scope import get_current_tenant_company_id
+        company_id = request.data.get('company_id') or get_current_tenant_company_id(request=request, user=request.user)
 
-        if not warehouse_id or not year_month or not action_type:
-            return Response({'error': 'پارامترهای warehouse_id، year_month و action الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not year_month or not action_type:
+            return Response({'error': 'پارامترهای year_month و action الزامی هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not warehouse_id and not company_id:
+            return Response({'error': 'شناسه انبار یا شرکت فعال الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wh_val = int(warehouse_id) if (warehouse_id and str(warehouse_id).isdigit()) else None
+        comp_val = int(company_id) if (company_id and str(company_id).isdigit()) else None
+
+        lookup = {'year_month': str(year_month).strip()}
+        if wh_val:
+            lookup['warehouse_id'] = wh_val
+        if comp_val:
+            lookup['company_id'] = comp_val
 
         period, _ = MonthlyWorkPeriod.objects.get_or_create(
-            warehouse_id=warehouse_id,
-            year_month=year_month,
-            defaults={'status': 'OPEN'}
+            **lookup,
+            defaults={'status': 'OPEN', 'company_id': comp_val, 'warehouse_id': wh_val}
         )
 
         is_financial = request.user.is_superuser or request.user.groups.filter(name__in=['Accountant', 'Finance', 'مدیر مالی']).exists() or request.user.has_perm('personnel.can_override_attendance_lock')
@@ -5548,6 +5660,10 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        from common.tenant_scope import scope_tenant_queryset
+        qs = scope_tenant_queryset(qs, user, company_field='personnel__company_id', request=self.request)
+
         period_id = self.request.query_params.get('period_id')
         if period_id:
             qs = qs.filter(period_id=period_id)
@@ -5565,19 +5681,31 @@ class MonthlyPayrollViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='calculate-period')
     def calculate_period(self, request):
         """
-        تجمیع کارکرد و محاسبه خودکار ۵۸ ستون حقوق برای دوره انتخابی
+        تجمیع کارکرد و محاسبه خودکار ۵۸ ستون حقوق برای دوره انتخابی (با پشتیبانی از سطح شرکت یا انبار)
         """
         warehouse_id = request.data.get('warehouse_id')
         year_month = request.data.get('year_month')
+        from common.tenant_scope import get_current_tenant_company_id
+        company_id = request.data.get('company_id') or get_current_tenant_company_id(request=request, user=request.user)
         
-        if not warehouse_id or not year_month:
-            return Response({'error': 'شناسه انبار و سال/ماه الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not year_month:
+            return Response({'error': 'سال/ماه الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not warehouse_id and not company_id:
+            return Response({'error': 'شناسه انبار یا شرکت فعال الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        wh_val = int(warehouse_id) if (warehouse_id and str(warehouse_id).isdigit()) else None
+        comp_val = int(company_id) if (company_id and str(company_id).isdigit()) else None
+
+        lookup = {'year_month': str(year_month).strip()}
+        if wh_val:
+            lookup['warehouse_id'] = wh_val
+        if comp_val:
+            lookup['company_id'] = comp_val
 
         # Get or create work period
         period, _ = MonthlyWorkPeriod.objects.get_or_create(
-            warehouse_id=int(warehouse_id),
-            year_month=str(year_month).strip(),
-            defaults={'status': 'OPEN'}
+            **lookup,
+            defaults={'status': 'OPEN', 'company_id': comp_val, 'warehouse_id': wh_val}
         )
 
         if period.status == 'LOCKED':
@@ -6054,15 +6182,23 @@ class FleetSettlementViewSet(viewsets.ViewSet):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=None, project_id=None, client_tab_id=None, sender_id=None):
+def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=None, project_id=None, client_tab_id=None, sender_id=None, company_id=None):
     """
-    ارسال بلادرنگ رویداد تغییرات ساختار سازمانی (پروژه، بخش، انتساب، طرف‌حساب) به وب‌سوکت سراسری
+    ارسال بلادرنگ رویداد تغییرات ساختار سازمانی (پروژه، بخش، انتساب، طرف‌حساب) به وب‌سوکت شرکتی
     """
     try:
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
         if channel_layer is not None:
+            cid = company_id
+            if not cid and project_id:
+                try:
+                    from personnel.models import FinancialProject
+                    cid = FinancialProject.objects.filter(id=project_id).values_list('company_id', flat=True).first()
+                except Exception:
+                    pass
+
             payload = {
                 'type': 'send_notification',
                 'type_str': 'org_structure_updated',
@@ -6071,12 +6207,14 @@ def broadcast_org_structure_updated(entity_type, action, entity_id=None, name=No
                 'entity_id': entity_id,
                 'name': name,
                 'project_id': project_id,
+                'company_id': cid,
                 'client_tab_id': client_tab_id,
                 'sender_id': sender_id,
                 'message': f"ساختار سازمانی ({entity_type}) به‌روزرسانی شد."
             }
+            target_group = f'company_{cid}_notifications' if cid else 'global_notifications'
             async_to_sync(channel_layer.group_send)(
-                'global_notifications',
+                target_group,
                 payload
             )
     except Exception as e:
@@ -6099,7 +6237,9 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Company.objects.all().annotate(projects_count=Count('projects'))
+        qs = Company.objects.all().annotate(
+            projects_count=Count('projects')
+        ).prefetch_related('documents', 'bank_accounts', 'board_members')
 
         if not user.is_superuser and self.action != 'user_available':
             allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
@@ -6139,6 +6279,16 @@ class CompanyViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("تنها مدیران ارشد مجاز به حذف شرکت هستند.")
         if instance.projects.exists():
             raise serializers.ValidationError("این شرکت دارای پروژه‌های ثبت‌شده است و نمی‌توان آن را حذف کرد.")
+        if hasattr(instance, 'warehouses') and instance.warehouses.exists():
+            raise serializers.ValidationError("این شرکت دارای انبارهای ثبت‌شده در سامانه است و نمی‌توان آن را حذف کرد.")
+        if hasattr(instance, 'personnel_profiles') and instance.personnel_profiles.exists():
+            raise serializers.ValidationError("این شرکت دارای پرونده‌های پرسنلی ثبت‌شده است و نمی‌توان آن را حذف کرد.")
+        if hasattr(instance, 'monthly_work_periods') and instance.monthly_work_periods.exists():
+            raise serializers.ValidationError("این شرکت دارای دوره‌های کارکرد ثبت‌شده است و نمی‌توان آن را حذف کرد.")
+        if hasattr(instance, 'counterparties') and instance.counterparties.exists():
+            raise serializers.ValidationError("این شرکت دارای طرف‌حساب‌های مالی ثبت‌شده است و نمی‌توان آن را حذف کرد.")
+        if hasattr(instance, 'fiscal_periods') and instance.fiscal_periods.exists():
+            raise serializers.ValidationError("این شرکت دارای دوره‌های مالی تعریف‌شده است و نمی‌توان آن را حذف کرد.")
         instance_id = instance.id
         instance_name = instance.name
         instance.delete()
@@ -6148,15 +6298,42 @@ class CompanyViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='user-available')
     def user_available(self, request):
         """
-        لیست شرکت‌های در دسترس کاربر جاری برای نمایش در مودال ورود و هدر سوئیچر
+        لیست شرکت‌های در دسترس کاربر جاری برای نمایش در مودال ورود، هدر سوئیچر و کارتابل مدارک
+        اگر scope='documents' یا 'docs' باشد: شرکت‌هایی که کاربر حداقل دسترسی docs_read دارد.
+        اگر scope='all' باشد: تمامی شرکت‌های منتسب به کاربر.
+        پیش‌فرض: شرکت‌هایی که کاربر عضویت فضای کاری (workspace_full) دارد.
         """
         user = request.user
-        companies = get_user_allowed_companies(user)
+        scope = request.query_params.get('scope', 'workspace')
+        if scope in ('documents', 'docs'):
+            companies = get_user_allowed_companies(user, required_level='docs_read')
+        elif scope == 'all':
+            companies = get_user_allowed_companies(user, required_level=None)
+        else:
+            companies = get_user_allowed_companies(user, required_level='workspace_full')
+
         serializer = self.get_serializer(companies, many=True)
+        data = list(serializer.data)
+
+        # الحاق سطح دسترسی کاربر در هر شرکت برای هدایت هوشمند در فرانت‌اند
+        user_accesses = {
+            a.company_id: a.access_level
+            for a in UserCompanyAccess.objects.filter(user=user)
+        }
+        for c in data:
+            if user.is_superuser:
+                c['user_access_level'] = 'workspace_full'
+            elif c['id'] in user_accesses:
+                c['user_access_level'] = user_accesses[c['id']]
+            elif UserSectionAssignment.objects.filter(user=user, is_active=True, section__project__company_id=c['id']).exists():
+                c['user_access_level'] = 'workspace_full'
+            else:
+                c['user_access_level'] = 'docs_read'
+
         return Response({
-            'companies': serializer.data,
+            'companies': data,
             'is_superuser': user.is_superuser,
-            'count': companies.count()
+            'count': len(data)
         })
 
     @action(detail=False, methods=['get'], url_path='expiring-documents')
@@ -6170,18 +6347,24 @@ class CompanyViewSet(viewsets.ModelViewSet):
         qs = CompanyDocument.objects.select_related('company', 'uploaded_by').filter(expiry_date__isnull=False)
 
         if not user.is_superuser:
-            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            allowed_ids = get_user_allowed_companies(user, required_level='docs_read').values_list('id', flat=True)
             qs = qs.filter(company_id__in=allowed_ids, is_confidential=False)
 
         today = timezone.now().date()
         threshold = today + timedelta(days=30)
         expiring_qs = qs.filter(expiry_date__lte=threshold).order_by('expiry_date')
 
+        page = self.paginate_queryset(expiring_qs)
+        if page is not None:
+            serializer = CompanyDocumentSerializer(page, many=True, context={'request': request})
+            return self.get_paginated_response(serializer.data)
+
         serializer = CompanyDocumentSerializer(expiring_qs, many=True, context={'request': request})
         return Response({
             'count': expiring_qs.count(),
             'results': serializer.data
         })
+
 
     @action(detail=False, methods=['get'], url_path='export-excel')
     def export_excel(self, request):
@@ -6309,11 +6492,11 @@ class CompanyDocumentViewSet(viewsets.ModelViewSet):
 
         company_id = self.request.query_params.get('company_id') or get_request_company_id(self.request)
         if company_id:
-            cid = validate_user_company_access(user, company_id)
+            cid = validate_user_company_access(user, company_id, required_level='docs_read')
             if cid:
                 qs = qs.filter(company_id=cid)
         elif not user.is_superuser:
-            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            allowed_ids = get_user_allowed_companies(user, required_level='docs_read').values_list('id', flat=True)
             qs = qs.filter(company_id__in=allowed_ids)
 
         # عدم نمایش اسناد محرمانه به کاربران غیرسوپریوزر/غیرادمین
@@ -6336,8 +6519,8 @@ class CompanyDocumentViewSet(viewsets.ModelViewSet):
         if not company:
             raise serializers.ValidationError({"company": "انتخاب شرکت الزامی است."})
 
-        # بررسی دسترسی کاربر به این شرکت
-        validate_user_company_access(user, company.id)
+        # بررسی دسترسی کاربر به این شرکت (حداقل سطح ثبت اسناد)
+        validate_user_company_access(user, company.id, required_level='docs_write')
 
         # اگر سند محرمانه علامت زده شده، کاربر باید مدیر ارشد باشد
         is_confidential = serializer.validated_data.get('is_confidential', False)
@@ -6354,7 +6537,16 @@ class CompanyDocumentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         user = self.request.user
         instance = serializer.instance
-        validate_user_company_access(user, instance.company_id)
+        validate_user_company_access(user, instance.company_id, required_level='docs_write')
+
+        # عدم دسترسی کاربر عادی به ویرایش اسناد محرمانه
+        if instance.is_confidential and not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به ویرایش اسناد محرمانه هستند.")
+
+        # عدم اجازه به کاربر عادی جهت تغییر وضعیت محرمانگی سند
+        new_confidential = serializer.validated_data.get('is_confidential', instance.is_confidential)
+        if new_confidential != instance.is_confidential and not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تغییر وضعیت محرمانگی سند تنها توسط مدیران ارشد مجاز است.")
 
         file_obj = self.request.FILES.get('file')
         kwargs = {}
@@ -6367,7 +6559,7 @@ class CompanyDocumentViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        validate_user_company_access(user, instance.company_id)
+        validate_user_company_access(user, instance.company_id, required_level='docs_write')
         if not (user.is_superuser or user.is_staff):
             raise PermissionDenied("تنها مدیران ارشد مجاز به حذف مدارک رسمی شرکت هستند.")
 
@@ -6377,6 +6569,51 @@ class CompanyDocumentViewSet(viewsets.ModelViewSet):
         instance.delete()
         tab_id = self.request.headers.get('X-Client-Tab-Id')
         broadcast_org_structure_updated('company_document', 'delete', instance_id, instance_title, comp_id, tab_id, user.id)
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request, pk=None):
+        """
+        دانلود امن سند با اعمال گارد امنیتی BOLA، کنترل محرمانگی و بازگرداندن FileResponse
+        """
+        import mimetypes
+        import os
+        import re
+        from urllib.parse import quote
+        from django.http import FileResponse, Http404
+
+        user = request.user
+        try:
+            document = CompanyDocument.objects.select_related('company').get(pk=pk)
+        except CompanyDocument.DoesNotExist:
+            raise Http404("سند مورد نظر یافت نشد.")
+
+        # ۱. بررسی دسترسی کاربر به شرکت متبوع (BOLA با حداقل سطح مشاهده)
+        validate_user_company_access(user, document.company_id, required_level='docs_read')
+
+        # ۲. بررسی سند محرمانه (صرفاً سوپریوزر و ادمین مجازند)
+        if document.is_confidential and not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("شما مجوز دسترسی به این سند محرمانه را ندارید.")
+
+        # ۳. بررسی وجود فایل در حافظه ذخیره‌سازی
+        if not document.file or not document.file.storage.exists(document.file.name):
+            raise Http404("فایل سند در حافظه سرور یافت نشد.")
+
+        file_handle = document.file.open('rb')
+        content_type, _ = mimetypes.guess_type(document.file.name)
+        content_type = content_type or 'application/octet-stream'
+
+        # پاک‌سازی کاراکترهای غیرمجاز در نام فایل دانلودی و رعایت استاندارد RFC 6266
+        ext = os.path.splitext(document.file.name)[1]
+        safe_title = re.sub(r'[\\/*?:"<>|]', '_', document.title or 'document').strip()
+        download_name = f"{safe_title}{ext}"
+        ascii_fallback = f"doc_{document.id}{ext}"
+        encoded_name = quote(download_name.encode('utf-8'))
+
+        response = FileResponse(file_handle, content_type=content_type, as_attachment=True, filename=ascii_fallback)
+        response['Content-Disposition'] = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded_name}"
+
+        return response
+
 
 
 class CompanyBankAccountViewSet(viewsets.ModelViewSet):
@@ -6456,6 +6693,73 @@ class CompanyBankAccountViewSet(viewsets.ModelViewSet):
         return Response(CompanyBankAccountSerializer(account).data, status=status.HTTP_200_OK)
 
 
+class CompanyBoardMemberViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت اعضای هیئت‌مدیره، صاحبان امضا و ارکان حاکمیتی شرکت‌ها با پشتیبانی از آپلود مدارک هویتی و احکام
+    """
+    queryset = CompanyBoardMember.objects.all().select_related('company')
+    serializer_class = CompanyBoardMemberSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CompanyBoardMember.objects.select_related('company')
+
+        company_id = self.request.query_params.get('company_id') or get_request_company_id(self.request)
+        if company_id:
+            cid = validate_user_company_access(user, company_id)
+            if cid:
+                qs = qs.filter(company_id=cid)
+        elif not user.is_superuser:
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_ids)
+
+        search = self.request.query_params.get('search')
+        if search:
+            search_clean = normalize_digits(str(search)).strip()
+            qs = qs.filter(
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search) |
+                Q(national_code__icontains=search_clean) |
+                Q(represented_legal_name__icontains=search)
+            )
+
+        return qs.order_by('-has_signature_right', 'role', '-created_at')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company')
+        if not company:
+            raise serializers.ValidationError({"company": "انتخاب شرکت الزامی است."})
+
+        validate_user_company_access(user, company.id)
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_board_member', 'create', instance.id, f"{instance.first_name} {instance.last_name}", instance.company_id, tab_id, user.id)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        validate_user_company_access(user, instance.company_id)
+        updated_instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_board_member', 'update', updated_instance.id, f"{updated_instance.first_name} {updated_instance.last_name}", updated_instance.company_id, tab_id, user.id)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        validate_user_company_access(user, instance.company_id)
+        if not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به حذف اعضای هیئت‌مدیره هستند.")
+        instance_id = instance.id
+        title = f"{instance.first_name} {instance.last_name}"
+        comp_id = instance.company_id
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_board_member', 'delete', instance_id, title, comp_id, tab_id, user.id)
+
+
 class UserCompanyAccessViewSet(viewsets.ModelViewSet):
     """
     مدیریت انتساب دسترسی کاربران به شرکت‌ها
@@ -6474,6 +6778,120 @@ class UserCompanyAccessViewSet(viewsets.ModelViewSet):
         if company_id:
             qs = qs.filter(company_id=company_id)
         return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_access', 'create', instance.id, str(instance.user), instance.company_id, tab_id, self.request.user.id)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_access', 'update', instance.id, str(instance.user), instance.company_id, tab_id, self.request.user.id)
+
+    def perform_destroy(self, instance):
+        instance_id = instance.id
+        user_title = str(instance.user)
+        comp_id = instance.company_id
+        instance.delete()
+        tab_id = self.request.headers.get('X-Client-Tab-Id')
+        broadcast_org_structure_updated('company_access', 'delete', instance_id, user_title, comp_id, tab_id, self.request.user.id)
+
+
+class CompanyFiscalPeriodViewSet(viewsets.ModelViewSet):
+    """
+    مدیریت دوره‌ها و سال‌های مالی شرکت‌ها (ایجاد، بستن دوره، انجماد کاردکس، بازگشایی)
+    """
+    queryset = CompanyFiscalPeriod.objects.all().select_related('company', 'closed_by')
+    serializer_class = CompanyFiscalPeriodSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = OptionalPageNumberPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CompanyFiscalPeriod.objects.select_related('company', 'closed_by')
+
+        company_id = self.request.query_params.get('company_id') or get_request_company_id(self.request)
+        if company_id:
+            cid = validate_user_company_access(user, company_id)
+            if cid:
+                qs = qs.filter(company_id=cid)
+        elif not user.is_superuser:
+            allowed_ids = get_user_allowed_companies(user).values_list('id', flat=True)
+            qs = qs.filter(company_id__in=allowed_ids)
+
+        year = self.request.query_params.get('fiscal_year')
+        if year:
+            qs = qs.filter(fiscal_year=year)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param)
+
+        return qs.order_by('-fiscal_year')
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        company = serializer.validated_data.get('company')
+        if not company:
+            raise serializers.ValidationError({"company": "انتخاب شرکت الزامی است."})
+        validate_user_company_access(user, company.id)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        validate_user_company_access(user, instance.company_id)
+        if instance.status == 'closed' and not user.is_superuser:
+            raise PermissionDenied("سال مالی بسته شده است و ویرایش آن صرفاً توسط مدیر ارشد امکان‌پذیر است.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        validate_user_company_access(user, instance.company_id)
+        if not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به حذف دوره مالی هستند.")
+        if instance.status == 'closed':
+            raise serializers.ValidationError("دوره مالی بسته شده را نمی‌توان حذف کرد.")
+        instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='close-period')
+    def close_period(self, request, pk=None):
+        """بستن قطعی دوره و سال مالی"""
+        period = self.get_object()
+        user = request.user
+        validate_user_company_access(user, period.company_id)
+        if not (user.is_superuser or user.is_staff):
+            raise PermissionDenied("تنها مدیران ارشد مجاز به بستن سال مالی هستند.")
+        period.status = 'closed'
+        period.closed_at = timezone.now()
+        period.closed_by = user
+        period.notes = request.data.get('notes', period.notes)
+        period.save(update_fields=['status', 'closed_at', 'closed_by', 'notes', 'updated_at'])
+        return Response({'detail': f'سال مالی {period.fiscal_year} با موفقیت بسته و قطعی شد.'})
+
+    @action(detail=True, methods=['post'], url_path='freeze-period')
+    def freeze_period(self, request, pk=None):
+        """انجماد موقت دوره مالی جهت رسیدگی و انبارگردانی"""
+        period = self.get_object()
+        user = request.user
+        validate_user_company_access(user, period.company_id)
+        period.status = 'frozen'
+        period.save(update_fields=['status', 'updated_at'])
+        return Response({'detail': f'دوره مالی {period.fiscal_year} موقتاً منجمد شد.'})
+
+    @action(detail=True, methods=['post'], url_path='reopen-period')
+    def reopen_period(self, request, pk=None):
+        """بازگشایی مجدد دوره مالی منجمد یا بسته شده (سوپریوزر)"""
+        period = self.get_object()
+        user = request.user
+        if not user.is_superuser:
+            raise PermissionDenied("صرفاً مدیر کل مجاز به بازگشایی دوره مالی بسته شده است.")
+        period.status = 'open'
+        period.closed_at = None
+        period.closed_by = None
+        period.save(update_fields=['status', 'closed_at', 'closed_by', 'updated_at'])
+        return Response({'detail': f'دوره مالی {period.fiscal_year} با موفقیت بازگشایی شد.'})
 
 
 class FinancialProjectViewSet(viewsets.ModelViewSet):
@@ -7013,6 +7431,30 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+
+        # ایزولاسیون چندمستاجری طرف‌حساب‌ها بر مبنای شرکت فعال
+        company_param = get_request_company_id(self.request)
+        if not user.is_superuser:
+            allowed_cids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+            if company_param:
+                try:
+                    cid = int(company_param)
+                    if cid not in allowed_cids:
+                        raise PermissionDenied("شما به طرف‌حساب‌های این شرکت دسترسی ندارید.")
+                    qs = qs.filter(Q(company_id=cid) | Q(company__isnull=True))
+                except (ValueError, TypeError):
+                    pass
+            else:
+                qs = qs.filter(Q(company_id__in=allowed_cids) | Q(company__isnull=True))
+        elif company_param:
+            try:
+                qs = qs.filter(Q(company_id=int(company_param)) | Q(company__isnull=True))
+            except (ValueError, TypeError):
+                pass
+
         c_type = self.request.query_params.get('counterparty_type')
         if c_type:
             qs = qs.filter(counterparty_type=c_type)
@@ -7026,6 +7468,21 @@ class CounterpartyViewSet(viewsets.ModelViewSet):
         return qs.order_by('name')
 
     def perform_create(self, serializer):
+        user = self.request.user
+        # انتساب خودکار شرکت فعال به طرف‌حساب در صورت خالی بودن
+        if 'company' not in serializer.validated_data or not serializer.validated_data.get('company'):
+            req_cid = get_request_company_id(self.request)
+            if req_cid:
+                try:
+                    cid = int(req_cid)
+                    if not user.is_superuser:
+                        allowed_cids = set(get_user_allowed_companies(user).values_list('id', flat=True))
+                        if cid in allowed_cids:
+                            serializer.validated_data['company_id'] = cid
+                    else:
+                        serializer.validated_data['company_id'] = cid
+                except (ValueError, TypeError):
+                    pass
         instance = serializer.save()
         tab_id = self.request.headers.get('X-Client-Tab-Id') or self.request.data.get('client_tab_id')
         broadcast_org_structure_updated('counterparty', 'create', instance.id, instance.name, None, tab_id, self.request.user.id)

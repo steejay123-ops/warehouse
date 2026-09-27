@@ -194,6 +194,8 @@ class CompanyDocument(models.Model):
     issue_date = models.DateField(null=True, blank=True, verbose_name="تاریخ صدور")
     expiry_date = models.DateField(null=True, blank=True, verbose_name="تاریخ انقضا")
     is_confidential = models.BooleanField(default=False, verbose_name="سند محرمانه (صرفاً مدیران ارشد)")
+    version = models.IntegerField(default=1, verbose_name="شماره ویرایش / نسخه")
+    is_superseded = models.BooleanField(default=False, verbose_name="سند منسوخ / جایگزین شده با نسخه جدید")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات و نکات")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="کاربر بارگذاری‌کننده")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ثبت")
@@ -301,6 +303,102 @@ class CompanyBankAccount(models.Model):
                 )
 
 
+class CompanyBoardMember(models.Model):
+    """
+    اعضای هیئت‌مدیره، مدیران عامل، بازرسان قانونی و صاحبان امضای مجاز شرکت
+    """
+    ROLE_CHOICES = (
+        ('chairman', 'رئیس هیئت‌مدیره'),
+        ('vice_chairman', 'نایب‌رئیس هیئت‌مدیره'),
+        ('board_member', 'عضو هیئت‌مدیره'),
+        ('managing_director', 'مدیرعامل'),
+        ('managing_director_and_member', 'عضو هیئت‌مدیره و مدیرعامل'),
+        ('main_inspector', 'بازرس اصلی'),
+        ('alternate_inspector', 'بازرس علی‌البدل'),
+        ('secretary', 'دبیر هیئت‌مدیره'),
+        ('other', 'سایر ارکان قانونی')
+    )
+
+    MEMBER_TYPE_CHOICES = (
+        ('real', 'شخص حقیقی'),
+        ('legal_rep', 'نماینده شخص حقوقی')
+    )
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='board_members',
+        verbose_name="شرکت متبوع"
+    )
+    first_name = models.CharField(max_length=100, verbose_name="نام")
+    last_name = models.CharField(max_length=150, verbose_name="نام خانوادگی")
+    national_code = models.CharField(max_length=10, verbose_name="کد ملی (۱۰ رقم)")
+    member_type = models.CharField(max_length=20, choices=MEMBER_TYPE_CHOICES, default='real', verbose_name="نوع عضو")
+    represented_legal_name = models.CharField(max_length=200, null=True, blank=True, verbose_name="نام شخصیت حقوقی متبوع")
+    role = models.CharField(max_length=40, choices=ROLE_CHOICES, default='board_member', verbose_name="سمت")
+    has_signature_right = models.BooleanField(default=False, verbose_name="دارای حق امضای تعهدآور")
+    signature_scope = models.CharField(max_length=250, null=True, blank=True, verbose_name="حدود اختیارات امضا")
+    term_start = models.DateField(null=True, blank=True, verbose_name="تاریخ شروع تصدی")
+    term_expiry = models.DateField(null=True, blank=True, verbose_name="تاریخ پایان تصدی (حداکثر ۲ سال)")
+    attached_id_doc = models.FileField(upload_to='company_board_docs/', null=True, blank=True, verbose_name="تصویر کارت ملی / شناسنامه")
+    attached_appointment_doc = models.FileField(upload_to='company_board_docs/', null=True, blank=True, verbose_name="حکم انتصاب / صورتجلسه مجمع")
+    is_active = models.BooleanField(default=True, verbose_name="فعال")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "عضو هیئت‌مدیره شرکت"
+        verbose_name_plural = "اعضای هیئت‌مدیره شرکت‌ها"
+        ordering = ['-has_signature_right', 'role', '-created_at']
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} ({self.get_role_display()}) - {self.company.name}"
+
+
+class CompanyFiscalPeriod(models.Model):
+    """
+    دوره و سال مالی رسمی شرکت (جهت بستن حساب‌ها، انجماد کاردکس و انتقال مانده به سال بعد)
+    """
+    STATUS_CHOICES = (
+        ('open', 'باز (امکان ثبت و ویرایش اسناد)'),
+        ('frozen', 'منجمد / در حال رسیدگی و انبارگردانی'),
+        ('closed', 'بسته شده / قطعی و غیرقابل ویرایش'),
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name='fiscal_periods',
+        verbose_name="شرکت"
+    )
+    fiscal_year = models.CharField(max_length=4, db_index=True, verbose_name="سال مالی (مثال ۱۴۰۵)")
+    title = models.CharField(max_length=150, default="سال مالی جاری", verbose_name="عنوان دوره")
+    start_date = models.CharField(max_length=10, verbose_name="تاریخ شروع دوره (شمسی)")
+    end_date = models.CharField(max_length=10, verbose_name="تاریخ پایان دوره (شمسی)")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open', verbose_name="وضعیت دوره مالی")
+    is_active = models.BooleanField(default=True, verbose_name="دوره پیش‌فرض فعال")
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="زمان بستن سال مالی")
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='closed_fiscal_periods',
+        verbose_name="کاربر بسته‌کننده دوره"
+    )
+    notes = models.TextField(blank=True, null=True, verbose_name="توضیحات و مصوبات مجمع")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "دوره مالی شرکت"
+        verbose_name_plural = "دوره‌های مالی شرکت‌ها"
+        unique_together = ('company', 'fiscal_year')
+        ordering = ['-fiscal_year']
+
+    def __str__(self):
+        return f"{self.company.name} - سال {self.fiscal_year} ({self.get_status_display()})"
+
+
 class FinancialProject(models.Model):
     """
     پروژه مالی و عملیاتی مستقل (مرکز هزینه و عملیات)
@@ -313,7 +411,7 @@ class FinancialProject(models.Model):
         related_name='projects',
         verbose_name="شرکت متبوع"
     )
-    code = models.CharField(max_length=50, unique=True, verbose_name="کد پروژه")
+    code = models.CharField(max_length=50, verbose_name="کد پروژه")
     name = models.CharField(max_length=200, verbose_name="نام پروژه")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
     is_active = models.BooleanField(default=True, verbose_name="فعال")
@@ -324,6 +422,18 @@ class FinancialProject(models.Model):
         verbose_name = "پروژه مالی/عملیاتی"
         verbose_name_plural = "پروژه‌های مالی/عملیاتی"
         ordering = ['code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'code'],
+                condition=models.Q(company__isnull=False),
+                name='unique_company_project_code'
+            ),
+            models.UniqueConstraint(
+                fields=['code'],
+                condition=models.Q(company__isnull=True),
+                name='unique_global_project_code'
+            )
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -399,8 +509,14 @@ class UserSectionAssignment(models.Model):
 
 class UserCompanyAccess(models.Model):
     """
-    تخصیص صریح یا ضمنی دسترسی کاربر به یک یا چند شرکت
+    تخصیص صریح یا ضمنی دسترسی کاربر به یک یا چند شرکت با تفکیک سطح دسترسی و نقش
     """
+    ACCESS_LEVEL_CHOICES = (
+        ('docs_read', 'فقط مشاهده مدارک رسمی'),
+        ('docs_write', 'مشاهده و بارگذاری مدارک رسمی'),
+        ('workspace_full', 'عضویت کامل در فضای کاری و ماژول‌ها'),
+    )
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -413,6 +529,18 @@ class UserCompanyAccess(models.Model):
         related_name='user_accesses',
         verbose_name="شرکت"
     )
+    access_level = models.CharField(
+        max_length=30,
+        choices=ACCESS_LEVEL_CHOICES,
+        default='docs_read',
+        verbose_name="سطح دسترسی سازمانی"
+    )
+    role_in_company = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="سمت / نقش در این شرکت"
+    )
     is_default = models.BooleanField(default=False, verbose_name="شرکت پیش‌فرض")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -422,7 +550,8 @@ class UserCompanyAccess(models.Model):
         verbose_name_plural = "دسترسی‌های کاربران به شرکت‌ها"
 
     def __str__(self):
-        return f"{self.user} -> {self.company.name}"
+        return f"{self.user} -> {self.company.name} ({self.get_access_level_display()})"
+
 
 
 class Counterparty(models.Model):
@@ -435,6 +564,14 @@ class Counterparty(models.Model):
         ('fuel_station', 'جایگاه سوخت'),
         ('contractor', 'پیمانکار خدماتی'),
         ('other', 'سایر اشخاص حقیقی/حقوقی'),
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='counterparties',
+        verbose_name="شرکت متبوع"
     )
     name = models.CharField(max_length=200, verbose_name="نام شخص یا شرکت")
     counterparty_type = models.CharField(
@@ -773,7 +910,7 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     # ── ۱. اطلاعات هویتی و شناسنامه‌ای ─────────────────────────────────
     first_name = models.CharField(max_length=100, verbose_name="نام")
     last_name = models.CharField(max_length=100, verbose_name="نام خانوادگی")
-    national_code = models.CharField(max_length=10, unique=True, db_index=True, verbose_name="کد ملی (۱۰ رقم)")
+    national_code = models.CharField(max_length=10, db_index=True, verbose_name="کد ملی (۱۰ رقم)")
     father_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام پدر")
     id_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره شناسنامه")
     id_series = models.CharField(max_length=50, blank=True, null=True, verbose_name="مسلسل شناسنامه")
@@ -853,6 +990,14 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
         verbose_name="تصویر یا فایل مدارک پرسنل (کارت ملی / شناسنامه)"
     )
     
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='personnel_profiles',
+        verbose_name="شرکت متبوع"
+    )
     assigned_warehouse_id = models.IntegerField(
         null=True,
         blank=True,
@@ -1018,6 +1163,18 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
         verbose_name = "پرونده پرسنل"
         verbose_name_plural = "پرسنل و کارگزینی"
         ordering = ['last_name', 'first_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['company', 'national_code'],
+                condition=models.Q(company__isnull=False),
+                name='unique_company_personnel_national_code'
+            ),
+            models.UniqueConstraint(
+                fields=['national_code'],
+                condition=models.Q(company__isnull=True),
+                name='unique_global_personnel_national_code'
+            )
+        ]
 
     @property
     def full_name(self):
@@ -1039,6 +1196,13 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
         return 0.0
 
     def save(self, *args, **kwargs):
+        # انتساب خودکار شرکت از روی بخش یا پروژه در صورت خالی بودن
+        if not self.company_id:
+            if self.section and self.section.project and self.section.project.company_id:
+                self.company_id = self.section.project.company_id
+            elif self.project and self.project.company_id:
+                self.company_id = self.project.company_id
+
         # پدینگ خودکار کد ملی به ۱۰ رقم
         if self.national_code:
             self.national_code = self.national_code.strip().zfill(10)
@@ -1099,7 +1263,15 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
         related_name='vehicle_profile',
         verbose_name="حساب کاربری راننده (اختیاری)"
     )
-    plate_number = models.CharField(max_length=30, unique=True, db_index=True, verbose_name="شماره پلاک")
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='vehicles',
+        verbose_name="شرکت متبوع"
+    )
+    plate_number = models.CharField(max_length=30, db_index=True, verbose_name="شماره پلاک")
     vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPE_CHOICES, default='nissan', verbose_name="نوع خودرو")
     ownership_type = models.CharField(max_length=20, choices=OWNERSHIP_CHOICES, default='contract', verbose_name="نوع مالکیت")
     driver_name = models.CharField(max_length=150, verbose_name="نام و نام خانوادگی راننده")
@@ -1292,8 +1464,26 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
             models.CheckConstraint(
                 check=models.Q(default_service_rate__gte=0),
                 name='vehicle_default_rate_gte_0'
+            ),
+            models.UniqueConstraint(
+                fields=['company', 'plate_number'],
+                condition=models.Q(company__isnull=False),
+                name='unique_company_vehicle_plate'
+            ),
+            models.UniqueConstraint(
+                fields=['plate_number'],
+                condition=models.Q(company__isnull=True),
+                name='unique_global_vehicle_plate'
             )
         ]
+
+    def save(self, *args, **kwargs):
+        if not self.company_id:
+            if self.section and self.section.project and self.section.project.company_id:
+                self.company_id = self.section.project.company_id
+            elif self.project and self.project.company_id:
+                self.company_id = self.project.company_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.driver_name} - {self.get_vehicle_type_display()} ({self.plate_number})"
@@ -1592,6 +1782,14 @@ class MonthlyWorkPeriod(_WarehouseCompatMixin, models.Model):
         ('REJECTED', 'رد شده و نیازمند بازبینی'),
     )
 
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='monthly_work_periods',
+        verbose_name="شرکت متبوع"
+    )
     warehouse_id = models.IntegerField(
         null=True,
         blank=True,
@@ -1681,9 +1879,35 @@ class MonthlyWorkPeriod(_WarehouseCompatMixin, models.Model):
         verbose_name = "دوره کارکرد ماهانه"
         verbose_name_plural = "دوره‌های کارکرد ماهانه"
         constraints = [
-            models.UniqueConstraint(fields=['warehouse_id', 'year_month'], name='unique_warehouse_year_month_period')
+            models.UniqueConstraint(
+                fields=['company', 'warehouse_id', 'year_month'],
+                condition=models.Q(company__isnull=False, warehouse_id__isnull=False),
+                name='unique_company_warehouse_year_month_period'
+            ),
+            models.UniqueConstraint(
+                fields=['company', 'year_month'],
+                condition=models.Q(company__isnull=False, warehouse_id__isnull=True),
+                name='unique_company_year_month_period'
+            ),
+            models.UniqueConstraint(
+                fields=['warehouse_id', 'year_month'],
+                condition=models.Q(company__isnull=True),
+                name='unique_warehouse_year_month_period'
+            ),
         ]
         ordering = ['-year_month']
+
+    def save(self, *args, **kwargs):
+        # انتساب خودکار شرکت از روی انبار در صورت خالی بودن
+        if not self.company_id and self.warehouse_id:
+            try:
+                from warehouses.models import Warehouse
+                wh = Warehouse.objects.filter(id=self.warehouse_id).first()
+                if wh and wh.company_id:
+                    self.company_id = wh.company_id
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
 
     def __str__(self):
         wh = self.warehouse

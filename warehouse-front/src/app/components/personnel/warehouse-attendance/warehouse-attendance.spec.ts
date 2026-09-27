@@ -2,7 +2,7 @@
 import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { WarehouseAttendance } from './warehouse-attendance';
-import { of, Subject } from 'rxjs';
+import { of, Subject, BehaviorSubject } from 'rxjs';
 
 describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
   let component: WarehouseAttendance;
@@ -98,7 +98,9 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
     };
 
     mockWsService = {
-      notifications$: new Subject<any>()
+      notifications$: new Subject<any>(),
+      connected$: new BehaviorSubject<boolean>(true),
+      tabId: 'tab_test_attendance'
     };
 
     mockToast = {
@@ -307,6 +309,79 @@ describe('WarehouseAttendance Comprehensive Vitest Suite', () => {
       expect(component.attendanceRows[0].effective_hours).toBe(5);
       expect(component.attendanceRows[0].is_existing).toBe(true);
       expect(component.hasUnsavedChanges).toBe(false);
+    });
+  });
+
+  describe('6. Real-Time WebSocket, Tab Echo & Performance Optimization', () => {
+    it('should silently refresh attendance matrix upon remote attendance_updated WebSocket event', () => {
+      component.selectedDateShamsi = '1405/06/08';
+      component.selectedWarehouseId = 1;
+      component.ngOnInit();
+      vi.clearAllMocks();
+
+      mockWsService.notifications$.next({
+        type: 'attendance_updated',
+        warehouse_id: 1,
+        date_shamsi: '1405/06/08',
+        client_tab_id: 'tab_other_device'
+      });
+
+      expect(mockPersonnelApi.getAttendanceMatrix).toHaveBeenCalled();
+    });
+
+    it('should ignore echoed WebSocket events from the current tab to prevent redundant refreshes', () => {
+      component.selectedDateShamsi = '1405/06/08';
+      component.selectedWarehouseId = 1;
+      component.ngOnInit();
+      vi.clearAllMocks();
+
+      mockWsService.notifications$.next({
+        type: 'attendance_updated',
+        warehouse_id: 1,
+        date_shamsi: '1405/06/08',
+        client_tab_id: 'tab_test_attendance'
+      });
+
+      expect(mockPersonnelApi.getAttendanceMatrix).not.toHaveBeenCalled();
+    });
+
+    it('should memoize attendanceCounts and avoid repeated recalculations', () => {
+      component.loadAttendanceMatrix();
+      const counts1 = component.attendanceCounts;
+      const counts2 = component.attendanceCounts;
+
+      expect(counts1).toBe(counts2); // exact same object reference (memoized)
+      expect(counts1.present).toBe(1);
+      expect(counts1.total).toBe(2);
+
+      // Mutating status should invalidate cache
+      component.setAttendanceStatus(component.attendanceRows[1], 'PRESENT_10H');
+      const counts3 = component.attendanceCounts;
+      expect(counts3.present).toBe(2);
+    });
+
+    it('should return stable trackBy keys for table rows to avoid DOM freezing', () => {
+      expect(component.trackByRowId(0, { personnel_id: 10 } as any)).toBe(10);
+      expect(component.trackByMonthlyGridRow(0, { personnel_id: 15 } as any)).toBe(15);
+      expect(component.trackByVehicleRow(0, { vehicle_id: 25 } as any)).toBe(25);
+      expect(component.trackByFleetMonthlyRow(0, { vehicle_id: 30 } as any)).toBe(30);
+      expect(component.trackByDayIdx(0, { day: 5 } as any)).toBe(5);
+      expect(component.trackByWhId(0, { id: 2 } as any)).toBe(2);
+    });
+
+    it('should clean up all subscriptions on ngOnDestroy without throwing errors', () => {
+      component.ngOnInit();
+      expect(() => component.ngOnDestroy()).not.toThrow();
+
+      // Subsequent notifications should not trigger handlers
+      vi.clearAllMocks();
+      mockWsService.notifications$.next({
+        type: 'attendance_updated',
+        warehouse_id: 1,
+        date_shamsi: '1405/06/08',
+        client_tab_id: 'tab_other_device'
+      });
+      expect(mockPersonnelApi.getAttendanceMatrix).not.toHaveBeenCalled();
     });
   });
 });

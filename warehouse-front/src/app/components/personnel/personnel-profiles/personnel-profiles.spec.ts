@@ -2,7 +2,7 @@
 import '@angular/compiler';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PersonnelProfilesHub } from './personnel-profiles';
-import { of } from 'rxjs';
+import { of, Subject, BehaviorSubject } from 'rxjs';
 
 describe('PersonnelProfilesHub Unit Tests', () => {
   let component: PersonnelProfilesHub;
@@ -15,8 +15,12 @@ describe('PersonnelProfilesHub Unit Tests', () => {
   let mockCdr: any;
   let mockRoute: any;
   let mockRouter: any;
+  let mockPersona: any;
 
   beforeEach(() => {
+    mockPersona = {
+      canPerform: vi.fn().mockReturnValue(true)
+    };
     mockState = {
       hasRole: vi.fn().mockReturnValue(true)
     };
@@ -81,10 +85,6 @@ describe('PersonnelProfilesHub Unit Tests', () => {
 
     mockRouter = {
       navigate: vi.fn()
-    };
-
-    const mockPersona = {
-      canPerform: vi.fn().mockReturnValue(true)
     };
 
     component = new PersonnelProfilesHub(
@@ -171,5 +171,103 @@ describe('PersonnelProfilesHub Unit Tests', () => {
     expect(component.diffRows[0].oldValue).toBe(6572696);
     expect(component.diffRows[0].newValue).toBe(7000000);
     expect(component.diffRows[0].isDiff).toBe(true);
+  });
+
+  describe('6. WebSocket Live Sync & Performance TrackBy', () => {
+    let wsSubject: Subject<any>;
+    let mockWs: any;
+
+    beforeEach(() => {
+      wsSubject = new Subject<any>();
+      mockWs = {
+        notifications$: wsSubject,
+        tabId: 'tab_test_spec'
+      };
+
+      component = new PersonnelProfilesHub(
+        mockState,
+        mockAuth,
+        { canPerform: vi.fn().mockReturnValue(true) } as any,
+        mockApi,
+        mockWhService,
+        mockToast,
+        mockConfirmDialog,
+        mockCdr,
+        mockRoute,
+        mockRouter,
+        mockWs
+      );
+      component.ngOnInit();
+      vi.clearAllMocks();
+    });
+
+    it('should silently reload personnel profiles upon remote personnel_updated WebSocket event', () => {
+      wsSubject.next({
+        type: 'personnel_updated',
+        client_tab_id: 'tab_remote_other',
+        personnel_id: 1
+      });
+      expect(mockApi.getPersonnelProfiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore echoed WebSocket events from current tab to prevent redundant requests', () => {
+      wsSubject.next({
+        type: 'personnel_updated',
+        client_tab_id: 'tab_test_spec',
+        personnel_id: 1
+      });
+      expect(mockApi.getPersonnelProfiles).not.toHaveBeenCalled();
+    });
+
+    it('should safely unsubscribe all subscriptions on ngOnDestroy without memory leaks', () => {
+      expect(() => component.ngOnDestroy()).not.toThrow();
+      // Emitting after destroy should not trigger API calls
+      wsSubject.next({
+        type: 'personnel_updated',
+        client_tab_id: 'tab_remote_other'
+      });
+      expect(mockApi.getPersonnelProfiles).not.toHaveBeenCalled();
+    });
+
+    it('should return stable trackBy keys for personnel, vehicles, and change requests', () => {
+      expect(component.trackByPersonnelId(0, { id: 42 } as any)).toBe(42);
+      expect(component.trackByVehicleId(0, { id: 88 } as any)).toBe(88);
+      expect(component.trackByCrId(0, { id: 105 } as any)).toBe(105);
+      expect(component.trackByDiffKey(0, { key: 'wage' } as any)).toBe('wage');
+    });
+
+    it('should reload profiles and warehouses when active company changes in ActiveCompanyService', () => {
+      const activeCompany$ = new BehaviorSubject<any>({ id: 1, name: 'شرکت اول' });
+      const mockActiveCompanyService = {
+        activeCompany$,
+        activeCompanyId: 1
+      };
+
+      const testComp = new PersonnelProfilesHub(
+        mockState,
+        mockAuth,
+        mockPersona,
+        mockApi,
+        mockWhService,
+        mockToast,
+        mockConfirmDialog,
+        mockCdr,
+        mockRoute,
+        mockRouter,
+        mockWs,
+        mockActiveCompanyService as any
+      );
+
+      testComp.ngOnInit();
+      vi.clearAllMocks();
+
+      // تغییر شرکت به شرکت شماره ۲
+      mockActiveCompanyService.activeCompanyId = 2;
+      activeCompany$.next({ id: 2, name: 'شرکت دوم' });
+
+      expect(mockApi.getPersonnelProfiles).toHaveBeenCalledWith(expect.objectContaining({
+        company_id: 2
+      }));
+    });
   });
 });

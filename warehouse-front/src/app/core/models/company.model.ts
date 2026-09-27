@@ -29,6 +29,8 @@ export interface CompanyDocument {
   expiry_status?: 'permanent' | 'expired' | 'expiring_soon' | 'valid';
   days_until_expiry?: number | null;
   is_confidential: boolean;
+  version?: number;
+  is_superseded?: boolean;
   description?: string | null;
   uploaded_by?: number | null;
   uploaded_by_name?: string | null;
@@ -39,6 +41,44 @@ export interface CompanyDocument {
 export interface ExpiringDocumentsResponse {
   count: number;
   results: CompanyDocument[];
+}
+
+export type CompanyBoardMemberRole =
+  | 'chairman'
+  | 'vice_chairman'
+  | 'board_member'
+  | 'managing_director'
+  | 'managing_director_and_member'
+  | 'main_inspector'
+  | 'alternate_inspector'
+  | 'secretary'
+  | 'other';
+
+export type CompanyBoardMemberType = 'real' | 'legal_rep';
+
+export interface CompanyBoardMember {
+  id?: number;
+  company: number;
+  company_name?: string;
+  first_name: string;
+  last_name: string;
+  national_code: string;
+  member_type: CompanyBoardMemberType;
+  member_type_display?: string;
+  represented_legal_name?: string | null;
+  role: CompanyBoardMemberRole;
+  role_display?: string;
+  has_signature_right: boolean;
+  signature_scope?: string | null;
+  term_start?: string | null;
+  term_expiry?: string | null;
+  attached_id_doc?: File | string | null;
+  attached_appointment_doc?: File | string | null;
+  attached_id_doc_url?: string | null;
+  attached_appointment_doc_url?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Company {
@@ -83,6 +123,8 @@ export interface Company {
   documents_count?: number;
   documents_health_status?: 'valid' | 'expiring_soon' | 'expired' | 'no_documents';
   bank_accounts?: CompanyBankAccount[];
+  board_members?: CompanyBoardMember[];
+  user_access_level?: CompanyAccessLevel;
   created_at?: string;
   updated_at?: string;
 }
@@ -107,6 +149,8 @@ export interface UserAvailableCompaniesResponse {
   count: number;
 }
 
+export type CompanyAccessLevel = 'docs_read' | 'docs_write' | 'workspace_full';
+
 export interface UserCompanyAccess {
   id?: number;
   user: number;
@@ -115,7 +159,29 @@ export interface UserCompanyAccess {
   company: number;
   company_name?: string;
   company_code?: string;
+  access_level?: CompanyAccessLevel;
+  access_level_display?: string;
+  role_in_company?: string | null;
   is_default: boolean;
   created_at?: string;
+}
+
+export interface CompanyFiscalPeriod {
+  id?: number;
+  company: number;
+  company_name?: string;
+  fiscal_year: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  status: 'open' | 'frozen' | 'closed';
+  status_display?: string;
+  is_active: boolean;
+  closed_at?: string | null;
+  closed_by?: number | null;
+  closed_by_name?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 

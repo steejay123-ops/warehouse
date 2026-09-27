@@ -666,6 +666,12 @@ export class Layout implements OnInit, OnDestroy {
       })
     );
 
+    this.offlineSubs.push(
+      this.activeCompanyService.documentCompanies$.subscribe(() => {
+        this.cdr.markForCheck();
+      })
+    );
+
     // دریافت لیست انبارها از بک‌اند (با خودترمیمی آنی در صورت حذف یا نامعتبر شدن انبار فعال)
     if (this.moduleRegistry.isModuleInstalled('warehouse')) {
       this.whService.getAll().subscribe({
@@ -1135,6 +1141,11 @@ export class Layout implements OnInit, OnDestroy {
   get userAvatar() { return this.auth.userAvatar(); }
   get userName() { return this.auth.userName(); }
   get userRole() { return this.auth.userRoleTitles()[0] || ''; }
+  get hasCompanyDocumentsAccess(): boolean {
+    const isSuper = !!this.auth.user()?.is_superuser || this.personaService.isSuperuser();
+    if (isSuper) return true;
+    return this.activeCompanyService.hasCompanyDocumentsAccess();
+  }
 
   openSidebar() { this.store.openSidebar(); }
   closeSidebar() { this.store.closeSidebar(); }
@@ -1150,7 +1161,7 @@ export class Layout implements OnInit, OnDestroy {
       return;
     }
     const accountingTabs = [
-      'companies', 'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
+      'companies', 'company-documents', 'documents', 'employee-portal', 'projects-and-sections', 'attendance', 'fleet', 'fleet-attendance',
       'manager-approvals', 'finance-cartable', 'treasury-cartable', 'treasury',
       'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement',
       'counterparties',
@@ -1335,6 +1346,8 @@ export class Layout implements OnInit, OnDestroy {
       'treasurer-reconciliation': 'مغایرت‌گیری بانکی و تقویم نقدینگی (پنل خزانه‌دار)',
       companies: 'مدیریت شرکت‌ها و هلدینگ',
       'projects-and-sections': 'مدیریت ساختار سازمانی، پروژه‌ها و بخش‌ها',
+      'company-documents': 'بایگانی اسناد و مدارک رسمی شرکت‌ها',
+      documents: 'بایگانی اسناد و مدارک رسمی شرکت‌ها',
       'counterparties': 'مدیریت طرف‌حساب‌های مالی و تجاری',
       'finance-audit': 'رهگیری و ممیزی مالی و اداری',
       health: 'مرکز جامع پایش سلامت و تاب‌آوری سامانه',

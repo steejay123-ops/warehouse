@@ -34,7 +34,7 @@ export class PersonnelApiService {
   constructor(private api: ApiService) {}
 
   // --- پرسنل و کارگزینی ---
-  getPersonnelProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<PersonnelProfile[]> {
+  getPersonnelProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string; company_id?: number }): Observable<PersonnelProfile[]> {
     return this.api.get<PersonnelProfile[]>(`${this.baseUrl}/profiles`, params as Record<string, unknown>);
   }
 
@@ -101,7 +101,7 @@ export class PersonnelApiService {
   }
 
   // --- ناوگان و رانندگان ---
-  getVehicleProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string }): Observable<VehicleDriverProfile[]> {
+  getVehicleProfiles(params?: { warehouse_id?: number; section_id?: number; project_id?: number; is_active?: boolean; approval_status?: string; search?: string; company_id?: number }): Observable<VehicleDriverProfile[]> {
     return this.api.get<VehicleDriverProfile[]>(`${this.baseUrl}/vehicles`, params as Record<string, unknown>);
   }
 
@@ -176,7 +176,7 @@ export class PersonnelApiService {
   }
 
   // --- کارتابل تغییرات پرسنل (Personnel Change Requests) ---
-  getPersonnelChangeRequests(params?: { status?: string; search?: string }): Observable<PersonnelChangeRequest[]> {
+  getPersonnelChangeRequests(params?: { status?: string; search?: string; company_id?: number }): Observable<PersonnelChangeRequest[]> {
     return this.api.get<PersonnelChangeRequest[]>(`${this.baseUrl}/personnel-change-requests`, params as Record<string, unknown>);
   }
 
@@ -197,7 +197,7 @@ export class PersonnelApiService {
   }
 
   // --- کارتابل تغییرات ناوگان (Vehicle Change Requests) ---
-  getVehicleChangeRequests(params?: { status?: string; search?: string }): Observable<VehicleChangeRequest[]> {
+  getVehicleChangeRequests(params?: { status?: string; search?: string; company_id?: number }): Observable<VehicleChangeRequest[]> {
     return this.api.get<VehicleChangeRequest[]>(`${this.baseUrl}/vehicle-change-requests`, params as Record<string, unknown>);
   }
 

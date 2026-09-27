@@ -97,6 +97,7 @@ export const offlineInterceptor: HttpInterceptorFn = (
       const parsedUrl = new URL(requestUrl, 'http://localhost');
       const baseUrl = requestUrl.split('?')[0].replace(/\/+$/, '');
       const reqWarehouseId = parsedUrl.searchParams.get('warehouse_id') || parsedUrl.searchParams.get('warehouse');
+      const reqCompanyId = parsedUrl.searchParams.get('company_id') || parsedUrl.searchParams.get('company');
       const reqPage = parsedUrl.searchParams.get('page');
       const isFirstPage = !reqPage || reqPage === '1';
       const reqSearch = parsedUrl.searchParams.get('search')?.trim().toLowerCase();
@@ -127,6 +128,10 @@ export const offlineInterceptor: HttpInterceptorFn = (
         if (reqWarehouseId && e.body && typeof e.body === 'object') {
           const bodyWh = e.body.warehouse_id || e.body.warehouse;
           if (bodyWh && String(bodyWh) !== String(reqWarehouseId)) return false;
+        }
+        if (reqCompanyId && e.body && typeof e.body === 'object') {
+          const bodyCo = e.body.company_id || e.body.company;
+          if (bodyCo && String(bodyCo) !== String(reqCompanyId)) return false;
         }
         if (reqSearch && e.body && typeof e.body === 'object') {
           const text = JSON.stringify(e.body).toLowerCase();
@@ -409,6 +414,11 @@ export const offlineInterceptor: HttpInterceptorFn = (
       else if (lowerUrl.includes('/doc-tasks/')) entityType = 'doc_task';
       else if (lowerUrl.includes('/dynamic-fields/')) entityType = 'dynamic_field';
       else if (lowerUrl.includes('/attendance/')) entityType = 'daily_attendance';
+      else if (lowerUrl.includes('/company-bank-accounts/')) entityType = 'company_bank_account';
+      else if (lowerUrl.includes('/company-board-members/')) entityType = 'company_board_member';
+      else if (lowerUrl.includes('/company-documents/')) entityType = 'company_document';
+      else if (lowerUrl.includes('/user-company-access/')) entityType = 'user_company_access';
+      else if (lowerUrl.includes('/companies/')) entityType = 'company';
     }
 
     let modifiedBody: any = req.body;
@@ -468,22 +478,25 @@ export const offlineInterceptor: HttpInterceptorFn = (
   // ─── متدهای تغییری (POST / PUT / PATCH / DELETE) ───
   if (network.isBrowserOnline) {
     return next(req).pipe(
-      tap((event) => {
+      switchMap(async (event) => {
         if (event instanceof HttpResponse && event.status >= 200 && event.status < 300) {
           network.reportServerReachable();
           try {
             const rawUrl = req.url.split('?')[0];
-            const cleanUrl = rawUrl.replace(/\/+$/, '');
-            const lastSlash = cleanUrl.lastIndexOf('/');
-            if (lastSlash > 0) {
-              const parentUrl = cleanUrl.substring(0, lastSlash);
-              syncService.invalidateCache(parentUrl);
+            let currentPath = rawUrl.replace(/\/+$/, '');
+            const apiMarker = currentPath.includes('/api') ? '/api' : '';
+            const minLength = apiMarker ? currentPath.indexOf(apiMarker) + apiMarker.length : 1;
+            while (currentPath.length > minLength) {
+              await syncService.invalidateCache(currentPath);
+              const slash = currentPath.lastIndexOf('/');
+              if (slash <= 0) break;
+              currentPath = currentPath.substring(0, slash);
             }
-            syncService.invalidateCache(cleanUrl);
           } catch (e) {
             console.warn('[OfflineInterceptor] Error invalidating cache on mutation:', e);
           }
         }
+        return event;
       }),
       catchError((error: HttpErrorResponse) => {
         if (isServerUnreachable(error.status)) {

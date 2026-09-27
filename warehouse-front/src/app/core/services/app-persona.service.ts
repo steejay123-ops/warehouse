@@ -203,6 +203,10 @@ export class AppPersonaService {
       return false;
     }
 
+    if ((app === 'accounting' || app === 'personnel') && this.activeCompanyService?.hasCompanyDocumentsAccess()) {
+      return true;
+    }
+
     const spec = this.moduleRegistry.getSpec(app);
     if (!spec) return false;
     return this.moduleRegistry.userHasAccessToModule(
@@ -459,7 +463,13 @@ export class AppPersonaService {
       case 'ops_commander':
         return '/app/operations/cockpit';
       default:
-        return this.activeApp() === 'warehouse' ? '/app/warehouse/dashboard' : '/app/finance/accountant-payroll';
+        if (this.activeApp() === 'warehouse') {
+          return '/app/warehouse/dashboard';
+        }
+        if (this.activeCompanyService?.hasCompanyDocumentsAccess()) {
+          return '/app/finance/company-documents';
+        }
+        return '/app/finance/accountant-payroll';
     }
   }
 
@@ -494,7 +504,15 @@ export class AppPersonaService {
 
     // بررسی قلمرو کلان اپلیکیشن‌ها
     if (cleanRoute.startsWith('/app/warehouse') && !this.hasWarehouseAccess()) return false;
-    if (cleanRoute.startsWith('/app/finance') && !this.hasPersonnelAccess()) return false;
+    if (cleanRoute.startsWith('/app/finance')) {
+      const isDocs = cleanRoute.includes('company-documents') || cleanRoute.includes('/documents');
+      if (isDocs) {
+        return !!this.activeCompanyService?.hasCompanyDocumentsAccess();
+      }
+      if (!this.hasPersonnelAccess()) {
+        return false;
+      }
+    }
     if (cleanRoute.startsWith('/app/operations') && !this.hasOperationsAccess()) return false;
 
     // ایزولاسیون صددرصدی نقش فعال در سامانه مالی و کارکرد (Strict RBAC & SoD)

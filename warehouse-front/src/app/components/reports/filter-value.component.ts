@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
 import { ReportFieldMeta, ReportOperator } from '../../core/models/report.model';
 
@@ -11,7 +11,7 @@ import { ReportFieldMeta, ReportOperator } from '../../core/models/report.model'
 @Component({
   selector: 'app-filter-value',
   standalone: true,
-  imports: [CommonModule, FormsModule, NgPersianDatepickerModule],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule, NgPersianDatepickerModule],
   template: `
     @if (operator === 'isnull') {
       <select [ngModel]="value" (ngModelChange)="setValue($event)" class="ctl custom-select">
@@ -23,7 +23,7 @@ import { ReportFieldMeta, ReportOperator } from '../../core/models/report.model'
         @if (isDate) {
           <div class="relative flex items-center">
             <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="setPair(0, $event.gregorian)">
-              <input type="text" class="ctl pr-7 pl-2 w-32 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="از تاریخ…" [value]="formatDateLabel(pair()[0])" readonly>
+              <input type="text" [formControl]="datePair0Control" class="ctl pr-7 pl-2 w-32 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="از تاریخ…" readonly>
             </ng-persian-datepicker>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="absolute right-2 text-slate-400 pointer-events-none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             @if (pair()[0]) {
@@ -33,7 +33,7 @@ import { ReportFieldMeta, ReportOperator } from '../../core/models/report.model'
           <span class="text-slate-400 text-xs">تا</span>
           <div class="relative flex items-center">
             <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="setPair(1, $event.gregorian)">
-              <input type="text" class="ctl pr-7 pl-2 w-32 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="تا تاریخ…" [value]="formatDateLabel(pair()[1])" readonly>
+              <input type="text" [formControl]="datePair1Control" class="ctl pr-7 pl-2 w-32 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="تا تاریخ…" readonly>
             </ng-persian-datepicker>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="absolute right-2 text-slate-400 pointer-events-none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             @if (pair()[1]) {
@@ -81,7 +81,7 @@ import { ReportFieldMeta, ReportOperator } from '../../core/models/report.model'
     } @else if (isDate) {
       <div class="relative flex items-center">
         <ng-persian-datepicker [dateInitValue]="false" (dateOnSelect)="setValue($event.gregorian)">
-          <input type="text" class="ctl pr-7 pl-2 w-36 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="انتخاب تاریخ…" [value]="formatDateLabel(value)" readonly>
+          <input type="text" [formControl]="singleDateControl" class="ctl pr-7 pl-2 w-36 cursor-pointer bg-slate-50/50 hover:bg-white" placeholder="انتخاب تاریخ…" readonly>
         </ng-persian-datepicker>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="absolute right-2 text-slate-400 pointer-events-none"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
         @if (value) {
@@ -113,6 +113,10 @@ export class FilterValueComponent implements OnChanges {
   @Input() value: any = null;
   @Output() valueChange = new EventEmitter<any>();
 
+  datePair0Control = new FormControl('');
+  datePair1Control = new FormControl('');
+  singleDateControl = new FormControl('');
+
   rawListText = '';
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -122,6 +126,17 @@ export class FilterValueComponent implements OnChanges {
           this.rawListText = Array.isArray(this.value) ? this.value.join('، ') : (this.value || '');
         }
       }
+      this.syncDateControls();
+    }
+  }
+
+  private syncDateControls(): void {
+    if (this.operator === 'between') {
+      const p = this.pair();
+      this.datePair0Control.setValue(this.formatDateLabel(p[0]), { emitEvent: false });
+      this.datePair1Control.setValue(this.formatDateLabel(p[1]), { emitEvent: false });
+    } else if (this.isDate) {
+      this.singleDateControl.setValue(this.formatDateLabel(this.value), { emitEvent: false });
     }
   }
 

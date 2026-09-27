@@ -39,6 +39,7 @@ import { TreasurerChequesComponent } from '../../components/finance/treasurer/tr
 import { TreasurerReconciliationComponent } from '../../components/finance/treasurer/treasurer-reconciliation/treasurer-reconciliation';
 import { Audit } from '../../components/audit/audit';
 import { HealthDashboardComponent } from '../../components/health-dashboard/health-dashboard';
+import { CompanyDocumentsArchiveComponent } from '../../components/finance/company-documents-archive/company-documents-archive';
 
 export { IS_ACCOUNTING_INSTALLED } from './accounting-flags';
 
@@ -105,6 +106,7 @@ export const ACCOUNTING_ROUTES: Routes = [
   { path: 'treasurer/reconciliation', redirectTo: 'treasurer-reconciliation', pathMatch: 'full' },
   { path: 'finance-cartable', component: FinanceCartable, data: { reuse: true } },
   { path: 'attendance', component: WarehouseAttendance, data: { defaultTab: 'personnel' } },
+  { path: 'timesheet', redirectTo: 'attendance', pathMatch: 'full' },
   { path: 'fleet', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
   { path: 'fleet-attendance', component: WarehouseAttendance, data: { defaultTab: 'fleet' } },
   { path: 'manager-approvals', component: ManagerApprovals, data: { reuse: true } },
@@ -116,6 +118,9 @@ export const ACCOUNTING_ROUTES: Routes = [
   { path: 'base-settings', component: BaseSettings, data: { reuse: true } },
   { path: 'projects-and-sections', component: ProjectsAndSectionsComponent, data: { reuse: true } },
   { path: 'counterparties', component: CounterpartiesComponent, data: { reuse: true } },
+  { path: 'company-documents', component: CompanyDocumentsArchiveComponent, data: { reuse: true } },
+  { path: 'company-documents-archive', redirectTo: 'company-documents', pathMatch: 'full' },
+  { path: 'documents', redirectTo: 'company-documents', pathMatch: 'full' },
   { path: 'audit', component: Audit, data: { appScope: 'finance', reuse: true } },
   { path: 'health', component: HealthDashboardComponent, data: { appScope: 'finance', reuse: false } },
   { path: 'finance-audit', redirectTo: 'audit', pathMatch: 'full' },

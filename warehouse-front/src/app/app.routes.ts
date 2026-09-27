@@ -19,6 +19,7 @@ import { CompaniesManagementComponent } from './components/operations/companies/
 import { Audit } from './components/audit/audit';
 import { HealthDashboardComponent } from './components/health-dashboard/health-dashboard';
 import { ModuleRegistryService } from './core/modules/module-registry.service';
+import { ActiveCompanyService } from './core/services/active-company.service';
 
 export const routes: Routes = [
   // ─── احراز هویت و صفحات عمومی ─────────────────────────
@@ -112,6 +113,12 @@ export const routes: Routes = [
         }
         return 'app/finance/employee-attendance';
       }
+      if (!hasWh && !hasFin) {
+        const activeCompanyService = inject(ActiveCompanyService);
+        if (activeCompanyService.hasCompanyDocumentsAccess()) {
+          return 'app/finance/company-documents';
+        }
+      }
       return 'app/launcher';
     },
     pathMatch: 'full'
@@ -150,6 +157,8 @@ export const routes: Routes = [
   { path: 'personnel-profiles', redirectTo: 'app/finance/personnel-profiles', pathMatch: 'full' },
   { path: 'base-settings', redirectTo: 'app/finance/base-settings', pathMatch: 'full' },
   { path: 'projects-and-sections', redirectTo: 'app/finance/projects-and-sections', pathMatch: 'full' },
+  { path: 'company-documents', redirectTo: 'app/finance/company-documents', pathMatch: 'full' },
+  { path: 'documents', redirectTo: 'app/finance/company-documents', pathMatch: 'full' },
   { path: 'employee-portal', redirectTo: 'app/finance/employee-portal', pathMatch: 'full' },
   { path: 'employee-attendance', redirectTo: 'app/finance/employee-attendance', pathMatch: 'full' },
   { path: 'employee-fleet', redirectTo: 'app/finance/employee-fleet', pathMatch: 'full' },
@@ -220,6 +229,12 @@ export const routes: Routes = [
           return 'app/finance/finance-cartable';
         }
         return 'app/finance/attendance';
+      }
+      if (!hasWh && !hasFin) {
+        const activeCompanyService = inject(ActiveCompanyService);
+        if (activeCompanyService.hasCompanyDocumentsAccess()) {
+          return 'app/finance/company-documents';
+        }
       }
       return 'app/launcher';
     },

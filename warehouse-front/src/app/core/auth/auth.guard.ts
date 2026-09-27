@@ -28,7 +28,7 @@ export const WarehouseCompanyGuard: CanActivateFn = () => {
   const activeCompany = inject(ActiveCompanyService, { optional: true });
   const router = inject(Router);
 
-  if (activeCompany && !activeCompany.hasWarehouseModule) {
+  if (activeCompany && (!activeCompany.activeCompany || !activeCompany.hasWarehouseModule)) {
     router.navigate(['/app/launcher']);
     return false;
   }
@@ -226,11 +226,20 @@ export const AuthGuard: CanActivateFn = (route, state) => {
 
     // بررسی دسترسی به سطح ماژول مالی (هم نصب بودن ماژول و هم مجوز دسترسی کاربر)
     const isFinanceScope = state.url.includes('/app/finance') || route.routeConfig?.path === 'finance';
+    const isCompanyDocsRoute = state.url.includes('company-documents') || state.url.includes('/documents') || route.routeConfig?.path === 'company-documents' || route.routeConfig?.path === 'documents';
+
     if (isFinanceScope) {
       if (!moduleRegistry.isModuleInstalled('accounting')) {
         return router.parseUrl(moduleRegistry.isModuleInstalled('warehouse') ? '/app/warehouse/dashboard' : '/app/launcher');
       }
-      if (!hasPersonnelAccess) {
+      if (isCompanyDocsRoute) {
+        // دسترسی به اسناد شرکت‌ها فارغ از شغل کاربری و فقط منوط به داشتن دسترسی در حداقل یک شرکت است
+        const activeCompanyService = inject(ActiveCompanyService);
+        const hasDocAccess = isAdmin || activeCompanyService.hasCompanyDocumentsAccess();
+        if (!hasDocAccess) {
+          return router.parseUrl(hasWarehouseAccess ? '/app/warehouse/dashboard' : '/app/launcher');
+        }
+      } else if (!hasPersonnelAccess) {
         if (hasWarehouseAccess && moduleRegistry.isModuleInstalled('warehouse')) {
           return router.parseUrl('/app/warehouse/dashboard');
         }

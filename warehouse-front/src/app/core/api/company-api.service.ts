@@ -6,6 +6,8 @@ import {
   Company,
   CompanyDocument,
   CompanyBankAccount,
+  CompanyBoardMember,
+  CompanyFiscalPeriod,
   ExpiringDocumentsResponse,
   UserAvailableCompaniesResponse
 } from '../models/company.model';
@@ -18,6 +20,7 @@ export class CompanyApiService {
   private endpoint = `${environment.apiUrl}/personnel/companies`;
   private documentsEndpoint = `${environment.apiUrl}/personnel/company-documents`;
   private bankAccountsEndpoint = `${environment.apiUrl}/personnel/company-bank-accounts`;
+  private boardMembersEndpoint = `${environment.apiUrl}/personnel/company-board-members`;
 
   getAll(filters?: { search?: string; is_active?: boolean }): Observable<Company[] | { results: Company[]; count: number }> {
     let params = new HttpParams();
@@ -50,8 +53,12 @@ export class CompanyApiService {
     return this.http.delete<void>(`${this.endpoint}/${id}/`);
   }
 
-  getUserAvailable(): Observable<UserAvailableCompaniesResponse> {
-    return this.http.get<UserAvailableCompaniesResponse>(`${this.endpoint}/user-available/`);
+  getUserAvailable(scope?: 'workspace' | 'documents' | 'all'): Observable<UserAvailableCompaniesResponse> {
+    let params = new HttpParams();
+    if (scope) {
+      params = params.set('scope', scope);
+    }
+    return this.http.get<UserAvailableCompaniesResponse>(`${this.endpoint}/user-available/`, { params });
   }
 
   exportExcel(): Observable<Blob> {
@@ -62,6 +69,10 @@ export class CompanyApiService {
     const formData = new FormData();
     formData.append('logo', file);
     return this.http.patch<Company>(`${this.endpoint}/${id}/`, formData);
+  }
+
+  deleteLogo(id: number): Observable<Company> {
+    return this.http.patch<Company>(`${this.endpoint}/${id}/`, { logo: null });
   }
 
   uploadCoreDoc(id: number, docType: 'articles_of_association' | 'latest_gazette', file: File): Observable<Company> {
@@ -87,6 +98,10 @@ export class CompanyApiService {
     return this.http.delete<void>(`${this.documentsEndpoint}/${id}/`);
   }
 
+  downloadDocument(id: number): Observable<Blob> {
+    return this.http.get(`${this.documentsEndpoint}/${id}/download/`, { responseType: 'blob' });
+  }
+
   getExpiringDocuments(): Observable<ExpiringDocumentsResponse> {
     return this.http.get<ExpiringDocumentsResponse>(`${this.endpoint}/expiring-documents/`);
   }
@@ -98,8 +113,18 @@ export class CompanyApiService {
     return this.http.get<any[]>(`${environment.apiUrl}/personnel/user-company-access/`, { params: httpParams });
   }
 
-  createUserAccess(payload: { user: number; company: number; is_default?: boolean }): Observable<any> {
+  createUserAccess(payload: {
+    user: number;
+    company: number;
+    access_level?: string;
+    role_in_company?: string | null;
+    is_default?: boolean;
+  }): Observable<any> {
     return this.http.post<any>(`${environment.apiUrl}/personnel/user-company-access/`, payload);
+  }
+
+  updateUserAccess(id: number, payload: any): Observable<any> {
+    return this.http.patch<any>(`${environment.apiUrl}/personnel/user-company-access/${id}/`, payload);
   }
 
   deleteUserAccess(id: number): Observable<void> {
@@ -129,6 +154,60 @@ export class CompanyApiService {
 
   setPrimaryBankAccount(id: number): Observable<CompanyBankAccount> {
     return this.http.post<CompanyBankAccount>(`${this.bankAccountsEndpoint}/${id}/set-primary/`, {});
+  }
+
+  // مدیریت اعضای هیئت‌مدیره و ارکان قانونی شرکت
+  getBoardMembers(companyId?: number, search?: string): Observable<CompanyBoardMember[] | { results: CompanyBoardMember[]; count: number }> {
+    let params = new HttpParams();
+    if (companyId) {
+      params = params.set('company_id', String(companyId));
+    }
+    if (search) {
+      params = params.set('search', search);
+    }
+    return this.http.get<CompanyBoardMember[] | { results: CompanyBoardMember[]; count: number }>(`${this.boardMembersEndpoint}/`, { params });
+  }
+
+  createBoardMember(payload: FormData | Partial<CompanyBoardMember>): Observable<CompanyBoardMember> {
+    return this.http.post<CompanyBoardMember>(`${this.boardMembersEndpoint}/`, payload);
+  }
+
+  updateBoardMember(id: number, payload: FormData | Partial<CompanyBoardMember>): Observable<CompanyBoardMember> {
+    return this.http.patch<CompanyBoardMember>(`${this.boardMembersEndpoint}/${id}/`, payload);
+  }
+
+  deleteBoardMember(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.boardMembersEndpoint}/${id}/`);
+  }
+
+  // مدیریت سال‌ها و دوره‌های مالی رسمی شرکت
+  private fiscalPeriodsEndpoint = `${environment.apiUrl}/personnel/company-fiscal-periods`;
+
+  getFiscalPeriods(companyId?: number, fiscalYear?: string): Observable<CompanyFiscalPeriod[] | { results: CompanyFiscalPeriod[]; count: number }> {
+    let params = new HttpParams();
+    if (companyId) {
+      params = params.set('company_id', String(companyId));
+    }
+    if (fiscalYear) {
+      params = params.set('fiscal_year', fiscalYear);
+    }
+    return this.http.get<CompanyFiscalPeriod[] | { results: CompanyFiscalPeriod[]; count: number }>(`${this.fiscalPeriodsEndpoint}/`, { params });
+  }
+
+  createFiscalPeriod(payload: Partial<CompanyFiscalPeriod>): Observable<CompanyFiscalPeriod> {
+    return this.http.post<CompanyFiscalPeriod>(`${this.fiscalPeriodsEndpoint}/`, payload);
+  }
+
+  closeFiscalPeriod(id: number, notes?: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.fiscalPeriodsEndpoint}/${id}/close-period/`, { notes });
+  }
+
+  freezeFiscalPeriod(id: number): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.fiscalPeriodsEndpoint}/${id}/freeze-period/`, {});
+  }
+
+  reopenFiscalPeriod(id: number): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(`${this.fiscalPeriodsEndpoint}/${id}/reopen-period/`, {});
   }
 }
 

@@ -17,6 +17,14 @@
             <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
               {{ companies.length }} شرکت
             </span>
+            <span *ngIf="!isOnline" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+              آفلاین
+            </span>
+            <span *ngIf="isOnline" class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              برخط
+            </span>
           </div>
           <p class="text-[11px] text-slate-500 font-medium mt-0.5">شناسنامه حقوقی، بایگانی مدارک و مجوزها، تنظیمات کارگاهی بیمه و سامانه مودیان</p>
         </div>
@@ -56,13 +64,15 @@
 
         <div class="h-6 w-px bg-slate-200 mx-1"></div>
 
-        <!-- دکمه ثبت شرکت جدید -->
+        <!-- دکمه ثبت شرکت جدید (آیکونی با تولتیپ و متن دسترس‌پذیری) -->
         <button 
           type="button"
           (click)="openCreateModal()"
-          class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
-          <span class="text-sm font-black">+</span>
-          <span>ثبت شرکت جدید</span>
+          class="w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+          title="ثبت شرکت جدید"
+          aria-label="ثبت شرکت جدید">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span class="sr-only">ثبت شرکت جدید</span>
         </button>
       </div>
 
@@ -103,8 +113,8 @@
       </div>
     </div>
 
-    <!-- Table Content -->
-    <div class="overflow-x-auto">
+    <!-- Table Content (Desktop View) -->
+    <div class="hidden md:block overflow-x-auto">
       <table class="w-full text-right text-xs">
         <thead class="bg-slate-100/75 border-b border-slate-200/80 text-slate-600 font-black">
           <tr>
@@ -220,27 +230,33 @@
                 <button 
                   type="button"
                   (click)="openUserAccessModal(company)"
-                  class="px-2 py-1 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-                  title="مدیریت دسترسی کاربران به این شرکت">
-                  دسترسی‌ها
+                  class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 transition-all cursor-pointer"
+                  title="مدیریت دسترسی کاربران به این شرکت"
+                  aria-label="دسترسی‌ها">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                  <span class="sr-only">دسترسی‌ها</span>
                 </button>
 
                 <!-- دکمه ویرایش و ورود به استودیو -->
                 <button 
                   type="button"
                   (click)="openEditModal(company)"
-                  class="px-2 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-                  title="ویرایش مشخصات و مدارک شرکت">
-                  استودیو
+                  class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all cursor-pointer"
+                  title="ویرایش مشخصات و مدارک شرکت"
+                  aria-label="استودیو">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  <span class="sr-only">استودیو</span>
                 </button>
 
                 <!-- دکمه حذف -->
                 <button 
                   type="button"
                   (click)="confirmDelete(company)"
-                  class="px-2 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-                  title="حذف شرکت">
-                  حذف
+                  class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+                  title="حذف شرکت"
+                  aria-label="حذف">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                  <span class="sr-only">حذف</span>
                 </button>
               </div>
             </td>
@@ -249,13 +265,145 @@
       </table>
     </div>
 
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <!-- نمایش کارت‌های موبایل (Mobile Ergonomic Cards for Companies)               -->
+    <!-- ═════════════════════════════════════════════════════════════════════════ -->
+    <div class="block md:hidden divide-y divide-slate-100">
+      <!-- لودینگ موبایل -->
+      <div *ngIf="isLoading" class="p-8 text-center text-slate-400">
+        <div class="inline-block animate-spin text-indigo-600 text-xl mb-2">⟳</div>
+        <div class="text-xs">در حال بارگذاری اطلاعات شرکت‌ها...</div>
+      </div>
+
+      <!-- وضعیت خالی موبایل -->
+      <div *ngIf="!isLoading && filteredCompanies.length === 0" class="p-8 text-center text-slate-400 font-bold text-xs">
+        هیچ شرکتی با معیارهای جستجو یافت نشد.
+      </div>
+
+      <!-- کارت‌های شرکت در صفحات موبایل -->
+      <div *ngFor="let company of filteredCompanies; let i = index" class="p-4 space-y-3 bg-white">
+        <!-- هدر کارت: لوگو، نام شرکت و وضعیت فعال -->
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0 overflow-hidden">
+              <img *ngIf="company.logo" [src]="company.logo" [alt]="company.name" class="w-full h-full object-contain" />
+              <span *ngIf="!company.logo" class="text-lg">🏢</span>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-black text-slate-900 text-xs truncate">{{ company.name }}</span>
+                <span *ngIf="activeCompanyService.activeCompany?.id === company.id" class="text-[9px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.2 rounded-full">
+                  فعال جاری
+                </span>
+              </div>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded text-[10px]">
+                  {{ company.code }}
+                </span>
+                <span class="text-[11px] text-slate-500 truncate" *ngIf="company.ceo_name">
+                  مدیرعامل: {{ company.ceo_name }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <span 
+            [ngClass]="company.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-rose-50 text-rose-700 border-rose-200/80'"
+            class="border px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0">
+            {{ company.is_active ? 'فعال' : 'غیرفعال' }}
+          </span>
+        </div>
+
+        <!-- بدنه کارت: شناسه ملی، کد کارگاهی، پروژه‌ها و ماژول انبارداری -->
+        <div class="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+          <div>
+            <span class="text-slate-400 block text-[10px]">شناسه ملی:</span>
+            <span class="font-mono text-slate-700 font-bold">{{ company.national_id || '—' }}</span>
+          </div>
+          <div>
+            <span class="text-slate-400 block text-[10px]">کد کارگاه بیمه:</span>
+            <span class="font-mono text-slate-700 font-bold">{{ company.workshop_code || '—' }}</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 text-[10px]">پروژه‌ها:</span>
+            <span class="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded-full text-[10px]">
+              {{ company.projects_count || 0 }}
+            </span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400 text-[10px]">انبارداری:</span>
+            <span *ngIf="company.has_warehouse_module !== false" class="text-indigo-700 font-bold text-[10px]">فعال 📦</span>
+            <span *ngIf="company.has_warehouse_module === false" class="text-slate-400 font-bold text-[10px]">غیرفعال</span>
+          </div>
+        </div>
+
+        <!-- سلامت اسناد و مدارک رسمی -->
+        <div class="flex items-center justify-between text-[11px] px-1">
+          <span class="text-slate-500 text-[10px]">وضعیت مدارک:</span>
+          <div>
+            <span *ngIf="company.documents_health_status === 'valid'" 
+                  class="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full text-[10px]">
+              <span>🟢</span>
+              <span>{{ company.documents_count || 0 }} مدرک معتبر</span>
+            </span>
+            <span *ngIf="company.documents_health_status === 'expiring_soon'" 
+                  class="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-full text-[10px]">
+              <span>⚠️</span>
+              <span>در آستانه انقضا ({{ company.documents_count }})</span>
+            </span>
+            <span *ngIf="company.documents_health_status === 'expired'" 
+                  class="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-50 border border-rose-200/80 px-2 py-0.5 rounded-full text-[10px]">
+              <span>⛔</span>
+              <span>منقضی شده ({{ company.documents_count }})</span>
+            </span>
+            <span *ngIf="!company.documents_health_status || company.documents_health_status === 'no_documents'" 
+                  class="inline-flex items-center gap-1 font-bold text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full text-[10px]">
+              <span>—</span>
+              <span>فاقد مدرک</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- نوار دکمه‌های عملیاتی کارت در موبایل (آیکونی با تولتیپ و دسترس‌پذیری) -->
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+          <button 
+            type="button"
+            (click)="openUserAccessModal(company)"
+            class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-600 hover:text-emerald-600 bg-slate-50 hover:bg-emerald-50 border border-slate-200 transition-all cursor-pointer"
+            title="مدیریت دسترسی کاربران به این شرکت"
+            aria-label="دسترسی‌ها">
+            <span class="text-sm">👥</span>
+            <span class="sr-only">دسترسی‌ها</span>
+          </button>
+          <button 
+            type="button"
+            (click)="openEditModal(company)"
+            class="w-8 h-8 rounded-xl flex items-center justify-center text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-all cursor-pointer"
+            title="ویرایش مشخصات و مدارک شرکت (استودیو)"
+            aria-label="استودیو">
+            <span class="text-sm">⚙️</span>
+            <span class="sr-only">استودیو</span>
+          </button>
+          <button 
+            type="button"
+            (click)="confirmDelete(company)"
+            class="w-8 h-8 rounded-xl flex items-center justify-center text-rose-600 hover:bg-rose-50 border border-rose-200 transition-all cursor-pointer"
+            title="حذف شرکت"
+            aria-label="حذف">
+            <span class="text-sm">🗑️</span>
+            <span class="sr-only">حذف</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
   <!-- ۳. استودیوی مودال ۶ تبی ثبت، ویرایش، اسناد، شبا و شناسنامه حقوقی شرکت‌ها     -->
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <div *ngIf="companyModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
-    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl h-[88vh] max-h-[780px] min-h-[600px] overflow-hidden flex flex-col">
+  <div *ngIf="companyModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
+    <div class="bg-white rounded-none md:rounded-3xl border-0 md:border md:border-slate-200 shadow-2xl w-full max-w-4xl h-full md:h-[88vh] md:max-h-[780px] md:min-h-[600px] overflow-hidden flex flex-col">
       
       <!-- Modal Top Header -->
       <div class="p-4 md:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 shrink-0">
@@ -278,8 +426,9 @@
         </button>
       </div>
 
-      <!-- Subtab Navigation Bar (6 Standard Tabs) -->
-      <div class="bg-slate-100/90 p-1.5 border-b border-slate-200/80 overflow-x-auto flex items-center gap-1.5 shrink-0">
+      <!-- Subtab Navigation Bar (6 Standard Tabs - Legal & Financial Order) -->
+      <div class="bg-slate-100/90 p-1.5 border-b border-slate-200/80 overflow-x-auto flex items-center gap-1.5 shrink-0 scrollbar-none">
+        <!-- ۱. مشخصات هویتی و ثبتی -->
         <button 
           type="button" 
           (click)="setModalTab('identity')" 
@@ -289,36 +438,17 @@
           <span>مشخصات هویتی و ثبتی</span>
         </button>
 
-        <button 
-          type="button" 
-          (click)="setModalTab('documents')" 
-          [ngClass]="activeModalTab === 'documents' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
-          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
-          <span>📁</span>
-          <span>بایگانی مدارک</span>
-          <span *ngIf="companyDocuments.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-600 font-bold">
-            {{ companyDocuments.length }}
-          </span>
-        </button>
-
-        <button 
-          type="button" 
-          (click)="setModalTab('governance')" 
-          [ngClass]="activeModalTab === 'governance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
-          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
-          <span>👔</span>
-          <span>هیئت‌مدیره و امضا</span>
-        </button>
-
+        <!-- ۲. سال مالی، کارگاه بیمه و سامانه مودیان -->
         <button 
           type="button" 
           (click)="setModalTab('fiscal_insurance')" 
           [ngClass]="activeModalTab === 'fiscal_insurance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
           class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
           <span>⚖️</span>
-          <span>بیمه و مودیان</span>
+          <span>سال مالی، بیمه و مودیان</span>
         </button>
 
+        <!-- ۳. خزانه‌داری، بانک و شبا -->
         <button 
           type="button" 
           (click)="setModalTab('treasury')" 
@@ -331,6 +461,33 @@
           </span>
         </button>
 
+        <!-- ۴. ارکان، هیئت‌مدیره و صاحبان امضا -->
+        <button 
+          type="button" 
+          (click)="setModalTab('governance')" 
+          [ngClass]="activeModalTab === 'governance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>👔</span>
+          <span>هیئت‌مدیره و امضا</span>
+          <span *ngIf="companyBoardMembers.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 font-bold">
+            {{ companyBoardMembers.length }}
+          </span>
+        </button>
+
+        <!-- ۵. بایگانی مدارک و اسناد قانونی -->
+        <button 
+          type="button" 
+          (click)="setModalTab('documents')" 
+          [ngClass]="activeModalTab === 'documents' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+          class="px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap">
+          <span>📁</span>
+          <span>بایگانی مدارک</span>
+          <span *ngIf="companyDocuments.length > 0" class="text-[10px] font-mono px-1.5 py-0.2 rounded-md bg-indigo-50 text-indigo-600 font-bold">
+            {{ companyDocuments.length }}
+          </span>
+        </button>
+
+        <!-- ۶. دسترسی کاربران -->
         <button 
           type="button" 
           (click)="setModalTab('access')" 
@@ -425,28 +582,29 @@
             </div>
 
             <!-- تاریخ ثبت شرکت (تقویم شمسی جلالی) -->
-            <div class="relative">
+            <div class="relative" (click)="$event.stopPropagation()">
               <label class="block text-xs font-bold text-slate-700 mb-1">تاریخ ثبت شرکت (جلالی)</label>
-              <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-                <input 
-                  type="text" 
-                  [(ngModel)]="companyModal.data.registration_date" 
-                  placeholder="۱۴۰۱/۰۵/۱۰" 
-                  class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
-                />
+              <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all relative">
+                <ng-persian-datepicker 
+                  [(uiIsVisible)]="isRegDatePickerOpen"
+                  [dateInitValue]="false" 
+                  (dateOnSelect)="onRegDateSelect($event)"
+                  class="w-full block relative cursor-pointer">
+                  <input 
+                    type="text" 
+                    [formControl]="regDateControl" 
+                    (click)="isRegDatePickerOpen = !isRegDatePickerOpen"
+                    placeholder="۱۴۰۱/۰۵/۱۰" 
+                    class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                  />
+                </ng-persian-datepicker>
                 <button 
                   type="button" 
-                  (click)="isRegDatePickerOpen = !isRegDatePickerOpen"
+                  (click)="isRegDatePickerOpen = !isRegDatePickerOpen; $event.stopPropagation()"
                   title="انتخاب از تقویم شمسی"
                   class="text-slate-400 hover:text-indigo-600 p-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
                   📅
                 </button>
-              </div>
-              <div *ngIf="isRegDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
-                <ng-persian-datepicker 
-                  [dateInitValue]="false" 
-                  (dateOnSelect)="onRegDateSelect($event)">
-                </ng-persian-datepicker>
               </div>
             </div>
 
@@ -522,10 +680,27 @@
               </div>
             </div>
 
-            <label class="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/30 text-xs font-bold text-slate-600 transition-all cursor-pointer">
-              <span>{{ selectedLogoFile ? selectedLogoFile.name : 'انتخاب تصویر' }}</span>
-              <input type="file" accept="image/*" (change)="onLogoFileSelected($event)" class="hidden" />
-            </label>
+            <div class="flex items-center gap-2">
+              <button 
+                *ngIf="logoPreviewUrl || selectedLogoFile" 
+                type="button" 
+                (click)="clearLogo()" 
+                title="حذف لوگوی شرکت" 
+                class="w-8 h-8 rounded-xl border border-rose-200 hover:border-rose-400 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center transition-all cursor-pointer"
+                aria-label="حذف لوگو">
+                <span class="text-sm">🗑️</span>
+                <span class="sr-only">حذف لوگو</span>
+              </button>
+
+              <label 
+                class="w-8 h-8 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 text-slate-600 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+                title="انتخاب یا بارگذاری تصویر لوگو"
+                aria-label="انتخاب تصویر">
+                <span class="text-sm">🖼️</span>
+                <span class="sr-only">انتخاب تصویر</span>
+                <input type="file" accept="image/*" (change)="onLogoFileSelected($event)" class="hidden" />
+              </label>
+            </div>
           </div>
 
           <!-- چک‌باکس‌های وضعیت و ماژول انبارداری -->
@@ -594,17 +769,35 @@
                 </div>
 
                 <div class="flex items-center justify-between pt-2 border-t border-slate-200/60">
-                  <a *ngIf="companyModal.data.articles_of_association" 
-                     [href]="companyModal.data.articles_of_association" 
-                     target="_blank" 
-                     class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                    <span>📥</span>
-                    <span>دانلود یا مشاهده اساسنامه</span>
-                  </a>
+                  <div *ngIf="companyModal.data.articles_of_association" class="flex items-center gap-1.5">
+                    <button 
+                      type="button" 
+                      (click)="openCoreDocPreview('articles_of_association', 'اساسنامه رسمی شرکت')" 
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-slate-200 transition-colors cursor-pointer"
+                      title="پیش‌نمایش اساسنامه"
+                      aria-label="پیش‌نمایش اساسنامه">
+                      <span>👁️</span>
+                      <span class="sr-only">پیش‌نمایش اساسنامه</span>
+                    </button>
+                    <a 
+                      [href]="companyModal.data.articles_of_association" 
+                      target="_blank" 
+                      download 
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors"
+                      title="دانلود اساسنامه"
+                      aria-label="دانلود">
+                      <span>📥</span>
+                      <span class="sr-only">دانلود</span>
+                    </a>
+                  </div>
                   <span *ngIf="!companyModal.data.articles_of_association" class="text-[11px] text-slate-400">هنوز فایلی ثبت نشده است</span>
 
-                  <label class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs">
-                    <span>{{ companyModal.data.articles_of_association ? 'جایگزینی' : 'بارگذاری فایل' }}</span>
+                  <label 
+                    class="w-7 h-7 rounded-lg flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 hover:border-indigo-300 text-slate-700 cursor-pointer shadow-2xs transition-all"
+                    [title]="companyModal.data.articles_of_association ? 'جایگزینی فایل اساسنامه' : 'بارگذاری فایل اساسنامه'"
+                    aria-label="بارگذاری فایل اساسنامه">
+                    <span>📤</span>
+                    <span class="sr-only">بارگذاری فایل</span>
                     <input type="file" (change)="onCoreDocSelected($event, 'articles_of_association')" class="hidden" />
                   </label>
                 </div>
@@ -629,17 +822,35 @@
                 </div>
 
                 <div class="flex items-center justify-between pt-2 border-t border-slate-200/60">
-                  <a *ngIf="companyModal.data.latest_gazette" 
-                     [href]="companyModal.data.latest_gazette" 
-                     target="_blank" 
-                     class="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
-                    <span>📥</span>
-                    <span>دانلود یا مشاهده روزنامه رسمی</span>
-                  </a>
+                  <div *ngIf="companyModal.data.latest_gazette" class="flex items-center gap-1.5">
+                    <button 
+                      type="button" 
+                      (click)="openCoreDocPreview('latest_gazette', 'آخرین روزنامه رسمی')" 
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 border border-slate-200 transition-colors cursor-pointer"
+                      title="پیش‌نمایش روزنامه رسمی"
+                      aria-label="پیش‌نمایش روزنامه رسمی">
+                      <span>👁️</span>
+                      <span class="sr-only">پیش‌نمایش روزنامه رسمی</span>
+                    </button>
+                    <a 
+                      [href]="companyModal.data.latest_gazette" 
+                      target="_blank" 
+                      download 
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors"
+                      title="دانلود روزنامه رسمی"
+                      aria-label="دانلود">
+                      <span>📥</span>
+                      <span class="sr-only">دانلود</span>
+                    </a>
+                  </div>
                   <span *ngIf="!companyModal.data.latest_gazette" class="text-[11px] text-slate-400">هنوز فایلی ثبت نشده است</span>
 
-                  <label class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-[11px] font-bold text-slate-700 cursor-pointer shadow-2xs">
-                    <span>{{ companyModal.data.latest_gazette ? 'جایگزینی' : 'بارگذاری فایل' }}</span>
+                  <label 
+                    class="w-7 h-7 rounded-lg flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-50 hover:border-emerald-300 text-slate-700 cursor-pointer shadow-2xs transition-all"
+                    [title]="companyModal.data.latest_gazette ? 'جایگزینی فایل روزنامه رسمی' : 'بارگذاری فایل روزنامه رسمی'"
+                    aria-label="بارگذاری فایل روزنامه رسمی">
+                    <span>📤</span>
+                    <span class="sr-only">بارگذاری فایل</span>
                     <input type="file" (change)="onCoreDocSelected($event, 'latest_gazette')" class="hidden" />
                   </label>
                 </div>
@@ -677,54 +888,57 @@
                 </div>
 
                 <!-- تاریخ صدور (جلالی) -->
-                <div class="relative">
+                <!-- تاریخ صدور (جلالی) -->
+                <div class="relative" (click)="$event.stopPropagation()">
                   <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ صدور (جلالی)</label>
-                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-                    <input 
-                      type="text" 
-                      [(ngModel)]="newDoc.issue_date" 
-                      placeholder="۱۴۰۱/۰۵/۱۰" 
-                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
-                    />
+                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all relative">
+                    <ng-persian-datepicker 
+                      [(uiIsVisible)]="isDocIssueDatePickerOpen"
+                      [dateInitValue]="false" 
+                      (dateOnSelect)="onDocIssueDateSelect($event)"
+                      class="w-full block relative cursor-pointer">
+                      <input 
+                        type="text" 
+                        [formControl]="docIssueDateControl" 
+                        (click)="isDocIssueDatePickerOpen = !isDocIssueDatePickerOpen"
+                        placeholder="۱۴۰۱/۰۵/۱۰" 
+                        class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                      />
+                    </ng-persian-datepicker>
                     <button 
                       type="button" 
-                      (click)="isDocIssueDatePickerOpen = !isDocIssueDatePickerOpen"
+                      (click)="isDocIssueDatePickerOpen = !isDocIssueDatePickerOpen; $event.stopPropagation()"
                       title="انتخاب تقویم شمسی"
                       class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
                       📅
                     </button>
-                  </div>
-                  <div *ngIf="isDocIssueDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
-                    <ng-persian-datepicker 
-                      [dateInitValue]="false" 
-                      (dateOnSelect)="onDocIssueDateSelect($event)">
-                    </ng-persian-datepicker>
                   </div>
                 </div>
 
                 <!-- تاریخ انقضا (سررسید جلالی) -->
-                <div class="relative">
+                <div class="relative" (click)="$event.stopPropagation()">
                   <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ سررسید (جلالی)</label>
-                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-                    <input 
-                      type="text" 
-                      [(ngModel)]="newDoc.expiry_date" 
-                      placeholder="۱۴۰۳/۰۵/۱۰" 
-                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
-                    />
+                  <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all relative">
+                    <ng-persian-datepicker 
+                      [(uiIsVisible)]="isDocExpiryDatePickerOpen"
+                      [dateInitValue]="false" 
+                      (dateOnSelect)="onDocExpiryDateSelect($event)"
+                      class="w-full block relative cursor-pointer to-datepicker">
+                      <input 
+                        type="text" 
+                        [formControl]="docExpiryDateControl" 
+                        (click)="isDocExpiryDatePickerOpen = !isDocExpiryDatePickerOpen"
+                        placeholder="۱۴۰۳/۰۵/۱۰" 
+                        class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                      />
+                    </ng-persian-datepicker>
                     <button 
                       type="button" 
-                      (click)="isDocExpiryDatePickerOpen = !isDocExpiryDatePickerOpen"
+                      (click)="isDocExpiryDatePickerOpen = !isDocExpiryDatePickerOpen; $event.stopPropagation()"
                       title="انتخاب تقویم شمسی"
                       class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
                       📅
                     </button>
-                  </div>
-                  <div *ngIf="isDocExpiryDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
-                    <ng-persian-datepicker 
-                      [dateInitValue]="false" 
-                      (dateOnSelect)="onDocExpiryDateSelect($event)">
-                    </ng-persian-datepicker>
                   </div>
                 </div>
               </div>
@@ -760,9 +974,12 @@
                     type="button" 
                     (click)="uploadNewDocument()" 
                     [disabled]="isUploadingDoc || !newDoc.file"
-                    class="w-full px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
-                    <span *ngIf="isUploadingDoc">در حال بارگذاری...</span>
-                    <span *ngIf="!isUploadingDoc">ثبت در بایگانی</span>
+                    class="w-full h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    title="ثبت و بارگذاری مدرک در بایگانی"
+                    aria-label="ثبت در بایگانی">
+                    <span *ngIf="isUploadingDoc" class="animate-spin text-sm">⏳</span>
+                    <span *ngIf="!isUploadingDoc" class="text-sm">📤</span>
+                    <span class="sr-only">ثبت در بایگانی</span>
                   </button>
                 </div>
               </div>
@@ -891,115 +1108,367 @@
         </div>
 
         <!-- ═════════════════════════════════════════════════════════════════════ -->
-        <!-- تب ۳: هیئت‌مدیره و صاحبان امضا                                      -->
+        <!-- تب ۳: هیئت‌مدیره و صاحبان امضا (ساختار پویا و پرونده هویتی و مدارک) -->
         <!-- ═════════════════════════════════════════════════════════════════════ -->
         <div *ngIf="activeModalTab === 'governance'" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            <!-- نام مدیرعامل -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">نام مدیرعامل</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.ceo_name" 
-                placeholder="نام و نام خانوادگی مدیرعامل" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <!-- رئیس هیئت‌مدیره -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">رئیس هیئت‌مدیره</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.board_chairman" 
-                placeholder="نام و نام خانوادگی رئیس هیئت‌مدیره" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <!-- نایب‌رئیس هیئت‌مدیره -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">نایب‌رئیس هیئت‌مدیره</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.board_vice_chairman" 
-                placeholder="نام و نام خانوادگی نایب‌رئیس" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <!-- تاریخ انقضای دوره تصدی هیئت‌مدیره (۲ ساله جلالی) -->
-            <div class="relative">
-              <label class="block text-xs font-bold text-slate-700 mb-1">تاریخ انقضای هیئت‌مدیره (جلالی)</label>
-              <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-                <input 
-                  type="text" 
-                  [(ngModel)]="companyModal.data.board_term_expiry" 
-                  placeholder="۱۴۰۴/۰۳/۱۵" 
-                  class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none"
-                />
-                <button 
-                  type="button" 
-                  (click)="isBoardDatePickerOpen = !isBoardDatePickerOpen"
-                  title="انتخاب تقویم شمسی"
-                  class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
-                  📅
-                </button>
-              </div>
-              <div *ngIf="isBoardDatePickerOpen" class="absolute top-full mt-1 z-50 bg-white border border-slate-200 rounded-2xl shadow-xl p-2 right-0">
-                <ng-persian-datepicker 
-                  [dateInitValue]="false" 
-                  (dateOnSelect)="onBoardExpiryDateSelect($event)">
-                </ng-persian-datepicker>
+          <!-- هدر آماری و شاخص‌های کلیدی هیئت‌مدیره -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            <div class="bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80 flex items-center gap-2.5">
+              <span class="text-xl">👔</span>
+              <div>
+                <div class="text-[11px] text-slate-500 font-bold">کل ارکان و اعضا</div>
+                <div class="text-sm font-black text-slate-800 font-mono">{{ companyBoardMembers.length }} نفر</div>
               </div>
             </div>
 
-            <!-- بازرس اصلی -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">بازرس اصلی شرکت</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.main_inspector" 
-                placeholder="نام بازرس یا موسسه حسابرسی" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
+            <div class="bg-emerald-50/60 p-2.5 rounded-2xl border border-emerald-100 flex items-center gap-2.5">
+              <span class="text-xl">✍️</span>
+              <div>
+                <div class="text-[11px] text-emerald-700 font-bold">صاحبان حق امضا</div>
+                <div class="text-sm font-black text-emerald-800 font-mono">{{ getSignersCount() }} نفر</div>
+              </div>
             </div>
 
-            <!-- بازرس علی‌البدل -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">بازرس علی‌البدل شرکت</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.alternate_inspector" 
-                placeholder="نام بازرس علی‌البدل" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
+            <div class="bg-indigo-50/60 p-2.5 rounded-2xl border border-indigo-100 flex items-center gap-2.5">
+              <span class="text-xl">👑</span>
+              <div>
+                <div class="text-[11px] text-indigo-700 font-bold">رئیس هیئت‌مدیره</div>
+                <div class="text-xs font-black text-indigo-900 truncate max-w-[110px]" [title]="getChairmanMember() ? (getChairmanMember()!.first_name + ' ' + getChairmanMember()!.last_name) : 'تعیین‌نشده'">
+                  {{ getChairmanMember() ? (getChairmanMember()!.first_name + ' ' + getChairmanMember()!.last_name) : 'تعیین‌نشده' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-purple-50/60 p-2.5 rounded-2xl border border-purple-100 flex items-center gap-2.5">
+              <span class="text-xl">💼</span>
+              <div>
+                <div class="text-[11px] text-purple-700 font-bold">مدیرعامل</div>
+                <div class="text-xs font-black text-purple-900 truncate max-w-[110px]" [title]="getCeoMember() ? (getCeoMember()!.first_name + ' ' + getCeoMember()!.last_name) : 'تعیین‌نشده'">
+                  {{ getCeoMember() ? (getCeoMember()!.first_name + ' ' + getCeoMember()!.last_name) : 'تعیین‌نشده' }}
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- صاحبان امضای مجاز و حدود اختیارات -->
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">صاحبان امضای مجاز و نحوه امضا اسناد تعهدآور</label>
-            <textarea 
-              [(ngModel)]="companyModal.data.authorized_signers" 
-              rows="3" 
-              placeholder="مثال: کلیه اسناد و اوراق بهادار با امضای مشترک مدیرعامل و رئیس هیئت‌مدیره همراه با مهر شرکت معتبر است..."
-              class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"></textarea>
+          <!-- پیام راهنما در صورت ثبت شرکت جدید بدون شناسه -->
+          <div *ngIf="!companyModal.data.id" class="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>جهت افزودن اعضای هیئت‌مدیره و الصاق مدارک، لطفاً ابتدا مشخصات پایه شرکت را ثبت و دکمه ذخیره را بزنید.</span>
+          </div>
+
+          <!-- دکمه باز کردن فرم ثبت عضو جدید -->
+          <div *ngIf="companyModal.data.id && !showBoardMemberForm" class="flex justify-between items-center">
+            <h4 class="text-xs font-bold text-slate-700">لیست ارکان قانونی، هیئت‌مدیره و صاحبان امضا</h4>
+            <button 
+              type="button" 
+              (click)="openNewBoardMemberForm()"
+              class="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95"
+              title="افزودن عضو جدید به هیئت‌مدیره"
+              aria-label="افزودن عضو جدید">
+              <span class="text-base font-black">+</span>
+              <span class="sr-only">افزودن عضو جدید</span>
+            </button>
+          </div>
+
+          <!-- کارت فرم افزودن / ویرایش عضو هیئت‌مدیره -->
+          <div *ngIf="showBoardMemberForm" class="bg-slate-50/90 p-3.5 rounded-2xl border border-indigo-200/80 shadow-xs space-y-3 animate-fade-in">
+            <div class="flex items-center justify-between border-b border-slate-200/80 pb-2">
+              <span class="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                <span>{{ isEditingBoardMember ? '✏️ ویرایش مشخصات عضو هیئت‌مدیره' : '➕ ثبت عضو جدید هیئت‌مدیره / ارکان قانونی' }}</span>
+              </span>
+              <button type="button" (click)="cancelBoardMemberForm()" class="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <!-- نوع عضویت -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">نوع عضویت</label>
+                <select 
+                  [(ngModel)]="newBoardMember.member_type" 
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                  <option value="real">شخص حقیقی</option>
+                  <option value="legal_rep">نماینده شخص حقوقی</option>
+                </select>
+              </div>
+
+              <!-- نام شخصیت حقوقی متبوع -->
+              <div *ngIf="newBoardMember.member_type === 'legal_rep'">
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">نام شرکت / شخصیت حقوقی متبوع</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="newBoardMember.represented_legal_name" 
+                  placeholder="مثال: شرکت سرمایه‌گذاری سینا"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <!-- سمت سازمانی -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">سمت در شرکت</label>
+                <select 
+                  [(ngModel)]="newBoardMember.role" 
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
+                  <option *ngFor="let r of boardRolesList" [value]="r.value">{{ r.label }}</option>
+                </select>
+              </div>
+
+              <!-- نام -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">نام</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="newBoardMember.first_name" 
+                  placeholder="نام" 
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <!-- نام خانوادگی -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">نام خانوادگی</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="newBoardMember.last_name" 
+                  placeholder="نام خانوادگی" 
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <!-- کد ملی (۱۰ رقم) -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">کد ملی (۱۰ رقم)</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="newBoardMember.national_code" 
+                  placeholder="۱۲۳۴۵۶۷۸۹۰" 
+                  maxlength="10"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <!-- تاریخ شروع تصدی -->
+              <div class="relative" (click)="$event.stopPropagation()">
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ شروع تصدی (جلالی)</label>
+                <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all relative">
+                  <ng-persian-datepicker 
+                    [(uiIsVisible)]="isBoardTermStartDatePickerOpen"
+                    [dateInitValue]="false" 
+                    (dateOnSelect)="onBoardTermStartSelect($event)"
+                    class="w-full block relative cursor-pointer">
+                    <input 
+                      type="text" 
+                      [formControl]="boardTermStartControl" 
+                      (click)="isBoardTermStartDatePickerOpen = !isBoardTermStartDatePickerOpen"
+                      placeholder="۱۴۰۳/۰۱/۰۱" 
+                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                    />
+                  </ng-persian-datepicker>
+                  <button 
+                    type="button" 
+                    (click)="isBoardTermStartDatePickerOpen = !isBoardTermStartDatePickerOpen; $event.stopPropagation()"
+                    title="انتخاب تقویم شمسی"
+                    class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                    📅
+                  </button>
+                </div>
+              </div>
+
+              <!-- تاریخ پایان تصدی (حداکثر ۲ سال) -->
+              <div class="relative" (click)="$event.stopPropagation()">
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">تاریخ پایان تصدی (جلالی - ۲ ساله)</label>
+                <div class="flex items-center border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all relative">
+                  <ng-persian-datepicker 
+                    [(uiIsVisible)]="isBoardTermExpiryDatePickerOpen"
+                    [dateInitValue]="false" 
+                    (dateOnSelect)="onBoardTermExpirySelect($event)"
+                    class="w-full block relative cursor-pointer to-datepicker">
+                    <input 
+                      type="text" 
+                      [formControl]="boardTermExpiryControl" 
+                      (click)="isBoardTermExpiryDatePickerOpen = !isBoardTermExpiryDatePickerOpen"
+                      placeholder="۱۴۰۵/۰۱/۰۱" 
+                      class="w-full text-xs font-mono font-bold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+                    />
+                  </ng-persian-datepicker>
+                  <button 
+                    type="button" 
+                    (click)="isBoardTermExpiryDatePickerOpen = !isBoardTermExpiryDatePickerOpen; $event.stopPropagation()"
+                    title="انتخاب تقویم شمسی"
+                    class="text-slate-400 hover:text-indigo-600 p-0.5 rounded-md hover:bg-slate-100 transition-colors cursor-pointer shrink-0">
+                    📅
+                  </button>
+                </div>
+              </div>
+
+              <!-- چک‌باکس حق امضا -->
+              <div class="flex items-center gap-2 pt-5">
+                <input 
+                  type="checkbox" 
+                  id="hasSigRight" 
+                  [(ngModel)]="newBoardMember.has_signature_right" 
+                  class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                />
+                <label for="hasSigRight" class="text-xs font-bold text-slate-700 cursor-pointer">
+                  دارای حق امضای اسناد تعهدآور
+                </label>
+              </div>
+
+              <!-- حدود اختیارات امضا (در صورت داشتن حق امضا) -->
+              <div class="md:col-span-3" *ngIf="newBoardMember.has_signature_right">
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">حدود اختیارات و نحوه امضا</label>
+                <input 
+                  type="text" 
+                  [(ngModel)]="newBoardMember.signature_scope" 
+                  placeholder="مثال: امضای کلیه اسناد مالی و چک‌ها متفقاً با رئیس هیئت‌مدیره همراه با مهر شرکت"
+                  class="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+
+              <!-- فایل تصویر کارت ملی / شناسنامه -->
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">تصویر کارت ملی / شناسنامه (PDF/تصویر)</label>
+                <input 
+                  type="file" 
+                  (change)="onIdDocFileSelected($event)" 
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  class="w-full text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                />
+              </div>
+
+              <!-- فایل حکم انتصاب / صورتجلسه مجمع -->
+              <div class="md:col-span-2">
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">حکم انتصاب / صورتجلسه انتخاب مدیران (PDF/تصویر)</label>
+                <input 
+                  type="file" 
+                  (change)="onAppointmentDocFileSelected($event)" 
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  class="w-full text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <!-- دکمه‌های اقدام فرم (آیکونی با تولتیپ و متن دسترس‌پذیری) -->
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-200">
+              <button 
+                type="button" 
+                (click)="cancelBoardMemberForm()" 
+                title="انصراف از ویرایش/افزودن عضو"
+                aria-label="انصراف"
+                class="w-8 h-8 rounded-xl border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 flex items-center justify-center transition-all cursor-pointer">
+                <span class="text-sm">✕</span>
+                <span class="sr-only">انصراف</span>
+              </button>
+              <button 
+                type="button" 
+                (click)="saveBoardMember()" 
+                [disabled]="isSavingBoardMember"
+                [title]="isEditingBoardMember ? 'ثبت ویرایش عضو هیئت‌مدیره' : 'ذخیره عضو در هیئت‌مدیره'"
+                aria-label="ذخیره عضو"
+                class="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition-all shadow-xs cursor-pointer active:scale-95 disabled:opacity-50">
+                <span *ngIf="isSavingBoardMember" class="animate-spin text-sm">⏳</span>
+                <span *ngIf="!isSavingBoardMember" class="text-sm">✓</span>
+                <span class="sr-only">{{ isEditingBoardMember ? 'ثبت ویرایش عضو' : 'ذخیره عضو در هیئت‌مدیره' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- جدول اعضای هیئت‌مدیره ثبت شده -->
+          <div *ngIf="companyModal.data.id" class="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
+            <div *ngIf="isLoadingBoardMembers" class="p-6 text-center text-xs text-slate-500">
+              <span>در حال بارگذاری لیست اعضای هیئت‌مدیره...</span>
+            </div>
+
+            <div *ngIf="!isLoadingBoardMembers && companyBoardMembers.length === 0" class="p-8 text-center text-xs text-slate-400">
+              <span>هنوز هیچ عضوی برای هیئت‌مدیره یا ارکان قانونی این شرکت ثبت نشده است.</span>
+            </div>
+
+            <table *ngIf="!isLoadingBoardMembers && companyBoardMembers.length > 0" class="w-full text-right border-collapse text-xs">
+              <thead class="bg-slate-50/90 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th class="p-2.5 text-center w-10">#</th>
+                  <th class="p-2.5">نام و هویت</th>
+                  <th class="p-2.5 text-center">کد ملی</th>
+                  <th class="p-2.5">سمت سازمانی</th>
+                  <th class="p-2.5 text-center">حق امضا</th>
+                  <th class="p-2.5 text-center">دوره تصدی</th>
+                  <th class="p-2.5 text-center">مدارک پیوست</th>
+                  <th class="p-2.5 text-center w-20">عملیات</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr *ngFor="let m of companyBoardMembers; let idx = index" class="hover:bg-slate-50/70 transition-colors">
+                  <td class="p-2.5 text-center text-slate-400 font-mono text-[11px]">{{ idx + 1 }}</td>
+                  <td class="p-2.5">
+                    <div class="font-bold text-slate-800">{{ m.first_name }} {{ m.last_name }}</div>
+                    <div *ngIf="m.member_type === 'legal_rep'" class="text-[10px] text-indigo-600 font-medium">
+                      نماینده: {{ m.represented_legal_name || 'شخصیت حقوقی' }}
+                    </div>
+                  </td>
+                  <td class="p-2.5 text-center font-mono font-bold text-slate-700">{{ m.national_code }}</td>
+                  <td class="p-2.5">
+                    <span class="inline-flex px-2 py-0.5 rounded-lg border text-[11px] font-bold" [ngClass]="getRoleBadgeClass(m.role)">
+                      {{ getRoleLabel(m.role) }}
+                    </span>
+                  </td>
+                  <td class="p-2.5 text-center">
+                    <div *ngIf="m.has_signature_right">
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold" [title]="m.signature_scope || 'دارای حق امضا'">
+                        <span>✍️</span>
+                        <span>دارای حق امضا</span>
+                      </span>
+                      <div *ngIf="m.signature_scope" class="text-[10px] text-slate-400 truncate max-w-[140px] mx-auto mt-0.5" [title]="m.signature_scope">
+                        {{ m.signature_scope }}
+                      </div>
+                    </div>
+                    <span *ngIf="!m.has_signature_right" class="text-slate-300 text-[11px]">—</span>
+                  </td>
+                  <td class="p-2.5 text-center font-mono text-[11px] text-slate-600">
+                    <div *ngIf="m.term_start || m.term_expiry">
+                      <span>{{ m.term_start || '—' }}</span>
+                      <span class="text-slate-400 mx-1">تا</span>
+                      <span>{{ m.term_expiry || '—' }}</span>
+                    </div>
+                    <span *ngIf="!m.term_start && !m.term_expiry" class="text-slate-300">—</span>
+                  </td>
+                  <td class="p-2.5 text-center">
+                    <div class="flex items-center justify-center gap-1.5">
+                      <a *ngIf="m.attached_id_doc_url" [href]="m.attached_id_doc_url" target="_blank" title="مشاهده کارت ملی" class="p-1 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs">
+                        🪪
+                      </a>
+                      <a *ngIf="m.attached_appointment_doc_url" [href]="m.attached_appointment_doc_url" target="_blank" title="مشاهده حکم انتصاب" class="p-1 rounded-md bg-purple-50 text-purple-600 hover:bg-purple-100 text-xs">
+                        📜
+                      </a>
+                      <span *ngIf="!m.attached_id_doc_url && !m.attached_appointment_doc_url" class="text-slate-300 text-[11px]">—</span>
+                    </div>
+                  </td>
+                  <td class="p-2.5 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                      <button type="button" (click)="editBoardMember(m)" title="ویرایش عضو" class="p-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer">
+                        ✏️
+                      </button>
+                      <button type="button" (click)="deleteBoardMember(m)" title="حذف عضو" class="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer">
+                        🗑️
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
         <!-- ═════════════════════════════════════════════════════════════════════ -->
-        <!-- تب ۴: کارگاه بیمه و سامانه مودیان                                  -->
+        <!-- تب ۴: کارگاه بیمه و سامانه مودیان (پالایش‌شده از فیلدهای پروژه‌ای)    -->
         <!-- ═════════════════════════════════════════════════════════════════════ -->
         <div *ngIf="activeModalTab === 'fiscal_insurance'" class="space-y-4">
           <div class="p-3 bg-indigo-50/50 rounded-2xl border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
-            ℹ️ فیلدهای زیر مستقیماً در تولید دیسکت‌های ماهانه بیمه تأمین اجتماعی (DSKKAR00.DBF) و اتصال به کارپوشه سامانه مودیان مالیاتی مورد استفاده قرار می‌گیرند.
+            ℹ️ فیلدهای زیر مربوط به کد کارگاه مرکزی شرکت متبوع و اتصالات حافظه مالیاتی و سامانه مودیان هستند. کدهای کارگاه و ردیف‌های پیمان متناظر با پروژه‌های اجرایی منحصراً در بخش تعریف و مدیریت پروژه‌ها تعیین می‌گردند.
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            <!-- کد کارگاه تأمین اجتماعی -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <!-- کد کارگاه مرکزی تأمین اجتماعی شرکت -->
             <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">کد کارگاه بیمه (۱۰ رقم)</label>
+              <label class="block text-xs font-bold text-slate-700 mb-1">کد کارگاه بیمه شرکت (۱۰ رقم)</label>
               <input 
                 type="text" 
                 [(ngModel)]="companyModal.data.workshop_code" 
@@ -1007,50 +1476,7 @@
                 maxlength="10"
                 class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
               />
-            </div>
-
-            <!-- نام شعبه تأمین اجتماعی -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">نام شعبه تأمین اجتماعی</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.social_security_branch_name" 
-                placeholder="مثال: شعبه ۲ شیراز" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-            </div>
-
-            <!-- کد شعبه تأمین اجتماعی -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">کد شعبه تأمین اجتماعی</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.social_security_branch_code" 
-                placeholder="مثال: ۰۲۳۴" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-              />
-            </div>
-
-            <!-- ردیف پیمان بیمه -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">ردیف پیمان تأمین اجتماعی</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.contract_row" 
-                placeholder="مثال: ۰۰۰ یا ۰۲" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
-              />
-            </div>
-
-            <!-- نام کارفرما در لیست بیمه -->
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">نام کارفرما در دیسکت بیمه</label>
-              <input 
-                type="text" 
-                [(ngModel)]="companyModal.data.employer_name" 
-                placeholder="نام شخص حقیقی یا مدیرعامل" 
-                class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
+              <span class="block text-[10px] text-slate-400 mt-1">کد ۱۰ رقمی کارگاه دفتر مرکزی شرکت در سازمان تأمین اجتماعی</span>
             </div>
 
             <!-- کد اقتصادی قدیم -->
@@ -1062,6 +1488,7 @@
                 placeholder="کد اقتصادی ۱۲ رقمی" 
                 class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
               />
+              <span class="block text-[10px] text-slate-400 mt-1">کد اقتصادی پرونده مالیاتی عملکرد و ارزش افزوده</span>
             </div>
 
             <!-- شناسه یکتای حافظه مالیاتی (سامانه مودیان) -->
@@ -1074,10 +1501,11 @@
                 maxlength="6"
                 class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono uppercase"
               />
+              <span class="block text-[10px] text-slate-400 mt-1">شناسه صادر شده توسط کارپوشه سازمان امور مالیاتی</span>
             </div>
 
-            <!-- کد اقتصادی جدید ۱۶ رقمی -->
-            <div class="md:col-span-2">
+            <!-- کد اقتصادی جدید ۱۶ رقمی سامانه مودیان -->
+            <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">کد اقتصادی جدید سامانه مودیان (۱۶ رقم)</label>
               <input 
                 type="text" 
@@ -1086,19 +1514,14 @@
                 maxlength="16"
                 class="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono"
               />
+              <span class="block text-[10px] text-slate-400 mt-1">ترکیب شناسه ملی اشخاص حقوقی و کد شعبه اختصاصی</span>
             </div>
           </div>
-        </div>
 
-        <!-- ═════════════════════════════════════════════════════════════════════ -->
-        <!-- تب ۵: خزانه‌داری، مدیریت چند شماره شبا و حساب‌های بانکی رسمی شرکت         -->
-        <!-- ═════════════════════════════════════════════════════════════════════ -->
-        <div *ngIf="activeModalTab === 'treasury'" class="space-y-4">
-          
-          <!-- ماه شروع سال مالی شرکت -->
+          <!-- ماه شروع سال مالی شرکت (مقرر در اساسنامه) -->
           <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <span class="text-xs font-black text-slate-800 block">دوره و تقویم مالی شرکت</span>
+              <span class="text-xs font-black text-slate-800 block">دوره و تقویم سال مالی شرکت</span>
               <span class="text-[11px] text-slate-500">تعیین ماه آغاز سال مالی جهت بستن حساب‌ها و گزارشات قانونی</span>
             </div>
             <div class="w-full md:w-64">
@@ -1111,7 +1534,12 @@
               </select>
             </div>
           </div>
+        </div>
 
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <!-- تب ۵: خزانه‌داری، مدیریت چند شماره شبا و حساب‌های بانکی رسمی شرکت         -->
+        <!-- ═════════════════════════════════════════════════════════════════════ -->
+        <div *ngIf="activeModalTab === 'treasury'" class="space-y-4">
           <!-- بخش مدیریت چند شماره شبا و کارت‌های حساب‌های بانکی -->
           <div class="space-y-3">
             <div class="flex items-center justify-between">
@@ -1157,8 +1585,10 @@
                       type="button" 
                       (click)="setPrimaryAccount(acc)"
                       title="تنظیم به عنوان حساب اصلی شرکت"
-                      class="text-[10px] font-bold text-slate-400 hover:text-amber-600 hover:bg-amber-50 border border-slate-200 px-2 py-0.5 rounded-full transition-all cursor-pointer">
-                      تنظیم به عنوان اصلی
+                      aria-label="تنظیم به عنوان اصلی"
+                      class="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-amber-500 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 transition-all cursor-pointer">
+                      <span class="text-xs">⭐</span>
+                      <span class="sr-only">تنظیم به عنوان اصلی</span>
                     </button>
                   </div>
                 </div>
@@ -1172,10 +1602,12 @@
                     type="button" 
                     (click)="copySheba(acc.sheba_number, acc.id || acc.sheba_number)"
                     [title]="copiedShebaId === (acc.id || acc.sheba_number) ? 'کپی شد!' : 'کپی شماره شبا'"
-                    class="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                    aria-label="کپی شماره شبا"
+                    class="w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0"
                     [ngClass]="copiedShebaId === (acc.id || acc.sheba_number) ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'">
-                    <span *ngIf="copiedShebaId === (acc.id || acc.sheba_number)">✓ کپی شد</span>
-                    <span *ngIf="copiedShebaId !== (acc.id || acc.sheba_number)">📋 کپی</span>
+                    <span *ngIf="copiedShebaId === (acc.id || acc.sheba_number)" class="text-xs font-bold">✓</span>
+                    <span *ngIf="copiedShebaId !== (acc.id || acc.sheba_number)" class="text-xs">📋</span>
+                    <span class="sr-only">کپی شماره شبا</span>
                   </button>
                 </div>
 
@@ -1190,16 +1622,20 @@
                     <button 
                       type="button" 
                       (click)="editAccount(acc)" 
-                      class="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50 font-bold cursor-pointer" 
-                      title="ویرایش این حساب">
-                      ✏️ ویرایش
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-colors cursor-pointer" 
+                      title="ویرایش این حساب"
+                      aria-label="ویرایش">
+                      <span class="text-xs">✏️</span>
+                      <span class="sr-only">ویرایش</span>
                     </button>
                     <button 
                       type="button" 
                       (click)="deleteBankAccount(acc)" 
-                      class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 font-bold cursor-pointer" 
-                      title="حذف این حساب">
-                      🗑️ حذف
+                      class="w-7 h-7 rounded-lg flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors cursor-pointer" 
+                      title="حذف این حساب"
+                      aria-label="حذف">
+                      <span class="text-xs">🗑️</span>
+                      <span class="sr-only">حذف</span>
                     </button>
                   </div>
                 </div>
@@ -1216,8 +1652,11 @@
                   *ngIf="isEditingAccount" 
                   type="button" 
                   (click)="cancelEditAccount()" 
-                  class="text-[11px] text-slate-500 hover:text-slate-800 font-bold cursor-pointer">
-                  انصراف از ویرایش ✕
+                  title="انصراف از ویرایش حساب"
+                  aria-label="انصراف از ویرایش"
+                  class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer">
+                  <span class="text-xs font-bold">✕</span>
+                  <span class="sr-only">انصراف از ویرایش</span>
                 </button>
               </div>
 
@@ -1347,9 +1786,12 @@
                   type="button" 
                   (click)="saveBankAccount()" 
                   [disabled]="isSavingBankAccount || !newAccount.sheba_number"
-                  class="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
-                  <span *ngIf="isSavingBankAccount">در حال ذخیره‌سازی...</span>
-                  <span *ngIf="!isSavingBankAccount">{{ isEditingAccount ? 'ثبت تغییرات حساب' : 'افزودن حساب به شرکت' }}</span>
+                  [title]="isEditingAccount ? 'ثبت تغییرات حساب بانکی' : 'افزودن حساب به شرکت'"
+                  aria-label="ثبت حساب بانکی"
+                  class="w-9 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer">
+                  <span *ngIf="isSavingBankAccount" class="animate-spin text-sm">⏳</span>
+                  <span *ngIf="!isSavingBankAccount" class="text-sm">✓</span>
+                  <span class="sr-only">{{ isEditingAccount ? 'ثبت تغییرات حساب' : 'افزودن حساب به شرکت' }}</span>
                 </button>
               </div>
             </div>
@@ -1372,10 +1814,10 @@
 
           <div *ngIf="companyModal.data.id" class="space-y-4">
             <!-- فرم افزودن کاربر به شرکت -->
-            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+            <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col gap-3">
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
                 <!-- کمبوباکس انتخاب کاربر با جستجو -->
-                <div class="md:col-span-2">
+                <div class="md:col-span-1">
                   <label class="block text-[11px] font-bold text-slate-700 mb-1">انتخاب کاربر سیستم</label>
                   <select 
                     [(ngModel)]="studioSelectedUserId" 
@@ -1387,28 +1829,54 @@
                   </select>
                 </div>
 
-                <!-- شرکت پیش‌فرض کاربر -->
-                <div class="flex items-center gap-2 pt-4">
-                  <input 
-                    type="checkbox" 
-                    id="studio_acc_def" 
-                    [(ngModel)]="studioIsDefaultAccess" 
-                    class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-                  />
-                  <label for="studio_acc_def" class="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                    شرکت پیش‌فرض لاگین کاربر باشد
-                  </label>
+                <!-- سطح دسترسی سازمانی -->
+                <div class="md:col-span-1">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">سطح دسترسی سازمانی</label>
+                  <select 
+                    [(ngModel)]="studioAccessLevel" 
+                    class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white font-bold text-slate-800">
+                    <option *ngFor="let lvl of accessLevelsList" [value]="lvl.value">
+                      {{ lvl.label }}
+                    </option>
+                  </select>
                 </div>
-              </div>
 
-              <div>
-                <button 
-                  type="button" 
-                  (click)="addStudioAccess()" 
-                  [disabled]="!studioSelectedUserId"
-                  class="w-full md:w-auto px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs active:scale-95 transition-all cursor-pointer">
-                  تخصیص دسترسی
-                </button>
+                <!-- سمت / نقش در شرکت -->
+                <div class="md:col-span-1">
+                  <label class="block text-[11px] font-bold text-slate-700 mb-1">سمت / نقش در این شرکت</label>
+                  <input 
+                    type="text" 
+                    [(ngModel)]="studioRoleInCompany" 
+                    placeholder="مثال: کارشناس اسناد، خزانه‌دار..."
+                    class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 bg-white font-medium"
+                  />
+                </div>
+
+                <!-- پیش‌فرض و دکمه تخصیص -->
+                <div class="md:col-span-1 flex items-center justify-between gap-2">
+                  <div class="flex items-center gap-1.5">
+                    <input 
+                      type="checkbox" 
+                      id="studio_acc_def" 
+                      [(ngModel)]="studioIsDefaultAccess" 
+                      class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                    />
+                    <label for="studio_acc_def" class="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
+                      پیش‌فرض
+                    </label>
+                  </div>
+
+                  <button 
+                    type="button" 
+                    (click)="addStudioAccess()" 
+                    [disabled]="!studioSelectedUserId"
+                    title="تخصیص دسترسی کاربر"
+                    aria-label="تخصیص دسترسی"
+                    class="w-9 h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer shrink-0">
+                    <span class="text-base font-black">+</span>
+                    <span class="sr-only">تخصیص دسترسی</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1436,6 +1904,8 @@
                       <th class="py-2.5 px-3 w-10 text-center">ردیف</th>
                       <th class="py-2.5 px-3">نام و نام خانوادگی</th>
                       <th class="py-2.5 px-3">نام کاربری</th>
+                      <th class="py-2.5 px-3">سطح دسترسی سازمانی</th>
+                      <th class="py-2.5 px-3">سمت در شرکت</th>
                       <th class="py-2.5 px-3 text-center">وضعیت پیش‌فرض</th>
                       <th class="py-2.5 px-3 text-center">تاریخ انتساب</th>
                       <th class="py-2.5 px-3 text-center w-20">عملیات</th>
@@ -1446,6 +1916,12 @@
                       <td class="py-2.5 px-3 text-center font-mono text-slate-400">{{ idx + 1 }}</td>
                       <td class="py-2.5 px-3 font-bold text-slate-800">{{ acc.user_full_name || 'کاربر سیستم' }}</td>
                       <td class="py-2.5 px-3 font-mono text-slate-600">{{ acc.username }}</td>
+                      <td class="py-2.5 px-3">
+                        <span class="text-[10px] px-2 py-0.5 rounded-full border font-bold" [ngClass]="getAccessLevelBadgeClass(acc.access_level)">
+                          {{ acc.access_level_display || getAccessLevelLabel(acc.access_level) }}
+                        </span>
+                      </td>
+                      <td class="py-2.5 px-3 text-slate-600 font-medium">{{ acc.role_in_company || '—' }}</td>
                       <td class="py-2.5 px-3 text-center">
                         <span *ngIf="acc.is_default" class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
                           ✓ پیش‌فرض
@@ -1457,9 +1933,11 @@
                         <button 
                           type="button" 
                           (click)="removeStudioAccess(acc.id)" 
-                          class="text-rose-500 hover:text-rose-700 p-1 font-bold text-xs rounded hover:bg-rose-50 transition-colors cursor-pointer" 
-                          title="لغو دسترسی کاربر">
-                          🗑️ لغو
+                          class="w-7 h-7 rounded-lg flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer" 
+                          title="لغو دسترسی کاربر"
+                          aria-label="لغو دسترسی">
+                          <span class="text-xs">🗑️</span>
+                          <span class="sr-only">لغو دسترسی</span>
                         </button>
                       </td>
                     </tr>
@@ -1483,16 +1961,22 @@
           <button 
             type="button" 
             (click)="closeCompanyModal()" 
-            class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-200 text-xs font-bold transition-colors cursor-pointer">
-            انصراف
+            title="انصراف و بستن"
+            aria-label="انصراف"
+            class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer">
+            <span class="text-sm font-bold">✕</span>
+            <span class="sr-only">انصراف</span>
           </button>
           <button 
             type="button" 
             (click)="submitCompanyForm()" 
             [disabled]="companyModal.isSubmitting"
-            class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer">
-            <span *ngIf="companyModal.isSubmitting">در حال ذخیره‌سازی...</span>
-            <span *ngIf="!companyModal.isSubmitting">{{ companyModal.isEdit ? 'ثبت ویرایش شناسنامه' : 'ثبت شرکت' }}</span>
+            [title]="companyModal.isEdit ? 'ثبت ویرایش شناسنامه' : 'ثبت شرکت'"
+            aria-label="ثبت شرکت"
+            class="w-9 h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer">
+            <span *ngIf="companyModal.isSubmitting" class="animate-spin text-sm">⏳</span>
+            <span *ngIf="!companyModal.isSubmitting" class="text-sm font-bold">✓</span>
+            <span class="sr-only">{{ companyModal.isEdit ? 'ثبت ویرایش شناسنامه' : 'ثبت شرکت' }}</span>
           </button>
         </div>
       </div>
@@ -1516,16 +2000,22 @@
         <button 
           type="button" 
           (click)="closeDeleteModal()" 
-          class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-bold cursor-pointer">
-          انصراف
+          title="انصراف از حذف"
+          aria-label="انصراف"
+          class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer">
+          <span class="text-sm font-bold">✕</span>
+          <span class="sr-only">انصراف</span>
         </button>
         <button 
           type="button" 
           (click)="executeDelete()" 
           [disabled]="deleteModal.isDeleting"
-          class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer active:scale-95">
-          <span *ngIf="deleteModal.isDeleting">در حال حذف...</span>
-          <span *ngIf="!deleteModal.isDeleting">تایید و حذف قطعی</span>
+          title="تایید و حذف قطعی"
+          aria-label="حذف"
+          class="w-9 h-9 rounded-xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-xs cursor-pointer active:scale-95 transition-all disabled:opacity-50">
+          <span *ngIf="deleteModal.isDeleting" class="animate-spin text-sm">⏳</span>
+          <span *ngIf="!deleteModal.isDeleting" class="text-sm">🗑️</span>
+          <span class="sr-only">حذف</span>
         </button>
       </div>
     </div>
@@ -1534,7 +2024,7 @@
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
   <!-- ۵. مودال مدیریت دسترسی کاربران به شرکت (UserCompanyAccess Modal)           -->
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <div *ngIf="userAccessModal.isOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
+  <div *ngIf="userAccessModal.isOpen" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-all">
     <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
       
       <!-- Modal Header -->
@@ -1563,22 +2053,66 @@
         <!-- افزودن کاربر جدید -->
         <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
           <span class="text-xs font-black text-slate-700 block">افزودن دسترسی برای کاربر:</span>
-          <div class="flex flex-col sm:flex-row items-center gap-2">
-            <select 
-              [(ngModel)]="userAccessModal.selectedUserId"
-              class="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
-              <option [ngValue]="null">-- انتخاب کاربر از سامانه --</option>
-              <option *ngFor="let u of systemUsers" [ngValue]="u.id">
-                {{ u.first_name }} {{ u.last_name }} ({{ u.username }})
-              </option>
-            </select>
-            <button 
-              type="button"
-              (click)="addUserAccess()"
-              [disabled]="userAccessModal.isSubmitting || !userAccessModal.selectedUserId"
-              class="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shrink-0 transition-all cursor-pointer">
-              {{ userAccessModal.isSubmitting ? '...' : '+ ثبت دسترسی' }}
-            </button>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">کاربر سامانه</label>
+              <select 
+                [(ngModel)]="userAccessModal.selectedUserId"
+                class="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+                <option [ngValue]="null">-- انتخاب کاربر از سامانه --</option>
+                <option *ngFor="let u of systemUsers" [ngValue]="u.id">
+                  {{ u.first_name }} {{ u.last_name }} ({{ u.username }})
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">سطح دسترسی سازمانی</label>
+              <select 
+                [(ngModel)]="userAccessModal.accessLevel"
+                class="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold text-slate-800">
+                <option *ngFor="let lvl of accessLevelsList" [value]="lvl.value">
+                  {{ lvl.label }}
+                </option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-600 mb-1">سمت / نقش در شرکت</label>
+              <input 
+                type="text"
+                [(ngModel)]="userAccessModal.roleInCompany"
+                placeholder="مثال: کارشناس اسناد، خزانه‌دار..."
+                class="w-full text-xs border border-slate-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-5">
+              <div class="flex items-center gap-1.5">
+                <input 
+                  type="checkbox" 
+                  id="uacc_modal_def" 
+                  [(ngModel)]="userAccessModal.isDefault" 
+                  class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+                />
+                <label for="uacc_modal_def" class="text-[11px] font-bold text-slate-700 cursor-pointer select-none">
+                  شرکت پیش‌فرض لاگین
+                </label>
+              </div>
+
+              <button 
+                type="button"
+                (click)="addUserAccess()"
+                [disabled]="userAccessModal.isSubmitting || !userAccessModal.selectedUserId"
+                title="ثبت دسترسی کاربر"
+                aria-label="ثبت دسترسی"
+                class="w-9 h-9 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white flex items-center justify-center rounded-xl shrink-0 transition-all cursor-pointer shadow-xs active:scale-95">
+                <span *ngIf="userAccessModal.isSubmitting" class="animate-spin text-sm">⏳</span>
+                <span *ngIf="!userAccessModal.isSubmitting" class="text-base font-black">+</span>
+                <span class="sr-only">ثبت دسترسی</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1604,11 +2138,17 @@
                 </span>
                 <div>
                   <div class="text-xs font-bold text-slate-800">{{ acc.user_full_name || acc.username }}</div>
-                  <div class="text-[10px] font-mono text-slate-400">@{{ acc.username }}</div>
+                  <div class="text-[10px] text-slate-500">
+                    <span class="font-mono text-slate-400">@{{ acc.username }}</span>
+                    <span *ngIf="acc.role_in_company" class="mr-1.5 text-indigo-600 font-bold">({{ acc.role_in_company }})</span>
+                  </div>
                 </div>
               </div>
 
               <div class="flex items-center gap-2">
+                <span class="text-[10px] px-2 py-0.5 rounded-full border font-bold" [ngClass]="getAccessLevelBadgeClass(acc.access_level)">
+                  {{ acc.access_level_display || getAccessLevelLabel(acc.access_level) }}
+                </span>
                 <span *ngIf="acc.is_default" class="text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold">
                   پیش‌فرض
                 </span>
@@ -1631,8 +2171,11 @@
         <button 
           type="button" 
           (click)="closeUserAccessModal()" 
-          class="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer">
-          بستن
+          title="بستن پنجره مدیریت دسترسی"
+          aria-label="بستن"
+          class="w-8 h-8 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center transition-colors cursor-pointer">
+          <span class="text-xs font-bold">✕</span>
+          <span class="sr-only">بستن</span>
         </button>
       </div>
 
@@ -1640,32 +2183,189 @@
   </div>
 
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <!-- ۶. مودال لایت‌باکس پیش‌نمایش درجا مدارک و اسناد (In-Place Preview Lightbox)  -->
+  <!-- ۶. مودال لایت‌باکس پیش‌نمایش درجا با امکانات زوم، جابجایی، تمام‌صفحه و رندر اختصاصی بوم (In-Place Interactive Preview Lightbox) -->
   <!-- ═════════════════════════════════════════════════════════════════════════ -->
-  <div *ngIf="previewModal.isOpen" class="fixed inset-0 z-60 flex items-center justify-center p-3 md:p-6 bg-slate-950/80 backdrop-blur-md transition-all">
-    <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col">
-      <!-- Header -->
-      <div class="p-3.5 md:p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50 shrink-0">
-        <div class="flex items-center gap-2">
-          <span class="text-base">📄</span>
-          <span class="text-xs md:text-sm font-black text-slate-800">{{ previewModal.title }}</span>
+  <div *ngIf="previewModal.isOpen" (click)="closePreview()" 
+       [ngClass]="isFullscreenPreview ? 'p-0' : 'p-2 md:p-6'"
+       class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 backdrop-blur-md transition-all">
+    
+    <div (click)="$event.stopPropagation()" 
+         [ngClass]="isFullscreenPreview ? 'w-screen h-screen rounded-none max-w-none border-0' : 'w-full max-w-5xl h-[92vh] rounded-3xl border border-slate-700/60 shadow-2xl'"
+         class="bg-slate-900 text-slate-100 overflow-hidden flex flex-col transition-all">
+      
+      <!-- Lightbox Header & Interactive Controls Toolbar -->
+      <div class="px-3.5 py-2.5 md:px-5 md:py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950/80 backdrop-blur-md shrink-0 gap-2 flex-wrap">
+        
+        <!-- Right Side (RTL Start): Title & Page Indicator -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="text-lg shrink-0">📄</span>
+          <div class="min-w-0">
+            <h3 class="text-xs md:text-sm font-black text-white truncate max-w-[200px] md:max-w-md">{{ previewModal.title }}</h3>
+            <span *ngIf="previewModal.isPdf && pdfTotalPages > 1" class="text-[10px] text-slate-400 font-mono">
+              صفحه {{ pdfCurrentPage }} از {{ pdfTotalPages }}
+            </span>
+          </div>
+
+          <!-- Page Switcher Buttons (for multi-page PDFs) -->
+          <div *ngIf="previewModal.isPdf && pdfTotalPages > 1" class="flex items-center gap-1 bg-slate-800/80 p-0.5 rounded-xl border border-slate-700 mr-2">
+            <button 
+              type="button" 
+              (click)="prevPdfPage()" 
+              [disabled]="pdfCurrentPage <= 1"
+              title="صفحه قبلی"
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+              →
+            </button>
+            <span class="text-[10px] font-mono font-bold px-1.5 text-slate-300">{{ pdfCurrentPage }}/{{ pdfTotalPages }}</span>
+            <button 
+              type="button" 
+              (click)="nextPdfPage()" 
+              [disabled]="pdfCurrentPage >= pdfTotalPages"
+              title="صفحه بعدی"
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer">
+              ←
+            </button>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <a [href]="previewModal.fileUrl" target="_blank" download class="px-3 py-1 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold flex items-center gap-1 transition-all">
-            <span>📥</span>
-            <span>دانلود اصل فایل</span>
+
+        <!-- Left Side (RTL End): Zoom Controls, Rotate, Fullscreen, Download, Close -->
+        <div class="flex items-center gap-1 md:gap-1.5">
+          <!-- Zoom Controls (کوچک‌نمایی، درصد و بزرگ‌نمایی) -->
+          <div class="flex items-center bg-slate-800/80 rounded-xl border border-slate-700/80 p-0.5">
+            <button 
+              type="button" 
+              (click)="zoomOut()" 
+              title="کوچک‌نمایی (-)" 
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer active:scale-95">
+              −
+            </button>
+            <button 
+              type="button" 
+              (click)="resetZoom()" 
+              title="بازنشانی اندازه به ۱۰۰٪" 
+              class="px-2 h-7 rounded-lg flex items-center justify-center text-[10px] font-mono font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer">
+              {{ (previewScale * 100).toFixed(0) }}%
+            </button>
+            <button 
+              type="button" 
+              (click)="zoomIn()" 
+              title="بزرگ‌نمایی (+)" 
+              class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-all cursor-pointer active:scale-95">
+              +
+            </button>
+          </div>
+
+          <!-- دکمه چرخش (Rotate) -->
+          <button 
+            type="button" 
+            (click)="rotatePreview()" 
+            title="چرخش ۹۰ درجه" 
+            class="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center text-xs transition-all cursor-pointer active:scale-95">
+            ↻
+          </button>
+
+          <!-- دکمه بازنشانی جابجایی و زوم (Reset Pan/Zoom) -->
+          <button 
+            type="button" 
+            (click)="resetZoom()" 
+            title="مرکز کردن سند" 
+            class="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center text-xs transition-all cursor-pointer active:scale-95">
+            🎯
+          </button>
+
+          <!-- دکمه تمام‌صفحه (Fullscreen) -->
+          <button 
+            type="button" 
+            (click)="toggleFullscreen()" 
+            [title]="isFullscreenPreview ? 'خروج از تمام‌صفحه' : 'نمایش تمام‌صفحه'" 
+            class="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 flex items-center justify-center text-xs transition-all cursor-pointer active:scale-95">
+            <span *ngIf="!isFullscreenPreview">⛶</span>
+            <span *ngIf="isFullscreenPreview">🗗</span>
+          </button>
+
+          <!-- دکمه دانلود اصل فایل -->
+          <a [href]="previewModal.fileUrl" target="_blank" download 
+             title="دانلود نسخه اصلی سند"
+             aria-label="دانلود"
+             class="w-8 h-8 rounded-xl bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 hover:text-white border border-indigo-500/40 flex items-center justify-center transition-all cursor-pointer">
+            <span class="text-xs">📥</span>
+            <span class="sr-only">دانلود</span>
           </a>
-          <button type="button" (click)="closePreview()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer">
+
+          <!-- دکمه بستن -->
+          <button 
+            type="button" 
+            (click)="closePreview()" 
+            title="بستن پیش‌نمایش (Esc)"
+            class="w-8 h-8 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 hover:text-white border border-rose-500/30 flex items-center justify-center transition-all cursor-pointer mr-1">
             ✕
           </button>
         </div>
+
       </div>
 
-      <!-- Preview Body -->
-      <div class="flex-1 bg-slate-900/5 p-2 overflow-auto flex items-center justify-center">
-        <iframe *ngIf="previewModal.isPdf" [src]="previewModal.fileUrl" class="w-full h-full rounded-xl border border-slate-200 bg-white"></iframe>
-        <img *ngIf="!previewModal.isPdf" [src]="previewModal.fileUrl" class="max-h-full max-w-full rounded-xl shadow-md object-contain" [alt]="previewModal.title" />
+      <!-- Preview Body (Interactive Canvas / Image Area with Pan & Drag) -->
+      <div 
+        (mousedown)="startPan($event)" 
+        (mousemove)="onPan($event)" 
+        (mouseup)="stopPan()" 
+        (mouseleave)="stopPan()"
+        class="flex-1 bg-slate-950 overflow-auto flex items-center justify-center p-4 relative select-none cursor-grab active:cursor-grabbing">
+        
+        <!-- اندیکاتور بارگذاری PDF -->
+        <div *ngIf="isPdfLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-xs text-white">
+          <div class="w-10 h-10 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <span class="text-xs font-bold animate-pulse text-indigo-300">در حال رندر صفحات سند بر روی بوم اختصاصی...</span>
+          <span class="text-[10px] text-slate-400 mt-1">بدون فعال‌سازی دانلود منیجر و به صورت کاملاً امن</span>
+        </div>
+
+        <!-- ۱. رندر اختصاصی صفحات PDF بر روی Canvas (بدون دخالت افزونه IDM یا باگ‌های مرورگر) -->
+        <div *ngIf="previewModal.isPdf && !useIframeFallback" 
+             [style.transform]="'translate(' + panX + 'px, ' + panY + 'px)'"
+             class="transition-transform duration-75 flex flex-col items-center justify-center">
+          <canvas id="pdf-render-canvas" class="shadow-2xl rounded-xl bg-white max-w-none transition-all"></canvas>
+        </div>
+
+        <!-- فال‌بک آی‌فریم در صورت نیاز -->
+        <iframe *ngIf="previewModal.isPdf && useIframeFallback && previewModal.safeFileUrl" 
+                [src]="previewModal.safeFileUrl" 
+                class="w-full h-full rounded-2xl border border-slate-700 bg-white"></iframe>
+
+        <!-- ۲. نمایشگر تصویر (Image Viewer با زوم، پن و چرخش) -->
+        <div *ngIf="previewModal.isImage && previewModal.fileUrl"
+             [style.transform]="'translate(' + panX + 'px, ' + panY + 'px)'"
+             class="transition-transform duration-75 flex items-center justify-center">
+          <img 
+            [src]="previewModal.fileUrl" 
+            [style.transform]="'scale(' + previewScale + ') rotate(' + previewRotation + 'deg)'"
+            class="max-h-[82vh] max-w-[85vw] rounded-2xl shadow-2xl object-contain transition-transform duration-100" 
+            [alt]="previewModal.title" 
+          />
+        </div>
+
+        <!-- ۳. فال‌بک برای سایر انواع فایل‌ها -->
+        <div *ngIf="!previewModal.isPdf && !previewModal.isImage" class="text-center space-y-3 p-8 bg-slate-900/90 rounded-2xl border border-slate-800">
+          <div class="text-4xl">📄</div>
+          <p class="text-xs font-bold text-slate-300">پیش‌نمایش مستقیم این نوع فایل در مرورگر پشتیبانی نمی‌شود.</p>
+          <a [href]="previewModal.fileUrl" target="_blank" download class="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs">
+            دانلود مستقیم فایل
+          </a>
+        </div>
+
       </div>
+
+      <!-- Footer Help Bar -->
+      <div class="px-4 py-1.5 bg-slate-950/90 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 shrink-0">
+        <div class="flex items-center gap-3">
+          <span>💡 راهنما: سند را با کلیک و کشیدن ماوس (Drag) جابجا کنید.</span>
+          <span class="hidden md:inline">|</span>
+          <span class="hidden md:inline">بزرگ‌نمایی: دکمه‌های + و −</span>
+        </div>
+        <div class="font-mono text-slate-500">
+          مقیاس: {{ (previewScale * 100).toFixed(0) }}% | چرخش: {{ previewRotation }}°
+        </div>
+      </div>
+
     </div>
   </div>
 

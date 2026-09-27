@@ -7,8 +7,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from personnel.models import Company, CompanyDocument, CompanyBankAccount, UserCompanyAccess
+from personnel.models import (
+    Company, CompanyDocument, CompanyBankAccount, CompanyBoardMember, UserCompanyAccess,
+    FinancialProject, ProjectSection, UserSectionAssignment
+)
 from personnel.serializers import CompanySerializer
+from personnel.views import get_user_allowed_companies
 
 User = get_user_model()
 
@@ -312,4 +316,376 @@ class CompanyDocumentTests(TestCase):
             'account_title': 'تلاش غیرمجاز'
         })
         self.assertEqual(resp_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_signed_media_urls_prevent_forbidden(self):
+        """ایراد ۱: تست تولید URL امضاشده برای اسناد شرکت و جلوگیری از خطای ۴۰۳"""
+        from common.media_urls import verify, is_protected
+
+        doc = CompanyDocument.objects.create(
+            company=self.company_a,
+            document_type='statute',
+            title='اساسنامه رسمی',
+            file=SimpleUploadedFile('statute.pdf', b'%PDF-1.4 test content', content_type='application/pdf')
+        )
+
+        self.client.force_authenticate(user=self.superuser)
+        resp = self.client.get(f'/api/personnel/company-documents/{doc.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        file_url = resp.data['file_url']
+        self.assertIsNotNone(file_url)
+        self.assertIn('?e=', file_url)
+        self.assertIn('&s=', file_url)
+
+        # اعتبارسنجی پارامترهای امضا
+        import urllib.parse
+        parsed = urllib.parse.urlparse(file_url)
+        params = urllib.parse.parse_qs(parsed.query)
+        path = parsed.path.replace('/media/', '').lstrip('/')
+
+        self.assertTrue(is_protected(path))
+        self.assertIn('e', params)
+        self.assertIn('s', params)
+        self.assertTrue(verify(path, params['e'][0], params['s'][0]))
+
+        # بررسی اینکه دسترسی به همین فایل بدون امضا خطای ۴۰۳ می‌دهد
+        unsigned_resp = self.client.get(f'/media/{path}')
+        self.assertEqual(unsigned_resp.status_code, 403)
+
+        # و دسترسی با امضا خطای ۴۰۳ نمی‌دهد و باید برای نمایش در فریم به صورت inline سرو شود
+        signed_resp = self.client.get(file_url)
+        self.assertEqual(signed_resp.status_code, status.HTTP_200_OK)
+        self.assertIn('inline', signed_resp.get('Content-Disposition', ''))
+        self.assertEqual(signed_resp.get('X-Frame-Options'), 'SAMEORIGIN')
+
+        # تست فایل با نام فارسی و کاراکترهای یونیکد (آگهی_تغییرات_شرکت.pdf)
+        doc_persian = CompanyDocument.objects.create(
+            company=self.company_a,
+            document_type='statute',
+            title='اساسنامه فارسی',
+            file=SimpleUploadedFile('اساسنامه_رسمی_شرکت.pdf', b'%PDF-1.4 persian test content', content_type='application/pdf')
+        )
+        resp_p = self.client.get(f'/api/personnel/company-documents/{doc_persian.id}/')
+        p_url = resp_p.data['file_url']
+        p_resp = self.client.get(p_url)
+        self.assertEqual(p_resp.status_code, status.HTTP_200_OK)
+        self.assertIn('inline', p_resp.get('Content-Disposition', ''))
+
+    def test_file_extension_and_size_validation(self):
+        """ایراد ۲: تست اعتبارسنجی پسوند و حجم فایل در مدارک و اساسنامه شرکت"""
+        self.client.force_authenticate(user=self.superuser)
+
+        # ۱. رد فایل با پسوند غیرمجاز (.exe)
+        bad_file = SimpleUploadedFile('malicious.exe', b'bad-binary-content', content_type='application/x-msdownload')
+        resp_bad_ext = self.client.post('/api/personnel/company-documents/', {
+            'company': self.company_a.id,
+            'document_type': 'other',
+            'title': 'فایل مخرب',
+            'file': bad_file
+        }, format='multipart')
+        self.assertEqual(resp_bad_ext.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('file', resp_bad_ext.data)
+        self.assertIn('غیرمجاز', str(resp_bad_ext.data['file']))
+
+        # ۲. رد فایل با حجم غیرمجاز (>25MB)
+        from unittest.mock import MagicMock
+        from rest_framework import serializers
+        from personnel.serializers import validate_uploaded_document
+        mock_oversized = MagicMock()
+        mock_oversized.size = 26 * 1024 * 1024
+        with self.assertRaises(serializers.ValidationError) as ctx:
+            validate_uploaded_document(mock_oversized)
+        self.assertTrue('25' in str(ctx.exception) and 'مگابایت' in str(ctx.exception))
+
+
+
+        # ۳. پذیرش فایل مجاز (.pdf)
+        good_file = SimpleUploadedFile('valid.pdf', b'%PDF-1.4 sample', content_type='application/pdf')
+        resp_good = self.client.post('/api/personnel/company-documents/', {
+            'company': self.company_a.id,
+            'document_type': 'operating_license',
+            'title': 'پروانه بهره‌برداری معتبر',
+            'file': good_file
+        }, format='multipart')
+        self.assertEqual(resp_good.status_code, status.HTTP_201_CREATED)
+
+    def test_confidentiality_guard_and_secure_download(self):
+        """ایراد ۳: تست گارد محرمانگی و اکشن اختصاصی دانلود امن"""
+        # ایجاد سند محرمانه توسط سوپریوزر
+        conf_file = SimpleUploadedFile('secret_board.pdf', b'%PDF-1.4 confidential', content_type='application/pdf')
+        doc_conf = CompanyDocument.objects.create(
+            company=self.company_a,
+            document_type='master_agreement',
+            title='قرارداد محرمانه هیئت‌مدیره',
+            file=conf_file,
+            is_confidential=True
+        )
+
+        # ۱. تلاش کاربر عادی شرکت A جهت دانلود سند محرمانه -> خطای ۴۰۳
+        self.client.force_authenticate(user=self.user_a)
+        resp_download_forbidden = self.client.get(f'/api/personnel/company-documents/{doc_conf.id}/download/')
+        self.assertEqual(resp_download_forbidden.status_code, status.HTTP_403_FORBIDDEN)
+
+        # ۲. تلاش کاربر عادی شرکت A جهت ویرایش سند محرمانه -> عدم دسترسی (۴۰۳ یا ۴۰۴ به دلیل فیلتر شدن از کوئری‌ست)
+        resp_edit_forbidden = self.client.patch(f'/api/personnel/company-documents/{doc_conf.id}/', {
+            'title': 'تغییر عنوان سند محرمانه'
+        })
+        self.assertIn(resp_edit_forbidden.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND])
+
+        # ۳. تلاش کاربر شرکت B (شرکت دیگر) -> خطای ۴۰۳ BOLA
+        self.client.force_authenticate(user=self.user_b)
+        resp_bola = self.client.get(f'/api/personnel/company-documents/{doc_conf.id}/download/')
+        self.assertEqual(resp_bola.status_code, status.HTTP_403_FORBIDDEN)
+
+        # ۴. دانلود موفقیت‌آمیز توسط سوپریوزر -> بازگشت FileResponse با هدر دیسپوزیشن
+        self.client.force_authenticate(user=self.superuser)
+        resp_download_success = self.client.get(f'/api/personnel/company-documents/{doc_conf.id}/download/')
+        self.assertEqual(resp_download_success.status_code, status.HTTP_200_OK)
+        self.assertIn('attachment', resp_download_success['Content-Disposition'])
+
+        # ۵. درخواست دانلود سند ناموجود -> خطای ۴۰۴
+        resp_not_found = self.client.get('/api/personnel/company-documents/999999/download/')
+        self.assertEqual(resp_not_found.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_expiring_documents_pagination(self):
+        """ایراد ۵: تست صفحه‌بندی اختیاری اندپوینت expiring-documents"""
+        today = timezone.now().date()
+        # ایجاد ۳ سند در آستانه انقضا
+        for i in range(3):
+            CompanyDocument.objects.create(
+                company=self.company_a,
+                document_type='operating_license',
+                title=f'سند انقضا {i}',
+                file=SimpleUploadedFile(f'lic_{i}.pdf', b'content'),
+                expiry_date=today + timedelta(days=i + 1)
+            )
+
+        self.client.force_authenticate(user=self.superuser)
+
+        # الف) فراخوانی عادی بدون پارامتر صفحه‌بندی -> فرمت سازگار قبلی { count, results }
+        resp_normal = self.client.get('/api/personnel/companies/expiring-documents/')
+        self.assertEqual(resp_normal.status_code, status.HTTP_200_OK)
+        self.assertIn('count', resp_normal.data)
+        self.assertIn('results', resp_normal.data)
+        self.assertNotIn('next', resp_normal.data)
+
+        # ب) فراخوانی با پارامتر صفحه‌بندی -> فرمت صفحه‌بندی استاندارد DRF
+        resp_paginated = self.client.get('/api/personnel/companies/expiring-documents/?page=1&page_size=2')
+        self.assertEqual(resp_paginated.status_code, status.HTTP_200_OK)
+        self.assertIn('count', resp_paginated.data)
+        self.assertIn('next', resp_paginated.data)
+        self.assertIn('previous', resp_paginated.data)
+        self.assertIn('results', resp_paginated.data)
+        self.assertEqual(len(resp_paginated.data['results']), 2)
+
+    def test_shamsi_date_parsing_and_representation(self):
+        """ایراد ۶: تست پذیرش تاریخ شمسی (با ارقام فارسی و انگلیسی) و بازگشت رشته استاندارد شمسی"""
+        self.client.force_authenticate(user=self.superuser)
+
+        # ۱. ثبت شرکت با تاریخ‌های شمسی در registration_date و board_term_expiry
+        resp_comp = self.client.post('/api/personnel/companies/', {
+            'code': 'CMPNEW',
+            'name': 'شرکت نوین تست',
+            'company_type': 'private_joint_stock',
+            'registration_date': '1400/01/15',
+            'board_term_expiry': '۱۴۰۵/۰۸/۳۰'  # با ارقام فارسی
+        })
+        self.assertEqual(resp_comp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp_comp.data['registration_date'], '1400/01/15')
+        self.assertEqual(resp_comp.data['board_term_expiry'], '1405/08/30')
+
+        # بررسی در دیتابیس (ذخیره میلادی معادل)
+        comp = Company.objects.get(code='CMPNEW')
+        from datetime import date
+        self.assertEqual(comp.registration_date, date(2021, 4, 4))
+        self.assertEqual(comp.board_term_expiry, date(2026, 11, 21))
+
+
+        # ۲. ثبت سند شرکت با تاریخ صدور و انقضای شمسی
+        doc_file = SimpleUploadedFile('tax.pdf', b'tax content', content_type='application/pdf')
+        resp_doc = self.client.post('/api/personnel/company-documents/', {
+            'company': comp.id,
+            'document_type': 'tax_clearance',
+            'title': 'مفاصاحساب مالیاتی ۱۴۰۳',
+            'file': doc_file,
+            'issue_date': '1403/05/20',
+            'expiry_date': '۱۴۰۴/۰۵/۲۰'  # با ارقام فارسی
+        }, format='multipart')
+        self.assertEqual(resp_doc.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp_doc.data['issue_date'], '1403/05/20')
+        self.assertEqual(resp_doc.data['expiry_date'], '1404/05/20')
+
+        # ۳. رد تاریخ نامعتبر
+        invalid_file = SimpleUploadedFile('invalid.pdf', b'content', content_type='application/pdf')
+        resp_invalid = self.client.post('/api/personnel/company-documents/', {
+            'company': comp.id,
+            'document_type': 'tax_clearance',
+            'title': 'سند تاریخ غلط',
+            'file': invalid_file,
+            'issue_date': 'تاریخ_غلط_تستی'
+        }, format='multipart')
+        self.assertEqual(resp_invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('issue_date', resp_invalid.data)
+
+    def test_section_assignment_does_not_grant_documents_access(self):
+        """
+        صرف داشتن انتساب در بخش‌های تابعه (UserSectionAssignment) نباید دسترسی
+        به بایگانی مدارک (docs_read و docs_write) را به کاربر اعطا کند.
+        دسترسی به اسناد تنها بر اساس مجوز صریح UserCompanyAccess یا سوپریوزر است.
+        """
+        worker = User.objects.create_user(
+            username='worker_section_only',
+            password='Password123!',
+            email='worker_sec@example.com'
+        )
+
+        project = FinancialProject.objects.create(
+            company=self.company_b,
+            code='PRJ_SEC_TEST',
+            name='پروژه آزمایشی شرکت بتا'
+        )
+
+        section = ProjectSection.objects.create(
+            project=project,
+            code='SEC_WORKER',
+            name='بخش عملیات کارگاهی'
+        )
+
+        UserSectionAssignment.objects.create(
+            user=worker,
+            section=section,
+            role='employee',
+            is_active=True
+        )
+
+        # ۱. در سطح فضای کاری (workspace_full)، کاربر به شرکت بتا دسترسی مشتق‌شده دارد
+        allowed_workspace = get_user_allowed_companies(worker, required_level='workspace_full')
+        self.assertIn(self.company_b, allowed_workspace)
+
+        # ۲. در سطوح اسناد (docs_read و docs_write)، کاربر نباید هیچ دسترسی به شرکت بتا داشته باشد
+        allowed_docs_read = get_user_allowed_companies(worker, required_level='docs_read')
+        self.assertNotIn(self.company_b, allowed_docs_read)
+
+        allowed_docs_write = get_user_allowed_companies(worker, required_level='docs_write')
+        self.assertNotIn(self.company_b, allowed_docs_write)
+
+        # ۳. تست از طریق API کاربر
+        self.client.force_authenticate(user=worker)
+
+        # الف) لیست شرکت‌های در دسترس با اسکوپ documents باید خالی باشد
+        resp_scope = self.client.get('/api/personnel/companies/user-available/?scope=documents')
+        self.assertEqual(resp_scope.status_code, status.HTTP_200_OK)
+        company_ids_in_docs = [c['id'] for c in resp_scope.data['companies']]
+        self.assertNotIn(self.company_b.id, company_ids_in_docs)
+
+        # ب) درخواست لیست اسناد شرکت بتا باید خطای 403 پرتاب کند
+        resp_docs = self.client.get(f'/api/personnel/company-documents/?company_id={self.company_b.id}')
+        self.assertEqual(resp_docs.status_code, status.HTTP_403_FORBIDDEN)
+
+        # ج) درخواست ثبت سند در شرکت بتا باید خطای 403 پرتاب کند
+        dummy_file = SimpleUploadedFile('sample.pdf', b'sample content', content_type='application/pdf')
+        resp_create = self.client.post('/api/personnel/company-documents/', {
+            'company': self.company_b.id,
+            'document_type': 'statute',
+            'title': 'اساسنامه تستی غیرمجاز',
+            'file': dummy_file
+        }, format='multipart')
+        self.assertEqual(resp_create.status_code, status.HTTP_403_FORBIDDEN)
+
+        # ۴. اعطای دسترسی صریح UserCompanyAccess با سطح docs_read
+        UserCompanyAccess.objects.create(
+            user=worker,
+            company=self.company_b,
+            access_level='docs_read'
+        )
+
+        # اکنون باید دسترسی مشاهده داشته باشد
+        allowed_now = get_user_allowed_companies(worker, required_level='docs_read')
+        self.assertIn(self.company_b, allowed_now)
+
+        resp_docs_allowed = self.client.get(f'/api/personnel/company-documents/?company_id={self.company_b.id}')
+        self.assertEqual(resp_docs_allowed.status_code, status.HTTP_200_OK)
+
+        # اما همچنان نباید اجازه آپلود داشته باشد (سطح docs_write ندارد)
+        dummy_file2 = SimpleUploadedFile('sample2.pdf', b'sample content 2', content_type='application/pdf')
+        resp_create_denied = self.client.post('/api/personnel/company-documents/', {
+            'company': self.company_b.id,
+            'document_type': 'statute',
+            'title': 'اساسنامه بدون مجوز نوشتن',
+            'file': dummy_file2
+        }, format='multipart')
+        self.assertEqual(resp_create_denied.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_company_board_members_crud_and_features(self):
+        """تست جامع عملیات اعضای هیئت‌مدیره، حق امضا، بارگذاری مدارک و نسخه‌گذاری اسناد"""
+        self.client.force_authenticate(user=self.superuser)
+
+        # ۱. ایجاد عضو هیئت‌مدیره با مشخصات کامل و فایل‌های پیوست
+        id_doc = SimpleUploadedFile('national_card.jpg', b'fake image data', content_type='image/jpeg')
+        resp = self.client.post('/api/personnel/company-board-members/', {
+            'company': self.company_a.id,
+            'first_name': 'رضا',
+            'last_name': 'پاینده',
+            'national_code': '1234567890',
+            'member_type': 'real',
+            'role': 'chairman',
+            'has_signature_right': True,
+            'signature_scope': 'امضای کلیه اسناد تعهدآور و چک‌ها منفرداً',
+            'term_start': '1403/01/01',
+            'term_expiry': '1405/01/01',
+            'attached_id_doc': id_doc
+        }, format='multipart')
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        member_id = resp.data['id']
+        self.assertEqual(resp.data['role'], 'chairman')
+        self.assertTrue(resp.data['has_signature_right'])
+        self.assertIsNotNone(resp.data['attached_id_doc_url'])
+
+        # ۲. بررسی قرارگیری در فیلد board_members سریالایزر شرکت
+        resp_comp = self.client.get(f'/api/personnel/companies/{self.company_a.id}/')
+        self.assertEqual(resp_comp.status_code, status.HTTP_200_OK)
+        self.assertIn('board_members', resp_comp.data)
+        self.assertEqual(len(resp_comp.data['board_members']), 1)
+        self.assertEqual(resp_comp.data['board_members'][0]['id'], member_id)
+
+        # ۳. ویرایش سمت عضو هیئت‌مدیره
+        resp_update = self.client.patch(f'/api/personnel/company-board-members/{member_id}/', {
+            'role': 'managing_director_and_member',
+            'signature_scope': 'امضای مدیرعامل با مهر شرکت'
+        })
+        self.assertEqual(resp_update.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp_update.data['role'], 'managing_director_and_member')
+
+        # ۴. فیلتر کردن بر اساس company_id
+        resp_list = self.client.get(f'/api/personnel/company-board-members/?company_id={self.company_a.id}')
+        self.assertEqual(resp_list.status_code, status.HTTP_200_OK)
+        members_a = resp_list.data['results'] if isinstance(resp_list.data, dict) and 'results' in resp_list.data else resp_list.data
+        self.assertEqual(len(members_a), 1)
+
+        # لیست شرکت B نباید عضو شرکت A را داشته باشد
+        resp_list_b = self.client.get(f'/api/personnel/company-board-members/?company_id={self.company_b.id}')
+        self.assertEqual(resp_list_b.status_code, status.HTTP_200_OK)
+        members_b = resp_list_b.data['results'] if isinstance(resp_list_b.data, dict) and 'results' in resp_list_b.data else resp_list_b.data
+        self.assertEqual(len(members_b), 0)
+
+        # ۵. تست نسخه‌گذاری اسناد شرکت
+        doc_file = SimpleUploadedFile('doc_v1.pdf', b'content v1', content_type='application/pdf')
+        resp_doc = self.client.post('/api/personnel/company-documents/', {
+            'company': self.company_a.id,
+            'document_type': 'statute',
+            'title': 'اساسنامه نسخه ۱',
+            'version': 1,
+            'file': doc_file
+        }, format='multipart')
+        self.assertEqual(resp_doc.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp_doc.data['version'], 1)
+        self.assertFalse(resp_doc.data['is_superseded'])
+
+        # ۶. حذف عضو هیئت‌مدیره
+        resp_del = self.client.delete(f'/api/personnel/company-board-members/{member_id}/')
+        self.assertEqual(resp_del.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(CompanyBoardMember.objects.filter(id=member_id).count(), 0)
+
+
 

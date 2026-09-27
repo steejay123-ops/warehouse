@@ -57,11 +57,25 @@ class CompanyWarehouseIsolationTestCase(TestCase):
             email="manager@test.com",
             password="managerpassword123"
         )
-        # انتساب کاربر عادی فقط به شرکت PTS
+        # انتساب کاربر عادی فقط به شرکت PTS با دسترسی فضای کاری
         UserCompanyAccess.objects.create(
             user=self.regular_user,
             company=self.company_pts,
+            access_level='workspace_full',
             is_default=True
+        )
+
+        # کاربر با دسترسی صرفاً مدارک (الگوی نسرین بیرمی)
+        self.docs_user = User.objects.create_user(
+            username="docs_only_user",
+            email="docs@test.com",
+            password="docspassword123"
+        )
+        UserCompanyAccess.objects.create(
+            user=self.docs_user,
+            company=self.company_pts,
+            access_level='docs_read',
+            is_default=False
         )
 
     def test_superuser_sees_all_warehouses_without_company_filter(self):
@@ -178,4 +192,18 @@ class CompanyWarehouseIsolationTestCase(TestCase):
             HTTP_X_COMPANY_ID=str(self.company_fa.id)
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_docs_only_user_cannot_access_or_see_warehouses(self):
+        """
+        کاربری که صرفاً دسترسی مشاهده مدارک رسمی (docs_read) دارد (الگوی نسرین بیرمی)،
+        نباید هیچ انباری در لیست ببیند و در صورت ارسال هدر با خطای 403 مواجه شود.
+        """
+        self.client.force_authenticate(user=self.docs_user)
+        response = self.client.get('/api/warehouses/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 0)
+
+        response_header = self.client.get('/api/warehouses/', HTTP_X_COMPANY_ID=str(self.company_pts.id))
+        self.assertEqual(response_header.status_code, 403)
+
 

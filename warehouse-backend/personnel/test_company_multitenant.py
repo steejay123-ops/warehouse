@@ -93,10 +93,11 @@ class CompanyMultiTenantTestCase(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()['count'], 0)
 
-        # ۲. انتساب مستقیم کاربر به شرکت PTS
+        # ۲. انتساب مستقیم کاربر به شرکت PTS با سطح فضای کاری کامل
         UserCompanyAccess.objects.create(
             user=self.regular_user,
             company=self.company_pts,
+            access_level='workspace_full',
             is_default=True
         )
         res = self.client.get('/api/personnel/companies/user-available/')
@@ -147,10 +148,11 @@ class CompanyMultiTenantTestCase(TestCase):
         self.assertEqual(res_header.json()[0]['company_name'], 'فارس عالیش تست')
 
     def test_bola_protection_unauthorized_company_access(self):
-        # کاربر عادی فقط به شرکت PTS دسترسی دارد
+        # کاربر عادی با سطح فضای کاری فقط به شرکت PTS دسترسی دارد
         UserCompanyAccess.objects.create(
             user=self.regular_user,
             company=self.company_pts,
+            access_level='workspace_full',
             is_default=True
         )
         self.client.force_authenticate(user=self.regular_user)
@@ -344,4 +346,175 @@ class CompanyMultiTenantTestCase(TestCase):
         log_ids = [l['id'] for l in logs_data]
         self.assertIn(log1.id, log_ids)
         self.assertNotIn(log2.id, log_ids)
+
+    def test_counterparty_company_isolation_and_auto_assign(self):
+        """
+        آزمون ایزولاسیون طرف‌حساب‌ها بر مبنای شرکت و انتساب خودکار
+        """
+        from personnel.models import Counterparty
+        self.client.force_authenticate(user=self.admin_user)
+
+        # ایجاد طرف‌حساب برای شرکت PTS با هدر X-Company-ID
+        res_create = self.client.post('/api/personnel/counterparties/', {
+            'name': 'تأمین‌کننده قطعات پارسیان',
+            'counterparty_type': 'repair_shop'
+        }, HTTP_X_COMPANY_ID=str(self.company_pts.id))
+        self.assertEqual(res_create.status_code, 201)
+        cp_pts_id = res_create.json()['id']
+        self.assertEqual(res_create.json()['company'], self.company_pts.id)
+
+        # ایجاد طرف‌حساب برای شرکت FA
+        res_create_fa = self.client.post('/api/personnel/counterparties/', {
+            'name': 'جایگاه سوخت فارس عالیش',
+            'counterparty_type': 'fuel_station'
+        }, HTTP_X_COMPANY_ID=str(self.company_fa.id))
+        self.assertEqual(res_create_fa.status_code, 201)
+        cp_fa_id = res_create_fa.json()['id']
+
+        # استعلام با هدر PTS فقط باید طرف‌حساب PTS را برگرداند
+        res_pts = self.client.get('/api/personnel/counterparties/', HTTP_X_COMPANY_ID=str(self.company_pts.id))
+        self.assertEqual(res_pts.status_code, 200)
+        pts_ids = [c['id'] for c in res_pts.json()]
+        self.assertIn(cp_pts_id, pts_ids)
+        self.assertNotIn(cp_fa_id, pts_ids)
+
+    def test_personnel_company_auto_assignment(self):
+        """
+        آزمون انتساب خودکار فیلد company روی پرونده پرسنلی از روی بخش/پروژه
+        """
+        from personnel.models import PersonnelProfile
+        sec = ProjectSection.objects.create(
+            project=self.proj_dalan,
+            code='SEC_DALAN_HR',
+            name='بخش منابع انسانی دالان'
+        )
+        p = PersonnelProfile.objects.create(
+            first_name='حمید',
+            last_name='تقوی',
+            national_code='0012345678',
+            job_title='کارشناس فنی',
+            project=self.proj_dalan,
+            section=sec
+        )
+        self.assertIsNotNone(p.company)
+        self.assertEqual(p.company.id, self.company_pts.id)
+
+    def test_company_fiscal_period_lifecycle(self):
+        """
+        آزمون چرخه عمر سال مالی: ایجاد، بستن سال مالی، انجماد و بازگشایی
+        """
+        from personnel.models import CompanyFiscalPeriod
+        self.client.force_authenticate(user=self.admin_user)
+
+        res_create = self.client.post('/api/personnel/company-fiscal-periods/', {
+            'company': self.company_pts.id,
+            'fiscal_year': '1405',
+            'title': 'سال مالی ۱۴۰۵',
+            'start_date': '1405/01/01',
+            'end_date': '1405/12/29'
+        })
+        self.assertEqual(res_create.status_code, 201)
+        period_id = res_create.json()['id']
+        self.assertEqual(res_create.json()['status'], 'open')
+
+        # انجماد دوره مالی
+        res_freeze = self.client.post(f'/api/personnel/company-fiscal-periods/{period_id}/freeze-period/')
+        self.assertEqual(res_freeze.status_code, 200)
+        period = CompanyFiscalPeriod.objects.get(id=period_id)
+        self.assertEqual(period.status, 'frozen')
+
+        # بستن سال مالی
+        res_close = self.client.post(f'/api/personnel/company-fiscal-periods/{period_id}/close-period/', {
+            'notes': 'تصویب مجمع عمومی سالیانه'
+        })
+        self.assertEqual(res_close.status_code, 200)
+        period.refresh_from_db()
+        self.assertEqual(period.status, 'closed')
+        self.assertIsNotNone(period.closed_at)
+        self.assertEqual(period.closed_by, self.admin_user)
+
+        # بازگشایی توسط مدیر ارشد
+        res_reopen = self.client.post(f'/api/personnel/company-fiscal-periods/{period_id}/reopen-period/')
+        self.assertEqual(res_reopen.status_code, 200)
+        period.refresh_from_db()
+        self.assertEqual(period.status, 'open')
+
+    def test_company_delete_protection_with_warehouses_and_profiles(self):
+        """
+        آزمون ممانعت از حذف شرکت در صورت وجود انبار، پرسنل یا دوره مالی
+        """
+        from warehouses.models import Warehouse
+        from personnel.models import Company
+        self.client.force_authenticate(user=self.admin_user)
+
+        # ایجاد شرکت موقت برای تست حذف
+        temp_comp = Company.objects.create(
+            code='TEMP_CO_DEL',
+            name='شرکت موقت تست حذف'
+        )
+
+        # ۱. انتساب انبار به شرکت
+        wh = Warehouse.objects.create(
+            name='انبار تست شرکت موقت',
+            company=temp_comp
+        )
+        res_del_wh = self.client.delete(f'/api/personnel/companies/{temp_comp.id}/')
+        self.assertEqual(res_del_wh.status_code, 400)
+        self.assertIn('انبار', res_del_wh.content.decode('utf-8'))
+
+        # حذف انبار و تست وجود پرسنل
+        wh.delete()
+        from personnel.models import PersonnelProfile
+        p = PersonnelProfile.objects.create(
+            first_name='علی',
+            last_name='رضایی',
+            national_code='9988776655',
+            company=temp_comp
+        )
+        res_del_pers = self.client.delete(f'/api/personnel/companies/{temp_comp.id}/')
+        self.assertEqual(res_del_pers.status_code, 400)
+        self.assertIn('پرسنل', res_del_pers.content.decode('utf-8'))
+
+        # حذف پرسنل -> اکنون حذف موفقیت‌آمیز است
+        p.delete()
+        res_del_ok = self.client.delete(f'/api/personnel/companies/{temp_comp.id}/')
+        self.assertEqual(res_del_ok.status_code, 204)
+        self.assertFalse(Company.objects.filter(id=temp_comp.id).exists())
+
+    def test_websocket_broadcast_isolation_and_privacy(self):
+        """
+        آزمون فاز ۴: ایزولاسیون روم وب‌سوکت به شرکت مربوطه و عدم نشت کدملی در پی‌لود
+        """
+        from unittest.mock import patch
+        from personnel.models import PersonnelProfile
+        from personnel.views import broadcast_personnel_update
+
+        p = PersonnelProfile.objects.create(
+            first_name='سارا',
+            last_name='احمدی',
+            national_code='1234567890',
+            company=self.company_pts
+        )
+
+        with patch('channels.layers.get_channel_layer') as mock_get_layer:
+            from unittest.mock import MagicMock, AsyncMock
+            mock_layer = MagicMock()
+            mock_layer.group_send = AsyncMock()
+            mock_get_layer.return_value = mock_layer
+
+            broadcast_personnel_update(p, action_type='updated', message='تست وب‌سوکت')
+
+            mock_layer.group_send.assert_called_once()
+            call_args = mock_layer.group_send.call_args[0]
+            group_name = call_args[0]
+            payload = call_args[1]
+
+            # ۱. پیام باید دقیقاً به کانال تفکیک‌شده شرکت ارسال شود
+            self.assertEqual(group_name, f'company_{self.company_pts.id}_notifications')
+            self.assertEqual(payload['company_id'], self.company_pts.id)
+
+            # ۲. کدملی نباید در پی‌لود وب‌سوکت وجود داشته باشد (حفاظت از حریم خصوصی)
+            self.assertNotIn('national_code', payload)
+
+
 

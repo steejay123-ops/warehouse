@@ -184,6 +184,17 @@ ng-persian-datepicker {
   box-sizing: border-box !important;
 }
 
+.datepicker-outer-container.hide {
+  display: none !important;
+}
+
+/* Left-aligned positioning for inputs positioned on the left edge of grids/modals */
+.datepicker-left .datepicker-outer-container,
+.to-datepicker .datepicker-outer-container {
+  left: 0 !important;
+  right: auto !important;
+}
+
 .datepicker-outer-container .days-container .day-col {
   width: 14.2857% !important;
   box-sizing: border-box !important;

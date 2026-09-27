@@ -1,14 +1,15 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { StateService } from '../../../services/state.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ToastService } from '../../../services/toast.service';
 import { ConfirmDialogService } from '../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { PersonnelApiService } from '../../../core/api/personnel-api.service';
 import { WarehouseHttpService } from '../../../core/http/warehouse-http.service';
+import { WebSocketService } from '../../../core/http/websocket.service';
 import {
   PersonnelProfile,
   VehicleDriverProfile,
@@ -29,6 +30,7 @@ import {
   validateAccountNumber
 } from '../../../core/utils/sheba-utils';
 import { AppPersonaService } from '../../../core/services/app-persona.service';
+import { ActiveCompanyService } from '../../../core/services/active-company.service';
 
 @Component({
   selector: 'app-personnel-profiles',
@@ -37,7 +39,11 @@ import { AppPersonaService } from '../../../core/services/app-persona.service';
   templateUrl: './personnel-profiles.html',
   styleUrl: './personnel-profiles.css'
 })
-export class PersonnelProfilesHub implements OnInit {
+export class PersonnelProfilesHub implements OnInit, OnDestroy {
+  private wsSub?: Subscription;
+  private queryParamsSub?: Subscription;
+  private companySub?: Subscription;
+
   // Main Top Tabs: 'personnel' | 'vehicles' | 'change_requests'
   activeTab: 'personnel' | 'vehicles' | 'change_requests' = 'personnel';
   profileApprovalFilter: string = 'ALL';
@@ -99,7 +105,9 @@ export class PersonnelProfilesHub implements OnInit {
     private confirmDialog: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    @Optional() private ws?: WebSocketService,
+    @Optional() public activeCompanyService?: ActiveCompanyService
   ) {}
 
   get canApprovePersonnelManager(): boolean {
@@ -138,12 +146,46 @@ export class PersonnelProfilesHub implements OnInit {
     return this.persona.canPerform('/profiles', 'edit_base_wage_and_bonuses');
   }
 
+  private onCompanyContextChanged = () => {
+    this.selectedWarehouseId = null;
+    this.loadWarehouses();
+    this.loadProfiles();
+  };
+
   ngOnInit(): void {
     this.loadWarehouses();
     this.loadYearlySettings();
 
-    this.route.queryParams.subscribe(params => {
+    // گوش دادن به رویداد سراسری تغییر کانتکست شرکت
+    if (typeof window !== 'undefined') {
+      window.addEventListener('company_context_changed', this.onCompanyContextChanged);
+    }
+
+    // گوش دادن به تغییر شرکت فعال و به‌روزرسانی درجا فهرست پرسنل و ناوگان
+    if (this.activeCompanyService?.activeCompany$) {
+      let lastCompanyId = this.activeCompanyService.activeCompanyId;
+      this.companySub = this.activeCompanyService.activeCompany$.subscribe(company => {
+        const newId = company?.id ?? null;
+        if (newId !== lastCompanyId) {
+          lastCompanyId = newId;
+          this.selectedWarehouseId = null;
+          this.loadWarehouses();
+          this.loadProfiles();
+        }
+      });
+    }
+
+    this.queryParamsSub = this.route.queryParams.subscribe(params => {
       let shouldReload = false;
+      if (params['cid']) {
+        const queryCid = Number(params['cid']);
+        if (this.activeCompanyService && this.activeCompanyService.activeCompanyId !== queryCid) {
+          const target = this.activeCompanyService.availableCompanies.find(c => c.id === queryCid);
+          if (target) {
+            this.activeCompanyService.selectCompany(target);
+          }
+        }
+      }
       if (params['tab'] && (params['tab'] === 'personnel' || params['tab'] === 'vehicles' || params['tab'] === 'change_requests')) {
         this.activeTab = params['tab'];
       }
@@ -165,6 +207,56 @@ export class PersonnelProfilesHub implements OnInit {
       }
       this.loadProfiles();
     });
+
+    // اشتراک بلادرنگ وب‌سوکت برای همگام‌سازی لحظه‌ای پرونده پرسنل و ناوگان
+    if (this.ws) {
+      this.wsSub = this.ws.notifications$.subscribe(notif => {
+        if (!notif) return;
+        // نادیده گرفتن اکوی پیام به تب جاری
+        if (notif.client_tab_id && notif.client_tab_id === this.ws?.tabId) {
+          return;
+        }
+        if (notif.type === 'personnel_updated' || notif.event === 'personnel_updated' || notif.type_str === 'personnel_updated' ||
+            notif.type === 'vehicle_updated' || notif.event === 'vehicle_updated' || notif.type_str === 'vehicle_updated') {
+          this.loadProfiles();
+        }
+        if (notif.type === 'personnel_change_request_updated' || notif.type_str === 'personnel_change_request_updated') {
+          this.loadChangeRequests();
+        }
+      });
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('company_context_changed', this.onCompanyContextChanged);
+    }
+    if (this.wsSub) {
+      this.wsSub.unsubscribe();
+    }
+    if (this.queryParamsSub) {
+      this.queryParamsSub.unsubscribe();
+    }
+    if (this.companySub) {
+      this.companySub.unsubscribe();
+    }
+  }
+
+  // ─── بهینه‌سازی رندر و جلوگیری از بازسازی مکرر DOM با TrackBy ───
+  trackByPersonnelId(index: number, p: PersonnelProfile): any {
+    return p?.id || index;
+  }
+
+  trackByVehicleId(index: number, v: VehicleDriverProfile): any {
+    return v?.id || index;
+  }
+
+  trackByCrId(index: number, cr: any): any {
+    return cr?.id || index;
+  }
+
+  trackByDiffKey(index: number, row: any): any {
+    return row?.key || index;
   }
 
   updateUrlParams(): void {
@@ -230,7 +322,8 @@ export class PersonnelProfilesHub implements OnInit {
       this.api.getPersonnelProfiles({
         warehouse_id: this.selectedWarehouseId || undefined,
         approval_status: approvalParam,
-        search: this.profileSearch || undefined
+        search: this.profileSearch || undefined,
+        company_id: this.activeCompanyService?.activeCompanyId || undefined
       }).subscribe({
         next: (res) => {
           this.personnelList = res || [];
@@ -246,7 +339,8 @@ export class PersonnelProfilesHub implements OnInit {
       this.api.getVehicleProfiles({
         warehouse_id: this.selectedWarehouseId || undefined,
         approval_status: approvalParam,
-        search: this.profileSearch || undefined
+        search: this.profileSearch || undefined,
+        company_id: this.activeCompanyService?.activeCompanyId || undefined
       }).subscribe({
         next: (res) => {
           this.vehiclesList = res || [];
@@ -268,7 +362,8 @@ export class PersonnelProfilesHub implements OnInit {
     if (this.changeRequestSubTab === 'personnel') {
       this.api.getPersonnelChangeRequests({
         status: statusParam,
-        search: this.profileSearch || undefined
+        search: this.profileSearch || undefined,
+        company_id: this.activeCompanyService?.activeCompanyId || undefined
       }).subscribe({
         next: (res) => {
           this.personnelChangeRequests = res || [];
@@ -283,7 +378,8 @@ export class PersonnelProfilesHub implements OnInit {
     } else {
       this.api.getVehicleChangeRequests({
         status: statusParam,
-        search: this.profileSearch || undefined
+        search: this.profileSearch || undefined,
+        company_id: this.activeCompanyService?.activeCompanyId || undefined
       }).subscribe({
         next: (res) => {
           this.vehicleChangeRequests = res || [];

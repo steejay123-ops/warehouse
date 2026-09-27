@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef, HostListener, signal, computed, effect } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewChild, ElementRef, HostListener, signal, computed, effect, Optional } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpContext } from '@angular/common/http';
 import { FormsModule, ReactiveFormsModule, FormControl } from '@angular/forms';
@@ -28,6 +28,7 @@ import {
 } from '../../../core/models/personnel.model';
 import { jalaliToGregorian, gregorianToJalali } from '../../../core/utils/date-utils';
 import { IRANIAN_BANKS, IranianBankInfo, validateSheba, ShebaValidationResult, formatShebaDisplay, cleanShebaInput, extractShebaDigits, generateShebaFromAccount, getBankByName, validateAccountNumber } from '../../../core/utils/sheba-utils';
+import { ActiveCompanyService } from '../../../core/services/active-company.service';
 import { NgPersianDatepickerModule } from 'ng-persian-datepicker';
 import { AppPersonaService } from '../../../core/services/app-persona.service';
 
@@ -278,6 +279,17 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
   // WebSocket Live Subscription
   private wsSub?: Subscription;
   private wsConnectedSub?: Subscription;
+  private queryParamsSub?: Subscription;
+  private companySub?: Subscription;
+
+  // Caching for Performance (Avoid heavy array loops on every change detection tick)
+  private _cachedAttendanceCounts: any = null;
+  private _attendanceCountsVersion: number = 0;
+  private _lastCalculatedVersion: number = -1;
+
+  public invalidateAttendanceCounts(): void {
+    this._attendanceCountsVersion++;
+  }
 
   constructor(
     public state: StateService,
@@ -290,7 +302,8 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     private confirmDialog: ConfirmDialogService,
     private cdr: ChangeDetectorRef,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    @Optional() public activeCompanyService?: ActiveCompanyService
   ) {}
 
   get canUnlockPeriod(): boolean {
@@ -309,8 +322,15 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
            this.persona.canPerform('/attendance', 'input_bulk_attendance_records');
   }
 
-  // Summary counts for daily status using smart aggregation
+  // Summary counts for daily status with memoized caching to prevent UI freezing
   get attendanceCounts() {
+    const total = (this.attendanceRows || []).length;
+    if (this._cachedAttendanceCounts && 
+        this._lastCalculatedVersion === this._attendanceCountsVersion && 
+        this._cachedAttendanceCounts.total === total) {
+      return this._cachedAttendanceCounts;
+    }
+
     let present = 0;
     let half = 0;
     let absent = 0;
@@ -333,23 +353,40 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       totalOvertimeHours += Number(r.overtime_hours) || 0;
       totalAdvance += Number(r.advance_payment) || 0;
     }
-    return {
+
+    this._cachedAttendanceCounts = {
       present,
       half,
       absent,
       leave,
       mission,
       other,
-      total: this.attendanceRows.length,
+      total,
       totalEffectiveHours,
       totalOvertimeHours,
       totalAdvance
     };
+    this._lastCalculatedVersion = this._attendanceCountsVersion;
+    return this._cachedAttendanceCounts;
   }
 
   ngOnInit(): void {
     this.initDefaultDate();
     this.loadWarehouses();
+
+    // همگام‌سازی کارکرد و انبارها با تغییر شرکت فعال
+    if (this.activeCompanyService?.activeCompany$) {
+      let lastCompanyId = this.activeCompanyService.activeCompanyId;
+      this.companySub = this.activeCompanyService.activeCompany$.subscribe(company => {
+        const newId = company?.id ?? null;
+        if (newId !== lastCompanyId) {
+          lastCompanyId = newId;
+          this.selectedWarehouseId = null;
+          this.loadWarehouses();
+          this.onFilterChange();
+        }
+      });
+    }
 
     // گوش دادن بلادرنگ به رویدادهای کارکرد و ناوگان از طریق وب‌سوکت سراسری
     this.wsSub = this.wsService.notifications$.subscribe(notif => {
@@ -403,34 +440,38 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
 
     // ۴. مکانیزم Catch-up پس از وصل مجدد شبکه یا وب‌سوکت
     let isFirstConnection = true;
-    this.wsConnectedSub = this.wsService.connected$.subscribe(isConnected => {
-      if (isConnected) {
-        if (!isFirstConnection) {
-          console.log('[Attendance] 🔄 اتصال مجدد وب‌سوکت — اجرای استعلام Catch-up...');
-          if (this.activeMode === 'daily') {
-            this.refreshAttendanceMatrixSilently(true);
-          } else if (this.activeMode === 'monthly_grid') {
-            this.refreshMonthlyGridSilently(true);
-          } else if (this.activeMode === 'fleet') {
-            this.refreshVehicleMatrixSilently(true);
+    if (this.wsService?.connected$) {
+      this.wsConnectedSub = this.wsService.connected$.subscribe(isConnected => {
+        if (isConnected) {
+          if (!isFirstConnection) {
+            console.log('[Attendance] 🔄 اتصال مجدد وب‌سوکت — اجرای استعلام Catch-up...');
+            if (this.activeMode === 'daily') {
+              this.refreshAttendanceMatrixSilently(true);
+            } else if (this.activeMode === 'monthly_grid') {
+              this.refreshMonthlyGridSilently(true);
+            } else if (this.activeMode === 'fleet') {
+              this.refreshVehicleMatrixSilently(true);
+            }
           }
+          isFirstConnection = false;
         }
-        isFirstConnection = false;
-      }
-    });
+      });
+    }
 
     // تعیین بخش اصلی بر اساس روت ورودی (/attendance یا /fleet)
-    this.route.data.subscribe(data => {
-      if (data && data['defaultTab']) {
-        this.mainSectionTab = data['defaultTab'] === 'fleet' ? 'fleet' : 'personnel';
-      } else {
-        const url = this.router.url || '';
-        this.mainSectionTab = url.includes('/fleet') ? 'fleet' : 'personnel';
-      }
-    });
+    if (this.route.data) {
+      this.route.data.subscribe(data => {
+        if (data && data['defaultTab']) {
+          this.mainSectionTab = data['defaultTab'] === 'fleet' ? 'fleet' : 'personnel';
+        } else {
+          const url = this.router?.url || '';
+          this.mainSectionTab = url.includes('/fleet') ? 'fleet' : 'personnel';
+        }
+      });
+    }
 
     // خواندن و سینک کامل حالت‌ها و فیلترها از روی URL مرورگر
-    this.route.queryParams.subscribe(params => {
+    this.queryParamsSub = this.route.queryParams.subscribe(params => {
       let shouldReload = false;
       if (params['tab']) {
         this.mainSectionTab = params['tab'] === 'fleet' ? 'fleet' : 'personnel';
@@ -497,9 +538,46 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     if (this.wsConnectedSub) {
       this.wsConnectedSub.unsubscribe();
     }
+    if (this.queryParamsSub) {
+      this.queryParamsSub.unsubscribe();
+    }
+    if (this.companySub) {
+      this.companySub.unsubscribe();
+    }
+  }
+
+  // ─── توابع بهینه‌ساز عملکرد TrackBy جهت جلوگیری از انجماد یا لرزش رابط کاربری (UI Jitter / Freeze) ───
+  trackByRowId(index: number, row: AttendanceMatrixRow): any {
+    return row?.personnel_id || (row as any)?.id || index;
+  }
+
+  trackByMonthlyGridRow(index: number, row: MonthlyGridRow): any {
+    return row?.personnel_id || (row as any)?.id || index;
+  }
+
+  trackByVehicleRow(index: number, row: VehicleMatrixRow): any {
+    return row?.vehicle_id || (row as any)?.id || index;
+  }
+
+  trackByFleetMonthlyRow(index: number, row: VehicleMonthlyGridRow): any {
+    return row?.vehicle_id || (row as any)?.id || index;
+  }
+
+  trackByDayIdx(index: number, item: any): any {
+    return item?.day || item?.date || index;
+  }
+
+  trackByWhId(index: number, wh: any): any {
+    return wh?.id || index;
   }
 
   private initDefaultDate(): void {
+    if (this.selectedDateShamsi) {
+      if (!this.attendanceDateControl.value) {
+        this.attendanceDateControl.setValue(this.selectedDateShamsi, { emitEvent: false });
+      }
+      return;
+    }
     try {
       const formatter = new Intl.DateTimeFormat('fa-IR-u-nu-latn', {
         year: 'numeric',
@@ -1065,6 +1143,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
         this.periodStatus = res.period_status || 'OPEN';
         this.isAttendanceLoading = false;
         this.hasUnsavedChanges = false;
+        this.invalidateAttendanceCounts();
         this.applySearchFilter();
         this.cdr.detectChanges();
       },
@@ -1121,6 +1200,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
           }
         });
 
+        this.invalidateAttendanceCounts();
         this.applySearchFilter();
         this.cdr.detectChanges();
       },
@@ -1164,6 +1244,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       row.is_mission = false;
       row._isDirty = true;
       this.hasUnsavedChanges = true;
+      this.invalidateAttendanceCounts();
       this.cdr.detectChanges();
       return;
     }
@@ -1187,6 +1268,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       row.is_friday_work = false;
       row.is_mission = false;
     }
+    this.invalidateAttendanceCounts();
     this.cdr.detectChanges();
   }
 
@@ -1276,6 +1358,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     });
 
     this.hasUnsavedChanges = true;
+    this.invalidateAttendanceCounts();
     const scopeText = this.selectedPersonnelIds.size > 0 ? `${targetRows.length} نفر انتخاب‌شده` : `${targetRows.length} نفر`;
     this.toast.show('success', `${scopeText} به عنوان «${statusLabel}» تنظیم شدند`);
     this.cdr.detectChanges();
@@ -1310,6 +1393,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
           }
         });
         this.hasUnsavedChanges = true;
+        this.invalidateAttendanceCounts();
         this.toast.show('success', `اطلاعات کارکرد ${matched} نفر از روز قبل کپی شد`);
         this.cdr.detectChanges();
       },
@@ -1335,6 +1419,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       r._isDirty = true;
     });
     this.hasUnsavedChanges = true;
+    this.invalidateAttendanceCounts();
     this.toast.show('success', `وضعیت ${targets.length} نفر به تعطیل رسمی تغییر یافت`);
     this.cdr.detectChanges();
   }
@@ -1366,6 +1451,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
     });
 
     this.hasUnsavedChanges = true;
+    this.invalidateAttendanceCounts();
     this.applySearchFilter();
     this.toast.show('info', `وضعیت ${target.length} نفر پاکسازی شد. جهت اعمال نهایی در سرور، دکمه «به‌روزرسانی کارکرد» را بزنید.`);
     this.cdr.detectChanges();
@@ -1415,6 +1501,7 @@ export class WarehouseAttendance implements OnInit, OnDestroy {
       r._isDirty = true;
     });
     this.hasUnsavedChanges = true;
+    this.invalidateAttendanceCounts();
     this.isBulkHoursModalOpen = false;
     this.toast.show('success', `ساعات کارکرد برای ${targets.length} نفر با موفقیت اعمال شد`);
     this.cdr.detectChanges();

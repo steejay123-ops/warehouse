@@ -33,6 +33,11 @@ export class ToastService {
   error(message: string): void { this.show('error', message); }
   warning(message: string): void { this.show('warning', message); }
   info(message: string): void { this.show('info', message); }
+
+  showSuccess(message: string): void { this.success(message); }
+  showError(message: string): void { this.error(message); }
+  showWarning(message: string): void { this.warning(message); }
+  showInfo(message: string): void { this.info(message); }
 }
 
 // ══════════════════════════════════════════════════

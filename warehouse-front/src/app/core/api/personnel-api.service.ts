@@ -55,6 +55,14 @@ export class PersonnelApiService {
     return this.api.get<{ job_titles: string[] }>(`${this.baseUrl}/profiles/job-titles/`);
   }
 
+  lookupPersonnelByNationalCode(nationalCode: string): Observable<{ found: boolean; personnel?: any }> {
+    return this.api.get<{ found: boolean; personnel?: any }>(`${this.baseUrl}/profiles/lookup-by-national-code/`, { national_code: nationalCode });
+  }
+
+  assignPersonnelToSection(id: number, data: { section_id: number; project_id?: number; job_title?: string; daily_base_wage?: number; notes?: string }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/assign-section/`, data);
+  }
+
   deletePersonnelProfile(id: number): Observable<void> {
     return this.api.delete<void>(`${this.baseUrl}/profiles/${id}`);
   }

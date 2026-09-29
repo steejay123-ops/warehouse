@@ -1166,9 +1166,9 @@ export class Layout implements OnInit, OnDestroy {
       'profiles', 'personnel-profiles', 'base-settings', 'payroll', 'personnel', 'fleet-settlement',
       'counterparties',
       'employee-attendance', 'employee-fleet', 'employee-invoices', 'employee-petty-cash', 'employee-new-vehicle', 'employee-new-personnel',
-      'supervisor-attendance', 'supervisor-fleet', 'supervisor-invoices', 'supervisor-petty-cash', 'supervisor-new-profiles', 'supervisor-period-lock',
-      'accountant-payroll', 'accountant-fleet', 'accountant-invoices', 'accountant-petty-cash', 'accountant-diskettes', 'accountant-counterparties',
-      'manager-dashboard', 'manager-budget', 'manager-contracts', 'manager-reports',
+      'supervisor-attendance', 'supervisor-fleet', 'supervisor-personnel', 'supervisor-invoices', 'supervisor-petty-cash', 'supervisor-new-profiles', 'supervisor-period-lock',
+      'accountant-payroll', 'accountant-fleet', 'accountant-personnel', 'accountant-invoices', 'accountant-petty-cash', 'accountant-new-profiles', 'accountant-diskettes', 'accountant-counterparties',
+      'manager-dashboard', 'manager-personnel', 'manager-fleet', 'manager-budget', 'manager-contracts', 'manager-reports',
       'treasurer-disbursements', 'treasurer-invoices', 'treasurer-bank-accounts', 'treasurer-cheques', 'treasurer-reconciliation'
     ];
     const isAccountingItem = accountingTabs.includes(tabId) || this.accountingNavItems().some(i => i.id === tabId) || this.employeeNavItems().some(i => i.id === tabId) || this.supervisorNavItems().some(i => i.id === tabId) || this.accountantNavItems().some(i => i.id === tabId) || this.managerNavItems().some(i => i.id === tabId) || this.treasurerNavItems().some(i => i.id === tabId);

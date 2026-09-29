@@ -21,14 +21,19 @@ import { SupervisorFleetHubComponent } from '../../components/finance/supervisor
 import { SupervisorInvoicesHubComponent } from '../../components/finance/supervisor/supervisor-invoices/supervisor-invoices';
 import { SupervisorPettyCashHubComponent } from '../../components/finance/supervisor/supervisor-petty-cash/supervisor-petty-cash';
 import { SupervisorNewProfilesHubComponent } from '../../components/finance/supervisor/supervisor-new-profiles/supervisor-new-profiles';
+import { SupervisorPersonnelHubComponent } from '../../components/finance/supervisor/supervisor-personnel/supervisor-personnel';
 import { SupervisorPeriodLockHubComponent } from '../../components/finance/supervisor/supervisor-period-lock/supervisor-period-lock';
 import { AccountantPayrollHubComponent } from '../../components/finance/accountant/accountant-payroll/accountant-payroll';
 import { AccountantFleetHubComponent } from '../../components/finance/accountant/accountant-fleet/accountant-fleet';
+import { AccountantPersonnelHubComponent } from '../../components/finance/accountant/accountant-personnel/accountant-personnel';
 import { AccountantInvoicesHubComponent } from '../../components/finance/accountant/accountant-invoices/accountant-invoices';
 import { AccountantPettyCashHubComponent } from '../../components/finance/accountant/accountant-petty-cash/accountant-petty-cash';
 import { AccountantDiskettesHubComponent } from '../../components/finance/accountant/accountant-diskettes/accountant-diskettes';
 import { AccountantCounterpartiesHubComponent } from '../../components/finance/accountant/accountant-counterparties/accountant-counterparties';
+import { AccountantNewProfilesHubComponent } from '../../components/finance/accountant/accountant-new-profiles/accountant-new-profiles';
 import { ManagerDashboardComponent } from '../../components/finance/manager/manager-dashboard/manager-dashboard';
+import { ManagerPersonnelHubComponent } from '../../components/finance/manager/manager-personnel/manager-personnel';
+import { ManagerFleetHubComponent } from '../../components/finance/manager/manager-fleet/manager-fleet';
 import { ManagerBudgetComponent } from '../../components/finance/manager/manager-budget/manager-budget';
 import { ManagerContractsComponent } from '../../components/finance/manager/manager-contracts/manager-contracts';
 import { ManagerReportsComponent } from '../../components/finance/manager/manager-reports/manager-reports';
@@ -58,33 +63,43 @@ export const ACCOUNTING_ROUTES: Routes = [
   { path: 'employee/new-vehicle', redirectTo: 'employee-new-vehicle', pathMatch: 'full' },
   { path: 'employee/new-personnel', redirectTo: 'employee-new-personnel', pathMatch: 'full' },
   { path: 'supervisor', redirectTo: 'supervisor-attendance', pathMatch: 'full' },
+  { path: 'supervisor-personnel', component: SupervisorPersonnelHubComponent, data: { reuse: true } },
   { path: 'supervisor-attendance', component: SupervisorAttendanceHubComponent, data: { reuse: true } },
   { path: 'supervisor-fleet', component: SupervisorFleetHubComponent, data: { reuse: true } },
   { path: 'supervisor-invoices', component: SupervisorInvoicesHubComponent, data: { reuse: true } },
   { path: 'supervisor-petty-cash', component: SupervisorPettyCashHubComponent, data: { reuse: true } },
   { path: 'supervisor-new-profiles', component: SupervisorNewProfilesHubComponent, data: { reuse: true } },
   { path: 'supervisor-period-lock', component: SupervisorPeriodLockHubComponent, data: { reuse: true } },
+  { path: 'supervisor/personnel', redirectTo: 'supervisor-personnel', pathMatch: 'full' },
   { path: 'supervisor/attendance', redirectTo: 'supervisor-attendance', pathMatch: 'full' },
   { path: 'supervisor/fleet', redirectTo: 'supervisor-fleet', pathMatch: 'full' },
   { path: 'supervisor/invoices', redirectTo: 'supervisor-invoices', pathMatch: 'full' },
   { path: 'supervisor/petty-cash', redirectTo: 'supervisor-petty-cash', pathMatch: 'full' },
-  { path: 'supervisor/new-profiles', redirectTo: 'supervisor-new-profiles', pathMatch: 'full' },
+  { path: 'supervisor/new-profiles', redirectTo: 'supervisor-personnel', pathMatch: 'full' },
   { path: 'supervisor/period-lock', redirectTo: 'supervisor-period-lock', pathMatch: 'full' },
   { path: 'accountant', redirectTo: 'accountant-payroll', pathMatch: 'full' },
+  { path: 'accountant-personnel', component: AccountantPersonnelHubComponent, data: { reuse: true } },
   { path: 'accountant-payroll', component: AccountantPayrollHubComponent, data: { reuse: true } },
   { path: 'accountant-fleet', component: AccountantFleetHubComponent, data: { reuse: true } },
   { path: 'accountant-invoices', component: AccountantInvoicesHubComponent, data: { reuse: true } },
   { path: 'accountant-petty-cash', component: AccountantPettyCashHubComponent, data: { reuse: true } },
   { path: 'accountant-diskettes', component: AccountantDiskettesHubComponent, data: { reuse: true } },
   { path: 'accountant-counterparties', component: AccountantCounterpartiesHubComponent, data: { reuse: true } },
+  { path: 'accountant-new-profiles', component: AccountantNewProfilesHubComponent, data: { reuse: true } },
+  { path: 'accountant/personnel', redirectTo: 'accountant-personnel', pathMatch: 'full' },
   { path: 'accountant/payroll', redirectTo: 'accountant-payroll', pathMatch: 'full' },
   { path: 'accountant/fleet', redirectTo: 'accountant-fleet', pathMatch: 'full' },
   { path: 'accountant/invoices', redirectTo: 'accountant-invoices', pathMatch: 'full' },
   { path: 'accountant/petty-cash', redirectTo: 'accountant-petty-cash', pathMatch: 'full' },
   { path: 'accountant/diskettes', redirectTo: 'accountant-diskettes', pathMatch: 'full' },
   { path: 'accountant/counterparties', redirectTo: 'accountant-counterparties', pathMatch: 'full' },
+  { path: 'accountant/new-profiles', redirectTo: 'accountant-personnel', pathMatch: 'full' },
   { path: 'manager', redirectTo: 'manager-dashboard', pathMatch: 'full' },
+  { path: 'manager-personnel', component: ManagerPersonnelHubComponent, data: { reuse: true } },
+  { path: 'manager-fleet', component: ManagerFleetHubComponent, data: { reuse: true } },
   { path: 'manager-dashboard', component: ManagerDashboardComponent, data: { reuse: true } },
+  { path: 'manager/personnel', redirectTo: 'manager-personnel', pathMatch: 'full' },
+  { path: 'manager/fleet', redirectTo: 'manager-fleet', pathMatch: 'full' },
   { path: 'manager/dashboard', redirectTo: 'manager-dashboard', pathMatch: 'full' },
   { path: 'manager/approvals', redirectTo: 'manager-approvals', pathMatch: 'full' },
   { path: 'manager-budget', component: ManagerBudgetComponent, data: { reuse: true } },

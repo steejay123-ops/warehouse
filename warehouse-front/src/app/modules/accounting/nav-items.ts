@@ -31,17 +31,16 @@ export const EMPLOYEE_NAV_ITEMS: NavItem[] = [
 ];
 
 export const SUPERVISOR_NAV_ITEMS: NavItem[] = [
-  { id: 'supervisor-attendance', label: '📋 تایید کارکرد پرسنل', icon: 'check-square', permission: 'perm_approve_personnel_supervisor', module: 'accounting', isAccounting: true },
-  { id: 'supervisor-fleet', label: '🚚 تایید کارکرد ماشین‌آلات', icon: 'truck', permission: 'perm_approve_fleet_supervisor', module: 'accounting', isAccounting: true },
+  { id: 'supervisor-personnel', label: '👥 پرسنل', icon: 'users', permission: 'perm_approve_personnel_supervisor', module: 'accounting', isAccounting: true },
+  { id: 'supervisor-fleet', label: '🚚 ناوگان', icon: 'truck', permission: 'perm_approve_fleet_supervisor', module: 'accounting', isAccounting: true },
   { id: 'supervisor-invoices', label: '🧾 تایید فاکتورهای هزینه', icon: 'dollar-sign', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
   { id: 'supervisor-petty-cash', label: '💰 تایید اسناد تن‌خواه', icon: 'credit-card', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
-  { id: 'supervisor-new-profiles', label: '👥 تایید پرسنل و ناوگان جدید', icon: 'users', permission: 'perm_approve_personnel_supervisor', module: 'accounting', isAccounting: true },
   { id: 'supervisor-period-lock', label: '🔒 بستن دوره کارکرد ماهانه', icon: 'briefcase', permission: 'perm_lock_work_period', module: 'accounting', isAccounting: true },
 ];
 
 export const ACCOUNTANT_NAV_ITEMS: NavItem[] = [
-  { id: 'accountant-payroll', label: '💳 حقوق و دستمزد ماهانه', icon: 'dollar-sign', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
-  { id: 'accountant-fleet', label: '🚚 تسویه‌حساب ناوگان', icon: 'truck', permission: 'view_sys_fleet_settlement', module: 'accounting', isAccounting: true },
+  { id: 'accountant-personnel', label: '👥 پرسنل', icon: 'users', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
+  { id: 'accountant-fleet', label: '🚚 ناوگان', icon: 'truck', permission: 'view_sys_fleet_settlement', module: 'accounting', isAccounting: true },
   { id: 'accountant-invoices', label: '🧾 ممیزی فاکتورهای هزینه', icon: 'file-text', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
   { id: 'accountant-petty-cash', label: '💰 کنترل تن‌خواه‌گردان', icon: 'credit-card', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
   { id: 'accountant-diskettes', label: '📑 دیسکت‌های بیمه و مالیات', icon: 'briefcase', permission: 'view_sys_payroll', module: 'accounting', isAccounting: true },
@@ -50,9 +49,9 @@ export const ACCOUNTANT_NAV_ITEMS: NavItem[] = [
 
 export const MANAGER_NAV_ITEMS: NavItem[] = [
   { id: 'manager-dashboard', label: '📊 داشبورد هوش مدیریتی', icon: 'bar-chart-2', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
-  { id: 'manager-approvals', label: '✅ کارتابل تاییدات و پرداخت', icon: 'check-circle', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
+  { id: 'manager-personnel', label: '👥 پرسنل', icon: 'users', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
+  { id: 'manager-fleet', label: '🚚 ناوگان', icon: 'truck', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
   { id: 'manager-budget', label: '📉 کنترل بودجه و هزینه‌ها', icon: 'activity', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
-  { id: 'manager-contracts', label: '📜 تصویب احکام و قراردادها', icon: 'file-text', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
   { id: 'manager-reports', label: '📑 گزارشات جامع مدیریتی', icon: 'briefcase', permission: 'can_act_as_company_manager', module: 'accounting', isAccounting: true },
 ];
 

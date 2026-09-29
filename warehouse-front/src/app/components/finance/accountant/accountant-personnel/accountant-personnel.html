@@ -1,0 +1,608 @@
+<div class="min-h-screen bg-slate-50/50 p-3 md:p-6 space-y-4" dir="rtl">
+
+  <!-- ── ۱. هدر یکپارچه و چسبان مرکز فرماندهی (Unified Sticky Command Center Header) ── -->
+  <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
+    <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+      
+      <!-- سمت راست: دراپ‌داون انتخاب بخش و کپسول زیرتب‌های پرسنل -->
+      <div class="flex flex-wrap items-center gap-2 md:gap-3">
+        <!-- انتخابگر بخش فعال -->
+        <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">بخش فعال:</span>
+          <select
+            [(ngModel)]="selectedSectionId"
+            (change)="onSectionChanged()"
+            class="bg-transparent text-xs font-black text-blue-700 focus:outline-none cursor-pointer">
+            <option *ngFor="let sec of mySections" [value]="sec.id">
+              {{ sec.project_name ? (sec.project_name + ' ◀ ') : '' }}{{ sec.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- ناوبری زیرتب‌ها در کپسول محصور (Subtabs Pill Container) -->
+        <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
+          <button
+            type="button"
+            (click)="switchSubTab('new')"
+            [ngClass]="activeSubTab === 'new' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>🆕 احکام و مدارک مالی</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                  [ngClass]="statusCounters.newPending > 0 ? 'bg-amber-100 text-amber-900 font-black animate-pulse' : 'bg-slate-200/70 text-slate-600'">
+              {{ statusCounters.newPending }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            (click)="switchSubTab('payroll')"
+            [ngClass]="activeSubTab === 'payroll' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>💳 حقوق و دستمزد ماهانه</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                  [ngClass]="statusCounters.payrollPending > 0 ? 'bg-blue-100 text-blue-800 font-black' : 'bg-slate-200/70 text-slate-600'">
+              {{ statusCounters.payrollPending }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            (click)="switchSubTab('changes')"
+            [ngClass]="activeSubTab === 'changes' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer relative">
+            <span>🔄 درخواست‌های تغییرات</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
+                  [ngClass]="statusCounters.changesPending > 0 ? 'bg-amber-500 text-white animate-pulse' : 'bg-slate-200/70 text-slate-600'">
+              {{ statusCounters.changesPending }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            (click)="switchSubTab('all')"
+            [ngClass]="activeSubTab === 'all' ? 'bg-white text-blue-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            <span>📁 همه پرسنل</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md bg-slate-200/70 text-slate-600">
+              {{ statusCounters.allTotal }}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- سمت چپ: باکس جستجو و دکمه رفرش -->
+      <div class="flex items-center gap-2">
+        <div class="relative w-48 md:w-60">
+          <input
+            type="text"
+            [(ngModel)]="searchQuery"
+            (input)="fetchData()"
+            placeholder="جستجوی پرسنل، کد ملی، شبا..."
+            class="w-full bg-slate-100/90 text-xs py-1.5 pr-8 pl-6 rounded-xl border border-slate-200/80 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+          <span class="absolute right-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
+          <button *ngIf="searchQuery" (click)="searchQuery = ''; fetchData()" class="absolute left-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+        </div>
+
+        <button
+          type="button"
+          (click)="fetchData()"
+          [disabled]="isLoading"
+          title="همگام‌سازی و بارگذاری مجدد"
+          class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
+          <span [class.animate-spin]="isLoading">🔄</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── ۲. بدنه محتوا متناسب با زیرتب فعال ── -->
+
+  <!-- زیرتب ۱: احکام و مدارک مالی در انتظار تایید حسابدار -->
+  <div *ngIf="activeSubTab === 'new'" class="space-y-3">
+    <div *ngIf="personnelItems.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+      <span class="text-3xl block mb-2">🎉</span>
+      <p class="font-bold text-sm">هیچ پرونده پرسنلی معلق برای ممیزی مالی در این بخش وجود ندارد.</p>
+    </div>
+
+    <div *ngIf="personnelItems.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
+            <tr>
+              <th class="p-3">نام و مشخصات</th>
+              <th class="p-3">کد ملی</th>
+              <th class="p-3">گروه شغلی و مزد روزانه</th>
+              <th class="p-3">بیمه و مالیات</th>
+              <th class="p-3">بانک و شماره شبا</th>
+              <th class="p-3">وضعیت مدارک</th>
+              <th class="p-3 text-center">عملیات حسابدار</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let item of personnelItems" class="hover:bg-blue-50/20 transition-all">
+              <td class="p-3">
+                <div class="font-bold text-slate-800">{{ item.first_name }} {{ item.last_name }}</div>
+                <div class="text-[11px] text-slate-500 font-mono">{{ item.phone_number || '—' }}</div>
+              </td>
+              <td class="p-3 font-mono font-bold text-slate-700">
+                {{ item.national_code }}
+                <button *ngIf="item.id" (click)="copyToClipboard(item.national_code, item.id)" title="کپی" class="text-slate-400 hover:text-blue-600 mr-1 cursor-pointer">📋</button>
+              </td>
+              <td class="p-3">
+                <div class="font-bold text-slate-800 font-mono">
+                  {{ item.daily_base_wage ? (item.daily_base_wage | number) + ' ریال' : 'تعیین نشده' }}
+                </div>
+                <div class="text-[11px] text-slate-500">گروه: {{ item.job_grade || '۱۹' }}</div>
+              </td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded text-[11px] font-bold"
+                      [ngClass]="item.insurance_number ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+                  {{ item.insurance_number ? ('بیمه: ' + item.insurance_number) : 'فاقد شماره بیمه' }}
+                </span>
+              </td>
+              <td class="p-3">
+                <div *ngIf="item.sheba_number" class="flex items-center gap-1 font-mono text-[11px] font-bold text-slate-700">
+                  <span>IR{{ item.sheba_number }}</span>
+                  <button *ngIf="item.id" (click)="copyToClipboard('IR' + item.sheba_number, item.id)" title="کپی شبا" class="text-slate-400 hover:text-blue-600 cursor-pointer">📋</button>
+                </div>
+                <div *ngIf="!item.sheba_number" class="text-rose-600 font-bold text-[11px]">
+                  ⚠️ فاقد شبا
+                </div>
+                <div class="text-[10px] text-slate-500">{{ item.bank_name || 'بانک نامشخص' }}</div>
+              </td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-100 text-amber-900">
+                  در انتظار تایید حسابدار
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    (click)="openEditPersonnelModal(item)"
+                    class="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-black cursor-pointer transition-all">
+                    ✏️ احکام و مدارک
+                  </button>
+                  <button
+                    type="button"
+                    (click)="approvePersonnelFinance(item)"
+                    class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-black shadow-xs cursor-pointer transition-all">
+                    💳 تایید مالی (مدیر)
+                  </button>
+                  <button
+                    *ngIf="item.id"
+                    type="button"
+                    (click)="openRejectModal(item.id, item.first_name + ' ' + item.last_name, 'personnel', 'revision')"
+                    class="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold cursor-pointer">
+                    🔄 عودت
+                  </button>
+                  <button
+                    *ngIf="item.id"
+                    type="button"
+                    (click)="openRejectModal(item.id, item.first_name + ' ' + item.last_name, 'personnel', 'reject')"
+                    class="px-2 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold cursor-pointer">
+                    ✕ رد
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- زیرتب ۲: حقوق و دستمزد ماهانه -->
+  <div *ngIf="activeSubTab === 'payroll'" class="space-y-3">
+    <div *ngIf="payrollRecords.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+      <span class="text-3xl block mb-2">💳</span>
+      <p class="font-bold text-sm">هیچ رکورد حقوقی آماده ممیزی برای سال مالی {{ fiscalYear }} در این بخش یافت نشد.</p>
+    </div>
+
+    <div *ngIf="payrollRecords.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
+            <tr>
+              <th class="p-3">پرسنل</th>
+              <th class="p-3">ماه کارکرد</th>
+              <th class="p-3">مزد ناخالص</th>
+              <th class="p-3">کسورات (بیمه/مالیات)</th>
+              <th class="p-3">خالص پرداختی</th>
+              <th class="p-3">وضعیت سند</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let pay of payrollRecords" class="hover:bg-slate-50/50">
+              <td class="p-3 font-bold text-slate-800">{{ pay.personnel_name }}</td>
+              <td class="p-3 font-mono">{{ pay.month_name || 'تیر' }}</td>
+              <td class="p-3 font-mono font-bold">{{ pay.gross_salary | number }} ریال</td>
+              <td class="p-3 font-mono text-rose-600">{{ pay.total_deductions | number }} ریال</td>
+              <td class="p-3 font-mono font-black text-emerald-700">{{ pay.net_salary | number }} ریال</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded text-[11px] font-bold"
+                      [ngClass]="pay.finance_approved ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                  {{ pay.finance_approved ? 'تایید مالی' : 'معلق حسابدار' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- زیرتب ۳: درخواست‌های تغییرات پرسنل -->
+  <div *ngIf="activeSubTab === 'changes'" class="space-y-3">
+    <div *ngIf="changeRequests.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+      <span class="text-3xl block mb-2">🔄</span>
+      <p class="font-bold text-sm">هیچ درخواست تغییراتی برای پرسنل وجود ندارد.</p>
+    </div>
+
+    <div *ngIf="changeRequests.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
+            <tr>
+              <th class="p-3">نام پرسنل</th>
+              <th class="p-3">کد ملی</th>
+              <th class="p-3">فیلدهای تغییر یافته</th>
+              <th class="p-3">تاریخ درخواست</th>
+              <th class="p-3">وضعیت</th>
+              <th class="p-3 text-center">عملیات</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let cr of changeRequests" class="hover:bg-slate-50/50">
+              <td class="p-3 font-bold text-slate-800">{{ cr.personnel_name }}</td>
+              <td class="p-3 font-mono">{{ cr.national_code }}</td>
+              <td class="p-3">
+                <button
+                  type="button"
+                  (click)="openDiffModal(cr)"
+                  class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer">
+                  🔍 مشاهده مغایرت‌ها (Diff)
+                </button>
+              </td>
+              <td class="p-3 font-mono text-slate-500">{{ cr.created_at | slice:0:10 }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-100 text-amber-900">
+                  در انتظار حسابدار
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <button
+                  type="button"
+                  (click)="openRejectModal(cr.id, cr.personnel_name || '', 'personnel_cr', 'reject')"
+                  class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold cursor-pointer">
+                  ✕ رد درخواست
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- زیرتب ۴: همه پرسنل -->
+  <div *ngIf="activeSubTab === 'all'" class="space-y-3">
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
+            <tr>
+              <th class="p-3">نام و مشخصات</th>
+              <th class="p-3">کد ملی</th>
+              <th class="p-3">مزد روزانه</th>
+              <th class="p-3">شماره بیمه</th>
+              <th class="p-3">شبا بانکی</th>
+              <th class="p-3">وضعیت پرونده</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let p of allPersonnelList" class="hover:bg-slate-50/50">
+              <td class="p-3 font-bold text-slate-800">{{ p.first_name }} {{ p.last_name }}</td>
+              <td class="p-3 font-mono font-bold">{{ p.national_code }}</td>
+              <td class="p-3 font-mono">{{ p.daily_base_wage ? (p.daily_base_wage | number) + ' ریال' : '—' }}</td>
+              <td class="p-3 font-mono">{{ p.insurance_number || 'فاقد بیمه' }}</td>
+              <td class="p-3 font-mono text-[11px] text-slate-500">{{ p.sheba_number ? ('IR' + p.sheba_number) : '—' }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-black"
+                      [ngClass]="p.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
+                  {{ p.approval_status === 'approved' ? 'مصوب مدیر' : 'در گردش' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── مودال جامع احکام مالی، بیمه و شبا (Financial Wage & Documents Modal) ── -->
+  <div *ngIf="isPersonnelModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-150">
+      
+      <!-- هدر مودال -->
+      <div class="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-black text-slate-800">
+            احکام مالی، مزد و مدارک بانکی: {{ editingPersonnel?.first_name }} {{ editingPersonnel?.last_name }}
+          </h3>
+          <span class="text-xs text-slate-500 font-mono">کد ملی: {{ editingPersonnel?.national_code }}</span>
+        </div>
+        <button (click)="closePersonnelModal()" class="text-slate-400 hover:text-slate-600 cursor-pointer">✕</button>
+      </div>
+
+      <!-- تب‌های درون مودال -->
+      <div class="flex border-b border-slate-200 bg-slate-100/60 px-4 pt-2 gap-2">
+        <button
+          type="button"
+          (click)="setPersonnelTab('contract')"
+          [ngClass]="personnelModalTab === 'contract' ? 'bg-white text-blue-700 border-b-2 border-blue-600 font-black' : 'text-slate-600 font-bold'"
+          class="px-3 py-1.5 text-xs rounded-t-lg transition-all cursor-pointer">
+          💼 مزد و مزایا (قانون کار)
+        </button>
+        <button
+          type="button"
+          (click)="setPersonnelTab('insurance')"
+          [ngClass]="personnelModalTab === 'insurance' ? 'bg-white text-blue-700 border-b-2 border-blue-600 font-black' : 'text-slate-600 font-bold'"
+          class="px-3 py-1.5 text-xs rounded-t-lg transition-all cursor-pointer">
+          📑 بیمه و مالیات
+        </button>
+        <button
+          type="button"
+          (click)="setPersonnelTab('contact')"
+          [ngClass]="personnelModalTab === 'contact' ? 'bg-white text-blue-700 border-b-2 border-blue-600 font-black' : 'text-slate-600 font-bold'"
+          class="px-3 py-1.5 text-xs rounded-t-lg transition-all cursor-pointer">
+          🏦 حساب بانکی و شبا
+        </button>
+      </div>
+
+      <!-- بدنه فرم مودال -->
+      <div class="p-5 overflow-y-auto space-y-4 flex-1 text-xs">
+
+        <!-- تب مزد و احکام -->
+        <div *ngIf="personnelModalTab === 'contract' && editingPersonnel" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">گروه شغلی (جدول ۲۰ گانه):</label>
+              <select
+                [(ngModel)]="editingPersonnel.job_grade"
+                (change)="onJobGradeChange(editingPersonnel.job_grade || '')"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                <option *ngFor="let g of [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]" [value]="g.toString()">
+                  گروه {{ g }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">سابقه سنوات (سال):</label>
+              <input
+                type="number"
+                [(ngModel)]="editingPersonnel.base_years_experience"
+                (input)="recalculatePersonnelRates()"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">مزد مبنای روزانه (ریال):</label>
+              <input
+                type="number"
+                [(ngModel)]="editingPersonnel.daily_base_wage"
+                (input)="recalculatePersonnelRates()"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono font-bold text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">حق مسکن ماهانه (ریال):</label>
+              <input
+                type="number"
+                [(ngModel)]="editingPersonnel.housing_allowance"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">بن کارگری ماهانه (ریال):</label>
+              <input
+                type="number"
+                [(ngModel)]="editingPersonnel.food_allowance"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">تعداد اولاد تحت تکفل:</label>
+              <input
+                type="number"
+                [(ngModel)]="editingPersonnel.children_count"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-100 flex items-center justify-between font-mono">
+            <div>
+              <span class="text-slate-600 text-xs font-sans">مزد موثر روزانه: </span>
+              <span class="font-bold text-blue-900">{{ editingPersonnel.base_daily_rate | number }} ریال</span>
+            </div>
+            <div>
+              <span class="text-slate-600 text-xs font-sans">نرخ هر ساعت کار: </span>
+              <span class="font-bold text-blue-900">{{ editingPersonnel.hourly_rate | number }} ریال</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- تب بیمه و مالیات -->
+        <div *ngIf="personnelModalTab === 'insurance' && editingPersonnel" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">شماره بیمه تامین اجتماعی:</label>
+              <input
+                type="text"
+                [(ngModel)]="editingPersonnel.insurance_number"
+                placeholder="۱۰ رقم شماره بیمه..."
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">نوع استخدام در سامانه دارایی:</label>
+              <select
+                [(ngModel)]="editingPersonnel.employment_type"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs focus:bg-white focus:outline-none">
+                <option value="1">رسمی / ثابت</option>
+                <option value="2">قراردادی / قانون کار</option>
+                <option value="3">پیمانکاری / روزمزد</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- تب اطلاعات بانکی و شبا -->
+        <div *ngIf="personnelModalTab === 'contact' && editingPersonnel" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">نام بانک:</label>
+              <select
+                [(ngModel)]="editingPersonnel.bank_name"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-bold text-slate-800 focus:bg-white focus:outline-none">
+                <option *ngFor="let b of iranianBanks" [value]="b.name">{{ b.name }} (کد {{ b.code }})</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-1">شماره حساب بانکی:</label>
+              <div class="flex gap-2">
+                <input
+                  type="text"
+                  [(ngModel)]="editingPersonnel.account_number"
+                  placeholder="شماره حساب بانکی..."
+                  class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-2 font-mono text-xs focus:bg-white focus:outline-none" />
+                <button
+                  type="button"
+                  (click)="convertAccountToShebaNow()"
+                  title="تولید خودکار شبا با الگوریتم ISO 7064"
+                  class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black cursor-pointer shadow-xs">
+                  ⚡ تبدیل شبا
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block font-bold text-slate-600 mb-1">شماره شبا (۲۴ رقم):</label>
+            <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-2 focus-within:ring-1 focus-within:ring-blue-500">
+              <span class="font-mono font-bold text-slate-400">IR</span>
+              <input
+                type="text"
+                [ngModel]="shebaDigitsDisplay"
+                (ngModelChange)="onShebaInput($event)"
+                placeholder="شماره شبا..."
+                class="flex-1 bg-transparent font-mono text-xs focus:outline-none text-slate-800 font-bold" />
+            </div>
+            <div *ngIf="shebaValidationResult" class="mt-1">
+              <span *ngIf="shebaValidationResult.isValid" class="text-emerald-600 font-bold text-[11px]">
+                ✓ شماره شبا معتبر و منطبق بر استاندارد ISO 7064 Mod 97 است.
+              </span>
+              <span *ngIf="!shebaValidationResult.isValid" class="text-rose-600 font-bold text-[11px]">
+                ⚠️ شماره شبا نامعتبر است: {{ shebaValidationResult.errorMessage }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- فوتر مودال -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button
+          type="button"
+          (click)="closePersonnelModal()"
+          class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">
+          انصراف
+        </button>
+        <button
+          type="button"
+          (click)="savePersonnelFinancialChanges()"
+          [disabled]="isSavingPersonnel"
+          class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black shadow-xs cursor-pointer">
+          {{ isSavingPersonnel ? 'در حال ذخیره‌سازی...' : '💾 ذخیره تغییرات احکام' }}
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── مودال علت رد یا عودت ── -->
+  <div *ngIf="isRejectModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div class="p-4 border-b flex items-center justify-between"
+           [ngClass]="rejectTarget?.action === 'revision' ? 'bg-amber-50 text-amber-900 border-amber-100' : 'bg-rose-50 text-rose-900 border-rose-100'">
+        <h3 class="text-sm font-black">{{ rejectTarget?.action === 'revision' ? 'عودت به بازنگری' : 'رد قطعی پرونده' }}</h3>
+        <button (click)="closeRejectModal()" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-4 space-y-3">
+        <p class="text-xs text-slate-600 font-bold">{{ rejectTarget?.title }}</p>
+        <textarea
+          [(ngModel)]="rejectReason"
+          rows="3"
+          placeholder="علت نقص مدارک، مغایرت احکام یا عدم تایید..."
+          class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-rose-500"></textarea>
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+        <button
+          (click)="closeRejectModal()"
+          class="px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer">
+          انصراف
+        </button>
+        <button
+          (click)="submitRejectModal()"
+          [disabled]="isSubmittingReject"
+          class="px-4 py-1.5 rounded-xl text-white text-xs font-black shadow-xs cursor-pointer"
+          [ngClass]="rejectTarget?.action === 'revision' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-rose-600 hover:bg-rose-700'">
+          {{ isSubmittingReject ? 'در حال ثبت...' : 'ثبت قطعی' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── مودال مقایسه تفاوت‌ها (Diff Viewer) ── -->
+  <div *ngIf="isDiffModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+    <div class="bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div class="p-4 bg-indigo-50/80 border-b border-indigo-100 flex items-center justify-between">
+        <h3 class="text-sm font-black text-indigo-900">
+          مقایسه تفاوت‌ها (Diff): {{ selectedDiffCR?.personnel_name }}
+        </h3>
+        <button (click)="closeDiffModal()" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+      <div class="p-4 max-h-96 overflow-y-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-100 text-slate-600">
+            <tr>
+              <th class="p-2.5">عنوان فیلد</th>
+              <th class="p-2.5">مقدار قبلی</th>
+              <th class="p-2.5">مقدار جدید درخواستی</th>
+              <th class="p-2.5 text-center">وضعیت</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr *ngFor="let row of diffFieldRows" [ngClass]="row.is_changed ? 'bg-amber-50/50 font-bold' : ''">
+              <td class="p-2.5 text-slate-700">{{ row.field_label }}</td>
+              <td class="p-2.5 text-slate-500 line-through">{{ row.old_value }}</td>
+              <td class="p-2.5 text-emerald-700 font-bold">{{ row.new_value }}</td>
+              <td class="p-2.5 text-center">
+                <span *ngIf="row.is_changed" class="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-800">تغییر یافته</span>
+                <span *ngIf="!row.is_changed" class="text-slate-400 text-[10px]">بدون تغییر</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <button
+          (click)="closeDiffModal()"
+          class="px-4 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold cursor-pointer">
+          بستن پنجره
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

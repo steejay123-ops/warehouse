@@ -109,6 +109,11 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
   shebaDigitsDisplay: string = '';
   isShebaCopied: boolean = false;
   isAccountCopied: boolean = false;
+  isPhoneCopied: boolean = false;
+  foundExistingPersonnel: any = null;
+  existingPersonnelId: number | null = null;
+  existingPersonnelSectionId: number | null = null;
+  isLookingUpNationalCode: boolean = false;
   isBankDropdownOpen: boolean = false;
   bankSearchQuery: string = '';
   iranianBanks: IranianBankInfo[] = IRANIAN_BANKS;
@@ -827,6 +832,24 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     }
   }
 
+  copyPhoneToClipboard(): void {
+    const phone = this.newPersonnel.phone_number?.trim() || '';
+    if (!phone) return;
+    this.isPhoneCopied = true;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(phone).then(() => {
+        this.toast.show('success', 'شماره همراه در کلیپ‌بورد کپی شد.');
+        setTimeout(() => { this.isPhoneCopied = false; this.cdr.detectChanges(); }, 2000);
+        this.cdr.detectChanges();
+      }).catch(() => {
+        this.toast.show('warning', 'امکان کپی خودکار مقدور نشد.');
+      });
+    } else {
+      this.toast.show('success', 'شماره همراه کپی شد.');
+      setTimeout(() => { this.isPhoneCopied = false; this.cdr.detectChanges(); }, 2000);
+    }
+  }
+
   onBankSelect(bankName: string): void {
     this.newPersonnel.bank_name = bankName;
     const accValidation = validateAccountNumber(this.newPersonnel.account_number);
@@ -930,6 +953,86 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     const rem = sum % 11;
     const isValid = (rem < 2 && checksum === rem) || (rem >= 2 && checksum === 11 - rem);
     this.nationalCodeError = isValid ? null : 'ساختار کد ملی نامعتبر است (خطای رقم کنترلی).';
+
+    if (isValid && !this.editingPersonnel) {
+      this.lookupExistingPersonnel(code);
+    } else {
+      this.foundExistingPersonnel = null;
+      this.existingPersonnelId = null;
+      this.existingPersonnelSectionId = null;
+    }
+  }
+
+  // ─── استعلام پرونده پرسنل در شرکت بر مبنای کد ملی ───
+  lookupExistingPersonnel(code: string): void {
+    if (!this.personnelApi?.lookupPersonnelByNationalCode) return;
+    this.isLookingUpNationalCode = true;
+    this.personnelApi.lookupPersonnelByNationalCode(code).subscribe({
+      next: (res) => {
+        this.isLookingUpNationalCode = false;
+        if (res?.found && res.personnel) {
+          this.foundExistingPersonnel = res.personnel;
+          this.existingPersonnelId = res.personnel.id;
+          this.existingPersonnelSectionId = res.personnel.current_section_id;
+          this.cdr.detectChanges();
+        } else {
+          this.foundExistingPersonnel = null;
+          this.existingPersonnelId = null;
+          this.existingPersonnelSectionId = null;
+        }
+      },
+      error: () => {
+        this.isLookingUpNationalCode = false;
+        this.foundExistingPersonnel = null;
+        this.existingPersonnelId = null;
+        this.existingPersonnelSectionId = null;
+      }
+    });
+  }
+
+  // ─── اعمال خودکار مشخصات هویتی و بانکی پرونده یافت‌شده ───
+  applyFoundPersonnelData(): void {
+    if (!this.foundExistingPersonnel) return;
+    const p = this.foundExistingPersonnel;
+    this.existingPersonnelId = p.id;
+    this.existingPersonnelSectionId = p.current_section_id;
+    this.newPersonnel.first_name = p.first_name || '';
+    this.newPersonnel.last_name = p.last_name || '';
+    this.newPersonnel.father_name = p.father_name || '';
+    this.newPersonnel.gender = p.gender || 'مرد';
+    this.newPersonnel.id_number = p.id_number || '';
+    this.newPersonnel.id_series = p.id_series || '';
+    this.newPersonnel.id_serial = p.id_serial || '';
+    this.newPersonnel.birth_date = p.birth_date || '';
+    this.newPersonnel.birth_place = p.birth_place || '';
+    this.newPersonnel.issue_place = p.issue_place || '';
+    this.newPersonnel.marital_status = p.marital_status || 'single';
+    this.newPersonnel.children_count = p.children_count || 0;
+    this.newPersonnel.phone_number = p.phone_number || '';
+    if (p.job_title) this.newPersonnel.job_title = p.job_title;
+    if (p.daily_base_wage) {
+      this.newPersonnel.daily_base_wage = p.daily_base_wage;
+      this.wageFormattedDisplay = (p.daily_base_wage).toLocaleString('fa-IR');
+    }
+    if (p.bank_name) this.newPersonnel.bank_name = p.bank_name;
+    if (p.account_number) this.newPersonnel.account_number = p.account_number;
+    if (p.sheba_number) {
+      this.newPersonnel.sheba_number = p.sheba_number;
+      this.onShebaChange();
+    }
+    if (p.notes) {
+      this.newPersonnel.notes = p.notes;
+    }
+    if (p.attachment_url) {
+      this.existingAttachmentUrl = p.attachment_url;
+    }
+    this.toast.show('success', `مشخصات هویتی و بانکی «${p.first_name} ${p.last_name}» با موفقیت فراخوانی شد.`);
+    this.foundExistingPersonnel = null;
+    this.cdr.detectChanges();
+  }
+
+  dismissFoundPersonnelBanner(): void {
+    this.foundExistingPersonnel = null;
   }
 
   // ─── فرمت‌بندی و ماسک‌گذاری خودکار تاریخ تولد شمسی (YYYY/MM/DD) ───
@@ -1066,6 +1169,34 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         }
       });
+    } else if (this.existingPersonnelId) {
+      // در صورتی که شخص قبلاً در سامانه ثبت شده باشد و به بخش دیگری اضافه می‌گردد
+      if (this.selectedSectionId === this.existingPersonnelSectionId) {
+        this.toast.show('warning', 'این پرسنل قبلاً در همین بخش ثبت شده است. در صورت نیاز به ویرایش مشخصات، از دکمه ویرایش در جدول پرسنل استفاده نمایید.');
+        this.isSaving = false;
+        return;
+      }
+
+      this.personnelApi.assignPersonnelToSection(this.existingPersonnelId, {
+        section_id: this.selectedSectionId,
+        job_title: this.newPersonnel.job_title?.trim() || undefined,
+        daily_base_wage: Number(this.newPersonnel.daily_base_wage) || 0,
+        notes: this.newPersonnel.notes?.trim() || undefined
+      }).subscribe({
+        next: (res: any) => {
+          this.isSaving = false;
+          this.toast.show('success', res?.message || `پرسنل «${this.newPersonnel.first_name} ${this.newPersonnel.last_name}» با موفقیت به این بخش منتسب شد.`);
+          this.resetForm();
+          this.closeNewPersonnelModal();
+          this.loadRecentPersonnel();
+        },
+        error: (err: any) => {
+          this.isSaving = false;
+          const msg = err.error?.error || err.error?.detail || err.message || 'نامشخص';
+          this.toast.show('error', 'خطا در انتساب پرسنل به بخش جدید: ' + msg);
+          this.cdr.detectChanges();
+        }
+      });
     } else {
       this.personnelApi.createPersonnelProfile(payload).subscribe({
         next: (created: PersonnelProfile) => {
@@ -1121,6 +1252,11 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     this.wageFormattedDisplay = '';
     this.isShebaCopied = false;
     this.isAccountCopied = false;
+    this.isPhoneCopied = false;
+    this.foundExistingPersonnel = null;
+    this.existingPersonnelId = null;
+    this.existingPersonnelSectionId = null;
+    this.isLookingUpNationalCode = false;
     this.isBankDropdownOpen = false;
     this.bankSearchQuery = '';
     this.selectedDocumentAttachment = null;

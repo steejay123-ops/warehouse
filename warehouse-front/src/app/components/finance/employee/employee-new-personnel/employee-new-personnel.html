@@ -175,33 +175,54 @@
 
       <!-- بدنه اسکرول‌پذیر مودال حاوی کلیه فیلدها -->
       <div class="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 overscroll-contain">
-        <!-- فیلدهای فرم در شبکه چندستونه -->
+
+        <!-- بنر هوشمند استعلام کد ملی و پیشنهاد لود اطلاعات پرونده قبلی -->
+        <div *ngIf="foundExistingPersonnel" class="p-3 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center text-sm font-black shrink-0">
+              💡
+            </span>
+            <div>
+              <div class="text-xs font-bold text-purple-900">
+                این شخص با نام «{{ foundExistingPersonnel.first_name }} {{ foundExistingPersonnel.last_name }}» قبلاً در سامانه ثبت شده است
+                <span *ngIf="foundExistingPersonnel.current_section_name" class="text-[11px] text-purple-700 font-normal">
+                  (بخش فعال: {{ foundExistingPersonnel.current_section_name }})
+                </span>
+              </div>
+              <div class="text-[10px] text-purple-600 mt-0.5">
+                برای جلوگیری از تایپ مجدد، می‌توانید مشخصات شناسنامه‌ای و شماره شبا را مستقیماً لود کنید.
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            <button
+              type="button"
+              (click)="applyFoundPersonnelData()"
+              class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95">
+              <span>📋</span>
+              <span>بازخوانی و پر کردن فرم</span>
+            </button>
+            <button
+              type="button"
+              (click)="dismissFoundPersonnelBanner()"
+              class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg text-xs cursor-pointer"
+              title="بستن">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <!-- فیلدهای فرم در شبکه چندستونه متقارن -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- نام -->
-          <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">نام *</label>
-            <input
-              type="text"
-              [(ngModel)]="newPersonnel.first_name"
-              [disabled]="isReadOnlyMode"
-              placeholder="مثال: علی"
-              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none font-bold disabled:bg-slate-100 disabled:text-slate-600" />
-          </div>
 
-          <!-- نام خانوادگی -->
+          <!-- ردیف ۱، ستون ۱ (راست): کد ملی (۱۰ رقمی با اعتبارسنجی الگوریتم Mod 11) -->
           <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">نام خانوادگی *</label>
-            <input
-              type="text"
-              [(ngModel)]="newPersonnel.last_name"
-              [disabled]="isReadOnlyMode"
-              placeholder="مثال: محمدی"
-              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none font-bold disabled:bg-slate-100 disabled:text-slate-600" />
-          </div>
-
-          <!-- کد ملی (۱۰ رقمی با اعتبارسنجی الگوریتم Mod 11) -->
-          <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">کد ملی (۱۰ رقم) *</label>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+              <span>کد ملی (۱۰ رقم) *</span>
+              <span *ngIf="isLookingUpNationalCode" class="text-[10px] text-purple-600 font-bold animate-pulse">
+                در حال استعلام...
+              </span>
+            </label>
             <input
               type="text"
               inputmode="numeric"
@@ -220,19 +241,29 @@
             </p>
           </div>
 
-          <!-- جنسیت -->
+          <!-- ردیف ۱، ستون ۲ (وسط): نام -->
           <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">جنسیت</label>
-            <select
-              [(ngModel)]="newPersonnel.gender"
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">نام *</label>
+            <input
+              type="text"
+              [(ngModel)]="newPersonnel.first_name"
               [disabled]="isReadOnlyMode"
-              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-600 font-bold">
-              <option value="مرد">مرد</option>
-              <option value="زن">زن</option>
-            </select>
+              placeholder="مثال: علی"
+              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none font-bold disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- نام پدر -->
+          <!-- ردیف ۱، ستون ۳ (چپ): نام خانوادگی -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">نام خانوادگی *</label>
+            <input
+              type="text"
+              [(ngModel)]="newPersonnel.last_name"
+              [disabled]="isReadOnlyMode"
+              placeholder="مثال: محمدی"
+              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none font-bold disabled:bg-slate-100 disabled:text-slate-600" />
+          </div>
+
+          <!-- ردیف ۲، ستون ۱: نام پدر -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1">نام پدر</label>
             <input
@@ -243,7 +274,7 @@
               class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- شماره شناسنامه -->
+          <!-- ردیف ۲، ستون ۲: شماره شناسنامه -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره شناسنامه</label>
             <input
@@ -255,7 +286,7 @@
               class="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- سری و سریال شناسنامه -->
+          <!-- ردیف ۲، ستون ۳: سری و سریال شناسنامه -->
           <div class="grid grid-cols-2 gap-2">
             <div>
               <label class="block text-[11px] font-bold text-slate-700 mb-1">سری شناسنامه</label>
@@ -278,7 +309,44 @@
             </div>
           </div>
 
-          <!-- تاریخ تولد شمسی -->
+          <!-- ردیف ۳، ستون ۱: جنسیت -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">جنسیت</label>
+            <select
+              [(ngModel)]="newPersonnel.gender"
+              [disabled]="isReadOnlyMode"
+              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-600 font-bold">
+              <option value="مرد">مرد</option>
+              <option value="زن">زن</option>
+            </select>
+          </div>
+
+          <!-- ردیف ۳، ستون ۲: وضعیت تاهل -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">وضعیت تاهل</label>
+            <select
+              [(ngModel)]="newPersonnel.marital_status"
+              [disabled]="isReadOnlyMode"
+              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-600">
+              <option value="single">مجرد</option>
+              <option value="married">متاهل</option>
+            </select>
+          </div>
+
+          <!-- ردیف ۳، ستون ۳: تعداد فرزندان (همواره فعال برای همه وضعیت‌ها) -->
+          <div>
+            <label class="block text-[11px] font-bold text-slate-700 mb-1">تعداد فرزندان</label>
+            <input
+              type="number"
+              inputmode="numeric"
+              min="0"
+              [(ngModel)]="newPersonnel.children_count"
+              [disabled]="isReadOnlyMode"
+              placeholder="۰"
+              class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
+          </div>
+
+          <!-- ردیف ۴، ستون ۱: تاریخ تولد شمسی -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
               <span>تاریخ تولد (شمسی)</span>
@@ -296,7 +364,7 @@
               class="w-full px-3 py-2 text-xs font-mono font-bold bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none text-left disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- محل تولد -->
+          <!-- ردیف ۴، ستون ۲: محل تولد -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1">محل تولد</label>
             <input
@@ -307,7 +375,7 @@
               class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- محل صدور شناسنامه -->
+          <!-- ردیف ۴، ستون ۳: محل صدور شناسنامه -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1">محل صدور شناسنامه</label>
             <input
@@ -318,45 +386,34 @@
               class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
           </div>
 
-          <!-- وضعیت تاهل -->
-          <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">وضعیت تاهل</label>
-            <select
-              [(ngModel)]="newPersonnel.marital_status"
-              [disabled]="isReadOnlyMode"
-              class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-600">
-              <option value="single">مجرد</option>
-              <option value="married">متاهل</option>
-            </select>
-          </div>
-
-          <!-- تعداد فرزندان -->
-          <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">تعداد فرزندان</label>
-            <input
-              type="number"
-              inputmode="numeric"
-              min="0"
-              [(ngModel)]="newPersonnel.children_count"
-              [disabled]="isReadOnlyMode"
-              placeholder="۰"
-              class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
-          </div>
-
-          <!-- شماره تلفن همراه -->
+          <!-- ردیف ۵، ستون ۱: شماره تلفن همراه (با دکمه کپی ۱-کلیک) -->
           <div>
             <label class="block text-[11px] font-bold text-slate-700 mb-1">شماره همراه</label>
-            <input
-              type="tel"
-              inputmode="tel"
-              [(ngModel)]="newPersonnel.phone_number"
-              [disabled]="isReadOnlyMode"
-              placeholder="۰۹۱۲..."
-              class="w-full px-3 py-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
+            <div dir="ltr" class="relative flex items-center rounded-xl overflow-hidden border border-slate-200 bg-slate-50 focus-within:ring-2 focus-within:ring-purple-500 focus-within:bg-white transition-all" [ngClass]="{'opacity-80 bg-slate-100': isReadOnlyMode}">
+              <input
+                type="tel"
+                inputmode="tel"
+                dir="ltr"
+                [(ngModel)]="newPersonnel.phone_number"
+                [disabled]="isReadOnlyMode"
+                placeholder="۰۹۱۲..."
+                class="w-full bg-transparent border-0 text-left font-mono text-xs px-3 py-2 pr-9 focus:outline-none text-slate-800 placeholder:text-slate-400 disabled:text-slate-600" />
+              <div class="absolute right-1.5 top-1/2 -translate-y-1/2">
+                <button
+                  *ngIf="newPersonnel.phone_number"
+                  type="button"
+                  (click)="copyPhoneToClipboard()"
+                  class="w-6 h-6 rounded-lg transition-all flex items-center justify-center cursor-pointer border text-xs"
+                  [ngClass]="isPhoneCopied ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-black' : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200 shadow-2xs'"
+                  title="کپی شماره همراه">
+                  <span>{{ isPhoneCopied ? '✓' : '📋' }}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- عنوان شغلی / سمت سازمانی -->
-          <div>
+          <!-- ردیف ۵، ستون ۲ و ۳: عنوان و سمت شغلی (۲ ستونه جهت خوانایی کامل عناوین) -->
+          <div class="md:col-span-2">
             <label class="block text-[11px] font-bold text-slate-700 mb-1">عنوان و سمت شغلی *</label>
             <div class="relative">
               <input
@@ -365,25 +422,13 @@
                 list="jobTitlesList"
                 [disabled]="isReadOnlyMode"
                 placeholder="انتخاب یا تایپ سمت شغلی..."
-                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600" />
+                class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-purple-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-600 font-bold" />
               <datalist id="jobTitlesList">
                 <option *ngFor="let j of jobTitles" [value]="j">{{ j }}</option>
               </datalist>
             </div>
           </div>
 
-          <!-- نوع قرارداد کاری (منحصر بر روزمزد مبنا ۱۰ ساعت بر اساس قوانین کارگاه) -->
-          <div>
-            <label class="block text-[11px] font-bold text-slate-700 mb-1">نوع قرارداد کاری *</label>
-            <div class="w-full px-3 py-2 text-xs bg-slate-100/90 border border-slate-200 rounded-xl text-slate-800 font-bold flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>روزمزد (مبنا ۱۰ ساعت)</span>
-              </div>
-              <span class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/80">الزامی</span>
-            </div>
-            <input type="hidden" [(ngModel)]="newPersonnel.contract_type" />
-          </div>
         </div>
 
         <!-- اطلاعات حساب و شماره شبا جهت واریز حقوق -->

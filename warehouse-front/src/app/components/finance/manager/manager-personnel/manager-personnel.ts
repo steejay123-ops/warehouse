@@ -1,0 +1,381 @@
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
+import { AuthService } from '../../../../core/auth/auth.service';
+import { StateService } from '../../../../services/state.service';
+import { ToastService } from '../../../../shared/components/toast/toast.component';
+import { PersonnelApiService } from '../../../../core/api/personnel-api.service';
+import { ProjectSection, PersonnelProfile, PersonnelChangeRequest } from '../../../../core/models/personnel.model';
+import { WebSocketService } from '../../../../core/http/websocket.service';
+
+export type ManagerPersonnelSubTab = 'new' | 'contracts' | 'changes' | 'all';
+
+@Component({
+  selector: 'app-manager-personnel-hub',
+  standalone: true,
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  templateUrl: './manager-personnel.html',
+  styleUrl: './manager-personnel.css'
+})
+export class ManagerPersonnelHubComponent implements OnInit, OnDestroy {
+  activeSubTab: ManagerPersonnelSubTab = 'new';
+
+  mySections: ProjectSection[] = [];
+  selectedSectionId: number | null = null;
+  selectedSection: ProjectSection | null = null;
+  isLoadingSections = false;
+
+  searchQuery = '';
+  fiscalYear = '1405';
+  isLoading = false;
+
+  // لیست‌های داده
+  pendingManagerList: PersonnelProfile[] = [];
+  contractsList: any[] = [];
+  changeRequests: PersonnelChangeRequest[] = [];
+  allPersonnelList: PersonnelProfile[] = [];
+
+  statusCounters = {
+    newPending: 0,
+    contractsPending: 0,
+    changesPending: 0,
+    allTotal: 0
+  };
+
+  // مودال یادداشت و شروط تصویب مدیر
+  isApprovalModalOpen = false;
+  approvalTarget: { type: 'new' | 'contracts' | 'changes'; item: any; title: string } | null = null;
+  approvalNote = '';
+  isApproving = false;
+
+  // مودال رد پرونده توسط مدیر
+  isRejectModalOpen = false;
+  rejectTarget: { id: number; title: string; type: 'personnel' | 'changes' } | null = null;
+  rejectReason = '';
+  isRejecting = false;
+
+  // مودال مقایسه تفاوت‌ها (Diff Viewer)
+  isDiffModalOpen = false;
+  selectedDiffCR: PersonnelChangeRequest | null = null;
+  diffFieldRows: Array<{
+    field_name: string;
+    field_label: string;
+    old_value: any;
+    new_value: any;
+    is_changed: boolean;
+  }> = [];
+
+  copiedId: number | null = null;
+
+  private routeSub?: Subscription;
+  private wsSub?: Subscription;
+
+  constructor(
+    public auth: AuthService,
+    public state: StateService,
+    private toast: ToastService,
+    private personnelApi: PersonnelApiService,
+    private ws: WebSocketService,
+    private router: Router,
+    private route: ActivatedRoute,
+    private cdr: ChangeDetectorRef
+  ) {}
+
+  ngOnInit(): void {
+    this.routeSub = this.route.queryParams.subscribe(params => {
+      if (params['tab'] && ['new', 'contracts', 'changes', 'all'].includes(params['tab'])) {
+        this.activeSubTab = params['tab'] as ManagerPersonnelSubTab;
+      }
+      if (params['section_id']) {
+        this.selectedSectionId = Number(params['section_id']);
+      }
+      if (params['q']) {
+        this.searchQuery = params['q'];
+      }
+    });
+
+    this.wsSub = this.ws.notifications$.subscribe((msg: any) => {
+      if (msg && (msg.type_str === 'personnel_updated' || msg.type === 'personnel_updated')) {
+        this.fetchData();
+      }
+    });
+
+    this.loadSections();
+  }
+
+  ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
+    this.wsSub?.unsubscribe();
+  }
+
+  loadSections(): void {
+    this.isLoadingSections = true;
+    this.personnelApi.getProjectSections({ is_active: true }).subscribe({
+      next: (sections: ProjectSection[]) => {
+        this.mySections = sections || [];
+        if (this.mySections.length > 0 && !this.selectedSectionId) {
+          this.selectedSectionId = this.mySections[0]?.id ?? null;
+        }
+        this.selectedSection = this.mySections.find(s => s.id === this.selectedSectionId) || null;
+        this.isLoadingSections = false;
+        this.fetchData();
+      },
+      error: () => {
+        this.isLoadingSections = false;
+        this.fetchData();
+      }
+    });
+  }
+
+  onSectionChanged(): void {
+    this.selectedSection = this.mySections.find(s => s.id === Number(this.selectedSectionId)) || null;
+    this.syncUrlParams();
+    this.fetchData();
+  }
+
+  switchSubTab(tab: ManagerPersonnelSubTab): void {
+    this.activeSubTab = tab;
+    this.syncUrlParams();
+    this.fetchData();
+  }
+
+  syncUrlParams(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        tab: this.activeSubTab,
+        section_id: this.selectedSectionId || null,
+        q: this.searchQuery ? this.searchQuery : null
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  fetchData(): void {
+    this.isLoading = true;
+    const baseParams: any = {};
+    if (this.selectedSectionId) baseParams.section_id = this.selectedSectionId;
+    if (this.searchQuery.trim()) baseParams.search = this.searchQuery.trim();
+
+    // ۱. پرونده‌های در انتظار تصویب نهایی مدیر
+    this.personnelApi.getPersonnelProfiles({ ...baseParams, approval_status: 'pending_manager' }).subscribe({
+      next: (pList: PersonnelProfile[]) => {
+        this.pendingManagerList = pList || [];
+        this.statusCounters.newPending = this.pendingManagerList.length;
+      },
+      error: () => {
+        this.pendingManagerList = [];
+      }
+    });
+
+    // ۲. قراردادها و احکام
+    this.personnelApi.getPersonnelProfiles({ ...baseParams, is_active: true }).subscribe({
+      next: (cList: PersonnelProfile[]) => {
+        this.contractsList = (cList || []).map(p => ({
+          personnel_name: `${p.first_name || ''} ${p.last_name || ''}`,
+          contract_type: p.contract_type || 'قرارداد کاری',
+          start_date_shamsi: p.start_date || '-',
+          end_date_shamsi: p.end_date || '-',
+          status: p.approval_status
+        }));
+        this.statusCounters.contractsPending = this.contractsList.length;
+      },
+      error: () => {
+        this.contractsList = [];
+      }
+    });
+
+    // ۳. تغییرات پرسنل در انتظار مدیر
+    this.personnelApi.getPersonnelChangeRequests(baseParams).subscribe({
+      next: (crList: PersonnelChangeRequest[]) => {
+        this.changeRequests = (crList || []).filter(cr => cr.status === 'pending_manager');
+        this.statusCounters.changesPending = this.changeRequests.length;
+      },
+      error: () => {
+        this.changeRequests = [];
+      }
+    });
+
+    // ۴. تمام پرسنل فعال و مصوب
+    this.personnelApi.getPersonnelProfiles(baseParams).subscribe({
+      next: (allList: PersonnelProfile[]) => {
+        this.allPersonnelList = allList || [];
+        this.statusCounters.allTotal = this.allPersonnelList.length;
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.allPersonnelList = [];
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // ─── تصویب نهایی توسط مدیر ───
+  openApproveModal(type: 'new' | 'contracts' | 'changes', item: any): void {
+    const title = type === 'new'
+      ? `تصویب نهایی استخدام: ${item.first_name || ''} ${item.last_name || ''}`
+      : type === 'contracts'
+      ? `تصویب حکم و قرارداد: ${item.personnel_name || ''}`
+      : `تصویب تغییرات پرونده: ${item.personnel_name || ''}`;
+    this.approvalTarget = { type, item, title };
+    this.approvalNote = '';
+    this.isApprovalModalOpen = true;
+  }
+
+  closeApproveModal(): void {
+    this.isApprovalModalOpen = false;
+    this.approvalTarget = null;
+    this.approvalNote = '';
+  }
+
+  submitApproval(): void {
+    if (!this.approvalTarget) return;
+    this.isApproving = true;
+    const { type, item } = this.approvalTarget;
+
+    if (type === 'new') {
+      this.personnelApi.approvePersonnelManager(item.id, this.approvalNote).subscribe({
+        next: () => {
+          this.toast.showSuccess(`پرونده پرسنل «${item.first_name} ${item.last_name}» با موفقیت به تصویب نهایی رسید.`);
+          this.isApproving = false;
+          this.closeApproveModal();
+          this.fetchData();
+        },
+        error: (err: any) => {
+          this.isApproving = false;
+          this.toast.showError(err?.error?.detail || err?.error?.error || 'خطا در تصویب نهایی مدیر');
+        }
+      });
+    } else if (type === 'changes') {
+      this.personnelApi.approvePersonnelChangeRequestManager(item.id, this.approvalNote).subscribe({
+        next: () => {
+          this.toast.showSuccess('تغییرات با موفقیت تصویب و در پرونده اعمال شد.');
+          this.isApproving = false;
+          this.closeApproveModal();
+          this.fetchData();
+        },
+        error: (err: any) => {
+          this.isApproving = false;
+          this.toast.showError(err?.error?.detail || 'خطا در تصویب تغییرات');
+        }
+      });
+    } else {
+      this.isApproving = false;
+      this.closeApproveModal();
+    }
+  }
+
+  // ─── رد پرونده توسط مدیر ───
+  openRejectModal(id: number, title: string, type: 'personnel' | 'changes'): void {
+    this.rejectTarget = { id, title, type };
+    this.rejectReason = '';
+    this.isRejectModalOpen = true;
+  }
+
+  closeRejectModal(): void {
+    this.isRejectModalOpen = false;
+    this.rejectTarget = null;
+    this.rejectReason = '';
+  }
+
+  submitReject(): void {
+    if (!this.rejectTarget || !this.rejectReason.trim()) {
+      this.toast.showWarning('لطفاً دلیل مستند عدم تصویب یا رد را وارد فرمایید.');
+      return;
+    }
+    this.isRejecting = true;
+    const { id, type } = this.rejectTarget;
+
+    if (type === 'personnel') {
+      this.personnelApi.rejectPersonnel(id, this.rejectReason.trim()).subscribe({
+        next: () => {
+          this.toast.showSuccess('پرونده پرسنل رد شد.');
+          this.isRejecting = false;
+          this.closeRejectModal();
+          this.fetchData();
+        },
+        error: (err: any) => {
+          this.isRejecting = false;
+          this.toast.showError(err?.error?.detail || 'خطا در رد پرونده');
+        }
+      });
+    } else {
+      this.personnelApi.rejectPersonnelChangeRequest(id, this.rejectReason.trim()).subscribe({
+        next: () => {
+          this.toast.showSuccess('درخواست تغییرات رد شد.');
+          this.isRejecting = false;
+          this.closeRejectModal();
+          this.fetchData();
+        },
+        error: (err: any) => {
+          this.isRejecting = false;
+          this.toast.showError(err?.error?.detail || 'خطا در رد درخواست');
+        }
+      });
+    }
+  }
+
+  // ─── مقایسه تفاوت‌ها (Diff Viewer) ───
+  openDiffModal(cr: PersonnelChangeRequest): void {
+    this.selectedDiffCR = cr;
+    this.diffFieldRows = [];
+    const proposed = (cr.proposed_changes || {}) as Record<string, any>;
+    const current = (cr.previous_values || {}) as Record<string, any>;
+
+    const allKeys = Array.from(new Set([...Object.keys(proposed), ...Object.keys(current)]));
+    for (const key of allKeys) {
+      if (['id', 'created_at', 'updated_at', 'personnel'].includes(key)) continue;
+      const oldVal = current[key];
+      const newVal = proposed[key];
+      const isChanged = JSON.stringify(oldVal) !== JSON.stringify(newVal);
+      this.diffFieldRows.push({
+        field_name: key,
+        field_label: this.getFieldLabel(key),
+        old_value: oldVal ?? '—',
+        new_value: newVal ?? '—',
+        is_changed: isChanged
+      });
+    }
+    this.isDiffModalOpen = true;
+  }
+
+  closeDiffModal(): void {
+    this.isDiffModalOpen = false;
+    this.selectedDiffCR = null;
+    this.diffFieldRows = [];
+  }
+
+  getFieldLabel(field: string): string {
+    const dict: Record<string, string> = {
+      first_name: 'نام',
+      last_name: 'نام خانوادگی',
+      national_code: 'کد ملی',
+      mobile: 'شماره موبایل',
+      sheba_number: 'شماره شبا',
+      bank_name: 'نام بانک',
+      account_number: 'شماره حساب',
+      contract_type: 'نوع قرارداد',
+      job_title: 'عنوان شغلی',
+      insurance_number: 'شماره بیمه',
+      daily_base_wage: 'مزد مبنای روزانه',
+      job_grade: 'گروه شغلی'
+    };
+    return dict[field] || field;
+  }
+
+  copyToClipboard(text: string, id: number): void {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      this.copiedId = id;
+      this.toast.showSuccess('در حافظه کپی شد: ' + text);
+      setTimeout(() => {
+        if (this.copiedId === id) this.copiedId = null;
+        this.cdr.detectChanges();
+      }, 2000);
+    });
+  }
+}

@@ -7,20 +7,20 @@ import { AuthService } from '../../../../core/auth/auth.service';
 import { StateService } from '../../../../services/state.service';
 import { ToastService } from '../../../../shared/components/toast/toast.component';
 import { PersonnelApiService } from '../../../../core/api/personnel-api.service';
-import { ProjectSection, VehicleDriverProfile, VehicleChangeRequest } from '../../../../core/models/personnel.model';
+import { ProjectSection, PersonnelProfile, PersonnelChangeRequest } from '../../../../core/models/personnel.model';
 import { WebSocketService } from '../../../../core/http/websocket.service';
 
-export type SupervisorFleetSubTab = 'new' | 'work_logs' | 'changes' | 'all';
+export type SupervisorPersonnelSubTab = 'new' | 'attendance' | 'changes' | 'all';
 
 @Component({
-  selector: 'app-supervisor-fleet-hub',
+  selector: 'app-supervisor-personnel-hub',
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule],
-  templateUrl: './supervisor-fleet.html',
-  styleUrl: './supervisor-fleet.css'
+  templateUrl: './supervisor-personnel.html',
+  styleUrl: './supervisor-personnel.css'
 })
-export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
-  activeSubTab: SupervisorFleetSubTab = 'new';
+export class SupervisorPersonnelHubComponent implements OnInit, OnDestroy {
+  activeSubTab: SupervisorPersonnelSubTab = 'new';
 
   mySections: ProjectSection[] = [];
   selectedSectionId: number | null = null;
@@ -28,39 +28,39 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
   isLoadingSections = false;
 
   searchQuery = '';
-  fiscalYear = '1405';
   selectedDateShamsi = '';
+  fiscalYear = '1405';
   isLoading = false;
 
   // لیست‌های داده
-  newVehiclesList: VehicleDriverProfile[] = [];
-  workLogsList: any[] = [];
-  changeRequestsList: VehicleChangeRequest[] = [];
-  allVehiclesList: VehicleDriverProfile[] = [];
+  newPersonnelList: PersonnelProfile[] = [];
+  attendanceList: any[] = [];
+  changeRequestsList: PersonnelChangeRequest[] = [];
+  allPersonnelList: PersonnelProfile[] = [];
 
-  // شمارنده‌ها
+  // شمارنده‌های زنده کارتابل
   statusCounters = {
     newCount: 0,
-    workLogsCount: 0,
+    attendanceCount: 0,
     changesCount: 0,
     allCount: 0
   };
 
-  // پنجره تایید با یادداشت
+  // پنجره ثبت یادداشت تایید (Approval Modal)
   isApprovalModalOpen = false;
-  approvalTarget: { type: 'new' | 'work_logs' | 'changes'; item: any; title: string } | null = null;
+  approvalTarget: { type: 'new' | 'attendance' | 'changes'; item: any; title: string } | null = null;
   approvalNote = '';
   isApproving = false;
 
-  // پنجره ثبت علت عودت یا رد
+  // پنجره ثبت علت عودت یا رد (Reject / Revision Modal)
   isRejectModalOpen = false;
-  rejectTarget: { type: 'new' | 'work_logs' | 'changes'; item: any; action: 'reject' | 'revision'; title: string } | null = null;
+  rejectTarget: { type: 'new' | 'attendance' | 'changes'; item: any; action: 'reject' | 'revision'; title: string } | null = null;
   rejectReason = '';
   isRejecting = false;
 
-  // پنجره مقایسه تغییرات (Diff Viewer)
+  // پنجره مقایسه تغییرات (Diff Viewer Modal)
   isDiffModalOpen = false;
-  selectedDiffCR: VehicleChangeRequest | null = null;
+  selectedDiffCR: PersonnelChangeRequest | null = null;
   diffFieldRows: Array<{
     field_name: string;
     field_label: string;
@@ -68,6 +68,8 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
     new_value: any;
     is_changed: boolean;
   }> = [];
+
+  copiedId: number | null = null;
 
   private routeSub?: Subscription;
   private wsSub?: Subscription;
@@ -85,8 +87,8 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.routeSub = this.route.queryParams.subscribe(params => {
-      if (params['tab'] && ['new', 'work_logs', 'changes', 'all'].includes(params['tab'])) {
-        this.activeSubTab = params['tab'] as SupervisorFleetSubTab;
+      if (params['tab'] && ['new', 'attendance', 'changes', 'all'].includes(params['tab'])) {
+        this.activeSubTab = params['tab'] as SupervisorPersonnelSubTab;
       }
       if (params['section_id']) {
         this.selectedSectionId = Number(params['section_id']);
@@ -97,9 +99,9 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
     });
 
     this.wsSub = this.ws.notifications$.subscribe((msg: any) => {
-      if (msg && (msg.type_str === 'fleet_updated' || msg.type === 'fleet_updated')) {
+      if (msg && (msg.type_str === 'personnel_updated' || msg.type === 'personnel_updated')) {
         if (!this.selectedSectionId || msg.section_id === this.selectedSectionId) {
-          this.fetchFleetData();
+          this.fetchData();
         }
       }
     });
@@ -125,7 +127,7 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
             },
             error: () => {
               this.isLoadingSections = false;
-              this.fetchFleetData();
+              this.fetchData();
             }
           });
           return;
@@ -134,7 +136,7 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
       },
       error: () => {
         this.isLoadingSections = false;
-        this.fetchFleetData();
+        this.fetchData();
       }
     });
   }
@@ -147,19 +149,19 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
       this.selectedSection = this.mySections.find(s => s.id === this.selectedSectionId) || null;
     }
     this.isLoadingSections = false;
-    this.fetchFleetData();
+    this.fetchData();
   }
 
   onSectionChanged(): void {
     this.selectedSection = this.mySections.find(s => s.id === Number(this.selectedSectionId)) || null;
     this.syncUrlParams();
-    this.fetchFleetData();
+    this.fetchData();
   }
 
-  switchSubTab(tab: SupervisorFleetSubTab): void {
+  switchSubTab(tab: SupervisorPersonnelSubTab): void {
     this.activeSubTab = tab;
     this.syncUrlParams();
-    this.fetchFleetData();
+    this.fetchData();
   }
 
   syncUrlParams(): void {
@@ -174,42 +176,44 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
     });
   }
 
-  fetchFleetData(): void {
+  fetchData(): void {
     this.isLoading = true;
     const baseParams: any = {};
-    if (this.selectedSectionId) baseParams.section_id = this.selectedSectionId;
-    if (this.searchQuery.trim()) baseParams.search = this.searchQuery.trim();
+    if (this.selectedSectionId) {
+      baseParams.section_id = this.selectedSectionId;
+    }
+    if (this.searchQuery.trim()) {
+      baseParams.search = this.searchQuery.trim();
+    }
 
-    // ۱. خودروهای جدید در انتظار تایید سرپرست
-    this.personnelApi.getVehicleProfiles({ ...baseParams, approval_status: 'pending_supervisor,draft' }).subscribe({
-      next: (vList: any[]) => {
-        this.newVehiclesList = vList || [];
-        this.statusCounters.newCount = this.newVehiclesList.length;
+    // ۱. پرونده‌های جدید پرسنل در انتظار تایید سرپرست
+    this.personnelApi.getPersonnelProfiles({ ...baseParams, approval_status: 'pending_supervisor,draft' }).subscribe({
+      next: (pList: any[]) => {
+        this.newPersonnelList = pList || [];
+        this.statusCounters.newCount = this.newPersonnelList.length;
       },
       error: () => {
-        this.newVehiclesList = [];
+        this.newPersonnelList = [];
       }
     });
 
-    // ۲. کارکرد روزانه ماشین‌آلات
-    const dateStr = this.selectedDateShamsi || '';
-    this.personnelApi.getVehicleMatrix(null, dateStr, baseParams).subscribe({
-      next: (res: any) => {
-        this.workLogsList = (res?.vehicles || res?.items || []).map((v: any) => ({
-          ...v,
-          work_hours: v.work_hours || 0,
-          trips_count: v.trips_count || v.total_trips || 0,
-          status: v.status || 'pending_supervisor'
-        }));
-        this.statusCounters.workLogsCount = this.workLogsList.filter(x => x.status === 'pending_supervisor' || !x.status).length;
+    // ۲. کارکرد روزانه پرسنل
+    const attParams: any = { ...baseParams };
+    if (this.selectedDateShamsi) {
+      attParams.date_shamsi = this.selectedDateShamsi;
+    }
+    this.personnelApi.getDailyAttendance(attParams).subscribe({
+      next: (attList: any[]) => {
+        this.attendanceList = attList || [];
+        this.statusCounters.attendanceCount = this.attendanceList.filter(a => a.supervisor_approved === false || a.status === 'pending').length;
       },
       error: () => {
-        this.workLogsList = [];
+        this.attendanceList = [];
       }
     });
 
-    // ۳. درخواست‌های تغییرات ناوگان
-    this.personnelApi.getVehicleChangeRequests(baseParams).subscribe({
+    // ۳. درخواست‌های تغییرات پرسنل
+    this.personnelApi.getPersonnelChangeRequests(baseParams).subscribe({
       next: (crList: any[]) => {
         this.changeRequestsList = crList || [];
         this.statusCounters.changesCount = this.changeRequestsList.filter(c => c.status === 'pending_supervisor').length;
@@ -219,16 +223,16 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
       }
     });
 
-    // ۴. تمام ناوگان بخش
-    this.personnelApi.getVehicleProfiles(baseParams).subscribe({
+    // ۴. تمام پرسنل بخش
+    this.personnelApi.getPersonnelProfiles(baseParams).subscribe({
       next: (allList: any[]) => {
-        this.allVehiclesList = allList || [];
-        this.statusCounters.allCount = this.allVehiclesList.length;
+        this.allPersonnelList = allList || [];
+        this.statusCounters.allCount = this.allPersonnelList.length;
         this.isLoading = false;
         this.cdr.markForCheck();
       },
       error: () => {
-        this.allVehiclesList = [];
+        this.allPersonnelList = [];
         this.isLoading = false;
         this.cdr.markForCheck();
       }
@@ -236,12 +240,12 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
   }
 
   // ─── اکشن‌های تایید ───
-  openApproveModal(type: 'new' | 'work_logs' | 'changes', item: any): void {
-    const title = type === 'new'
-      ? `تایید اولیه خودرو: ${item.plate_number || item.model_name || ''}`
-      : type === 'work_logs'
-      ? `تایید کارکرد خودرو: ${item.plate_number || ''}`
-      : `تایید درخواست تغییرات خودرو: ${item.plate_number || ''}`;
+  openApproveModal(type: 'new' | 'attendance' | 'changes', item: any): void {
+    const title = type === 'new' 
+      ? `تایید اولیه پرسنل: ${item.first_name || ''} ${item.last_name || ''}`
+      : type === 'attendance'
+      ? `تایید کارکرد روزانه: ${item.personnel_name || ''} (${item.date_shamsi || ''})`
+      : `تایید درخواست تغییرات: ${item.personnel_name || ''}`;
     this.approvalTarget = { type, item, title };
     this.approvalNote = '';
     this.isApprovalModalOpen = true;
@@ -259,39 +263,38 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
     const { type, item } = this.approvalTarget;
 
     if (type === 'new') {
-      this.personnelApi.approveVehicleSupervisor(item.id, this.approvalNote).subscribe({
+      this.personnelApi.approvePersonnelSupervisor(item.id, this.approvalNote).subscribe({
         next: () => {
-          this.toast.showSuccess(`خودرو ${item.plate_number || ''} تایید و به حسابداری ارسال شد.`);
+          this.toast.showSuccess(`پرونده ${item.first_name || ''} ${item.last_name || ''} تایید و به حسابداری ارسال شد.`);
           this.isApproving = false;
           this.closeApproveModal();
-          this.fetchFleetData();
+          this.fetchData();
         },
-        error: (err) => {
+        error: (err: any) => {
           this.isApproving = false;
           this.toast.showError(err?.error?.detail || 'خطا در ثبت تایید سرپرست');
         }
       });
-    } else if (type === 'work_logs') {
-      const targetId = item.id || item.trip_id;
-      this.personnelApi.patchVehicleTrip(targetId, { notes: this.approvalNote || 'تایید سرپرست' }).subscribe({
+    } else if (type === 'attendance') {
+      this.personnelApi.patchDailyAttendance(item.id, { notes: this.approvalNote ? `${item.notes || ''} | تایید سرپرست: ${this.approvalNote}` : 'تایید سرپرست' }).subscribe({
         next: () => {
-          this.toast.showSuccess(`کارکرد خودرو ${item.plate_number || ''} با موفقیت تایید شد.`);
+          this.toast.showSuccess('کارکرد روزانه با موفقیت تایید شد.');
           this.isApproving = false;
           this.closeApproveModal();
-          this.fetchFleetData();
+          this.fetchData();
         },
-        error: (err) => {
+        error: (err: any) => {
           this.isApproving = false;
           this.toast.showError(err?.error?.detail || 'خطا در تایید کارکرد');
         }
       });
     } else if (type === 'changes') {
-      this.personnelApi.approveVehicleChangeRequestSupervisor(item.id, this.approvalNote).subscribe({
+      this.personnelApi.approvePersonnelChangeRequestSupervisor(item.id, this.approvalNote).subscribe({
         next: () => {
-          this.toast.showSuccess('درخواست تغییرات خودرو با موفقیت تایید شد.');
+          this.toast.showSuccess('درخواست تغییرات با موفقیت تایید شد.');
           this.isApproving = false;
           this.closeApproveModal();
-          this.fetchFleetData();
+          this.fetchData();
         },
         error: (err: any) => {
           this.isApproving = false;
@@ -302,9 +305,9 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
   }
 
   // ─── اکشن‌های عودت و رد ───
-  openRejectModal(type: 'new' | 'work_logs' | 'changes', item: any, action: 'reject' | 'revision'): void {
-    const actionTitle = action === 'revision' ? 'عودت به بازنگری' : 'رد قطعی پرونده خودرو';
-    const title = `${actionTitle}: ${item.plate_number || item.model_name || ''}`;
+  openRejectModal(type: 'new' | 'attendance' | 'changes', item: any, action: 'reject' | 'revision'): void {
+    const actionTitle = action === 'revision' ? 'عودت به بازنگری' : 'رد قطعی پرونده';
+    const title = `${actionTitle}: ${item.first_name || item.personnel_name || ''} ${item.last_name || ''}`;
     this.rejectTarget = { type, item, action, title };
     this.rejectReason = '';
     this.isRejectModalOpen = true;
@@ -324,38 +327,37 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
     this.isRejecting = true;
     const { type, item, action } = this.rejectTarget;
 
-    if (type === 'new') {
-      this.personnelApi.rejectVehicle(item.id, this.rejectReason.trim()).subscribe({
+    if (action === 'revision') {
+      this.personnelApi.requestPersonnelRevision(item.id, this.rejectReason.trim()).subscribe({
         next: () => {
-          this.toast.showSuccess('پرونده خودرو با موفقیت رد شد.');
+          this.toast.showSuccess('پرونده جهت بازنگری و اصلاح مدارک عودت داده شد.');
           this.isRejecting = false;
           this.closeRejectModal();
-          this.fetchFleetData();
+          this.fetchData();
         },
-        error: (err) => {
+        error: (err: any) => {
           this.isRejecting = false;
-          this.toast.showError(err?.error?.detail || 'خطا در رد پرونده خودرو');
+          this.toast.showError(err?.error?.detail || 'خطا در عودت پرونده');
         }
       });
-    } else if (type === 'work_logs') {
-      const targetId = item.id || item.trip_id;
-      this.personnelApi.patchVehicleTrip(targetId, { notes: `عودت سرپرست: ${this.rejectReason}` }).subscribe({
+    } else {
+      this.personnelApi.rejectPersonnel(item.id, this.rejectReason.trim()).subscribe({
         next: () => {
-          this.toast.showWarning('کارکرد خودرو جهت اصلاح عودت داده شد.');
+          this.toast.showSuccess('پرونده با موفقیت رد شد.');
           this.isRejecting = false;
           this.closeRejectModal();
-          this.fetchFleetData();
+          this.fetchData();
         },
-        error: (err) => {
+        error: (err: any) => {
           this.isRejecting = false;
-          this.toast.showError(err?.error?.detail || 'خطا در ثبت عودت کارکرد');
+          this.toast.showError(err?.error?.detail || 'خطا در رد پرونده');
         }
       });
     }
   }
 
-  // ─── مقایسه تغییرات (Diff Viewer) ───
-  openDiffModal(cr: VehicleChangeRequest): void {
+  // ─── پنجره مقایسه تغییرات (Diff Viewer) ───
+  openDiffModal(cr: PersonnelChangeRequest): void {
     this.selectedDiffCR = cr;
     this.diffFieldRows = [];
     const proposed = (cr.proposed_changes || {}) as Record<string, any>;
@@ -363,7 +365,7 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
 
     const allKeys = Array.from(new Set([...Object.keys(proposed), ...Object.keys(current)]));
     for (const key of allKeys) {
-      if (['id', 'created_at', 'updated_at', 'vehicle'].includes(key)) continue;
+      if (['id', 'created_at', 'updated_at', 'personnel'].includes(key)) continue;
       const oldVal = current[key];
       const newVal = proposed[key];
       const isChanged = JSON.stringify(oldVal) !== JSON.stringify(newVal);
@@ -386,16 +388,29 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
 
   getFieldLabel(field: string): string {
     const dict: Record<string, string> = {
-      plate_number: 'شماره پلاک',
-      model_name: 'مدل / برند',
-      driver_name: 'نام راننده',
-      driver_mobile: 'موبایل راننده',
-      owner_name: 'مالک خودرو',
+      first_name: 'نام',
+      last_name: 'نام خانوادگی',
+      national_code: 'کد ملی',
+      mobile: 'شماره موبایل',
       sheba_number: 'شماره شبا',
       bank_name: 'نام بانک',
       account_number: 'شماره حساب',
-      vehicle_type: 'نوع خودرو'
+      contract_type: 'نوع قرارداد',
+      job_title: 'عنوان شغلی',
+      insurance_number: 'شماره بیمه'
     };
     return dict[field] || field;
+  }
+
+  copyToClipboard(text: string, id: number): void {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      this.copiedId = id;
+      this.toast.showSuccess('در حافظه کپی شد: ' + text);
+      setTimeout(() => {
+        if (this.copiedId === id) this.copiedId = null;
+        this.cdr.markForCheck();
+      }, 2000);
+    });
   }
 }

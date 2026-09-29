@@ -4,7 +4,7 @@
   <div class="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-md pt-1 pb-2">
     <div class="bg-white p-2.5 md:p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
       
-      <!-- سمت راست: دراپ‌داون انتخاب بخش و تب‌های افقی هاب ناوگان -->
+      <!-- سمت راست: دراپ‌داون انتخاب بخش و تب‌های افقی هاب پرسنل -->
       <div class="flex flex-wrap items-center gap-2 md:gap-3">
         <!-- انتخابگر بخش فعال -->
         <div *ngIf="mySections.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
@@ -26,7 +26,7 @@
             (click)="switchSubTab('new')"
             [ngClass]="activeSubTab === 'new' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
             class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <span>🆕 خودروهای جدید</span>
+            <span>🆕 پرونده‌های جدید</span>
             <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
                   [ngClass]="statusCounters.newCount > 0 ? 'bg-amber-100 text-amber-800 font-black animate-pulse' : 'bg-slate-200/70 text-slate-600'">
               {{ statusCounters.newCount }}
@@ -35,13 +35,13 @@
 
           <button
             type="button"
-            (click)="switchSubTab('work_logs')"
-            [ngClass]="activeSubTab === 'work_logs' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
+            (click)="switchSubTab('attendance')"
+            [ngClass]="activeSubTab === 'attendance' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
             class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <span>🚛 کارکرد ماشین‌آلات</span>
+            <span>📋 کارکرد و حضورغیاب</span>
             <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
-                  [ngClass]="statusCounters.workLogsCount > 0 ? 'bg-indigo-100 text-indigo-800 font-black' : 'bg-slate-200/70 text-slate-600'">
-              {{ statusCounters.workLogsCount }}
+                  [ngClass]="statusCounters.attendanceCount > 0 ? 'bg-indigo-100 text-indigo-800 font-black' : 'bg-slate-200/70 text-slate-600'">
+              {{ statusCounters.attendanceCount }}
             </span>
           </button>
 
@@ -63,7 +63,7 @@
             (click)="switchSubTab('all')"
             [ngClass]="activeSubTab === 'all' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
             class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
-            <span>📁 همه ناوگان</span>
+            <span>📁 همه پرسنل</span>
             <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md bg-slate-200/70 text-slate-600">
               {{ statusCounters.allCount }}
             </span>
@@ -71,22 +71,23 @@
         </div>
       </div>
 
-      <!-- سمت چپ: جستجو و رفرش -->
+      <!-- سمت چپ: باکس جستجوی زنده و دکمه‌های اکشن استاندارد سه‌گانه -->
       <div class="flex items-center gap-2">
         <div class="relative w-48 md:w-60">
           <input
             type="text"
             [(ngModel)]="searchQuery"
-            (input)="fetchFleetData()"
-            placeholder="جستجوی پلاک، مدل، راننده..."
+            (input)="fetchData()"
+            placeholder="جستجوی نام، کد ملی، تلفن..."
             class="w-full bg-slate-100/90 text-xs py-1.5 pr-8 pl-6 rounded-xl border border-slate-200/80 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500" />
           <span class="absolute right-2.5 top-1.5 text-slate-400 text-xs">🔍</span>
-          <button *ngIf="searchQuery" (click)="searchQuery = ''; fetchFleetData()" class="absolute left-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+          <button *ngIf="searchQuery" (click)="searchQuery = ''; fetchData()" class="absolute left-2.5 top-1.5 text-slate-400 hover:text-slate-600 text-xs">✕</button>
         </div>
 
+        <!-- دکمه رفرش -->
         <button
           type="button"
-          (click)="fetchFleetData()"
+          (click)="fetchData()"
           [disabled]="isLoading"
           title="همگام‌سازی و بارگذاری مجدد"
           class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200/80 text-slate-600 flex items-center justify-center transition-all cursor-pointer">
@@ -97,38 +98,45 @@
     </div>
   </div>
 
-  <!-- ── ۲. بدنه محتوا متناسب با زیرتب فعال ── -->
+  <!-- ── ۲. بدنه اصلی محتوا متناسب با زیرتب فعال ── -->
 
-  <!-- تب ۱: خودروهای جدید در انتظار تایید سرپرست -->
+  <!-- تب ۱: پرونده‌های جدید پرسنل در انتظار تایید سرپرست -->
   <div *ngIf="activeSubTab === 'new'" class="space-y-3">
-    <div *ngIf="newVehiclesList.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
-      <span class="text-3xl block mb-2">🚚</span>
-      <p class="font-bold text-sm">هیچ پرونده خودروی معلقی برای تایید سرپرست در این بخش وجود ندارد.</p>
+    <div *ngIf="newPersonnelList.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+      <span class="text-3xl block mb-2">🎉</span>
+      <p class="font-bold text-sm">هیچ پرونده پرسنلی معلق برای تایید سرپرست در این بخش وجود ندارد.</p>
     </div>
 
-    <div *ngIf="newVehiclesList.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+    <div *ngIf="newPersonnelList.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-right text-xs">
           <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
             <tr>
-              <th class="p-3">شماره پلاک</th>
-              <th class="p-3">نوع و مدل</th>
-              <th class="p-3">نام راننده</th>
-              <th class="p-3">موبایل راننده</th>
-              <th class="p-3">مالک خودرو</th>
+              <th class="p-3">نام و نام خانوادگی</th>
+              <th class="p-3">کد ملی</th>
+              <th class="p-3">موبایل</th>
+              <th class="p-3">سمت / شغل</th>
+              <th class="p-3">نوع قرارداد</th>
               <th class="p-3">وضعیت پرونده</th>
               <th class="p-3 text-center">عملیات سرپرست</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let item of newVehiclesList" class="hover:bg-slate-50/50 transition-all">
-              <td class="p-3 font-mono font-bold text-slate-800">
-                <span class="px-2 py-0.5 rounded border border-slate-300 bg-slate-50">{{ item.plate_number || '—' }}</span>
+            <tr *ngFor="let item of newPersonnelList" class="hover:bg-indigo-50/30 transition-all">
+              <td class="p-3 font-bold text-slate-800">
+                {{ item.first_name }} {{ item.last_name }}
               </td>
-              <td class="p-3 font-bold text-slate-700">{{ item.vehicle_type_display || item.vehicle_type || '—' }}</td>
-              <td class="p-3">{{ item.driver_name || '—' }}</td>
-              <td class="p-3 font-mono text-slate-600">{{ item.driver_phone || '—' }}</td>
-              <td class="p-3 text-slate-600">{{ item.owner_name || '—' }}</td>
+              <td class="p-3 font-mono font-bold text-slate-600">
+                {{ item.national_code }}
+                <button *ngIf="item.id" (click)="copyToClipboard(item.national_code, item.id)" title="کپی کد ملی" class="text-slate-400 hover:text-indigo-600 mr-1 cursor-pointer">📋</button>
+              </td>
+              <td class="p-3 font-mono text-slate-600">{{ item.phone_number || '—' }}</td>
+              <td class="p-3 text-slate-700">{{ item.job_title || '—' }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700">
+                  {{ item.contract_type === 'daily' ? 'روزانه' : (item.contract_type === 'hourly' ? 'ساعتی' : 'ماهانه') }}
+                </span>
+              </td>
               <td class="p-3">
                 <span class="px-2 py-0.5 rounded-md text-[11px] font-black bg-amber-100 text-amber-800">
                   در انتظار تایید سرپرست
@@ -141,6 +149,12 @@
                     (click)="openApproveModal('new', item)"
                     class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-black cursor-pointer transition-all">
                     ✓ تایید سرپرست
+                  </button>
+                  <button
+                    type="button"
+                    (click)="openRejectModal('new', item, 'revision')"
+                    class="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold cursor-pointer transition-all">
+                    🔄 بازنگری
                   </button>
                   <button
                     type="button"
@@ -157,54 +171,54 @@
     </div>
   </div>
 
-  <!-- تب ۲: کارکرد ماشین‌آلات -->
-  <div *ngIf="activeSubTab === 'work_logs'" class="space-y-3">
-    <div *ngIf="workLogsList.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
-      <span class="text-3xl block mb-2">🚛</span>
-      <p class="font-bold text-sm">هیچ رکورد کارکرد ماشین‌آلاتی در این تاریخ ثبت نشده است.</p>
+  <!-- تب ۲: کارکرد و حضورغیاب پرسنل -->
+  <div *ngIf="activeSubTab === 'attendance'" class="space-y-3">
+    <div *ngIf="attendanceList.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+      <span class="text-3xl block mb-2">📋</span>
+      <p class="font-bold text-sm">هیچ رکورد کارکرد معلقی برای تایید در این تاریخ یافت نشد.</p>
     </div>
 
-    <div *ngIf="workLogsList.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+    <div *ngIf="attendanceList.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-right text-xs">
           <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
             <tr>
-              <th class="p-3">پلاک خودرو</th>
-              <th class="p-3">راننده</th>
-              <th class="p-3">تعداد سرویس</th>
-              <th class="p-3">ساعات کارکرد</th>
+              <th class="p-3">نام پرسنل</th>
+              <th class="p-3">تاریخ شمسی</th>
+              <th class="p-3">وضعیت حضور</th>
+              <th class="p-3">ساعات کاری</th>
+              <th class="p-3">اضافه کاری</th>
               <th class="p-3">وضعیت تایید</th>
               <th class="p-3 text-center">عملیات</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let item of workLogsList" class="hover:bg-slate-50/50">
-              <td class="p-3 font-mono font-bold text-slate-800">{{ item.plate_number }}</td>
-              <td class="p-3 font-bold text-slate-700">{{ item.driver_name }}</td>
-              <td class="p-3 font-mono">{{ item.trips_count }} سرویس</td>
-              <td class="p-3 font-mono font-bold text-indigo-600">{{ item.work_hours }} ساعت</td>
+            <tr *ngFor="let item of attendanceList" class="hover:bg-slate-50/50">
+              <td class="p-3 font-bold text-slate-800">{{ item.personnel_name }}</td>
+              <td class="p-3 font-mono">{{ item.date_shamsi }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-bold"
+                      [ngClass]="item.status === 'PRESENT' ? 'bg-emerald-100 text-emerald-800' : (item.status === 'LEAVE' ? 'bg-blue-100 text-blue-800' : 'bg-rose-100 text-rose-800')">
+                  {{ item.status === 'PRESENT' ? 'حاضر' : (item.status === 'LEAVE' ? 'مرخصی' : 'غایب') }}
+                </span>
+              </td>
+              <td class="p-3 font-mono font-bold">{{ item.work_hours || 0 }} ساعت</td>
+              <td class="p-3 font-mono text-indigo-600 font-bold">{{ item.overtime_hours || 0 }} ساعت</td>
               <td class="p-3">
                 <span class="px-2 py-0.5 rounded-md text-[11px] font-black"
-                      [ngClass]="item.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
-                  {{ item.status === 'approved' ? '✓ تایید شده' : 'در انتظار تایید' }}
+                      [ngClass]="item.supervisor_approved ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800'">
+                  {{ item.supervisor_approved ? '✓ تایید شده' : 'در انتظار تایید' }}
                 </span>
               </td>
               <td class="p-3 text-center">
-                <div class="flex items-center justify-center gap-1.5" *ngIf="item.status !== 'approved'">
-                  <button
-                    type="button"
-                    (click)="openApproveModal('work_logs', item)"
-                    class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-black cursor-pointer">
-                    ✓ تایید کارکرد
-                  </button>
-                  <button
-                    type="button"
-                    (click)="openRejectModal('work_logs', item, 'revision')"
-                    class="px-2 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 text-xs font-bold cursor-pointer">
-                    عودت
-                  </button>
-                </div>
-                <span *ngIf="item.status === 'approved'" class="text-xs text-slate-400 font-bold">تایید شده</span>
+                <button
+                  *ngIf="!item.supervisor_approved"
+                  type="button"
+                  (click)="openApproveModal('attendance', item)"
+                  class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-black cursor-pointer">
+                  ✓ تایید کارکرد
+                </button>
+                <span *ngIf="item.supervisor_approved" class="text-xs text-slate-400 font-bold">تایید شده</span>
               </td>
             </tr>
           </tbody>
@@ -213,11 +227,11 @@
     </div>
   </div>
 
-  <!-- تب ۳: درخواست‌های تغییرات ناوگان -->
+  <!-- تب ۳: درخواست‌های تغییرات پرسنل -->
   <div *ngIf="activeSubTab === 'changes'" class="space-y-3">
     <div *ngIf="changeRequestsList.length === 0 && !isLoading" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
       <span class="text-3xl block mb-2">🔄</span>
-      <p class="font-bold text-sm">هیچ درخواست تغییراتی برای ناوگان وجود ندارد.</p>
+      <p class="font-bold text-sm">هیچ درخواست تغییراتی برای پرسنل وجود ندارد.</p>
     </div>
 
     <div *ngIf="changeRequestsList.length > 0" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
@@ -225,8 +239,8 @@
         <table class="w-full text-right text-xs">
           <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
             <tr>
-              <th class="p-3">شماره پلاک</th>
-              <th class="p-3">راننده / مالک</th>
+              <th class="p-3">نام پرسنل</th>
+              <th class="p-3">کد ملی</th>
               <th class="p-3">فیلدهای تغییر یافته</th>
               <th class="p-3">تاریخ درخواست</th>
               <th class="p-3">وضعیت</th>
@@ -235,8 +249,8 @@
           </thead>
           <tbody class="divide-y divide-slate-100">
             <tr *ngFor="let cr of changeRequestsList" class="hover:bg-slate-50/50">
-              <td class="p-3 font-mono font-bold">{{ cr.plate_number }}</td>
-              <td class="p-3 font-bold text-slate-700">{{ cr.driver_name || '—' }}</td>
+              <td class="p-3 font-bold text-slate-800">{{ cr.personnel_name }}</td>
+              <td class="p-3 font-mono">{{ cr.national_code }}</td>
               <td class="p-3">
                 <button
                   type="button"
@@ -253,12 +267,14 @@
                 </span>
               </td>
               <td class="p-3 text-center">
-                <button
-                  type="button"
-                  (click)="openApproveModal('changes', cr)"
-                  class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-black cursor-pointer">
-                  ✓ تایید تغییرات
-                </button>
+                <div class="flex items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    (click)="openApproveModal('changes', cr)"
+                    class="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-black cursor-pointer">
+                    ✓ تایید تغییرات
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -267,35 +283,35 @@
     </div>
   </div>
 
-  <!-- تب ۴: کل ناوگان -->
+  <!-- تب ۴: همه پرسنل بخش -->
   <div *ngIf="activeSubTab === 'all'" class="space-y-3">
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
       <div class="overflow-x-auto">
         <table class="w-full text-right text-xs">
           <thead class="bg-slate-50/80 text-slate-600 border-b border-slate-200/80">
             <tr>
-              <th class="p-3">پلاک خودرو</th>
-              <th class="p-3">نوع و مدل</th>
-              <th class="p-3">راننده</th>
+              <th class="p-3">نام و نام خانوادگی</th>
+              <th class="p-3">کد ملی</th>
               <th class="p-3">موبایل</th>
+              <th class="p-3">شغل / سمت</th>
               <th class="p-3">وضعیت تاییدات</th>
-              <th class="p-3">شماره شبا</th>
+              <th class="p-3">شبا و حساب</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let v of allVehiclesList" class="hover:bg-slate-50/50">
-              <td class="p-3 font-mono font-bold text-slate-800">{{ v.plate_number }}</td>
-              <td class="p-3 font-bold text-slate-700">{{ v.vehicle_type_display || v.vehicle_type }}</td>
-              <td class="p-3">{{ v.driver_name }}</td>
-              <td class="p-3 font-mono">{{ v.driver_phone || '—' }}</td>
+            <tr *ngFor="let p of allPersonnelList" class="hover:bg-slate-50/50">
+              <td class="p-3 font-bold text-slate-800">{{ p.first_name }} {{ p.last_name }}</td>
+              <td class="p-3 font-mono font-bold">{{ p.national_code }}</td>
+              <td class="p-3 font-mono">{{ p.phone_number || '—' }}</td>
+              <td class="p-3">{{ p.job_title || '—' }}</td>
               <td class="p-3">
                 <span class="px-2 py-0.5 rounded-md text-[11px] font-black"
-                      [ngClass]="v.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'">
-                  {{ v.approval_status === 'approved' ? 'فعال و مصوب' : 'در انتظار بررسی' }}
+                      [ngClass]="p.approval_status === 'approved' ? 'bg-emerald-100 text-emerald-800' : (p.approval_status === 'pending_accountant' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800')">
+                  {{ p.approval_status === 'approved' ? 'مصوب نهایی' : (p.approval_status === 'pending_accountant' ? 'در انتظار حسابدار' : 'در انتظار سرپرست') }}
                 </span>
               </td>
               <td class="p-3 font-mono text-[11px] text-slate-500">
-                {{ v.sheba_number ? ('IR' + v.sheba_number) : 'فاقد شبا' }}
+                {{ p.sheba_number ? ('IR' + p.sheba_number) : 'فاقد شبا' }}
               </td>
             </tr>
           </tbody>
@@ -304,7 +320,7 @@
     </div>
   </div>
 
-  <!-- ── مودال ۱: ثبت یادداشت تایید (Approval Modal) ── -->
+  <!-- ── مودال ۱: ثبت تایید و یادداشت (Approval Modal) ── -->
   <div *ngIf="isApprovalModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
     <div class="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
       <div class="p-4 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between">
@@ -316,7 +332,7 @@
         <textarea
           [(ngModel)]="approvalNote"
           rows="3"
-          placeholder="توضیحات مربوط به تایید ناوگان یا کارکرد..."
+          placeholder="توضیحات مربوط به تایید این پرونده یا کارکرد..."
           class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"></textarea>
       </div>
       <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
@@ -335,7 +351,7 @@
     </div>
   </div>
 
-  <!-- ── مودال ۲: ثبت علت رد یا عودت ── -->
+  <!-- ── مودال ۲: ثبت علت عودت به بازنگری یا رد (Reject / Revision Modal) ── -->
   <div *ngIf="isRejectModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
     <div class="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
       <div class="p-4 border-b flex items-center justify-between"
@@ -344,11 +360,11 @@
         <button (click)="closeRejectModal()" class="text-slate-400 hover:text-slate-600">✕</button>
       </div>
       <div class="p-4 space-y-3">
-        <label class="text-xs font-bold text-slate-600 block">علت رد یا عودت (الزامی):</label>
+        <label class="text-xs font-bold text-slate-600 block">دلیل مستند عودت یا رد (الزامی):</label>
         <textarea
           [(ngModel)]="rejectReason"
           rows="3"
-          placeholder="توضیحات عدم تایید یا نقص اطلاعات را بنویسید..."
+          placeholder="علت نقص مدارک یا عدم تایید را بنویسید..."
           class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:bg-white focus:outline-none focus:ring-1 focus:ring-rose-500"></textarea>
       </div>
       <div class="p-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
@@ -368,12 +384,12 @@
     </div>
   </div>
 
-  <!-- ── مودال ۳: مقایسه تفاوت‌ها (Diff Viewer) ── -->
+  <!-- ── مودال ۳: مقایسه تفاوت‌ها (Diff Viewer Modal) ── -->
   <div *ngIf="isDiffModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
     <div class="bg-white w-full max-w-2xl rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
       <div class="p-4 bg-indigo-50/80 border-b border-indigo-100 flex items-center justify-between">
         <h3 class="text-sm font-black text-indigo-900">
-          مقایسه تفاوت‌های ناوگان (Diff): {{ selectedDiffCR?.plate_number }}
+          مقایسه تفاوت‌ها (Diff): {{ selectedDiffCR?.personnel_name }}
         </h3>
         <button (click)="closeDiffModal()" class="text-slate-400 hover:text-slate-600">✕</button>
       </div>

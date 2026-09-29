@@ -54,7 +54,8 @@ from .models import (
     TaxRuleSettings,
     BankExportSettings,
     MonthlyPayrollRecord,
-    WorkflowAuditLog
+    WorkflowAuditLog,
+    PersonnelSectionAssignment
 )
 from .serializers import (
     normalize_plate,
@@ -295,10 +296,16 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
                 )
                 if str(section_id).isdigit() and int(section_id) not in user_section_ids:
                     return qs.none()
-            qs = qs.filter(section_id=section_id)
+            qs = qs.filter(
+                Q(section_id=section_id) |
+                Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+            ).distinct()
         project_id = self.request.query_params.get('project_id')
         if project_id:
-            qs = qs.filter(section__project_id=project_id)
+            qs = qs.filter(
+                Q(section__project_id=project_id) |
+                Q(section_assignments__project_id=project_id, section_assignments__is_active=True)
+            ).distinct()
         
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -504,6 +511,101 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             if clean and clean not in merged:
                 merged.append(clean)
         return Response({'job_titles': merged})
+
+    @action(detail=False, methods=['get'], url_path='lookup-by-national-code')
+    def lookup_by_national_code(self, request):
+        """
+        استعلام پرونده پرسنل بر اساس کد ملی در سطح شرکت فعال جهت فراخوانی خودکار مشخصات هویتی و بانکی
+        """
+        raw_code = request.query_params.get('national_code', '').strip()
+        if not raw_code:
+            return Response({'error': 'کد ملی ارسال نشده است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from common.date_utils import normalize_digits
+        clean_code = normalize_digits(raw_code).strip().zfill(10)
+        
+        cid = validate_user_company_access(request.user, get_request_company_id(request))
+        qs = PersonnelProfile.objects.all().select_related('section', 'section__project', 'company')
+        if cid:
+            qs = qs.filter(Q(company_id=cid) | Q(section__project__company_id=cid))
+        
+        personnel = qs.filter(national_code=clean_code).first()
+        if not personnel:
+            return Response({'found': False}, status=status.HTTP_200_OK)
+        
+        attachment_url = None
+        if personnel.attachment:
+            try:
+                attachment_url = request.build_absolute_uri(personnel.attachment.url)
+            except Exception:
+                attachment_url = personnel.attachment.url
+        
+        return Response({
+            'found': True,
+            'personnel': {
+                'id': personnel.id,
+                'first_name': personnel.first_name,
+                'last_name': personnel.last_name,
+                'national_code': personnel.national_code,
+                'father_name': personnel.father_name or '',
+                'gender': personnel.gender or 'مرد',
+                'id_number': personnel.id_number or '',
+                'id_series': personnel.id_series or '',
+                'id_serial': personnel.id_serial or '',
+                'birth_date': personnel.birth_date or '',
+                'birth_place': personnel.birth_place or '',
+                'issue_place': personnel.issue_place or '',
+                'marital_status': personnel.marital_status or 'single',
+                'children_count': personnel.children_count or 0,
+                'phone_number': personnel.phone_number or '',
+                'job_title': personnel.job_title or '',
+                'daily_base_wage': float(personnel.daily_base_wage or 0),
+                'bank_name': personnel.bank_name or '',
+                'account_number': personnel.account_number or '',
+                'sheba_number': personnel.sheba_number or '',
+                'notes': personnel.notes or '',
+                'current_section_id': personnel.section_id,
+                'current_section_name': personnel.section.name if personnel.section else None,
+                'current_project_name': personnel.section.project.name if (personnel.section and personnel.section.project) else None,
+                'attachment_url': attachment_url,
+            }
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='assign-section')
+    def assign_section(self, request, pk=None):
+        """
+        انتساب پرسنل موجود به یک بخش دیگر جهت فعالیت همزمان در چند بخش
+        """
+        personnel = self.get_object()
+        section_id = request.data.get('section_id') or request.data.get('section')
+        if not section_id:
+            return Response({'error': 'شناسه بخش ارسالی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        sec = ProjectSection.objects.filter(id=int(section_id)).select_related('project').first()
+        if not sec:
+            return Response({'error': 'بخش مورد نظر یافت نشد.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        job_title = (request.data.get('job_title') or personnel.job_title or '').strip()
+        daily_base_wage = request.data.get('daily_base_wage') or personnel.daily_base_wage or 0
+        
+        assignment, created = PersonnelSectionAssignment.objects.update_or_create(
+            personnel=personnel,
+            section=sec,
+            defaults={
+                'project': sec.project,
+                'job_title': job_title,
+                'daily_base_wage': daily_base_wage,
+                'is_active': True
+            }
+        )
+        
+        broadcast_personnel_update(personnel, action_type='assigned', message=f'پرسنل «{personnel.full_name}» به بخش «{sec.name}» منتسب شد.', sender_id=request.user.id if request.user else None)
+        
+        return Response({
+            'message': f'پرسنل «{personnel.full_name}» با موفقیت به بخش «{sec.name}» منتسب شد.',
+            'assignment_id': assignment.id,
+            'personnel': self.get_serializer(personnel).data
+        }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='approve-supervisor')
     def approve_supervisor(self, request, pk=None):
@@ -2636,7 +2738,14 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         raw_sec = request.query_params.get('section_id')
         section_id = int(raw_sec) if (raw_sec and str(raw_sec).upper() not in ['ALL', '0', 'NONE', '']) else None
         if section_id:
-            personnel_list = personnel_list.filter(section_id=section_id)
+            personnel_list = personnel_list.filter(
+                Q(section_id=section_id) |
+                Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+            ).distinct()
+            attendances_qs = attendances_qs.filter(
+                Q(section_id=section_id) | (Q(section_id__isnull=True) & Q(personnel__section_id=section_id))
+            )
+            existing_attendances = {att.personnel_id: att for att in attendances_qs}
 
         # فیلتر کانتکست شرکت فعال در ماتریس کارکرد
         cid = validate_user_company_access(request.user, get_request_company_id(request))
@@ -2648,12 +2757,17 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         matrix_rows = []
         for p in personnel_list:
             att = existing_attendances.get(p.id)
+            p_job_title = p.job_title
+            if section_id:
+                sa = p.section_assignments.filter(section_id=section_id, is_active=True).first()
+                if sa and sa.job_title:
+                    p_job_title = sa.job_title
             if att:
                 matrix_rows.append({
                     'personnel_id': p.id,
                     'full_name': p.full_name,
                     'national_code': p.national_code,
-                    'job_title': p.job_title,
+                    'job_title': p_job_title,
                     'is_active': p.is_active,
                     'warehouse_id': att.warehouse_id,
                     'warehouse_name': att.warehouse.name if att.warehouse else (p.assigned_warehouse.name if p.assigned_warehouse else 'شناور'),
@@ -2673,7 +2787,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     'personnel_id': p.id,
                     'full_name': p.full_name,
                     'national_code': p.national_code,
-                    'job_title': p.job_title,
+                    'job_title': p_job_title,
                     'is_active': p.is_active,
                     'warehouse_id': p.assigned_warehouse_id,
                     'warehouse_name': p.assigned_warehouse.name if p.assigned_warehouse else 'شناور',
@@ -2709,6 +2823,12 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         raw_wh = serializer.validated_data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
         project_id = serializer.validated_data.get('project_id')
+        section_id = serializer.validated_data.get('section_id')
+        if section_id and not project_id:
+            sec_ref = ProjectSection.objects.filter(id=section_id).first()
+            if sec_ref:
+                project_id = sec_ref.project_id
+
         raw_date = serializer.validated_data['date_shamsi']
         date_shamsi = normalize_attendance_date(raw_date)
         items = serializer.validated_data['items']
@@ -2772,13 +2892,22 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 adv_pay = float(item.get('advance_payment', 0))
                 notes_val = item.get('notes', '') or ''
 
-                # اگر وضعیت خالی و ساعت صفر باشد (پاکسازی‌شده)، رکورد دیتابیس باید حذف گردد
+                target_section_id = section_id or p_obj.section_id
+                target_project_id = project_id or p_obj.project_id or (p_obj.section.project_id if p_obj.section else None)
+
+                # اگر وضعیت خالی و ساعت صفر باشد (پاکسازی‌شده)، رکورد دیتابیس در این بخش حذف می‌گردد
                 if not status_val and eff_h == 0:
-                    att_obj = DailyAttendance.objects.select_for_update().filter(
-                        personnel_id=personnel_id,
-                        date_shamsi=date_shamsi,
-                        is_deleted=False
-                    ).first()
+                    att_filter = {
+                        'personnel_id': personnel_id,
+                        'date_shamsi': date_shamsi,
+                        'is_deleted': False
+                    }
+                    if target_section_id:
+                        att_obj = DailyAttendance.objects.select_for_update().filter(
+                            Q(**att_filter) & (Q(section_id=target_section_id) | (Q(section_id__isnull=True) & Q(personnel__section_id=target_section_id)))
+                        ).first()
+                    else:
+                        att_obj = DailyAttendance.objects.select_for_update().filter(**att_filter).first()
                     if att_obj:
                         att_obj.is_deleted = True
                         att_obj.modified_by = request.user
@@ -2803,12 +2932,41 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     is_fri = False
                     is_mis = False
 
-                # پیدا کردن رکورد فعال پرسنل در این تاریخ (مستقل از انبار قبلی)
-                att_obj = DailyAttendance.objects.select_for_update().filter(
+                # اعتبارسنجی عدم تداخل کارکرد در چند بخش مختلف در یک روز
+                other_att_qs = DailyAttendance.objects.filter(
                     personnel_id=personnel_id,
                     date_shamsi=date_shamsi,
                     is_deleted=False
-                ).first()
+                )
+                if target_section_id:
+                    other_att_qs = other_att_qs.exclude(Q(section_id=target_section_id) | (Q(section_id__isnull=True) & Q(personnel__section_id=target_section_id)))
+
+                if status_val == 'PRESENT_10H':
+                    conflicting_full = other_att_qs.filter(status='PRESENT_10H').first()
+                    if conflicting_full:
+                        sec_title = conflicting_full.section.name if conflicting_full.section else 'بخش دیگری'
+                        return Response({
+                            'error': f'برای پرسنل «{p_obj.full_name}» در تاریخ {date_shamsi} وضعیت «حاضر کامل» در «{sec_title}» ثبت شده است. در صورت کارکرد همزمان در دو بخش، از وضعیت نیمه‌وقت یا ساعت سفارشی استفاده نمایید.'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+
+                other_hours_sum = sum(float(a.effective_hours or 0) for a in other_att_qs)
+                if other_hours_sum + eff_h > 24:
+                    return Response({
+                        'error': f'مجموع کارکرد روزانه پرسنل «{p_obj.full_name}» در تاریخ {date_shamsi} در بخش‌های مختلف ({other_hours_sum + eff_h:.1f} ساعت) از سقف ۲۴ ساعت شبانه‌روز بیشتر است.'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                # پیدا کردن رکورد فعال پرسنل در این تاریخ و این بخش
+                att_filter = {
+                    'personnel_id': personnel_id,
+                    'date_shamsi': date_shamsi,
+                    'is_deleted': False
+                }
+                if target_section_id:
+                    att_obj = DailyAttendance.objects.select_for_update().filter(
+                        Q(**att_filter) & (Q(section_id=target_section_id) | (Q(section_id__isnull=True) & Q(personnel__section_id=target_section_id)))
+                    ).first()
+                else:
+                    att_obj = DailyAttendance.objects.select_for_update().filter(**att_filter).first()
 
                 if att_obj:
                     # بررسی تغییرات جهت ثبت در Audit Log
@@ -2848,17 +3006,24 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                     att_obj.advance_payment = adv_pay
                     att_obj.notes = notes_val
                     att_obj.warehouse_id = target_wh
+                    if target_section_id:
+                        att_obj.section_id = target_section_id
+                    if target_project_id:
+                        att_obj.project_id = target_project_id
                     att_obj.modified_by = request.user
                     if target_period:
                         att_obj.period = target_period
                     att_obj.save()
 
-                    # پاکسازی رکوردهای تکراری قدیمی احتمالی برای این روز
-                    DailyAttendance.objects.filter(
+                    # پاکسازی رکوردهای تکراری قدیمی احتمالی برای این روز در همین بخش
+                    dup_qs = DailyAttendance.objects.filter(
                         personnel_id=personnel_id,
                         date_shamsi=date_shamsi,
                         is_deleted=False
-                    ).exclude(id=att_obj.id).delete()
+                    ).exclude(id=att_obj.id)
+                    if target_section_id:
+                        dup_qs = dup_qs.filter(Q(section_id=target_section_id) | (Q(section_id__isnull=True) & Q(personnel__section_id=target_section_id)))
+                    dup_qs.delete()
 
                     # ثبت لاگ‌های ممیزی
                     for f_name, o_val, n_val in changes:
@@ -2874,10 +3039,12 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                         )
                     updated_count += 1
                 else:
-                    # ایجاد رکورد جدید
+                    # ایجاد رکورد جدید با انتساب به بخش و پروژه مشخص
                     att_obj = DailyAttendance.objects.create(
                         personnel_id=personnel_id,
                         warehouse_id=target_wh,
+                        project_id=target_project_id,
+                        section_id=target_section_id,
                         date_shamsi=date_shamsi,
                         status=status_val,
                         effective_hours=eff_h,
@@ -2920,6 +3087,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         raw_wh = request.data.get('warehouse_id')
         warehouse_id = int(raw_wh) if (raw_wh and str(raw_wh).upper() not in ['ALL', '0', 'NONE', '']) else None
         project_id = safe_int(request.data.get('project_id'))
+        section_id = safe_int(request.data.get('section_id'))
         personnel_ids = request.data.get('personnel_ids')
 
         # اعتبارسنجی بازه مجاز ویرایش تاریخ
@@ -2930,6 +3098,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         qs = DailyAttendance.objects.filter(date_shamsi=date_shamsi, is_deleted=False)
         if warehouse_id:
             qs = qs.filter(warehouse_id=warehouse_id)
+        if section_id:
+            qs = qs.filter(section_id=section_id)
         if personnel_ids and isinstance(personnel_ids, list) and len(personnel_ids) > 0:
             qs = qs.filter(personnel_id__in=personnel_ids)
 
@@ -3059,22 +3229,32 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi__startswith=year_month, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
             if section_id:
-                personnel_list = personnel_list.filter(section_id=section_id)
+                personnel_list = personnel_list.filter(
+                    Q(section_id=section_id) |
+                    Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+                ).distinct()
             attendances = DailyAttendance.objects.filter(
                 Q(warehouse_id=warehouse_id) | Q(personnel__in=personnel_list),
                 date_shamsi__startswith=year_month,
                 is_deleted=False
             ).order_by('id')
+            if section_id:
+                attendances = attendances.filter(section_id=section_id)
         else:
             personnel_list = PersonnelProfile.objects.filter(
                 Q(is_active=True, approval_status='approved') | Q(daily_attendances__date_shamsi__startswith=year_month, daily_attendances__is_deleted=False)
             ).distinct().order_by('last_name', 'first_name')
             if section_id:
-                personnel_list = personnel_list.filter(section_id=section_id)
+                personnel_list = personnel_list.filter(
+                    Q(section_id=section_id) |
+                    Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+                ).distinct()
             attendances = DailyAttendance.objects.filter(
                 date_shamsi__startswith=year_month,
                 is_deleted=False
             ).order_by('id')
+            if section_id:
+                attendances = attendances.filter(section_id=section_id)
 
         att_map = {}
         for a in attendances:
@@ -3098,6 +3278,11 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         anomalies = []
 
         for p in personnel_list:
+            p_job_title = p.job_title
+            if section_id:
+                sa = p.section_assignments.filter(section_id=section_id, is_active=True).first()
+                if sa and sa.job_title:
+                    p_job_title = sa.job_title
             p_days = []
             total_hours = 0.0
             total_overtime = 0.0
@@ -3201,7 +3386,7 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                 'personnel_id': p.id,
                 'full_name': p.full_name,
                 'national_code': p.national_code,
-                'job_title': p.job_title,
+                'job_title': p_job_title,
                 'is_active': p.is_active,
                 'total_hours': round(total_hours, 2),
                 'total_overtime': round(total_overtime, 2),
@@ -3281,6 +3466,8 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         )
         if warehouse_id:
             existing_qs = existing_qs.filter(warehouse_id=warehouse_id)
+        if section_id:
+            existing_qs = existing_qs.filter(section_id=section_id)
         existing_map = {(att.personnel_id, att.date_shamsi): att for att in existing_qs}
 
         # اعتبارسنجی فقط برای روزهای جدید یا تغییریافته
@@ -3347,12 +3534,15 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
                 target_wh = warehouse_id if warehouse_id else p_obj.assigned_warehouse_id
 
-                # پیدا کردن رکورد فعال پرسنل در این تاریخ (مستقل از انبار قبلی)
-                att_obj = DailyAttendance.objects.select_for_update().filter(
-                    personnel_id=personnel_id,
-                    date_shamsi=date_shamsi,
-                    is_deleted=False
-                ).first()
+                # پیدا کردن رکورد فعال پرسنل در این تاریخ و این بخش
+                att_filter = {
+                    'personnel_id': personnel_id,
+                    'date_shamsi': date_shamsi,
+                    'is_deleted': False
+                }
+                if section_id:
+                    att_filter['section_id'] = section_id
+                att_obj = DailyAttendance.objects.select_for_update().filter(**att_filter).first()
 
                 if not att_obj and not status_val and eff_h == 0:
                     continue
@@ -3421,12 +3611,15 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
                         att_obj.period = target_period
                     att_obj.save()
 
-                    # پاکسازی رکوردهای تکراری قدیمی احتمالی برای این روز
-                    DailyAttendance.objects.filter(
+                    # پاکسازی رکوردهای تکراری قدیمی احتمالی برای این روز در همین بخش
+                    dup_qs = DailyAttendance.objects.filter(
                         personnel_id=personnel_id,
                         date_shamsi=date_shamsi,
                         is_deleted=False
-                    ).exclude(id=att_obj.id).delete()
+                    ).exclude(id=att_obj.id)
+                    if section_id:
+                        dup_qs = dup_qs.filter(section_id=section_id)
+                    dup_qs.delete()
 
                     for f_name, o_val, n_val in changes:
                         AttendanceAuditLog.objects.create(
@@ -3540,7 +3733,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
         )
 
         if section_id:
-            personnel_list = personnel_list.filter(section_id=section_id)
+            personnel_list = personnel_list.filter(
+                Q(section_id=section_id) |
+                Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+            ).distinct()
             attendances = attendances.filter(section_id=section_id)
         elif warehouse_id:
             personnel_list = personnel_list.filter(
@@ -3779,7 +3975,10 @@ class DailyAttendanceViewSet(viewsets.ModelViewSet):
 
         personnel_qs = PersonnelProfile.objects.filter(is_active=True)
         if section_id:
-            personnel_qs = personnel_qs.filter(section_id=section_id)
+            personnel_qs = personnel_qs.filter(
+                Q(section_id=section_id) |
+                Q(section_assignments__section_id=section_id, section_assignments__is_active=True)
+            ).distinct()
         elif warehouse_id:
             personnel_qs = personnel_qs.filter(
                 Q(assigned_warehouse_id=warehouse_id) | Q(assigned_warehouse_id__isnull=True)

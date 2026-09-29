@@ -1236,6 +1236,69 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
         return f"{self.full_name} ({self.national_code}) - {self.job_title}"
 
 
+class PersonnelSectionAssignment(models.Model):
+    """
+    انتساب سازمانی پرسنل به بخش‌ها و پروژه‌های مختلف با حفظ استقلال سمت و دستمزد
+    """
+    personnel = models.ForeignKey(
+        'PersonnelProfile',
+        on_delete=models.CASCADE,
+        related_name='section_assignments',
+        verbose_name="پرسنل"
+    )
+    section = models.ForeignKey(
+        'ProjectSection',
+        on_delete=models.CASCADE,
+        related_name='personnel_assignments',
+        verbose_name="بخش/دپارتمان پروژه"
+    )
+    project = models.ForeignKey(
+        'FinancialProject',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='personnel_assignments',
+        verbose_name="پروژه مالی/عملیاتی"
+    )
+    job_title = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        verbose_name="سمت / شغل در این بخش"
+    )
+    daily_base_wage = models.DecimalField(
+        max_digits=14,
+        decimal_places=0,
+        default=0,
+        verbose_name="دستمزد روزانه مصوب این بخش (ریال)"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="فعال در این بخش"
+    )
+    assigned_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="تاریخ انتساب به بخش"
+    )
+
+    class Meta:
+        verbose_name = "انتساب پرسنل به بخش"
+        verbose_name_plural = "انتساب‌های پرسنل به بخش‌ها"
+        unique_together = ('personnel', 'section')
+
+    def save(self, *args, **kwargs):
+        if not self.project_id and self.section and self.section.project_id:
+            self.project_id = self.section.project_id
+        if not self.job_title and self.personnel:
+            self.job_title = self.personnel.job_title
+        if (not self.daily_base_wage or self.daily_base_wage == 0) and self.personnel:
+            self.daily_base_wage = self.personnel.daily_base_wage
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.personnel.full_name} -> {self.section.name} ({self.job_title})"
+
+
 class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     """
     پرونده راننده و ناوگان خودرویی شرکت

@@ -363,6 +363,23 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"national_code": f"پرسنلی با کد ملی «{nat_code}» قبلاً در سامانه ثبت شده است."})
         return attrs
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if request:
+            sec_id = request.query_params.get('section_id')
+            if sec_id and str(sec_id).isdigit():
+                sec_id = int(sec_id)
+                assignment = instance.section_assignments.filter(section_id=sec_id, is_active=True).first()
+                if assignment:
+                    if assignment.job_title:
+                        ret['job_title'] = assignment.job_title
+                    if assignment.daily_base_wage:
+                        ret['daily_base_wage'] = float(assignment.daily_base_wage)
+                    ret['is_assigned_to_section'] = True
+                    ret['assignment_id'] = assignment.id
+        return ret
+
 
 class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     vehicle_type_display = serializers.CharField(source='get_vehicle_type_display', read_only=True)

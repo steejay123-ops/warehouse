@@ -33,5 +33,10 @@ export class StateService {
     return labels[d] || d;
   }
 
+  selectedWarehouseId(): number | null {
+    const id = this.appState?.activeWarehouseId;
+    return (id && id !== 'ALL') ? Number(id) : null;
+  }
+
   constructor() {}
 }

@@ -442,12 +442,26 @@
 
                   <!-- فوتر تک‌خطی جمع‌وجور: شرکت + تلفن همراه -->
                   <div class="flex items-center justify-between text-[10px] pt-2 mt-2 border-t border-slate-100 text-slate-500 font-mono">
-                    <span class="font-sans text-slate-400 truncate max-w-[130px]" [title]="u.company || 'فارس عالیش'">{{u.company || 'فارس عالیش'}}</span>
-                    <span *ngIf="u.phone_number" class="flex items-center gap-1 text-slate-600 font-bold">
+                    <div class="flex flex-wrap gap-1 items-center max-w-[160px] truncate">
+                      <ng-container *ngIf="getUserCompanyBadges(u).length > 0">
+                        <span *ngFor="let cb of getUserCompanyBadges(u) | slice:0:2"
+                              [ngClass]="cb.is_default ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'"
+                              class="px-1.5 py-0.2 rounded-md font-sans text-[9px] font-bold border truncate"
+                              [title]="cb.name + (cb.is_default ? ' (اصلی)' : '')">
+                          <span *ngIf="cb.is_default && getUserCompanyBadges(u).length > 1" class="text-amber-500 text-[8px]">★</span>
+                          {{ cb.name }}
+                        </span>
+                        <span *ngIf="getUserCompanyBadges(u).length > 2" class="text-[9px] font-mono text-indigo-600 font-bold">
+                          +{{ getUserCompanyBadges(u).length - 2 }}
+                        </span>
+                      </ng-container>
+                      <span *ngIf="getUserCompanyBadges(u).length === 0" class="font-sans text-slate-400 text-[9.5px]">بدون شرکت</span>
+                    </div>
+                    <span *ngIf="u.phone_number" class="flex items-center gap-1 text-slate-600 font-bold shrink-0">
                       <span class="text-slate-400 text-[9px]">📱</span>
                       <span>{{u.phone_number}}</span>
                     </span>
-                    <span *ngIf="!u.phone_number" class="text-slate-400 text-[9.5px] font-sans">بدون تماس</span>
+                    <span *ngIf="!u.phone_number" class="text-slate-400 text-[9.5px] font-sans shrink-0">بدون تماس</span>
                   </div>
                 </div>
             </div>
@@ -587,7 +601,18 @@
 
                       <!-- Company -->
                       <td class="py-3.5 px-4">
-                        <span class="text-slate-700 text-[11px] font-medium">{{u.company || 'فارس عالیش'}}</span>
+                        <div class="flex flex-wrap gap-1 max-w-[220px] items-center">
+                          <ng-container *ngIf="getUserCompanyBadges(u).length > 0">
+                            <span *ngFor="let cb of getUserCompanyBadges(u)"
+                                  [ngClass]="cb.is_default ? 'bg-indigo-50 text-indigo-700 border-indigo-200/90 shadow-2xs font-black' : 'bg-slate-50 text-slate-700 border-slate-200 font-bold'"
+                                  class="px-2 py-0.5 rounded-lg text-[10.5px] border flex items-center gap-1 transition-all"
+                                  [title]="cb.name + (cb.is_default ? ' (شرکت اصلی / پیش‌فرض)' : '')">
+                              <span *ngIf="cb.is_default && getUserCompanyBadges(u).length > 1" class="text-amber-500 text-[9px]" title="شرکت اصلی">★</span>
+                              <span class="truncate">{{ cb.name }}</span>
+                            </span>
+                          </ng-container>
+                          <span *ngIf="getUserCompanyBadges(u).length === 0" class="text-[10px] text-slate-400 font-medium">بدون شرکت</span>
+                        </div>
                       </td>
 
                       <!-- Status Badge -->
@@ -1532,15 +1557,15 @@
           </span>
         </button>
 
-        <!-- تب ۴: انبارها و پروژه‌ها -->
+        <!-- تب ۴: شرکت‌ها و انبارها -->
         <button type="button" (click)="setUserModalInnerTab('warehouses')"
           [ngClass]="userModalInnerTab === 'warehouses' ? 'bg-indigo-600 text-white shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-bold'"
           class="flex-1 py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer select-none">
-          <span class="text-sm">🏬</span>
-          <span class="truncate">{{ hasInventoryModule() ? 'انبارها و پروژه‌ها' : 'پروژه‌ها و کارگاه‌ها' }}</span>
+          <span class="text-sm">🏢</span>
+          <span class="truncate">{{ hasInventoryModule() ? 'شرکت‌ها و انبارها' : 'شرکت‌ها و پروژه‌ها' }}</span>
           <span class="text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold"
             [ngClass]="userModalInnerTab === 'warehouses' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700'">
-            {{ userForm.assigned_warehouses?.length || 0 }}
+            {{ userForm.company_ids?.length || 0 }} ش / {{ userForm.assigned_warehouses?.length || 0 }} ا
           </span>
         </button>
       </div>
@@ -1652,17 +1677,6 @@
                     </div>
                     <div *ngIf="userFormErrors['national_code']" class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-rose-500 flex items-center">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- شرکت متبوع -->
-                <div>
-                  <label class="block text-[11px] font-bold text-slate-600 mb-1.5">شرکت متبوع / پیمانکار (Company)</label>
-                  <div class="relative">
-                    <input type="text" [(ngModel)]="userForm.company" name="company" placeholder="مثال: شرکت نفت و گاز / فارس عالیش" class="w-full px-3.5 py-2.5 rounded-xl text-xs outline-none transition-all" [class]="getFieldClass('company')">
-                    <div *ngIf="isFieldValid('company')" class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600 flex items-center">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
                   </div>
                 </div>
@@ -2034,33 +2048,135 @@
           </div>
         </div>
 
-        <!-- تب ۴: انبارها و پروژه‌های مجاز -->
+        <!-- تب ۴: شرکت‌ها و انبارهای مجاز -->
         <div *ngIf="userModalInnerTab === 'warehouses'" class="space-y-4 animate-in fade-in duration-200">
-          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-3.5">
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4.5 space-y-4">
+            <!-- سربرگ تب -->
             <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <div class="flex items-center gap-2">
-                <span class="w-7 h-7 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">🏬</span>
+                <span class="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm">🏢</span>
                 <div>
-                  <h3 class="text-xs font-black text-slate-800">{{ hasInventoryModule() ? 'محدوده عملیاتی مجاز (انبارها و پروژه‌ها)' : 'محدوده عملیاتی مجاز (پروژه‌ها و کارگاه‌ها)' }}</h3>
-                  <p class="text-[10px] text-slate-400">{{ hasInventoryModule() ? 'انبارها یا پروژه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد' : 'پروژه‌ها یا کارگاه‌هایی که پرسنل مجوز رویت و ثبت تراکنش در آنها را دارد' }}</p>
+                  <h3 class="text-xs font-black text-slate-800">{{ hasInventoryModule() ? 'شرکت‌ها و انبارهای مجاز' : 'شرکت‌ها و پروژه‌های مجاز' }}</h3>
+                  <p class="text-[10px] text-slate-400">ابتدا شرکت‌های کاری را انتخاب کرده و سپس انبارهای متناظر آنها را مشخص فرمایید</p>
                 </div>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-[10px] text-slate-500 font-medium">مجموع موارد انتخابی:</span>
-                <span class="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">{{userForm.assigned_warehouses?.length || 0}}</span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  {{ userForm.company_ids?.length || 0 }} شرکت
+                </span>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {{ userForm.assigned_warehouses?.length || 0 }} انبار
+                </span>
+                <span class="text-[10px] font-bold text-slate-400">گام ۴ از ۴</span>
               </div>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 max-h-56 overflow-y-auto custom-scrollbar">
-              <label *ngFor="let p of state.appState.projects" 
-                class="flex items-center gap-2.5 p-2 rounded-xl transition-all border cursor-pointer select-none"
-                [ngClass]="isWarehouseAssigned(p.id) ? 'bg-indigo-50/90 border-indigo-400 shadow-2xs' : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50'">
-                <input type="checkbox" [checked]="isWarehouseAssigned(p.id)" (change)="toggleUserProjCheckbox(p.id, $event)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
-                <span class="text-xs text-slate-800 font-bold truncate" [title]="p.name">{{p.name}}</span>
-              </label>
+            <!-- بخش ۱: انتخاب شرکت‌های مجاز کاربر (Multi-Company) -->
+            <div class="bg-slate-50/90 rounded-2xl p-3.5 border border-slate-200 space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-lg bg-indigo-100/80 text-indigo-800 flex items-center justify-center font-bold text-xs">۱</span>
+                  <label class="block text-xs font-black text-slate-800">انتخاب شرکت‌های کاری مجاز (شرکت اصلی / پیش‌فرض را نیز تعیین کنید)</label>
+                </div>
+                <span *ngIf="userForm.company_ids?.length > 0" class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  ✓ لیست انبارها بر این اساس فیلتر شده است
+                </span>
+              </div>
 
-              <div *ngIf="!state.appState.projects || state.appState.projects.length === 0" class="col-span-full py-6 text-center text-slate-400 text-xs font-bold">
-                {{ hasInventoryModule() ? 'هیچ انباری در سیستم تعریف نشده است.' : 'هیچ پروژه‌ای در سیستم تعریف نشده است.' }}
+              <!-- گرید شرکت‌ها -->
+              <div *ngIf="availableCompanies && availableCompanies.length > 0" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                <div *ngFor="let comp of availableCompanies"
+                  (click)="toggleUserCompany(comp.id)"
+                  [ngClass]="userForm.company_ids?.includes(comp.id) ? 'bg-indigo-50/90 border-indigo-400 shadow-2xs ring-1 ring-indigo-200' : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300'"
+                  class="flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer select-none">
+                  
+                  <div class="flex items-center gap-2.5 min-w-0">
+                    <input type="checkbox"
+                      [checked]="userForm.company_ids?.includes(comp.id)"
+                      (click)="$event.stopPropagation()"
+                      (change)="toggleUserCompany(comp.id)"
+                      class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+                    <div class="truncate">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                          {{ comp.code }}
+                        </span>
+                        <span class="text-xs font-black text-slate-800 truncate" [title]="comp.name">
+                          {{ comp.name }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-1.5 shrink-0" (click)="$event.stopPropagation()">
+                    <!-- دکمه شرکت پیش‌فرض -->
+                    <button type="button"
+                      *ngIf="userForm.company_ids?.includes(comp.id)"
+                      (click)="setDefaultCompany(comp.id, $event)"
+                      [title]="userForm.default_company_id === comp.id ? 'شرکت پیش‌فرض فعال' : 'تنظیم به عنوان شرکت پیش‌فرض'"
+                      [ngClass]="userForm.default_company_id === comp.id ? 'bg-emerald-600 text-white shadow-2xs font-black' : 'bg-slate-100 hover:bg-emerald-50 text-slate-500 hover:text-emerald-700 font-bold'"
+                      class="px-2 py-0.5 rounded-lg text-[10px] transition-all cursor-pointer flex items-center gap-1">
+                      <span *ngIf="userForm.default_company_id === comp.id">★ اصلی</span>
+                      <span *ngIf="userForm.default_company_id !== comp.id">☆ پیش‌فرض</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div *ngIf="!availableCompanies || availableCompanies.length === 0" class="py-3 text-center text-xs text-slate-400 font-medium">
+                در حال بارگذاری لیست شرکت‌ها...
+              </div>
+            </div>
+
+            <!-- بخش ۲: انتخاب انبارهای متناظر با شرکت‌های انتخابی -->
+            <div class="space-y-2 pt-1">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-6 h-6 rounded-lg bg-emerald-100/80 text-emerald-800 flex items-center justify-center font-bold text-xs">۲</span>
+                  <label class="block text-xs font-black text-slate-800">{{ hasInventoryModule() ? 'تخصیص انبارهای عملیاتی مجاز' : 'تخصیص پروژه‌های عملیاتی مجاز' }}</label>
+                </div>
+                <div class="flex items-center gap-2" *ngIf="userForm.company_ids?.length > 0 && modalWarehouses.length > 0">
+                  <button type="button" (click)="selectAllModalWarehouses()" class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-lg border border-indigo-200 transition-all cursor-pointer">
+                    انتخاب همه انبارها
+                  </button>
+                  <button type="button" (click)="clearAllModalWarehouses()" class="text-[10px] font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-lg border border-slate-200 transition-all cursor-pointer">
+                    لغو همه
+                  </button>
+                </div>
+              </div>
+
+              <!-- هشدار در صورت عدم انتخاب شرکت -->
+              <div *ngIf="!userForm.company_ids || userForm.company_ids.length === 0" 
+                   class="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs flex items-center gap-2.5">
+                <span class="text-base">⚠️</span>
+                <span>برای مشاهده و تخصیص انبارها، لطفاً ابتدا حداقل یک شرکت را در کادر بالا علامت بزنید. انبارها بلافاصله نمایش داده خواهند شد.</span>
+              </div>
+
+              <!-- لودینگ بارگذاری انبارها -->
+              <div *ngIf="isLoadingModalWarehouses" class="py-6 text-center text-xs text-indigo-700 font-bold flex items-center justify-center gap-2 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                <span class="animate-spin text-indigo-600">⏳</span>
+                <span>در حال به‌روزرسانی آنی لیست انبارها متناسب با شرکت‌های انتخابی...</span>
+              </div>
+
+              <!-- گرید انبارها متناسب با شرکت‌های انتخابی -->
+              <div *ngIf="!isLoadingModalWarehouses && modalWarehouses && modalWarehouses.length > 0" 
+                   class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 max-h-56 overflow-y-auto custom-scrollbar">
+                <label *ngFor="let p of modalWarehouses" 
+                  class="flex items-center gap-2.5 p-2 rounded-xl transition-all border cursor-pointer select-none"
+                  [ngClass]="isWarehouseAssigned(p.id) ? 'bg-indigo-50/90 border-indigo-400 shadow-2xs' : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50'">
+                  <input type="checkbox" [checked]="isWarehouseAssigned(p.id)" (change)="toggleUserProjCheckbox(p.id, $event)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+                  <div class="min-w-0 flex-1 truncate">
+                    <span class="text-xs text-slate-800 font-bold truncate block" [title]="p.name">{{p.name}}</span>
+                    <span *ngIf="p.company_name" class="text-[9px] text-slate-400 font-semibold truncate block">
+                      {{ p.company_name }}
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <div *ngIf="!isLoadingModalWarehouses && userForm.company_ids?.length > 0 && modalWarehouses.length === 0" 
+                   class="col-span-full py-6 text-center text-slate-400 text-xs font-bold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                {{ hasInventoryModule() ? 'هیچ انباری برای شرکت‌های انتخاب‌شده یافت نشد.' : 'هیچ پروژه‌ای برای شرکت‌های انتخاب‌شده یافت نشد.' }}
               </div>
             </div>
           </div>

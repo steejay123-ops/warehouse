@@ -1,6 +1,6 @@
 import { HttpInterceptorFn, HttpRequest, HttpHandlerFn, HttpResponse, HttpContextToken, HttpErrorResponse } from '@angular/common/http';
 import { from, Observable, of, throwError } from 'rxjs';
-import { switchMap, tap, catchError, timeout } from 'rxjs/operators';
+import { switchMap, tap, catchError, timeout, finalize } from 'rxjs/operators';
 import { NetworkStatusService } from '../services/network-status.service';
 import { OfflineSyncService } from '../services/offline-sync.service';
 import { offlineDb } from '../services/offline-db';
@@ -50,6 +50,40 @@ export function isNonQueueableEndpoint(url: string): boolean {
     clean.includes('/ping')
   );
 }
+
+/**
+ * محاسبه کلید کش آفلاین با تفکیک قطعی چندشرکتی (Multi-Tenant Cache Key Isolation)
+ * جهت جلوگیری از تداخل و نشت داده‌های کش‌شده انبارها، کالاها و پروژه‌ها میان شرکت‌های مختلف
+ */
+export function getOfflineCacheKey(req: HttpRequest<unknown>): string {
+  const url = req.urlWithParams || req.url;
+  const headerCid = req.headers.get('X-Company-ID');
+  let cid = headerCid;
+  if (!cid) {
+    try {
+      const parsed = new URL(url, 'http://localhost');
+      cid = parsed.searchParams.get('company_id') || parsed.searchParams.get('cid');
+    } catch {}
+  }
+  if (!cid && typeof window !== 'undefined') {
+    try {
+      cid = sessionStorage.getItem('active_company_id') || localStorage.getItem('active_company_id');
+    } catch {}
+  }
+  return cid ? `${url}::cid_${cid}` : url;
+}
+
+/**
+ * رهگیری درخواست‌های استعلام پس‌زمینه در حال اجرا جهت جلوگیری قطعی از درخواست‌های تکراری،
+ * تداخل چندگانه و حلقه‌های رگباری SWR
+ */
+const inFlightRevalidations = new Set<string>();
+
+/**
+ * حداقل فاصله زمانی مجاز برای استعلام مجدد پس‌زمینه برای یک کلید کش (۱۵ ثانیه)
+ */
+const REVALIDATION_COOLDOWN_MS = 15_000;
+const lastRevalidationTime = new Map<string, number>();
 
 /**
  * offlineInterceptor — اینترسپتور آفلاین با قابلیت Lie-Fi و ادغام کش+صف
@@ -265,9 +299,10 @@ export const offlineInterceptor: HttpInterceptorFn = (
 
   // ─── مدیریت GET با الگوی Stale-While-Revalidate (SWR) ───
   const handleGetSWR = (): Observable<any> => {
-    const cacheKey = req.urlWithParams;
+    const cacheKey = getOfflineCacheKey(req);
 
     return from(syncService.getCachedEntry(cacheKey)).pipe(
+
       switchMap((entry) => {
         // ۱. اگر داده در کش محلی IndexedDB موجود باشد (تحویل فوری ۰ میلی‌ثانیه):
         if (entry !== null) {
@@ -277,8 +312,15 @@ export const offlineInterceptor: HttpInterceptorFn = (
                 `[OfflineInterceptor] ⚡ تحویل آنی SWR از کش محلی (0ms): ${cacheKey}${entry.isStale ? ' (Stale)' : ''}`
               );
 
-              // استعلام آرام و نامحسوس در پس‌زمینه (Background Revalidation)
-              if (network.isBrowserOnline) {
+              // استعلام آرام و نامحسوس در پس‌زمینه (Background Revalidation با جلوگیری قطعی از حلقه‌های تکراری)
+              const now = Date.now();
+              const lastReval = lastRevalidationTime.get(cacheKey) || 0;
+              const isCooldownActive = now - lastReval < REVALIDATION_COOLDOWN_MS;
+
+              if (network.isBrowserOnline && !inFlightRevalidations.has(cacheKey) && !isCooldownActive) {
+                inFlightRevalidations.add(cacheKey);
+                lastRevalidationTime.set(cacheKey, now);
+
                 next(req)
                   .pipe(
                     timeout(10_000),
@@ -290,18 +332,27 @@ export const offlineInterceptor: HttpInterceptorFn = (
                         `[OfflineInterceptor] 🤫 استعلام پس‌زمینه بدون مزاحمت گذشت (سرور غیرقابل‌دسترس/آفلاین): ${req.url}`
                       );
                       return of(null);
+                    }),
+                    finalize(() => {
+                      inFlightRevalidations.delete(cacheKey);
                     })
                   )
                   .subscribe(async (event) => {
                     if (event instanceof HttpResponse && event.ok) {
                       network.reportServerReachable();
-                      // به‌روزرسانی کش IndexedDB
-                      await syncService.cacheResponse(cacheKey, event.body);
-                      // ادغام با رکوردهای صف آفلاین
-                      const freshMerged = await mergeWithQueue(event.body, req.url);
-                      // اطلاع‌رسانی به کل برنامه جهت به‌روزرسانی زنده و هایلایت انیمیشنی
-                      syncService.notifyDataUpdated(req.urlWithParams || req.url, freshMerged);
-                      console.log(`[OfflineInterceptor] 🔄 داده‌های جدید پس‌زمینه دریافت و منتشر شد: ${req.urlWithParams || req.url}`);
+                      // بررسی تغییر واقعی داده‌ها جهت جلوگیری از سربار حافظه و رندرهای اضافه
+                      const hasDataChanged = JSON.stringify(event.body) !== JSON.stringify(entry.response);
+                      if (hasDataChanged) {
+                        // به‌روزرسانی کش IndexedDB
+                        await syncService.cacheResponse(cacheKey, event.body);
+                        // ادغام با رکوردهای صف آفلاین
+                        const freshMerged = await mergeWithQueue(event.body, req.url);
+                        // اطلاع‌رسانی به کل برنامه جهت به‌روزرسانی زنده و هایلایت انیمیشنی
+                        syncService.notifyDataUpdated(req.urlWithParams || req.url, freshMerged);
+                        console.log(`[OfflineInterceptor] 🔄 داده‌های جدید پس‌زمینه دریافت و منتشر شد: ${req.urlWithParams || req.url}`);
+                      } else {
+                        console.log(`[OfflineInterceptor] ⚡ داده‌های سرور با کش محلی یکسان بود؛ صرف‌نظر از رندرهای اضافی: ${cacheKey}`);
+                      }
                     }
                   });
               }

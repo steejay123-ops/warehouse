@@ -82,10 +82,13 @@ export interface PersonnelProfile {
   phone_number?: string;
   postal_code?: string;
   address?: string;
+  notes?: string;
   attachment?: string | null;
 
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
+  company?: number | null;
+  company_name?: string;
   project?: number | null;
   project_name?: string;
   section?: number | null;
@@ -138,8 +141,11 @@ export interface VehicleDriverProfile {
   bank_name?: string;
   account_number?: string;
   sheba_number?: string;
+  notes?: string;
   assigned_warehouse?: number | null;
   assigned_warehouse_name?: string;
+  company?: number | null;
+  company_name?: string;
   project?: number | null;
   project_name?: string;
   section?: number | null;
@@ -663,8 +669,11 @@ export interface FinancialProject {
 export interface ProjectSection {
   id?: number;
   project: number;
+  project_id?: number;
   project_name?: string;
   project_code?: string;
+  company_id?: number;
+  company_name?: string;
   code: string;
   name: string;
   is_active: boolean;
@@ -718,11 +727,22 @@ export interface ExpenseInvoice {
   invoice_number: string;
   invoice_date_shamsi: string;
   amount: number;
+  total_amount?: number;
   category: string;
   description: string;
   attachment?: string | null;
-  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'ready_to_pay' | 'paid' | 'rejected';
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'pending_manager' | 'ready_to_pay' | 'paid' | 'rejected' | 'revision_required';
   status_display?: string;
+  rejection_reason?: string;
+  supervisor_approver_name?: string;
+  accountant_approver_name?: string;
+  manager_approver_name?: string;
+  date?: string;
+  issue_date_shamsi?: string;
+  payment_ref?: string;
+  paid_at?: string;
+  paid_by?: number | null;
+  paid_by_name?: string;
   created_by?: number | null;
   created_by_name?: string;
   created_at?: string;
@@ -766,13 +786,28 @@ export interface PettyCashTransaction {
   counterparty_name?: string;
   receipt_number?: string;
   attachment?: string | null;
-  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'approved' | 'rejected';
+  status: 'draft' | 'pending_supervisor' | 'pending_accountant' | 'pending_manager' | 'approved' | 'rejected' | 'revision_required';
   status_display?: string;
   rejection_reason?: string;
   created_by?: number | null;
   created_by_name?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface WorkflowAuditLog {
+  id?: number;
+  content_type: string;
+  object_id: number;
+  actor?: number | null;
+  actor_name?: string;
+  from_status: string;
+  to_status: string;
+  action: string;
+  action_display?: string;
+  reason?: string;
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 export interface PettyCashBalanceSummary {

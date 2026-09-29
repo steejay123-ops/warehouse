@@ -372,10 +372,26 @@ export class Dispatch implements OnInit, OnDestroy {
       this.loadItems();
     });
 
-    // ─── SWR Live Revalidation: دریافت داده‌های جدیدتر سرور در پس‌زمینه ───
-    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url }) => {
-      if (url && url.includes('/api/inventory/items/')) {
-        this.loadItems();
+    // ─── SWR Live Revalidation: دریافت داده‌های جدیدتر سرور در پس‌زمینه بدون ایجاد حلقه درخواست ───
+    this.swrSub = this.offlineSync.liveDataUpdates$.subscribe(({ url, data }) => {
+      if (url && url.includes('/api/inventory/items/') && data) {
+        const rawList = data.results || (Array.isArray(data) ? data : []);
+        this.items = rawList.map((r: any) => ({
+          ...r,
+          labelStatus: r.tag_status === 'printed' ? 'چاپ شده' : (r.tag_status || 'چاپ نشده'),
+          fieldStatus: r.field_status === 'counting' ? 'counting' : r.field_status === 'recount' ? 'recount' : r.field_status === 'done' ? 'done' : 'waiting',
+          docStatus: r.doc_status === 'processing' ? 'processing' : (r.doc_status === 'done' || r.doc_status === 'approved') ? 'done' : 'waiting',
+          fieldAssignee: r.field_assignee || 'ثبت نشده',
+          docAssignee: r.doc_assignee || 'ثبت نشده'
+        }));
+        if (data.count !== undefined) {
+          this.totalItems = data.count;
+        }
+        this.updateAvailableTags();
+        if (this.selectedItemIds.size > 0) {
+          this.updateSelectedItemsTags();
+        }
+        this.cdr.markForCheck();
       }
     });
 

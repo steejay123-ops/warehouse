@@ -6,6 +6,7 @@ import {
   OnInit,
   OnDestroy,
   NgZone,
+  inject
 } from '@angular/core';
 
 /**
@@ -24,11 +25,10 @@ export class ClickOutsideDirective implements OnInit, OnDestroy {
   @Output() clickedOutside = new EventEmitter<void>();
 
   private listener!: (event: Event) => void;
+  private el = inject(ElementRef);
+  private ngZone = inject(NgZone);
 
-  constructor(
-    private el: ElementRef,
-    private ngZone: NgZone,
-  ) {}
+  constructor() {}
 
   ngOnInit(): void {
     // ثبت listener خارج از zone برای جلوگیری از change detection اضافی

@@ -24,7 +24,8 @@ import {
   ExpenseInvoice,
   PettyCashAccount,
   PettyCashTransaction,
-  PettyCashBalanceSummary
+  PettyCashBalanceSummary,
+  WorkflowAuditLog
 } from '../models/personnel.model';
 
 @Injectable({ providedIn: 'root' })
@@ -80,16 +81,16 @@ export class PersonnelApiService {
   }
 
   // --- گردش کار تایید پرسنل ---
-  approvePersonnelSupervisor(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-supervisor/`, {});
+  approvePersonnelSupervisor(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-supervisor/`, note ? { note } : {});
   }
 
-  approvePersonnelManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-manager/`, {});
+  approvePersonnelManager(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-manager/`, note ? { note } : {});
   }
 
-  approvePersonnelFinance(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-finance/`, {});
+  approvePersonnelFinance(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/profiles/${id}/approve-finance/`, note ? { note } : {});
   }
 
   rejectPersonnel(id: number, reason: string): Observable<any> {
@@ -155,16 +156,16 @@ export class PersonnelApiService {
   }
 
   // --- گردش کار تایید ناوگان ---
-  approveVehicleSupervisor(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-supervisor/`, {});
+  approveVehicleSupervisor(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-supervisor/`, note ? { note } : {});
   }
 
-  approveVehicleManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-manager/`, {});
+  approveVehicleManager(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-manager/`, note ? { note } : {});
   }
 
-  approveVehicleFinance(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-finance/`, {});
+  approveVehicleFinance(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicles/${id}/approve-finance/`, note ? { note } : {});
   }
 
   rejectVehicle(id: number, reason: string): Observable<any> {
@@ -180,16 +181,16 @@ export class PersonnelApiService {
     return this.api.get<PersonnelChangeRequest[]>(`${this.baseUrl}/personnel-change-requests`, params as Record<string, unknown>);
   }
 
-  approvePersonnelChangeRequestSupervisor(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-supervisor/`, {});
+  approvePersonnelChangeRequestSupervisor(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-supervisor/`, note ? { note } : {});
   }
 
-  approvePersonnelChangeRequestFinance(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-finance/`, {});
+  approvePersonnelChangeRequestFinance(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-finance/`, note ? { note } : {});
   }
 
-  approvePersonnelChangeRequestManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-manager/`, {});
+  approvePersonnelChangeRequestManager(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/personnel-change-requests/${id}/approve-manager/`, note ? { note } : {});
   }
 
   rejectPersonnelChangeRequest(id: number, reason: string): Observable<any> {
@@ -201,20 +202,31 @@ export class PersonnelApiService {
     return this.api.get<VehicleChangeRequest[]>(`${this.baseUrl}/vehicle-change-requests`, params as Record<string, unknown>);
   }
 
-  approveVehicleChangeRequestSupervisor(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-supervisor/`, {});
+  approveVehicleChangeRequestSupervisor(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-supervisor/`, note ? { note } : {});
   }
 
-  approveVehicleChangeRequestFinance(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-finance/`, {});
+  approveVehicleChangeRequestFinance(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-finance/`, note ? { note } : {});
   }
 
-  approveVehicleChangeRequestManager(id: number): Observable<any> {
-    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-manager/`, {});
+  approveVehicleChangeRequestManager(id: number, note?: string): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/approve-manager/`, note ? { note } : {});
   }
 
   rejectVehicleChangeRequest(id: number, reason: string): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/vehicle-change-requests/${id}/reject/`, { reason });
+  }
+
+  // --- حضور و غیاب و کارکرد روزانه ---
+  getDailyAttendance(params?: {
+    warehouse_id?: number;
+    section_id?: number;
+    project_id?: number;
+    date_shamsi?: string;
+    personnel_id?: number;
+  }): Observable<any[]> {
+    return this.api.get<any[]>(`${this.baseUrl}/attendance`, params as Record<string, unknown>);
   }
 
   // --- ماتریس ثبت کارکرد پرسنل ---
@@ -379,6 +391,14 @@ export class PersonnelApiService {
       params.project_id = options.project_id;
     }
     return this.api.get<VehicleMatrixResponse>(`${this.baseUrl}/trips/matrix`, params, options);
+  }
+
+  getVehicleTripsMatrix(
+    warehouseId: number | null | undefined,
+    dateShamsi: string,
+    options?: { context?: import('@angular/common/http').HttpContext; status?: string; section_id?: number; project_id?: number }
+  ): Observable<VehicleMatrixResponse> {
+    return this.getVehicleMatrix(warehouseId, dateShamsi, options);
   }
 
   saveVehicleTripsBulk(payload: {
@@ -677,17 +697,27 @@ export class PersonnelApiService {
 
   postCartableAction(
     cartableType: 'supervisor' | 'accountant' | 'manager',
-    data: { action: 'approve' | 'revision' | 'reject'; model: string; id: number; reason?: string }
+    data: { action: 'approve' | 'revision' | 'reject'; model: string; id?: number; reason?: string; year_month?: string; warehouse_id?: number | null }
   ): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/cartable/${cartableType}/`, data);
   }
 
+  patchDailyAttendance(id: number, data: any): Observable<any> {
+    return this.api.patch<any>(`${this.baseUrl}/attendance/${id}/`, data);
+  }
+
+  patchVehicleTrip(id: number, data: any): Observable<any> {
+    return this.api.patch<any>(`${this.baseUrl}/trips/${id}/`, data);
+  }
+
+
   disburseTreasury(data: {
-    action: 'disburse_period' | 'disburse_single_payroll' | 'disburse_fleet';
+    action: 'disburse_period' | 'disburse_single_payroll' | 'disburse_fleet' | 'disburse_invoice';
     tracking_code: string;
     period_id?: number;
     payroll_id?: number;
     trip_ids?: number[];
+    invoice_id?: number;
     batch_id?: string;
   }): Observable<any> {
     return this.api.post<any>(`${this.baseUrl}/cartable/treasury/`, data);
@@ -798,6 +828,26 @@ export class PersonnelApiService {
     return this.api.delete<void>(`${this.baseUrl}/expense-invoices/${id}`);
   }
 
+  submitExpenseInvoice(id: number): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}/submit/`, {});
+  }
+
+  approveExpenseInvoice(id: number): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}/approve/`, {});
+  }
+
+  rejectExpenseInvoice(id: number, reason: string): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}/reject/`, { reason });
+  }
+
+  requestRevisionExpenseInvoice(id: number, reason: string): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}/request-revision/`, { reason });
+  }
+
+  payExpenseInvoice(id: number, data: { payment_ref: string; treasury_account_id?: number }): Observable<ExpenseInvoice> {
+    return this.api.post<ExpenseInvoice>(`${this.baseUrl}/expense-invoices/${id}/pay/`, data);
+  }
+
   exportExpenseInvoicesExcel(params?: { section_id?: number; status?: string }): Observable<Blob> {
     return this.api.download(`${this.baseUrl}/expense-invoices/export-excel/`, params as Record<string, unknown>);
   }
@@ -835,6 +885,18 @@ export class PersonnelApiService {
     return this.api.delete<void>(`${this.baseUrl}/petty-cash-transactions/${id}`);
   }
 
+  submitPettyCashTransaction(id: number): Observable<PettyCashTransaction> {
+    return this.api.post<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions/${id}/submit/`, {});
+  }
+
+  approvePettyCashTransaction(id: number): Observable<PettyCashTransaction> {
+    return this.api.post<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions/${id}/approve/`, {});
+  }
+
+  rejectPettyCashTransaction(id: number, reason: string): Observable<PettyCashTransaction> {
+    return this.api.post<PettyCashTransaction>(`${this.baseUrl}/petty-cash-transactions/${id}/reject/`, { reason });
+  }
+
   requestPettyCashReplenishment(data: {
     section_id: number;
     amount: number;
@@ -853,6 +915,11 @@ export class PersonnelApiService {
     search?: string;
   }): Observable<Blob> {
     return this.api.download(`${this.baseUrl}/petty-cash-transactions/export-excel/`, params as Record<string, unknown>);
+  }
+
+  // --- تاریخچه و لاگ‌های گردش کار (Workflow Audit Logs) ---
+  getWorkflowAuditLogs(params?: { content_type?: string; object_id?: number }): Observable<WorkflowAuditLog[]> {
+    return this.api.get<WorkflowAuditLog[]>(`${this.baseUrl}/workflow-audit-logs`, params as Record<string, unknown>);
   }
 
   // --- ورودی و خروجی اکسل ساختار سازمانی و طرف‌های حساب ---
@@ -924,6 +991,38 @@ export class PersonnelApiService {
     formData.append('file', file);
     if (dryRun) formData.append('dry_run', 'true');
     return this.api.post<any>(`${this.baseUrl}/counterparties/import-excel/`, formData);
+  }
+
+  calculatePeriodPayroll(payload: {
+    warehouse_id?: number | null;
+    company_id?: number | null;
+    year_month: string;
+  }): Observable<any> {
+    return this.api.post<any>(`${this.baseUrl}/monthly-payroll/calculate-period/`, payload);
+  }
+
+  exportMonthlyPayrollExcel(periodId: number): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/monthly-payroll/export-monthly-excel/`, { period_id: periodId });
+  }
+
+  exportTreasuryDiskette(periodId: number, type: 'paya' | 'satna' = 'paya'): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/cartable/treasury/export-diskette/`, { period_id: periodId, type });
+  }
+
+  exportBimehDisketteZip(periodId: number, projectId: number): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/monthly-payroll/export-dsk-zip/`, { period_id: periodId, project_id: projectId });
+  }
+
+  exportTaxWh(periodId: number, projectId: number): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/monthly-payroll/export-tax-wh/`, { period_id: periodId, project_id: projectId });
+  }
+
+  exportTaxWp(periodId: number, projectId: number): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/monthly-payroll/export-tax-wp/`, { period_id: periodId, project_id: projectId });
+  }
+
+  exportBankPaymentExcel(periodId: number, projectId: number): Observable<Blob> {
+    return this.api.download(`${this.baseUrl}/monthly-payroll/export-bank-excel/`, { period_id: periodId, project_id: projectId });
   }
 }
 

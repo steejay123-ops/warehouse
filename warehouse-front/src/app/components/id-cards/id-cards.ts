@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, HostListener } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, HostListener, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -179,15 +179,15 @@ export class IdCards implements OnInit {
     }
   }
 
-  constructor(
-    public state: StateService,
-    private accountsHttp: AccountsHttpService,
-    private warehouseHttp: WarehouseHttpService,
-    private toast: ToastService,
-    private sanitizer: DomSanitizer,
-    private cdr: ChangeDetectorRef,
-    private registry: ModuleRegistryService
-  ) {}
+  public state = inject(StateService);
+  private accountsHttp = inject(AccountsHttpService);
+  private warehouseHttp = inject(WarehouseHttpService);
+  private toast = inject(ToastService);
+  private sanitizer = inject(DomSanitizer);
+  private cdr = inject(ChangeDetectorRef);
+  private registry = inject(ModuleRegistryService);
+
+  constructor() {}
 
   get isWarehouseInstalled(): boolean {
     return this.registry.isModuleInstalled('warehouse');

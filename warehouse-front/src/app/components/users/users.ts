@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, computed, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, HostListener, computed, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StateService } from '../../services/state.service';
@@ -19,6 +19,9 @@ import { environment } from '../../../environments/environment';
 import { Observable, Subject, Subscription, forkJoin, of } from 'rxjs';
 import { debounceTime, finalize, map, catchError } from 'rxjs/operators';
 import { ActivatedRoute, Router } from '@angular/router';
+import { CompanyApiService } from '../../core/api/company-api.service';
+import { ActiveCompanyService } from '../../core/services/active-company.service';
+import { Company } from '../../core/models/company.model';
 
 @Component({
   selector: 'app-users',
@@ -191,11 +194,15 @@ export class Users implements OnInit, OnDestroy {
 
   // User Form (با حذف فیلدهای موهومی انقضا و افزودن کلمه عبور و آواتار تراکنشی)
   editingUser: any = null;
+  availableCompanies: Company[] = [];
+  modalWarehouses: any[] = [];
+  isLoadingModalWarehouses = false;
   userForm: any = {
     id: null as number | null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
     operational_zone: '', supervisor: null as number | null, address: '', company: '', email: '', avatar: null as string | null,
     _pendingAvatarBlob: null as Blob | null, _pendingAvatarDelete: false, blood_type: '', emergency_contact: '', groups: [] as number[],
-    assigned_warehouses: [] as number[], date_joined: '', last_login: '', is_active: true, is_superuser: false
+    assigned_warehouses: [] as number[], date_joined: '', last_login: '', is_active: true, is_superuser: false,
+    company_ids: [] as number[], default_company_id: null as number | null
   };
 
   // Quick Role Presets / Templates for One-Click Permission Granting
@@ -543,20 +550,22 @@ export class Users implements OnInit, OnDestroy {
   excelImportFn!: (file: File, updateExisting: boolean, dryRun?: boolean) => Observable<ImportResult>;
   excelTemplateFn!: () => void;
 
-  constructor(
-    public state: StateService,
-    public auth: AuthService,
-    public persona: AppPersonaService,
-    public registry: ModuleRegistryService,
-    private toast: ToastService,
-    private accountsService: AccountsHttpService,
-    private whService: WarehouseHttpService,
-    private personnelApi: PersonnelApiService,
-    private cdr: ChangeDetectorRef,
-    private confirmDialog: ConfirmDialogService,
-    private route: ActivatedRoute,
-    private router: Router
-  ) {}
+  public state = inject(StateService);
+  public auth = inject(AuthService);
+  public persona = inject(AppPersonaService);
+  public registry = inject(ModuleRegistryService);
+  private toast = inject(ToastService);
+  private accountsService = inject(AccountsHttpService);
+  private whService = inject(WarehouseHttpService);
+  private personnelApi = inject(PersonnelApiService);
+  private cdr = inject(ChangeDetectorRef);
+  private confirmDialog = inject(ConfirmDialogService);
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  public activeCompanyService = inject(ActiveCompanyService);
+  private companyApi = inject(CompanyApiService);
+
+  constructor() {}
 
   ngOnInit() {
     try {
@@ -595,6 +604,11 @@ export class Users implements OnInit, OnDestroy {
   }
 
   loadData() {
+    this.companyApi.getAll().pipe(catchError(() => of([]))).subscribe((res: any) => {
+      this.availableCompanies = Array.isArray(res) ? res : (res?.results || []);
+      this.cdr.detectChanges();
+    });
+
     this.accountsService.getPermissions().subscribe(res => {
       this.systemPermissions = res;
       
@@ -857,6 +871,7 @@ export class Users implements OnInit, OnDestroy {
         const nid = (u.national_code || '');
         const phone = (u.phone_number || '');
         const comp = (u.company || '').toLowerCase();
+        const compAccesses = (u.company_accesses || []).map((ca: any) => (ca.company_name || '').toLowerCase()).join(' ');
         const opZone = (u.operational_zone || '').toLowerCase();
         const roleTitles = this.getUserRoles(u).map((r: any) => r.name.toLowerCase()).join(' ');
 
@@ -865,6 +880,7 @@ export class Users implements OnInit, OnDestroy {
                nid.includes(q) ||
                phone.includes(q) ||
                comp.includes(q) ||
+               compAccesses.includes(q) ||
                opZone.includes(q) ||
                roleTitles.includes(q);
       });
@@ -1226,6 +1242,20 @@ export class Users implements OnInit, OnDestroy {
     return p ? p.name : id;
   }
 
+  getUserCompanyBadges(u: any): { name: string; is_default: boolean; code?: string }[] {
+    if (u?.company_accesses && u.company_accesses.length > 0) {
+      return u.company_accesses.map((ca: any) => ({
+        name: ca.company_name || ca.company_code || 'شرکت',
+        is_default: !!ca.is_default,
+        code: ca.company_code
+      }));
+    }
+    if (u?.company) {
+      return [{ name: u.company, is_default: true }];
+    }
+    return [];
+  }
+
   switchTab(tab: string) {
     this.router.navigate([], { queryParams: { tab }, queryParamsHandling: 'merge' });
     this.openMenuId = null;
@@ -1406,6 +1436,7 @@ export class Users implements OnInit, OnDestroy {
       const u = this.state.appState.users.find((x: any) => x.id === id);
       this.editingUser = u;
       const { roles, role_objects, ...userFields } = u;
+      const compIds = u.company_ids ? [...u.company_ids].map(Number) : (u.company_accesses ? u.company_accesses.map((a: any) => Number(a.company_id)) : []);
       this.userForm = {
         ...userFields,
         company: u.company || '',
@@ -1418,24 +1449,139 @@ export class Users implements OnInit, OnDestroy {
         blood_type: u.blood_type || '',
         emergency_contact: u.emergency_contact || '',
         operational_zone: u.operational_zone || '',
-        supervisor: u.supervisor || null
+        supervisor: u.supervisor || null,
+        company_ids: compIds,
+        default_company_id: u.default_company_id ? Number(u.default_company_id) : (compIds[0] || null)
       };
       this.userForm.groups = u.groups ? [...u.groups].map(Number) : [];
       this.userForm.assigned_warehouses = (this.userForm.assigned_warehouses || []).map(Number);
+
+      // اگر کاربر شرکت تعریف‌شده در لیست ندارد ولی نام شرکت ثبت شده، مطابقت بدهیم
+      if (this.userForm.company_ids.length === 0 && u.company && this.availableCompanies.length > 0) {
+        const matched = this.availableCompanies.find(c => c.name === u.company);
+        if (matched) {
+          this.userForm.company_ids = [matched.id];
+          this.userForm.default_company_id = matched.id;
+        }
+      }
     } else {
       this.editingUser = null;
       this.showPassword = false;
+      const activeCid = this.activeCompanyService.activeCompany?.id || (this.availableCompanies[0]?.id ?? null);
+      const activeName = this.activeCompanyService.activeCompany?.name || (this.availableCompanies[0]?.name ?? '');
       this.userForm = {
         id: null, first_name: '', last_name: '', national_code: '', username: '', phone_number: '', password: '',
-        operational_zone: '', supervisor: null, address: '', company: '', email: '', avatar: null, _pendingAvatarBlob: null,
+        operational_zone: '', supervisor: null, address: '', company: activeName, email: '', avatar: null, _pendingAvatarBlob: null,
         _pendingAvatarDelete: false, blood_type: '', emergency_contact: '', groups: [], assigned_warehouses: [],
-        date_joined: '', last_login: '', is_active: true, is_superuser: false
+        date_joined: '', last_login: '', is_active: true, is_superuser: false,
+        company_ids: activeCid ? [activeCid] : [],
+        default_company_id: activeCid
       };
     }
     this.userRoleModalTab = this.hasInventoryModule() ? 'warehouse' : 'finance';
     this.userModalInnerTab = 'identity';
     this.isUserModalOpen = true;
+    this.updateModalWarehouses();
     this.cdr.detectChanges();
+  }
+
+  toggleUserCompany(companyId: number) {
+    const numId = Number(companyId);
+    let ids: number[] = [...(this.userForm.company_ids || [])];
+    if (ids.includes(numId)) {
+      ids = ids.filter(id => id !== numId);
+      if (this.userForm.default_company_id === numId) {
+        this.userForm.default_company_id = ids.length > 0 ? ids[0] : null;
+      }
+      // پاک‌سازی انبارهای تخصیص‌یافته به شرکت غیرفعال‌شده
+      if (this.userForm.assigned_warehouses && this.userForm.assigned_warehouses.length > 0) {
+        const removedWhIds = new Set(
+          this.modalWarehouses
+            .filter((wh: any) => wh.company_id === numId || wh.company === numId)
+            .map((wh: any) => wh.id)
+        );
+        this.userForm.assigned_warehouses = this.userForm.assigned_warehouses.filter(
+          (whId: number) => !removedWhIds.has(whId)
+        );
+      }
+    } else {
+      ids.push(numId);
+      if (!this.userForm.default_company_id) {
+        this.userForm.default_company_id = numId;
+      }
+    }
+    this.userForm.company_ids = ids;
+    const defComp = this.availableCompanies.find(c => c.id === this.userForm.default_company_id);
+    this.userForm.company = defComp ? defComp.name : '';
+    this.updateModalWarehouses();
+    this.cdr.detectChanges();
+  }
+
+  setDefaultCompany(companyId: number, event?: Event) {
+    if (event) event.stopPropagation();
+    const numId = Number(companyId);
+    if (!this.userForm.company_ids.includes(numId)) {
+      this.userForm.company_ids.push(numId);
+    }
+    this.userForm.default_company_id = numId;
+    const defComp = this.availableCompanies.find(c => c.id === numId);
+    this.userForm.company = defComp ? defComp.name : '';
+    this.cdr.detectChanges();
+  }
+
+  selectAllModalWarehouses() {
+    const ids = (this.modalWarehouses || []).map((w: any) => w.id);
+    this.userForm.assigned_warehouses = Array.from(new Set([...(this.userForm.assigned_warehouses || []), ...ids]));
+    this.cdr.detectChanges();
+  }
+
+  clearAllModalWarehouses() {
+    const modalIds = new Set((this.modalWarehouses || []).map((w: any) => w.id));
+    this.userForm.assigned_warehouses = (this.userForm.assigned_warehouses || []).filter((id: number) => !modalIds.has(id));
+    this.cdr.detectChanges();
+  }
+
+  updateModalWarehouses() {
+    this.isLoadingModalWarehouses = true;
+    const selectedCompanyIds = (this.userForm.company_ids || []).map(Number);
+    
+    if (selectedCompanyIds.length === 0) {
+      this.modalWarehouses = [];
+      this.userForm.assigned_warehouses = [];
+      this.isLoadingModalWarehouses = false;
+      this.cdr.detectChanges();
+      return;
+    }
+
+    const requests = selectedCompanyIds.map((cid: number) =>
+      this.whService.getAll(cid).pipe(catchError(() => of([])))
+    );
+
+    forkJoin<any[]>(requests).subscribe({
+      next: (results: any) => {
+        const combined = new Map<number, any>();
+        results.forEach((whList: any) => {
+          if (Array.isArray(whList)) {
+            whList.forEach((wh: any) => {
+              combined.set(wh.id, wh);
+            });
+          }
+        });
+        this.modalWarehouses = Array.from(combined.values());
+        this.isLoadingModalWarehouses = false;
+        if (this.userForm.assigned_warehouses && this.userForm.assigned_warehouses.length > 0) {
+          const currentValidWhIds = new Set(this.modalWarehouses.map((w: any) => Number(w.id)));
+          this.userForm.assigned_warehouses = this.userForm.assigned_warehouses.filter(
+            (id: number) => currentValidWhIds.has(Number(id))
+          );
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingModalWarehouses = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   setUserModalInnerTab(tab: 'identity' | 'security' | 'roles' | 'warehouses') {
@@ -1726,6 +1872,9 @@ export class Users implements OnInit, OnDestroy {
     delete payload.roles;
     delete payload.role_objects;
     payload.groups = (this.userForm.groups || []).map(Number);
+    payload.company_ids = (this.userForm.company_ids || []).map(Number);
+    payload.default_company_id = this.userForm.default_company_id ? Number(this.userForm.default_company_id) : null;
+    payload.assigned_warehouses = (this.userForm.assigned_warehouses || []).map(Number);
     if (!this.editingUser) {
       delete payload.id;
     }

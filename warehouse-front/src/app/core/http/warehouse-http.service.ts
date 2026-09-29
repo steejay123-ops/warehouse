@@ -40,11 +40,15 @@ export class WarehouseHttpService {
 
   constructor(private http: HttpClient) {}
 
-  getAll(): Observable<Warehouse[]> {
+  getAll(companyId?: number): Observable<Warehouse[]> {
     if (!this.moduleRegistry.isModuleInstalled('warehouse')) {
       return of([]);
     }
-    return this.http.get<Warehouse[]>(this.baseUrl).pipe(
+    let url = this.baseUrl;
+    if (companyId) {
+      url += `?company_id=${companyId}`;
+    }
+    return this.http.get<Warehouse[]>(url).pipe(
       catchError(() => of([]))
     );
   }

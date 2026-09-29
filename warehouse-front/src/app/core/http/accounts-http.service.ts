@@ -42,8 +42,18 @@ export interface User {
   groups: number[];
   roles?: string[];
   role_titles?: string[];
-  user_permissions: number[];
   assigned_warehouses: string[];
+  company_ids?: number[];
+  default_company_id?: number | null;
+  company_accesses?: Array<{
+    company_id: number;
+    company_name: string;
+    company_code: string;
+    access_level: string;
+    role_in_company?: string;
+    is_default: boolean;
+  }>;
+  user_permissions?: any[];
 }
 
 export interface ImportResult {

@@ -32,7 +32,9 @@ from .models import (
     VehicleChangeRequest,
     MonthlyWorkPeriod,
     MonthlyPayrollRecord,
-    VehicleTripLog
+    VehicleTripLog,
+    ExpenseInvoice,
+    PettyCashTransaction
 )
 from .serializers import (
     PersonnelProfileSerializer,
@@ -40,7 +42,9 @@ from .serializers import (
     PersonnelChangeRequestSerializer,
     VehicleChangeRequestSerializer,
     MonthlyWorkPeriodSerializer,
-    MonthlyPayrollRecordSerializer
+    MonthlyPayrollRecordSerializer,
+    ExpenseInvoiceSerializer,
+    PettyCashTransactionSerializer
 )
 from .workflow_engine import (
     WorkflowStatuses,
@@ -48,7 +52,8 @@ from .workflow_engine import (
     determine_user_tier,
     advance_workflow_step,
     request_workflow_revision,
-    reject_workflow
+    reject_workflow,
+    execute_treasury_disbursement
 )
 from .treasury_engine import (
     TreasuryDisbursementService,
@@ -57,8 +62,8 @@ from .treasury_engine import (
 )
 
 
-def _get_target_instance(model_name: str, instance_id: int):
-    """یافتن نمونه مدل بر اساس نام و شناسه"""
+def _get_target_instance(model_name: str, instance_id: int, request_data: dict = None):
+    """یافتن نمونه مدل بر اساس نام و شناسه (با پشتیبانی هوشمند از بازیابی/ایجاد خودکار دوره ماهانه بر مبنای year_month)"""
     models_map = {
         'personnel': PersonnelProfile,
         'personnel_profile': PersonnelProfile,
@@ -72,11 +77,34 @@ def _get_target_instance(model_name: str, instance_id: int):
         'work_period': MonthlyWorkPeriod,
         'payroll': MonthlyPayrollRecord,
         'payroll_record': MonthlyPayrollRecord,
-        'trip': VehicleTripLog
+        'trip': VehicleTripLog,
+        'invoice': ExpenseInvoice,
+        'expense_invoice': ExpenseInvoice,
+        'petty_cash': PettyCashTransaction,
+        'petty_cash_transaction': PettyCashTransaction,
     }
     model_cls = models_map.get(model_name.lower())
     if not model_cls:
         raise ValidationError(f"مدل «{model_name}» نامعتبر است.")
+
+    if model_name.lower() in ['period', 'work_period']:
+        if instance_id and int(instance_id) > 0:
+            try:
+                return MonthlyWorkPeriod.objects.get(pk=instance_id)
+            except MonthlyWorkPeriod.DoesNotExist:
+                pass
+        # در صورت نبود شناسه اما ارسال year_month، دوره به صورت خودکار ایجاد/بازیابی می‌شود
+        if request_data and request_data.get('year_month'):
+            ym = request_data.get('year_month')
+            wh_id = request_data.get('warehouse_id')
+            period, _ = MonthlyWorkPeriod.objects.get_or_create(
+                year_month=ym,
+                warehouse_id=wh_id,
+                defaults={'status': 'OPEN'}
+            )
+            return period
+        raise ValidationError("شناسه دوره کارکرد یا سال و ماه (year_month) الزامی است.")
+
     try:
         return model_cls.objects.get(pk=instance_id)
     except model_cls.DoesNotExist:
@@ -120,6 +148,16 @@ class SupervisorCartableAPIView(APIView):
             status__in=[WorkflowStatuses.PERIOD_OPEN, WorkflowStatuses.PERIOD_REVISION_REQUIRED]
         )
 
+        # فاکتورهای هزینه نیازمند بررسی سرپرست
+        invoices_qs = ExpenseInvoice.objects.filter(
+            status__in=[WorkflowStatuses.PENDING_SUPERVISOR, 'pending_supervisor', WorkflowStatuses.DRAFT, 'draft', WorkflowStatuses.REVISION_REQUIRED, 'revision_required']
+        ).select_related('section', 'counterparty')
+
+        # اسناد تنخواه‌گردان نیازمند بررسی سرپرست
+        petty_cash_qs = PettyCashTransaction.objects.filter(
+            status__in=[WorkflowStatuses.PENDING_SUPERVISOR, 'pending_supervisor', WorkflowStatuses.DRAFT, 'draft', WorkflowStatuses.REVISION_REQUIRED, 'revision_required']
+        ).select_related('section', 'custodian')
+
         return Response({
             'tier': 'SUPERVISOR',
             'counts': {
@@ -128,13 +166,17 @@ class SupervisorCartableAPIView(APIView):
                 'personnel_changes': p_changes.count(),
                 'vehicle_changes': v_changes.count(),
                 'periods': periods.count(),
-                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count()
+                'invoices': invoices_qs.count(),
+                'petty_cash': petty_cash_qs.count(),
+                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count() + invoices_qs.count() + petty_cash_qs.count()
             },
             'personnel': PersonnelProfileSerializer(personnel_qs[:50], many=True).data,
             'vehicles': VehicleDriverProfileSerializer(vehicles_qs[:50], many=True).data,
             'personnel_changes': PersonnelChangeRequestSerializer(p_changes[:50], many=True).data,
             'vehicle_changes': VehicleChangeRequestSerializer(v_changes[:50], many=True).data,
-            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data
+            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data,
+            'invoices': ExpenseInvoiceSerializer(invoices_qs[:50], many=True).data,
+            'petty_cash': PettyCashTransactionSerializer(petty_cash_qs[:50], many=True).data
         })
 
     def post(self, request):
@@ -145,11 +187,11 @@ class SupervisorCartableAPIView(APIView):
         item_id = request.data.get('id')
         reason = request.data.get('reason', '')
 
-        if not action_type or not model_name or not item_id:
-            raise ValidationError("پارامترهای action، model و id الزامی هستند.")
+        if not action_type or not model_name or (not item_id and not (model_name in ['period', 'work_period'] and request.data.get('year_month'))):
+            raise ValidationError("پارامترهای action، model و id (یا year_month برای دوره) الزامی هستند.")
 
-        instance = _get_target_instance(model_name, item_id)
-        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record']
+        instance = _get_target_instance(model_name, item_id, request.data)
+        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record', 'invoice', 'expense_invoice', 'petty_cash', 'petty_cash_transaction']
 
         if action_type == 'approve':
             updated = advance_workflow_step(instance, user, is_financial=is_financial)
@@ -200,6 +242,16 @@ class AccountantCartableAPIView(APIView):
             status__in=[WorkflowStatuses.PERIOD_SUBMITTED_SUPERVISOR, 'SUBMITTED_SUPERVISOR']
         )
 
+        # فاکتورهای نیازمند ممیزی حسابدار
+        invoices_qs = ExpenseInvoice.objects.filter(
+            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant']
+        ).select_related('section', 'counterparty')
+
+        # اسناد تنخواه‌گردان نیازمند ممیزی حسابدار
+        petty_cash_qs = PettyCashTransaction.objects.filter(
+            status__in=[WorkflowStatuses.PENDING_ACCOUNTANT, 'pending_accountant']
+        ).select_related('section', 'custodian')
+
         return Response({
             'tier': 'ACCOUNTANT',
             'counts': {
@@ -208,13 +260,17 @@ class AccountantCartableAPIView(APIView):
                 'personnel_changes': p_changes.count(),
                 'vehicle_changes': v_changes.count(),
                 'periods': periods.count(),
-                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count()
+                'invoices': invoices_qs.count(),
+                'petty_cash': petty_cash_qs.count(),
+                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count() + invoices_qs.count() + petty_cash_qs.count()
             },
             'personnel': PersonnelProfileSerializer(personnel_qs[:50], many=True).data,
             'vehicles': VehicleDriverProfileSerializer(vehicles_qs[:50], many=True).data,
             'personnel_changes': PersonnelChangeRequestSerializer(p_changes[:50], many=True).data,
             'vehicle_changes': VehicleChangeRequestSerializer(v_changes[:50], many=True).data,
-            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data
+            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data,
+            'invoices': ExpenseInvoiceSerializer(invoices_qs[:50], many=True).data,
+            'petty_cash': PettyCashTransactionSerializer(petty_cash_qs[:50], many=True).data
         })
 
     def post(self, request):
@@ -224,11 +280,11 @@ class AccountantCartableAPIView(APIView):
         item_id = request.data.get('id')
         reason = request.data.get('reason', '')
 
-        if not action_type or not model_name or not item_id:
-            raise ValidationError("پارامترهای action، model و id الزامی هستند.")
+        if not action_type or not model_name or (not item_id and not (model_name in ['period', 'work_period'] and request.data.get('year_month'))):
+            raise ValidationError("پارامترهای action، model و id (یا year_month برای دوره) الزامی هستند.")
 
-        instance = _get_target_instance(model_name, item_id)
-        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record']
+        instance = _get_target_instance(model_name, item_id, request.data)
+        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record', 'invoice', 'expense_invoice', 'petty_cash', 'petty_cash_transaction']
 
         if action_type == 'approve':
             updated = advance_workflow_step(instance, user, is_financial=is_financial)
@@ -279,6 +335,16 @@ class ManagerCartableAPIView(APIView):
             status__in=[WorkflowStatuses.PERIOD_SUBMITTED_ACCOUNTANT, 'SUBMITTED_ACCOUNTANT']
         )
 
+        # فاکتورهای نیازمند تایید مدیر
+        invoices_qs = ExpenseInvoice.objects.filter(
+            status__in=[WorkflowStatuses.PENDING_MANAGER, 'pending_manager', WorkflowStatuses.READY_TO_PAY, 'ready_to_pay']
+        ).select_related('section', 'counterparty')
+
+        # اسناد تنخواه نیازمند تایید مدیر
+        petty_cash_qs = PettyCashTransaction.objects.filter(
+            status__in=[WorkflowStatuses.APPROVED, 'approved']
+        ).select_related('section', 'custodian')
+
         return Response({
             'tier': 'MANAGER',
             'counts': {
@@ -287,13 +353,17 @@ class ManagerCartableAPIView(APIView):
                 'personnel_changes': p_changes.count(),
                 'vehicle_changes': v_changes.count(),
                 'periods': periods.count(),
-                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count()
+                'invoices': invoices_qs.count(),
+                'petty_cash': petty_cash_qs.count(),
+                'total_pending': personnel_qs.count() + vehicles_qs.count() + p_changes.count() + v_changes.count() + periods.count() + invoices_qs.count() + petty_cash_qs.count()
             },
             'personnel': PersonnelProfileSerializer(personnel_qs[:50], many=True).data,
             'vehicles': VehicleDriverProfileSerializer(vehicles_qs[:50], many=True).data,
             'personnel_changes': PersonnelChangeRequestSerializer(p_changes[:50], many=True).data,
             'vehicle_changes': VehicleChangeRequestSerializer(v_changes[:50], many=True).data,
-            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data
+            'periods': MonthlyWorkPeriodSerializer(periods, many=True).data,
+            'invoices': ExpenseInvoiceSerializer(invoices_qs[:50], many=True).data,
+            'petty_cash': PettyCashTransactionSerializer(petty_cash_qs[:50], many=True).data
         })
 
     def post(self, request):
@@ -303,11 +373,11 @@ class ManagerCartableAPIView(APIView):
         item_id = request.data.get('id')
         reason = request.data.get('reason', '')
 
-        if not action_type or not model_name or not item_id:
-            raise ValidationError("پارامترهای action، model و id الزامی هستند.")
+        if not action_type or not model_name or (not item_id and not (model_name in ['period', 'work_period'] and request.data.get('year_month'))):
+            raise ValidationError("پارامترهای action، model و id (یا year_month برای دوره) الزامی هستند.")
 
-        instance = _get_target_instance(model_name, item_id)
-        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record']
+        instance = _get_target_instance(model_name, item_id, request.data)
+        is_financial = model_name in ['period', 'work_period', 'payroll', 'payroll_record', 'invoice', 'expense_invoice', 'petty_cash', 'petty_cash_transaction']
 
         if action_type == 'approve':
             updated = advance_workflow_step(instance, user, is_financial=is_financial)
@@ -352,6 +422,11 @@ class TreasuryCartableAPIView(APIView):
             vehicle__approval_status__in=[WorkflowStatuses.APPROVED, 'approved']
         ).select_related('vehicle')[:100]
 
+        # فاکتورهای تایید شده آماده پرداخت خزانه‌داری
+        invoices_payable = ExpenseInvoice.objects.filter(
+            status__in=[WorkflowStatuses.READY_TO_PAY, 'ready_to_pay']
+        ).select_related('section', 'counterparty')[:100]
+        data['invoices'] = ExpenseInvoiceSerializer(invoices_payable, many=True).data
         data['payrolls'] = MonthlyPayrollRecordSerializer(payrolls, many=True).data
         data['trips'] = [
             {
@@ -416,6 +491,23 @@ class TreasuryCartableAPIView(APIView):
                 batch_id=batch_id
             )
             return Response(res)
+
+        elif action == 'disburse_invoice':
+            invoice_id = request.data.get('invoice_id')
+            if not invoice_id:
+                raise ValidationError("شناسه فاکتور (invoice_id) الزامی است.")
+            invoice = ExpenseInvoice.objects.get(pk=invoice_id)
+            updated_invoice = execute_treasury_disbursement(
+                instance=invoice,
+                user=user,
+                tracking_code=tracking_code,
+                batch_id=batch_id,
+                notes=request.data.get('notes')
+            )
+            return Response({
+                'message': f'فاکتور شماره «{invoice.invoice_number}» با موفقیت تسویه و پرداخت شد.',
+                'invoice': ExpenseInvoiceSerializer(updated_invoice).data
+            })
 
         else:
             raise ValidationError(f"اقدام «{action}» نامعتبر است.")

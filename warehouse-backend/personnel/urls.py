@@ -12,6 +12,7 @@ from .views import (
     UserSectionAssignmentViewSet,
     CounterpartyViewSet,
     ExpenseInvoiceViewSet,
+    WorkflowAuditLogViewSet,
     PettyCashAccountViewSet,
     PettyCashTransactionViewSet,
     PersonnelProfileViewSet,
@@ -47,6 +48,7 @@ router.register(r'project-sections', ProjectSectionViewSet, basename='project-se
 router.register(r'user-section-assignments', UserSectionAssignmentViewSet, basename='user-section-assignments')
 router.register(r'counterparties', CounterpartyViewSet, basename='counterparties')
 router.register(r'expense-invoices', ExpenseInvoiceViewSet, basename='expense-invoices')
+router.register(r'workflow-audit-logs', WorkflowAuditLogViewSet, basename='workflow-audit-logs')
 router.register(r'petty-cash-accounts', PettyCashAccountViewSet, basename='petty-cash-accounts')
 router.register(r'petty-cash-transactions', PettyCashTransactionViewSet, basename='petty-cash-transactions')
 router.register(r'profiles', PersonnelProfileViewSet, basename='personnel-profile')
@@ -66,6 +68,7 @@ urlpatterns = [
     path('cartable/accountant/', AccountantCartableAPIView.as_view(), name='accountant-cartable'),
     path('cartable/manager/', ManagerCartableAPIView.as_view(), name='manager-cartable'),
     path('cartable/treasury/', TreasuryCartableAPIView.as_view(), name='treasury-cartable'),
+    path('cartable/treasury/export-diskette/', TreasuryDisketteExportAPIView.as_view(), name='treasury-export-diskette'),
     path('profiles/download-template/', PersonnelProfileViewSet.as_view({'get': 'download_template'}), name='personnel-download-template'),
     path('profiles/download-template', PersonnelProfileViewSet.as_view({'get': 'download_template'})),
     path('profiles/import-excel/', PersonnelProfileViewSet.as_view({'post': 'import_excel', 'get': 'import_excel'}), name='personnel-import-excel'),

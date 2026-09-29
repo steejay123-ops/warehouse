@@ -610,8 +610,10 @@ class ExpenseInvoice(models.Model):
         ('draft', 'پیش‌نویس کارمند'),
         ('pending_supervisor', 'در انتظار تایید سرپرست'),
         ('pending_accountant', 'در انتظار بررسی حسابدار'),
+        ('pending_manager', 'در انتظار تایید مدیر'),
         ('ready_to_pay', 'تایید مدیر / آماده پرداخت'),
         ('paid', 'پرداخت‌شده توسط خزانه‌دار'),
+        ('revision_required', 'نیازمند بازنگری و اصلاح'),
         ('rejected', 'رد شده'),
     )
     section = models.ForeignKey(
@@ -633,6 +635,17 @@ class ExpenseInvoice(models.Model):
     description = models.TextField(verbose_name="شرح هزینه")
     attachment = models.FileField(upload_to='invoices/', blank=True, null=True, verbose_name="تصویر یا فایل فاکتور")
     status = models.CharField(max_length=30, choices=INVOICE_STATUS_CHOICES, default='draft', verbose_name="وضعیت فاکتور")
+    rejection_reason = models.TextField(blank=True, null=True, verbose_name="علت رد یا بازنگری فاکتور")
+    payment_ref = models.CharField(max_length=100, blank=True, null=True, verbose_name="شماره پیگیری / سند پرداخت")
+    paid_at = models.DateTimeField(blank=True, null=True, verbose_name="تاریخ و زمان پرداخت")
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paid_invoices',
+        verbose_name="پرداخت‌کننده خزانه‌داری"
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -983,6 +996,7 @@ class PersonnelProfile(_WarehouseCompatMixin, models.Model):
     phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="شماره همراه")
     postal_code = models.CharField(max_length=20, blank=True, null=True, verbose_name="کد پستی")
     address = models.TextField(blank=True, null=True, verbose_name="آدرس محل سکونت")
+    notes = models.TextField(blank=True, null=True, verbose_name="توضیحات و یادداشت تکمیلی")
     attachment = models.FileField(
         upload_to='personnel_docs/',
         blank=True,
@@ -1294,6 +1308,7 @@ class VehicleDriverProfile(_WarehouseCompatMixin, models.Model):
     bank_name = models.CharField(max_length=100, blank=True, null=True, verbose_name="نام بانک")
     account_number = models.CharField(max_length=50, blank=True, null=True, verbose_name="شماره حساب")
     sheba_number = models.CharField(max_length=30, blank=True, null=True, verbose_name="شماره شبا")
+    notes = models.TextField(blank=True, null=True, verbose_name="توضیحات و یادداشت تکمیلی")
     
     assigned_warehouse_id = models.IntegerField(
         null=True,
@@ -2848,4 +2863,43 @@ def emit_accounting_event(source_instance, event_type: str, occurred_at=None, pa
         occurred_at=occurred_at or timezone.now(),
         payload=final_payload,
     )
+
+
+# ==============================================================================
+# لاگ جامع و پایدار ممیزی گردش‌کار و تغییرات وضعیت (Enterprise Workflow Audit Trail)
+# ==============================================================================
+
+class WorkflowAuditLog(models.Model):
+    """
+    ثبت دائمی و تغییرناپذیر تمامی مراحل، تاییدات، بازنگری‌ها و ابطال‌های گردش کار
+    """
+    content_type = models.CharField(max_length=50, verbose_name="نوع مدل") # 'personnel', 'vehicle', 'invoice', 'petty_cash', 'period'
+    object_id = models.IntegerField(verbose_name="شناسه رکورد")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='workflow_audit_logs',
+        verbose_name="اقدام‌کننده"
+    )
+    from_status = models.CharField(max_length=50, blank=True, null=True, verbose_name="وضعیت مبدأ")
+    to_status = models.CharField(max_length=50, verbose_name="وضعیت مقصد")
+    action = models.CharField(max_length=50, verbose_name="نوع اقدام") # 'submit', 'approve', 'revision', 'reject', 'pay'
+    reason = models.TextField(blank=True, null=True, verbose_name="شرح / دلیل بازنگری یا رد")
+    metadata = models.JSONField(blank=True, null=True, default=dict, verbose_name="متادیتای الحاقی")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان ثبت")
+
+    class Meta:
+        verbose_name = "لاگ ممیزی گردش‌کار"
+        verbose_name_plural = "لاگ‌های ممیزی گردش‌کار"
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+            models.Index(fields=['created_at']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else "سیستم"
+        return f"[{self.content_type}#{self.object_id}] {self.action} by {actor_name} -> {self.to_status}"
 

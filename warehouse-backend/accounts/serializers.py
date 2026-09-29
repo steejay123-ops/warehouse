@@ -98,6 +98,85 @@ class CustomRoleSerializer(serializers.ModelSerializer):
             instance.user_set.set(users)
         return instance
 
+def _sync_user_company_access(user, company_ids=None, default_company_id=None, company_accesses_data=None):
+    """
+    ثبت و همگام‌سازی تراکنشی رکوردهای دسترسی کاربر به شرکت‌ها (UserCompanyAccess)
+    """
+    from django.apps import apps
+    if not apps.is_installed('personnel'):
+        return
+
+    from personnel.models import UserCompanyAccess, Company
+
+    target_accesses = {}
+    if company_accesses_data is not None and isinstance(company_accesses_data, list):
+        for item in company_accesses_data:
+            if isinstance(item, dict) and 'company_id' in item:
+                try:
+                    cid = int(item['company_id'])
+                    target_accesses[cid] = {
+                        'access_level': item.get('access_level', 'workspace_full'),
+                        'role_in_company': item.get('role_in_company', ''),
+                        'is_default': bool(item.get('is_default', False))
+                    }
+                except (ValueError, TypeError):
+                    pass
+    elif company_ids is not None:
+        for cid in company_ids:
+            try:
+                cid_int = int(cid)
+                target_accesses[cid_int] = {
+                    'access_level': 'workspace_full',
+                    'role_in_company': '',
+                    'is_default': (default_company_id is not None and cid_int == int(default_company_id))
+                }
+            except (ValueError, TypeError):
+                continue
+
+    if company_ids is None and company_accesses_data is None:
+        if default_company_id is not None:
+            UserCompanyAccess.objects.filter(user=user).update(is_default=False)
+            UserCompanyAccess.objects.filter(user=user, company_id=default_company_id).update(is_default=True)
+            def_comp = Company.objects.filter(id=default_company_id).first()
+            if def_comp and user.company != def_comp.name:
+                user.company = def_comp.name
+                user.save(update_fields=['company'])
+        return
+
+    if target_accesses:
+        has_default = any(info['is_default'] for info in target_accesses.values())
+        if not has_default:
+            if default_company_id and int(default_company_id) in target_accesses:
+                target_accesses[int(default_company_id)]['is_default'] = True
+            else:
+                first_cid = next(iter(target_accesses))
+                target_accesses[first_cid]['is_default'] = True
+
+    # حذف شرکت‌هایی که در لیست جدید نیستند
+    UserCompanyAccess.objects.filter(user=user).exclude(company_id__in=target_accesses.keys()).delete()
+
+    # ایجاد یا به‌روزرسانی رکوردهای مجاز
+    valid_companies = {c.id: c for c in Company.objects.filter(id__in=target_accesses.keys())}
+    default_comp_name = None
+    for cid, info in target_accesses.items():
+        if cid in valid_companies:
+            UserCompanyAccess.objects.update_or_create(
+                user=user,
+                company_id=cid,
+                defaults={
+                    'access_level': info.get('access_level', 'workspace_full'),
+                    'role_in_company': info.get('role_in_company', ''),
+                    'is_default': info.get('is_default', False)
+                }
+            )
+            if info.get('is_default'):
+                default_comp_name = valid_companies[cid].name
+
+    if default_comp_name and user.company != default_comp_name:
+        user.company = default_comp_name
+        user.save(update_fields=['company'])
+
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
@@ -113,6 +192,23 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of group names to assign to the user"
     )
+    company_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        help_text="List of company IDs user has access to"
+    )
+    default_company_id = serializers.IntegerField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        help_text="Primary/default company ID"
+    )
+    company_accesses = serializers.ListField(
+        write_only=True,
+        required=False,
+        help_text="Detailed company access list with access_level"
+    )
     # اعلام صریح فیلد تا در صورت عدم نصب اپ warehouses، خطای فیلد نامعتبر مدل در ساخت سوپر رخ ندهد
     assigned_warehouses = serializers.SerializerMethodField(required=False)
 
@@ -124,7 +220,8 @@ class UserSerializer(serializers.ModelSerializer):
             'supervisor', 'company', 'address', 'avatar', 'blood_type', 'emergency_contact', 'is_active', 'date_joined', 'last_login',
             'updated_at', 'created_by', 'modified_by',
             'groups', 'user_permissions', 'assigned_warehouses', 'is_superuser',
-            'requires_password_change', 'ui_preferences', 'roles'
+            'requires_password_change', 'ui_preferences', 'roles',
+            'company_ids', 'default_company_id', 'company_accesses'
         ]
         extra_kwargs = {
             'email': {
@@ -247,6 +344,40 @@ class UserSerializer(serializers.ModelSerializer):
             phone = attrs.get('phone_number')
             if not phone:
                 raise serializers.ValidationError({'phone_number': 'وارد کردن شماره تلفن همراه الزامی است.'})
+
+        # اعتبارسنجی شرکت‌ها و تطابق با انبارها
+        from django.apps import apps
+        company_ids = attrs.get('company_ids')
+        default_company_id = attrs.get('default_company_id')
+        company_accesses = attrs.get('company_accesses')
+
+        active_comp_ids = set()
+        if company_ids is not None:
+            active_comp_ids.update(company_ids)
+        elif company_accesses is not None and isinstance(company_accesses, list):
+            for item in company_accesses:
+                if isinstance(item, dict) and 'company_id' in item:
+                    try:
+                        active_comp_ids.add(int(item['company_id']))
+                    except (ValueError, TypeError):
+                        pass
+        elif self.instance and apps.is_installed('personnel'):
+            active_comp_ids.update(self.instance.company_accesses.values_list('company_id', flat=True))
+
+        if default_company_id and active_comp_ids and default_company_id not in active_comp_ids:
+            raise serializers.ValidationError({'default_company_id': 'شرکت پیش‌فرض باید یکی از شرکت‌های مجاز کاربر باشد.'})
+
+        # اعتبارسنجی اینکه انبارهای انتسابی متعلق به شرکت‌های کاربر باشند (به جز ادمین کل)
+        assigned_warehouses = attrs.get('assigned_warehouses')
+        is_su = attrs.get('is_superuser', getattr(self.instance, 'is_superuser', False))
+        if not is_su and assigned_warehouses and active_comp_ids:
+            for wh in assigned_warehouses:
+                wh_cid = getattr(wh, 'company_id', None)
+                if wh_cid is not None and wh_cid not in active_comp_ids:
+                    raise serializers.ValidationError({
+                        'assigned_warehouses': f'انبار «{getattr(wh, "name", str(wh))}» متعلق به شرکت دیگری است و به شرکت‌های مجاز این کاربر تعلق ندارد.'
+                    })
+
         return super().validate(attrs)
 
     def to_representation(self, instance):
@@ -268,6 +399,68 @@ class UserSerializer(serializers.ModelSerializer):
                 })
         ret['roles'] = [r['name'] for r in role_data]
         ret['role_objects'] = role_data
+
+        # Multi-company accesses
+        try:
+            from django.apps import apps
+            if apps.is_installed('personnel'):
+                accesses = list(instance.company_accesses.select_related('company').all())
+                comp_access_data = []
+                comp_ids = []
+                def_cid = None
+                for acc in accesses:
+                    if acc.company:
+                        comp_ids.append(acc.company_id)
+                        is_def = bool(acc.is_default)
+                        if is_def:
+                            def_cid = acc.company_id
+                        comp_access_data.append({
+                            'company_id': acc.company_id,
+                            'company_name': acc.company.name,
+                            'company_code': acc.company.code,
+                            'access_level': acc.access_level,
+                            'role_in_company': acc.role_in_company or '',
+                            'is_default': is_def
+                        })
+
+                # همچنین شرکت‌های متناظر با انتساب‌های فعال در بخش‌های پروژه
+                existing_comp_ids = set(comp_ids)
+                from personnel.models import UserSectionAssignment
+                sec_assignments = UserSectionAssignment.objects.filter(
+                    user=instance, is_active=True, section__project__company__isnull=False
+                ).select_related('section__project__company')
+                for sa in sec_assignments:
+                    sec_comp = sa.section.project.company
+                    if sec_comp and sec_comp.id not in existing_comp_ids:
+                        existing_comp_ids.add(sec_comp.id)
+                        comp_ids.append(sec_comp.id)
+                        is_first = (def_cid is None)
+                        if is_first:
+                            def_cid = sec_comp.id
+                        comp_access_data.append({
+                            'company_id': sec_comp.id,
+                            'company_name': sec_comp.name,
+                            'company_code': sec_comp.code,
+                            'access_level': 'workspace_full',
+                            'role_in_company': sa.get_role_display() if hasattr(sa, 'get_role_display') else '',
+                            'is_default': is_first
+                        })
+
+                ret['company_accesses'] = comp_access_data
+                ret['company_ids'] = comp_ids
+                ret['default_company_id'] = def_cid if def_cid is not None else (comp_ids[0] if comp_ids else None)
+                if not ret.get('company') and comp_access_data:
+                    def_item = next((c for c in comp_access_data if c.get('is_default')), comp_access_data[0])
+                    ret['company'] = def_item.get('company_name')
+            else:
+                ret['company_accesses'] = []
+                ret['company_ids'] = []
+                ret['default_company_id'] = None
+        except Exception:
+            ret['company_accesses'] = []
+            ret['company_ids'] = []
+            ret['default_company_id'] = None
+
         # Admin/superuser gets all warehouses (فقط در نصب‌های دارای اپ انبار).
         Warehouse = _warehouse_model()
         if instance.is_superuser and Warehouse is not None and 'assigned_warehouses' in ret:
@@ -275,97 +468,116 @@ class UserSerializer(serializers.ModelSerializer):
         return ret
 
     def create(self, validated_data):
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            is_req_admin = request.user.is_superuser
-            if not is_req_admin and 'is_superuser' in validated_data:
-                validated_data.pop('is_superuser')
+        from django.db import transaction
+        with transaction.atomic():
+            request = self.context.get('request')
+            if request and hasattr(request, 'user'):
+                is_req_admin = request.user.is_superuser
+                if not is_req_admin and 'is_superuser' in validated_data:
+                    validated_data.pop('is_superuser')
 
-        groups = validated_data.pop('groups', None)
-        roles = validated_data.pop('roles', None)
-        user_permissions = validated_data.pop('user_permissions', [])
-        # فاز ۲ §۲.۳ — در نصب بدون انبار این کلید وجود ندارد.
-        assigned_warehouses = validated_data.pop('assigned_warehouses', []) if _warehouse_model() is not None else []
-        password = validated_data.pop('password', None)
+            company_ids = validated_data.pop('company_ids', None)
+            default_company_id = validated_data.pop('default_company_id', None)
+            company_accesses_data = validated_data.pop('company_accesses', None)
 
-        if not validated_data.get('email'):
-            validated_data['email'] = ''
+            groups = validated_data.pop('groups', None)
+            roles = validated_data.pop('roles', None)
+            user_permissions = validated_data.pop('user_permissions', [])
+            # فاز ۲ §۲.۳ — در نصب بدون انبار این کلید وجود ندارد.
+            assigned_warehouses = validated_data.pop('assigned_warehouses', []) if _warehouse_model() is not None else []
+            password = validated_data.pop('password', None)
 
-        user = CustomUser(**validated_data)
-        if password:
-            user.set_password(password)
-        else:
-            user.set_password('123456')
-            user.requires_password_change = True
-        user.save()
+            if not validated_data.get('email'):
+                validated_data['email'] = ''
 
-        if groups is not None:
-            user.groups.set(groups)
-        elif roles is not None:
-            group_objs = Group.objects.filter(name__in=roles)
-            user.groups.set(group_objs)
+            user = CustomUser(**validated_data)
+            if password:
+                user.set_password(password)
+            else:
+                user.set_password('123456')
+                user.requires_password_change = True
+            user.save()
 
-        user.user_permissions.set(user_permissions)
-        if assigned_warehouses:
-            user.assigned_warehouses.set(assigned_warehouses)
+            if groups is not None:
+                user.groups.set(groups)
+            elif roles is not None:
+                group_objs = Group.objects.filter(name__in=roles)
+                user.groups.set(group_objs)
 
-        return user
+            user.user_permissions.set(user_permissions)
+            if assigned_warehouses:
+                user.assigned_warehouses.set(assigned_warehouses)
+
+            _sync_user_company_access(user, company_ids, default_company_id, company_accesses_data)
+
+            return user
 
     def update(self, instance, validated_data):
         from django.db.models import Q
         from rest_framework.exceptions import ValidationError
+        from django.db import transaction
         
-        if 'email' in validated_data and not validated_data['email']:
-            validated_data['email'] = ''
-        
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            is_req_admin = request.user.is_superuser
-            if not is_req_admin and 'is_superuser' in validated_data:
-                validated_data.pop('is_superuser')
+        with transaction.atomic():
+            company_ids = validated_data.pop('company_ids', None)
+            default_company_id = validated_data.pop('default_company_id', None)
+            company_accesses_data = validated_data.pop('company_accesses', None)
 
-        groups = validated_data.pop('groups', None)
-        roles = validated_data.pop('roles', None)
-        user_permissions = validated_data.pop('user_permissions', None)
-        assigned_warehouses = validated_data.pop('assigned_warehouses', None) if _warehouse_model() is not None else None
-        password = validated_data.pop('password', None)
-        if password:
-            instance.set_password(password)
-        
-        # Check if the user is currently an admin (superuser only)
-        was_admin = instance.is_superuser
-        
-        # Determine new states
-        new_is_active = validated_data.get('is_active', instance.is_active)
-        new_is_superuser = validated_data.get('is_superuser', instance.is_superuser)
-        new_has_admin_role = False  # Admin protection is based on is_superuser now
-        if roles is not None:
-            new_has_admin_role = False  # Role name no longer determines admin status
+            if 'email' in validated_data and not validated_data['email']:
+                validated_data['email'] = ''
             
-        will_be_admin = new_is_active and (new_is_superuser or new_has_admin_role)
-        
-        if was_admin and not will_be_admin:
-            # Check if there are other active admins
-            active_admins = CustomUser.objects.filter(
-                is_active=True, is_superuser=True
-            ).exclude(id=instance.id).count()
+            request = self.context.get('request')
+            if request and hasattr(request, 'user'):
+                is_req_admin = request.user.is_superuser
+                if not is_req_admin and 'is_superuser' in validated_data:
+                    validated_data.pop('is_superuser')
+
+            groups = validated_data.pop('groups', None)
+            roles = validated_data.pop('roles', None)
+            user_permissions = validated_data.pop('user_permissions', None)
+            assigned_warehouses = validated_data.pop('assigned_warehouses', None) if _warehouse_model() is not None else None
+            password = validated_data.pop('password', None)
+            if password:
+                instance.set_password(password)
             
-            if active_admins == 0:
-                raise ValidationError("شما نمی‌توانید آخرین مدیر (Admin) فعال سیستم را تنزل درجه داده یا غیرفعال کنید.")
+            # Check if the user is currently an admin (superuser only)
+            was_admin = instance.is_superuser
+            
+            # Determine new states
+            new_is_active = validated_data.get('is_active', instance.is_active)
+            new_is_superuser = validated_data.get('is_superuser', instance.is_superuser)
+            new_has_admin_role = False  # Admin protection is based on is_superuser now
+            if roles is not None:
+                new_has_admin_role = False  # Role name no longer determines admin status
                 
-        if groups is not None:
-            instance.groups.set(groups)
-        elif roles is not None:
-            group_objs = Group.objects.filter(name__in=roles)
-            instance.groups.set(group_objs)
+            will_be_admin = new_is_active and (new_is_superuser or new_has_admin_role)
             
-        if user_permissions is not None:
-            instance.user_permissions.set(user_permissions)
+            if was_admin and not will_be_admin:
+                # Check if there are other active admins
+                active_admins = CustomUser.objects.filter(
+                    is_active=True, is_superuser=True
+                ).exclude(id=instance.id).count()
+                
+                if active_admins == 0:
+                    raise ValidationError("شما نمی‌توانید آخرین مدیر (Admin) فعال سیستم را تنزل درجه داده یا غیرفعال کنید.")
+                    
+            if groups is not None:
+                instance.groups.set(groups)
+            elif roles is not None:
+                group_objs = Group.objects.filter(name__in=roles)
+                instance.groups.set(group_objs)
+                
+            if user_permissions is not None:
+                instance.user_permissions.set(user_permissions)
 
-        if assigned_warehouses is not None and hasattr(instance, 'assigned_warehouses'):
-            instance.assigned_warehouses.set(assigned_warehouses)
-        
-        return super().update(instance, validated_data)
+            if assigned_warehouses is not None and hasattr(instance, 'assigned_warehouses'):
+                instance.assigned_warehouses.set(assigned_warehouses)
+            
+            user = super().update(instance, validated_data)
+
+            if company_ids is not None or company_accesses_data is not None or default_company_id is not None:
+                _sync_user_company_access(user, company_ids, default_company_id, company_accesses_data)
+
+            return user
 
 from axes.handlers.proxy import AxesProxyHandler
 from rest_framework.exceptions import Throttled, AuthenticationFailed

@@ -22,8 +22,8 @@ class WarehouseViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
             )
         )
         req = self.request
-        # تفکیک و عایق‌سازی چندشرکتی انبارها بر مبنای هدر یا کوئری‌پارامتر همراه با اعتبارسنجی امنیتی دسترسی (BOLA Protection)
-        company_id = req.headers.get('X-Company-ID') or req.META.get('HTTP_X_COMPANY_ID') or req.query_params.get('company_id')
+        # تفکیک و عایق‌سازی چندشرکتی انبارها بر مبنای کوئری‌پارامتر صریح یا هدر سشن با اعتبارسنجی امنیتی دسترسی (BOLA Protection)
+        company_id = req.query_params.get('company_id') or req.headers.get('X-Company-ID') or req.META.get('HTTP_X_COMPANY_ID')
         
         if company_id:
             from personnel.views import validate_user_company_access

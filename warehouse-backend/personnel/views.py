@@ -53,7 +53,8 @@ from .models import (
     WorkshopInsuranceSettings,
     TaxRuleSettings,
     BankExportSettings,
-    MonthlyPayrollRecord
+    MonthlyPayrollRecord,
+    WorkflowAuditLog
 )
 from .serializers import (
     normalize_plate,
@@ -91,7 +92,8 @@ from .serializers import (
     WorkshopInsuranceSettingsSerializer,
     TaxRuleSettingsSerializer,
     BankExportSettingsSerializer,
-    MonthlyPayrollRecordSerializer
+    MonthlyPayrollRecordSerializer,
+    WorkflowAuditLogSerializer
 )
 from .permissions import IsOrgStructureManagerOrReadOnly, IsPayrollSettingsManagerOrReadOnly
 from .payroll_engine import calculate_monthly_payroll_for_period, get_effective_payroll_settings
@@ -320,6 +322,22 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        section_id = data.get('section')
+        if not data.get('company') and section_id:
+            try:
+                sec = ProjectSection.objects.filter(id=int(section_id)).select_related('project').first()
+                if sec and sec.project and sec.project.company_id:
+                    data['company'] = sec.project.company_id
+            except (ValueError, TypeError):
+                pass
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         user = self.request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_personnel_manager') or user.has_perm('accounts.can_act_as_manager')
@@ -335,19 +353,16 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         if section and hasattr(section, 'project') and section.project:
             if not serializer.validated_data.get('project'):
                 extra_kwargs['project'] = section.project
+            if not serializer.validated_data.get('company') and section.project.company_id:
+                extra_kwargs['company_id'] = section.project.company_id
 
         req_status = self.request.data.get('approval_status')
-        if is_mgr:
-            extra_kwargs.update({
-                'approval_status': req_status if req_status in ['draft', 'pending_supervisor', 'manager_approved'] else 'manager_approved',
-                'manager_approved_by': user,
-                'manager_approved_at': timezone.now()
-            })
-        else:
-            # کاربر عادی می‌تواند به عنوان پیش‌نویس موقت ذخیره کند یا مستقیماً به سرپرست ارسال نماید
-            extra_kwargs['approval_status'] = 'pending_supervisor' if req_status == 'pending_supervisor' else 'draft'
-
+        extra_kwargs['approval_status'] = 'draft' if req_status == 'draft' else 'pending_supervisor'
         instance = serializer.save(**extra_kwargs)
+        if req_status != 'draft':
+            from .workflow_engine import process_creation_with_auto_pass
+            process_creation_with_auto_pass(instance, user, is_financial=False)
+            instance.save()
         broadcast_personnel_update(instance, action_type='created', message=f'پرونده پرسنل «{instance.full_name}» ثبت شد.', sender_id=user.id if user else None)
 
     def update(self, request, *args, **kwargs):
@@ -507,11 +522,23 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in ['draft', 'revision_required', 'pending_supervisor']:
             return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تایید سرپرست ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'pending_accountant'
         instance.supervisor_approved_by = user
         instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        WorkflowAuditLog.objects.create(
+            content_type='personnel',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='pending_accountant',
+            action='approve_supervisor',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'supervisor'}
+        )
         broadcast_personnel_update(instance, action_type='pending_accountant', message=f'پرونده پرسنل «{instance.full_name}» به تایید سرپرست رسید و به حسابداری ارسال شد.', sender_id=user.id)
         return Response({
             'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده به حسابداری ارسال گردید.',
@@ -529,11 +556,23 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in valid_statuses:
             return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تایید مالی ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'pending_manager'
         instance.accountant_approved_by = user
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
+        WorkflowAuditLog.objects.create(
+            content_type='personnel',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='pending_manager',
+            action='approve_finance',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'accountant'}
+        )
         broadcast_personnel_update(instance, action_type='pending_manager', message=f'پرونده پرسنل «{instance.full_name}» به تایید مالی رسید و به کارتابل مدیر ارسال شد.', sender_id=user.id)
         return Response({
             'message': 'تایید مالی با موفقیت ثبت شد و پرونده جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
@@ -560,6 +599,8 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in valid_statuses:
             return Response({'error': f'پرسنل در وضعیت «{instance.get_approval_status_display()}» امکان تصویب نهایی مدیر را ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'approved'
         instance.manager_approved_by = user
         instance.manager_approved_at = timezone.now()
@@ -572,6 +613,16 @@ class PersonnelProfileViewSet(viewsets.ModelViewSet):
         instance.rejection_reason = None
         instance.is_active = True
         instance.save()
+        WorkflowAuditLog.objects.create(
+            content_type='personnel',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='approved',
+            action='approve_manager',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'manager'}
+        )
         broadcast_personnel_update(instance, action_type='approved', message=f'پرونده پرسنل «{instance.full_name}» به تصویب نهایی مدیر رسید و فعال گردید.', sender_id=user.id)
         return Response({
             'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و پرسنل فعال گردید.',
@@ -1210,6 +1261,30 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        section_id = data.get('section')
+        if not data.get('company') and section_id:
+            try:
+                sec = ProjectSection.objects.filter(id=int(section_id)).select_related('project').first()
+                if sec and sec.project and sec.project.company_id:
+                    data['company'] = sec.project.company_id
+            except (ValueError, TypeError):
+                pass
+        if not data.get('company'):
+            cid = get_request_company_id(request)
+            if cid:
+                data['company'] = cid
+            else:
+                first_co = Company.objects.first()
+                if first_co:
+                    data['company'] = first_co.id
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     def perform_create(self, serializer):
         user = self.request.user
         is_mgr = user.is_superuser or user.has_perm('accounts.perm_approve_fleet_manager') or user.has_perm('accounts.can_act_as_manager')
@@ -1225,19 +1300,16 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         if section and hasattr(section, 'project') and section.project:
             if not serializer.validated_data.get('project'):
                 extra_kwargs['project'] = section.project
+            if not serializer.validated_data.get('company') and section.project.company_id:
+                extra_kwargs['company_id'] = section.project.company_id
 
         req_status = self.request.data.get('approval_status')
-        if is_mgr:
-            extra_kwargs.update({
-                'approval_status': req_status if req_status in ['draft', 'pending_supervisor', 'manager_approved'] else 'manager_approved',
-                'manager_approved_by': user,
-                'manager_approved_at': timezone.now()
-            })
-        else:
-            # کاربر عادی می‌تواند به عنوان پیش‌نویس موقت ذخیره کند یا مستقیماً به سرپرست ارسال نماید
-            extra_kwargs['approval_status'] = 'pending_supervisor' if req_status == 'pending_supervisor' else 'draft'
-
+        extra_kwargs['approval_status'] = 'draft' if req_status == 'draft' else 'pending_supervisor'
         instance = serializer.save(**extra_kwargs)
+        if req_status != 'draft':
+            from .workflow_engine import process_creation_with_auto_pass
+            process_creation_with_auto_pass(instance, user, is_financial=False)
+            instance.save()
         broadcast_vehicle_update(instance, action_type='created', message=f'پرونده خودرو «{instance.plate_number}» با راننده «{instance.driver_name}» ثبت شد.', sender_id=user.id if user else None)
 
     def update(self, request, *args, **kwargs):
@@ -1378,12 +1450,24 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in ['draft', 'revision_required', 'pending_supervisor']:
             return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تایید سرپرست ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'pending_accountant'
         instance.supervisor_approved_by = user
         instance.supervisor_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
-        log_vehicle_audit(user, 'APPROVE_SUPERVISOR', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
+        log_vehicle_audit(user, 'APPROVE_SUPERVISOR', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name, 'approval_note': note})
+        WorkflowAuditLog.objects.create(
+            content_type='vehicle',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='pending_accountant',
+            action='approve_supervisor',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'supervisor'}
+        )
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید سرپرست رسید و به حسابداری ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید سرپرست با موفقیت ثبت شد و پرونده خودرو به حسابداری ارسال گردید.',
@@ -1401,12 +1485,24 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in valid_statuses:
             return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تایید مالی ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'pending_manager'
         instance.accountant_approved_by = user
         instance.accountant_approved_at = timezone.now()
         instance.rejection_reason = None
         instance.save()
-        log_vehicle_audit(user, 'APPROVE_FINANCE', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
+        log_vehicle_audit(user, 'APPROVE_FINANCE', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name, 'approval_note': note})
+        WorkflowAuditLog.objects.create(
+            content_type='vehicle',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='pending_manager',
+            action='approve_finance',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'accountant'}
+        )
         broadcast_vehicle_update(instance, action_type='updated', message=f'پرونده خودرو «{instance.plate_number}» به تایید مالی رسید و به مدیر ارسال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تایید مالی با موفقیت ثبت شد و پرونده خودرو جهت تصویب نهایی به کارتابل مدیر ارسال گردید.',
@@ -1433,6 +1529,8 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         if instance.approval_status not in valid_statuses:
             return Response({'error': f'خودرو در وضعیت «{instance.get_approval_status_display()}» امکان تصویب نهایی مدیر ندارد.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        note = (request.data.get('note') or request.data.get('approval_note') or '').strip()
+        old_status = instance.approval_status
         instance.approval_status = 'approved'
         instance.manager_approved_by = user
         instance.manager_approved_at = timezone.now()
@@ -1445,7 +1543,17 @@ class VehicleDriverProfileViewSet(viewsets.ModelViewSet):
         instance.rejection_reason = None
         instance.is_active = True
         instance.save()
-        log_vehicle_audit(user, 'APPROVE_MANAGER', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name})
+        log_vehicle_audit(user, 'APPROVE_MANAGER', instance, {'plate_number': instance.plate_number, 'driver_name': instance.driver_name, 'approval_note': note})
+        WorkflowAuditLog.objects.create(
+            content_type='vehicle',
+            object_id=instance.id,
+            actor=user,
+            from_status=old_status,
+            to_status='approved',
+            action='approve_manager',
+            reason=note,
+            metadata={'approval_note': note, 'actor_role': 'manager'}
+        )
         broadcast_vehicle_update(instance, action_type='updated', message=f'خودرو «{instance.plate_number}» با راننده «{instance.driver_name}» تصویب و فعال شد.', sender_id=user.id if user else None)
         return Response({
             'message': 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.',
@@ -7570,21 +7678,84 @@ class ExpenseInvoiceViewSet(viewsets.ModelViewSet):
             allowed_ids = set(get_user_allowed_companies(user).values_list('id', flat=True))
             if section.project.company_id not in allowed_ids:
                 raise PermissionDenied("شما مجاز به ثبت فاکتور برای این شرکت نیستید.")
-        # Guardian G2: employee-submitted invoices must always be created in 'draft' status
+        # Guardian G2: default to draft status
+        req_status = self.request.data.get('status')
         if not user.is_superuser:
-            serializer.save(created_by=user, status='draft')
+            instance = serializer.save(created_by=user, status='draft')
         else:
-            serializer.save(created_by=user)
+            instance = serializer.save(created_by=user, status=req_status or 'draft')
+        if req_status and req_status != 'draft':
+            from .workflow_engine import process_creation_with_auto_pass
+            process_creation_with_auto_pass(instance, user, is_financial=True)
+            instance.save()
 
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        if not user.is_superuser:
-            new_status = serializer.validated_data.get('status')
-            if new_status and new_status not in ['draft', 'pending_supervisor']:
-                serializer.save(status=instance.status)
-                return
+        new_status = serializer.validated_data.get('status')
+        if new_status and new_status != instance.status and not user.is_superuser:
+            from .workflow_engine import determine_user_tier, WorkflowTiers
+            tier = determine_user_tier(user)
+            if new_status in ['draft', 'pending_supervisor']:
+                pass
+            elif new_status in ['pending_accountant', 'revision_required', 'rejected'] and tier >= WorkflowTiers.TIER_2_SUPERVISOR:
+                pass
+            elif new_status in ['pending_manager', 'ready_to_pay', 'revision_required', 'rejected'] and tier >= WorkflowTiers.TIER_3_ACCOUNTANT:
+                pass
+            elif new_status in ['ready_to_pay', 'approved', 'revision_required', 'rejected'] and tier >= WorkflowTiers.TIER_4_MANAGER:
+                pass
+            elif new_status == 'paid' and tier >= WorkflowTiers.TIER_5_TREASURY:
+                pass
+            else:
+                raise PermissionDenied("شما سطح دسترسی لازم برای تغییر وضعیت فاکتور به این مرحله را ندارید.")
         serializer.save()
+
+    @action(detail=True, methods=['post'], url_path='submit')
+    def submit_invoice(self, request, pk=None):
+        instance = self.get_object()
+        if instance.status not in ['draft', 'revision_required']:
+            return Response({'error': 'فقط فاکتورهای پیش‌نویس یا نیازمند بازنگری قابل ارسال هستند.'}, status=status.HTTP_400_BAD_REQUEST)
+        from .workflow_engine import advance_workflow_step
+        advance_workflow_step(instance, request.user, target_status='pending_supervisor', is_financial=True)
+        return Response({'message': 'فاکتور با موفقیت به سرپرست ارسال شد.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve_invoice(self, request, pk=None):
+        instance = self.get_object()
+        from .workflow_engine import advance_workflow_step
+        notes = request.data.get('notes')
+        advance_workflow_step(instance, request.user, notes=notes, is_financial=True)
+        return Response({'message': 'تایید فاکتور با موفقیت ثبت شد.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='reject')
+    def reject_invoice(self, request, pk=None):
+        instance = self.get_object()
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({'error': 'درج دلیل رد فاکتور الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        from .workflow_engine import reject_workflow
+        reject_workflow(instance, request.user, reason=reason)
+        return Response({'message': 'فاکتور هزینه رد گردید.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='request-revision')
+    def request_revision_invoice(self, request, pk=None):
+        instance = self.get_object()
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({'error': 'درج دلیل بازنگری الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        from .workflow_engine import request_workflow_revision
+        request_workflow_revision(instance, request.user, reason=reason, target_status='draft')
+        return Response({'message': 'فاکتور با ثبت اشکال جهت بازنگری ارجاع شد.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='pay')
+    def pay_invoice(self, request, pk=None):
+        instance = self.get_object()
+        tracking_code = request.data.get('tracking_code') or request.data.get('payment_ref', '').strip()
+        if not tracking_code:
+            return Response({'error': 'درج شماره پیگیری یا شماره سند بانکی الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        from .workflow_engine import execute_treasury_disbursement
+        execute_treasury_disbursement(instance, request.user, tracking_code=tracking_code, notes=request.data.get('notes'))
+        return Response({'message': 'تسویه فاکتور با موفقیت در خزانه‌داری ثبت گردید.', 'status': instance.status})
 
     @action(detail=False, methods=['get'], url_path='export-excel')
     def export_excel(self, request):
@@ -7804,27 +7975,58 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
                 defaults={'ceiling_amount': Decimal('100000000')}
             )
 
-        # تحمیل قانون طلایی پیش‌نویس (Guardian G2)
-        if not user.is_superuser:
-            serializer.save(
-                created_by=user,
-                custodian=custodian,
-                account=account,
-                status='draft'
-            )
-        else:
-            serializer.save(created_by=user, custodian=custodian, account=account)
+        instance = serializer.save(
+            created_by=user,
+            custodian=custodian,
+            account=account,
+            status='draft'
+        )
+        from .workflow_engine import process_creation_with_auto_pass
+        process_creation_with_auto_pass(instance, user, is_financial=True)
+        instance.save()
 
     def perform_update(self, serializer):
         user = self.request.user
         instance = self.get_object()
-        if not user.is_superuser:
-            new_status = serializer.validated_data.get('status')
-            # کارمندان عادی فقط مجاز به نگه‌داشتن draft یا ارسال به pending_supervisor هستند
-            if new_status and new_status not in ['draft', 'pending_supervisor']:
-                serializer.save(status=instance.status)
-                return
+        new_status = serializer.validated_data.get('status')
+        if new_status and new_status != instance.status and not user.is_superuser:
+            from .workflow_engine import determine_user_tier, WorkflowTiers
+            tier = determine_user_tier(user)
+            if new_status in ['draft', 'pending_supervisor']:
+                pass
+            elif new_status in ['pending_accountant', 'revision_required', 'rejected'] and tier >= WorkflowTiers.TIER_2_SUPERVISOR:
+                pass
+            elif new_status in ['approved', 'revision_required', 'rejected'] and tier >= WorkflowTiers.TIER_3_ACCOUNTANT:
+                pass
+            elif new_status in ['paid'] and tier >= WorkflowTiers.TIER_5_TREASURY:
+                pass
+            else:
+                raise PermissionDenied("شما سطح دسترسی لازم برای تغییر وضعیت سند تنخواه به این مرحله را ندارید.")
         serializer.save()
+
+    @action(detail=True, methods=['post'], url_path='submit')
+    def submit_tx(self, request, pk=None):
+        instance = self.get_object()
+        from .workflow_engine import advance_workflow_step
+        advance_workflow_step(instance, request.user, target_status='pending_supervisor', is_financial=True)
+        return Response({'message': 'تراکنش تنخواه با موفقیت به سرپرست ارسال شد.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='approve')
+    def approve_tx(self, request, pk=None):
+        instance = self.get_object()
+        from .workflow_engine import advance_workflow_step
+        advance_workflow_step(instance, request.user, notes=request.data.get('notes'), is_financial=True)
+        return Response({'message': 'تایید تراکنش تنخواه با موفقیت ثبت شد.', 'status': instance.status})
+
+    @action(detail=True, methods=['post'], url_path='reject')
+    def reject_tx(self, request, pk=None):
+        instance = self.get_object()
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({'error': 'درج دلیل رد الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        from .workflow_engine import reject_workflow
+        reject_workflow(instance, request.user, reason=reason)
+        return Response({'message': 'تراکنش تنخواه رد گردید.', 'status': instance.status})
 
     @action(detail=False, methods=['get'], url_path='my-balance')
     def my_balance(self, request):
@@ -8071,3 +8273,24 @@ class PettyCashTransactionViewSet(viewsets.ModelViewSet):
 
 
 
+
+
+
+class WorkflowAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    مشاهده تاریخچه ممیزی گردش کار و رویدادهای تایید/رد
+    """
+    queryset = WorkflowAuditLog.objects.all().select_related('actor')
+    serializer_class = WorkflowAuditLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        content_type = self.request.query_params.get('content_type')
+        if content_type:
+            qs = qs.filter(content_type=content_type.lower())
+        object_id = self.request.query_params.get('object_id')
+        if object_id:
+            qs = qs.filter(object_id=object_id)
+        return qs.order_by('-created_at')

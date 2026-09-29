@@ -127,6 +127,28 @@ def can_user_approve_stage(user, current_stage: str, is_financial: bool = False)
     return False
 
 
+
+
+def _record_audit_log(instance, user, from_status, to_status, action, reason=None, metadata=None):
+    """ثبت پایدار و تراکنشی لاگ ممیزی گردش کار سازمانی"""
+    try:
+        from .models import WorkflowAuditLog
+        content_type = instance.__class__.__name__.lower()
+        actor_user = user if getattr(user, 'is_authenticated', False) else None
+        WorkflowAuditLog.objects.create(
+            content_type=content_type,
+            object_id=instance.pk,
+            actor=actor_user,
+            from_status=from_status or '',
+            to_status=to_status or '',
+            action=action,
+            reason=reason or '',
+            metadata=metadata or {}
+        )
+    except Exception as e:
+        logger.warning(f"[WorkflowEngine] Failed to write WorkflowAuditLog for {instance}: {e}")
+
+
 @transaction.atomic
 def process_creation_with_auto_pass(instance, creator_user, is_financial: bool = False):
     """
@@ -287,6 +309,18 @@ def advance_workflow_step(instance, user, target_status: str = None, notes: str 
         elif hasattr(locked_instance, 'status'):
             locked_instance.status = WorkflowStatuses.PERIOD_SUBMITTED_ACCOUNTANT if hasattr(locked_instance, 'year_month') else next_status
 
+        if is_financial or hasattr(locked_instance, 'to_journal_lines'):
+            try:
+                from .models import emit_accounting_event
+                emit_accounting_event(
+                    source_instance=locked_instance,
+                    event_type='INVOICE_BOOKED',
+                    occurred_at=now,
+                    payload={'approved_by': user.pk, 'stage': 'accountant_approved', 'notes': notes}
+                )
+            except Exception as e:
+                logger.warning(f"[WorkflowEngine] Failed to emit INVOICE_BOOKED event for {locked_instance}: {e}")
+
     # انتقال از سطح ۳ ⬅️ سطح ۴ (مدیر شرکت)
     elif curr_lower in ['accountant_approved', 'pending_manager', 'manager_approved', 'submitted_accountant']:
         if hasattr(locked_instance, 'manager_approved_by'):
@@ -332,6 +366,7 @@ def advance_workflow_step(instance, user, target_status: str = None, notes: str 
         locked_instance.rejection_reason = None
 
     locked_instance.save()
+    _record_audit_log(locked_instance, user, current_status, getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', '')), 'approve', reason=notes)
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} advanced to {getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', ''))} by user {user.username}")
     return locked_instance
 
@@ -372,6 +407,7 @@ def request_workflow_revision(instance, user, reason: str, target_status: str = 
     if hasattr(locked_instance, 'vehicle') and locked_instance.vehicle:
         locked_instance.vehicle.has_pending_changes = False
         locked_instance.vehicle.save(update_fields=['has_pending_changes'])
+    _record_audit_log(locked_instance, user, getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', '')), next_status, 'revision', reason=reason)
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} marked REVISION_REQUIRED by {user.username}. Reason: {reason}")
     return locked_instance
 
@@ -406,6 +442,8 @@ def reject_workflow(instance, user, reason: str):
     if hasattr(locked_instance, 'vehicle') and locked_instance.vehicle:
         locked_instance.vehicle.has_pending_changes = False
         locked_instance.vehicle.save(update_fields=['has_pending_changes'])
+    target_st = getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', 'rejected'))
+    _record_audit_log(locked_instance, user, getattr(locked_instance, 'approval_status', getattr(locked_instance, 'status', '')), target_st, 'reject', reason=reason)
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} REJECTED by {user.username}. Reason: {reason}")
     return locked_instance
 
@@ -450,6 +488,8 @@ def execute_treasury_disbursement(instance, user, tracking_code: str, batch_id: 
         locked_instance.is_settled = True
         locked_instance.settled_at = now
         locked_instance.settled_by = user
+    if hasattr(locked_instance, 'payment_ref'):
+        locked_instance.payment_ref = tracking_code
 
     locked_instance.save()
     try:
@@ -462,6 +502,7 @@ def execute_treasury_disbursement(instance, user, tracking_code: str, batch_id: 
         )
     except Exception as e:
         logger.warning(f"[WorkflowEngine] Failed to emit accounting event for {locked_instance}: {e}")
+    _record_audit_log(locked_instance, user, 'ready_to_pay', 'paid', 'disburse', reason=notes, metadata={'tracking_code': tracking_code, 'batch_id': batch_id})
     logger.info(f"[WorkflowEngine] Instance {model_cls.__name__}#{locked_instance.pk} PAID & SETTLED by {user.username}. Tracking: {tracking_code}")
     return locked_instance
 

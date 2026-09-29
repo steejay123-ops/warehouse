@@ -31,7 +31,8 @@ from .models import (
     WorkshopInsuranceSettings,
     TaxRuleSettings,
     BankExportSettings,
-    MonthlyPayrollRecord
+    MonthlyPayrollRecord,
+    WorkflowAuditLog
 )
 import os
 from datetime import date as dt_date, datetime as dt_datetime
@@ -261,6 +262,10 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
             'is_auto_passed', 'auto_passed_by', 'auto_passed_at',
             'revision_requested_by', 'revision_requested_at'
         ]
+        extra_kwargs = {
+            'company': {'required': False, 'allow_null': True}
+        }
+        validators = []
 
     def get_assigned_warehouse_name(self, obj):
         aw = obj.assigned_warehouse
@@ -334,6 +339,30 @@ class PersonnelProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(err_msg or "شماره شبا نامعتبر است.")
         return cleaned
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        company = attrs.get('company')
+        if not company:
+            sec = attrs.get('section')
+            if sec and hasattr(sec, 'project') and sec.project and sec.project.company:
+                company = sec.project.company
+                attrs['company'] = company
+
+        nat_code = attrs.get('national_code')
+        if nat_code:
+            qs = PersonnelProfile.objects.filter(national_code=nat_code)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if company:
+                qs = qs.filter(company=company)
+                if qs.exists():
+                    raise serializers.ValidationError({"national_code": f"پرسنلی با کد ملی «{nat_code}» قبلاً در این شرکت ثبت شده است."})
+            else:
+                qs = qs.filter(company__isnull=True)
+                if qs.exists():
+                    raise serializers.ValidationError({"national_code": f"پرسنلی با کد ملی «{nat_code}» قبلاً در سامانه ثبت شده است."})
+        return attrs
+
 
 class VehicleDriverProfileSerializer(serializers.ModelSerializer):
     vehicle_type_display = serializers.CharField(source='get_vehicle_type_display', read_only=True)
@@ -362,6 +391,10 @@ class VehicleDriverProfileSerializer(serializers.ModelSerializer):
             'revision_requested_by', 'revision_requested_at',
             'has_pending_changes'
         ]
+        extra_kwargs = {
+            'company': {'required': False, 'allow_null': True}
+        }
+        validators = []
 
     def get_assigned_warehouse_name(self, obj):
         aw = obj.assigned_warehouse
@@ -1056,6 +1089,7 @@ class UserCompanyAccessSerializer(serializers.ModelSerializer):
 
 
 class FinancialProjectSerializer(serializers.ModelSerializer):
+    company = serializers.PrimaryKeyRelatedField(queryset=Company.objects.all(), required=False, allow_null=True)
     company_name = serializers.CharField(source='company.name', read_only=True)
     company_code = serializers.CharField(source='company.code', read_only=True)
     sections_count = serializers.SerializerMethodField()
@@ -1064,6 +1098,18 @@ class FinancialProjectSerializer(serializers.ModelSerializer):
         model = FinancialProject
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+        validators = []
+
+    def validate(self, attrs):
+        company = attrs.get('company') or getattr(self.instance, 'company', None)
+        code = attrs.get('code') or getattr(self.instance, 'code', None)
+        if code:
+            qs = FinancialProject.objects.filter(code=code, company=company)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({'code': 'پروژه‌ای با این کد برای این شرکت از قبل ثبت شده است.'})
+        return attrs
 
     def get_sections_count(self, obj):
         if hasattr(obj, 'sections_count'):
@@ -1074,6 +1120,7 @@ class FinancialProjectSerializer(serializers.ModelSerializer):
 class ProjectSectionSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source='project.name', read_only=True)
     project_code = serializers.CharField(source='project.code', read_only=True)
+    company_id = serializers.IntegerField(source='project.company_id', read_only=True)
 
     class Meta:
         model = ProjectSection
@@ -1147,6 +1194,7 @@ class ExpenseInvoiceSerializer(serializers.ModelSerializer):
     counterparty_name = serializers.CharField(source='counterparty.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.SerializerMethodField()
+    paid_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ExpenseInvoice
@@ -1156,6 +1204,11 @@ class ExpenseInvoiceSerializer(serializers.ModelSerializer):
     def get_created_by_name(self, obj):
         if obj.created_by:
             return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+
+    def get_paid_by_name(self, obj):
+        if obj.paid_by:
+            return f"{obj.paid_by.first_name} {obj.paid_by.last_name}".strip() or obj.paid_by.username
         return None
 
 
@@ -1216,6 +1269,26 @@ class CompanyFiscalPeriodSerializer(serializers.ModelSerializer):
         if obj.closed_by:
             return f"{obj.closed_by.first_name} {obj.closed_by.last_name}".strip() or obj.closed_by.username
         return None
+
+
+class WorkflowAuditLogSerializer(serializers.ModelSerializer):
+    actor_name = serializers.SerializerMethodField()
+    created_at_shamsi = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkflowAuditLog
+        fields = '__all__'
+
+    def get_actor_name(self, obj):
+        if obj.actor:
+            return f"{obj.actor.first_name} {obj.actor.last_name}".strip() or obj.actor.username
+        return "سیستم"
+
+    def get_created_at_shamsi(self, obj):
+        if obj.created_at:
+            from common.date_utils import format_to_shamsi_str
+            return format_to_shamsi_str(obj.created_at)
+        return ""
 
 
 

@@ -1,6 +1,6 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from .models import Company, CompanyBankAccount, CompanyDocument
+from .models import Company, CompanyBankAccount, CompanyDocument, UserSectionAssignment, UserCompanyAccess
 
 
 @receiver(post_save, sender=CompanyBankAccount)
@@ -83,3 +83,40 @@ def sync_company_core_documents(sender, instance, created, **kwargs):
                 is_confidential=False,
                 version=1
             )
+
+
+@receiver(post_save, sender=UserSectionAssignment)
+def handle_user_section_assignment_saved(sender, instance, created, **kwargs):
+    """
+    همگام‌سازی بلادرنگ نام شرکت سازمانی کاربر بر مبنای بخش‌های پروژه انتساب‌یافته
+    """
+    if not instance.user or not instance.section or not instance.is_active:
+        return
+    proj = instance.section.project
+    if proj and proj.company:
+        comp = proj.company
+        if instance.user.company != comp.name:
+            instance.user.company = comp.name
+            instance.user.save(update_fields=['company'])
+
+
+@receiver(post_delete, sender=UserSectionAssignment)
+def handle_user_section_assignment_deleted(sender, instance, **kwargs):
+    """
+    بازبینی نام شرکت کاربر پس از حذف انتساب بخش
+    """
+    if not instance.user:
+        return
+    user = instance.user
+    remaining = UserSectionAssignment.objects.filter(
+        user=user, is_active=True, section__project__company__isnull=False
+    ).select_related('section__project__company').first()
+
+    if remaining and remaining.section and remaining.section.project and remaining.section.project.company:
+        new_name = remaining.section.project.company.name
+        if user.company != new_name:
+            user.company = new_name
+            user.save(update_fields=['company'])
+    elif not user.is_superuser and user.company:
+        user.company = None
+        user.save(update_fields=['company'])

@@ -66,9 +66,24 @@ class UserViewSet(DeleteImpactMixin, viewsets.ModelViewSet):
         prefetch_items = ['groups__customrole', 'user_permissions']
         if apps.is_installed('warehouses'):
             prefetch_items.append('assigned_warehouses')
+        if apps.is_installed('personnel'):
+            prefetch_items.append('company_accesses__company')
         qs = qs.prefetch_related(*prefetch_items)
 
         user = self.request.user
+
+        # تفکیک چندشرکتی اختیاری بر مبنای کوئری‌پارامتر یا فیلتر دسترسی سازمانی
+        company_id_param = self.request.query_params.get('company_id')
+        if company_id_param and company_id_param.isdigit():
+            cid = int(company_id_param)
+            qs = qs.filter(Q(company_accesses__company_id=cid) | Q(is_superuser=True)).distinct()
+        elif user and user.is_authenticated and not user.is_superuser:
+            # کاربر عادی بدون فیلتر صریح: فقط کاربران شرکت‌های مشترک مجاز را مشاهده می‌کند
+            if apps.is_installed('personnel'):
+                from personnel.views import get_user_allowed_companies
+                allowed_cids = get_user_allowed_companies(user).values_list('id', flat=True)
+                if allowed_cids.exists():
+                    qs = qs.filter(Q(company_accesses__company_id__in=allowed_cids) | Q(id=user.id)).distinct()
 
         has_perm = self.request.query_params.get('has_perm')
         if has_perm:

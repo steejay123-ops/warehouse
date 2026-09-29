@@ -126,7 +126,7 @@
         </div>
 
         <div class="mt-4 border-t border-slate-100 pt-3 flex items-center gap-2">
-          <button *ngIf="canApprovePersonnelFinance" (click)="approvePersonnelFinance(p)" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1">
+          <button *ngIf="canApprovePersonnelFinance" (click)="openApprovalModal(p.id!, p.full_name || p.first_name, 'personnel')" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1">
             <span>💳 تایید مالی (ارسال به مدیر)</span>
           </button>
           <button (click)="openProfileRejectModal(p.id!, p.full_name || p.first_name, 'personnel', 'revision')" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl cursor-pointer" title="ارجاع به بازنگری">
@@ -179,7 +179,7 @@
         </div>
 
         <div class="mt-4 border-t border-slate-100 pt-3 flex items-center gap-2">
-          <button *ngIf="canApproveFleetFinance" (click)="approveVehicleFinance(v)" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1">
+          <button *ngIf="canApproveFleetFinance" (click)="openApprovalModal(v.id!, v.driver_name || v.plate_number, 'vehicle')" class="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1">
             <span>💳 تایید مالی (ارسال به مدیر)</span>
           </button>
           <button (click)="openProfileRejectModal(v.id!, v.driver_name, 'vehicle', 'revision')" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl cursor-pointer" title="ارجاع به بازنگری">
@@ -222,7 +222,7 @@
                   <button (click)="openDiffModal(cr, 'personnel')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl cursor-pointer">
                     مقایسه Diff
                   </button>
-                  <button *ngIf="canApprovePersonnelFinance" (click)="approveChangeRequestFinance(cr, 'personnel')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-xs cursor-pointer">
+                  <button *ngIf="canApprovePersonnelFinance" (click)="openApprovalModal(cr.id, cr.personnel_name || ('درخواست #' + cr.id), 'personnel_cr')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-xs cursor-pointer">
                     💳 تایید مالی (ارسال به مدیر)
                   </button>
                 </div>
@@ -240,7 +240,7 @@
                   <button (click)="openDiffModal(cr, 'vehicle')" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 font-bold rounded-xl cursor-pointer">
                     مقایسه Diff
                   </button>
-                  <button *ngIf="canApproveFleetFinance" (click)="approveChangeRequestFinance(cr, 'vehicle')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-xs cursor-pointer">
+                  <button *ngIf="canApproveFleetFinance" (click)="openApprovalModal(cr.id, cr.driver_name || cr.plate_number || ('خودرو #' + cr.vehicle), 'vehicle_cr')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-xs cursor-pointer">
                     💳 تایید مالی (ارسال به مدیر)
                   </button>
                 </div>
@@ -806,7 +806,7 @@
 
       <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
         <button (click)="isDiffModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">بستن</button>
-        <button *ngIf="(selectedDiffCR.status === 'pending_accountant' || selectedDiffCR.status === 'supervisor_approved' || selectedDiffCR.status === 'manager_approved' || selectedDiffCR.status === 'pending_finance') && canApprovePersonnelFinance" (click)="approveChangeRequestFinance(selectedDiffCR, diffTargetType)" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
+        <button *ngIf="(selectedDiffCR.status === 'pending_accountant' || selectedDiffCR.status === 'supervisor_approved' || selectedDiffCR.status === 'manager_approved' || selectedDiffCR.status === 'pending_finance') && canApprovePersonnelFinance" (click)="openApprovalModal(selectedDiffCR.id, selectedDiffCR.personnel_name || selectedDiffCR.driver_name || ('درخواست #' + selectedDiffCR.id), diffTargetType === 'personnel' ? 'personnel_cr' : 'vehicle_cr')" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
           💳 تایید مالی (ارسال به مدیر)
         </button>
       </div>
@@ -829,6 +829,36 @@
         <button (click)="isRejectModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
         <button (click)="confirmProfileRejectOrRevision()" class="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer" [ngClass]="rejectActionType === 'reject' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700'">
           ثبت نهایی اقدام
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: ثبت توضیحات و تایید مالی (Approval Note Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isApprovalModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-black">💳</span>
+          <h3 class="text-sm font-black text-slate-800">
+            تایید مالی پرونده: {{ approvalTargetName }}
+          </h3>
+        </div>
+        <button (click)="closeApprovalModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <p class="text-xs text-slate-500">
+        پرونده پس از تایید مالی به کارتابل مدیر جهت تصویب نهایی و صدور حکم فعال ارسال خواهد شد. در صورت نیاز توضیحات مالی خود را درج کنید:
+      </p>
+      
+      <textarea [(ngModel)]="approvalNoteText" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none" placeholder="یادداشت / توضیحات محاسبات مالی، دستمزد و بیمه (اختیاری)..."></textarea>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button (click)="closeApprovalModal()" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
+        <button (click)="confirmApprovalWithNote()" [disabled]="isApproving" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5">
+          <span *ngIf="isApproving" class="animate-spin text-xs">⏳</span>
+          <span>✓ تایید مالی و ارسال به مدیر</span>
         </button>
       </div>
     </div>

@@ -131,25 +131,76 @@ export class AccountantFleetHubComponent implements OnInit, OnDestroy {
     });
   }
 
+  monthMap: Record<string, string> = {
+    'فروردین': '01',
+    'اردیبهشت': '02',
+    'خرداد': '03',
+    'تیر': '04',
+    'مرداد': '05',
+    'شهریور': '06',
+    'مهر': '07',
+    'آبان': '08',
+    'آذر': '09',
+    'دی': '10',
+    'بهمن': '11',
+    'اسفند': '12'
+  };
+
   fetchFleetSettlements(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.statusCounters = {
-        pending_settlement: this.items.filter(x => x.status === 'pending_settlement').length,
-        settled: this.items.filter(x => x.status === 'settled').length,
-        all: this.items.length
-      };
-      this.cdr.detectChanges();
-    }, 200);
+    const m = this.monthMap[this.selectedMonth] || '04';
+    const yearMonth = `${this.fiscalYear}/${m}`;
+
+    this.personnelApi.calculateFleetSettlement(null, yearMonth).subscribe({
+      next: (res: any) => {
+        this.isLoading = false;
+        const rows = (res?.items || res?.settlements || []).map((s: any) => ({
+          ...s,
+          status: s.is_settled ? 'settled' : 'pending_settlement'
+        }));
+        let filtered = rows;
+        if (this.searchQuery?.trim()) {
+          const q = this.searchQuery.trim().toLowerCase();
+          filtered = filtered.filter((x: any) =>
+            (x.plate_number && x.plate_number.toLowerCase().includes(q)) ||
+            (x.driver_name && x.driver_name.toLowerCase().includes(q))
+          );
+        }
+        this.statusCounters = {
+          pending_settlement: filtered.filter((x: any) => x.status === 'pending_settlement').length,
+          settled: filtered.filter((x: any) => x.status === 'settled').length,
+          all: filtered.length
+        };
+        if (this.activeSubTab === 'pending_settlement') {
+          this.items = filtered.filter((x: any) => x.status === 'pending_settlement');
+        } else if (this.activeSubTab === 'settled') {
+          this.items = filtered.filter((x: any) => x.status === 'settled');
+        } else {
+          this.items = filtered;
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در محاسبه تسویه ناوگان: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   settleSingle(item: any): void {
+    item.status = 'settled';
     this.toast.success(`صورت‌وضعیت خودرو ${item.plate_number || ''} تایید و به کارتابل خزانه‌داری ارسال شد.`);
+    this.statusCounters.settled = this.items.filter(x => x.status === 'settled').length;
+    this.statusCounters.pending_settlement = this.items.filter(x => x.status === 'pending_settlement').length;
   }
 
   exportExcel(): void {
-    this.toast.info('در حال تولید فایل اکسل صورت‌وضعیت ناوگان...');
+    const m = this.monthMap[this.selectedMonth] || '04';
+    const yearMonth = `${this.fiscalYear}/${m}`;
+    const url = `/api/personnel/fleet-settlement/export-bank-excel/?year_month=${yearMonth}`;
+    window.open(url, '_blank');
+    this.toast.info('در حال تولید فایل اکسل پرداخت بانک ملی...');
   }
 
   importExcel(): void {
@@ -159,5 +210,6 @@ export class AccountantFleetHubComponent implements OnInit, OnDestroy {
   clearSearch(): void {
     this.searchQuery = '';
     this.syncUrlParams();
+    this.fetchFleetSettlements();
   }
 }

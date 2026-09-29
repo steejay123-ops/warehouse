@@ -18,7 +18,11 @@ import {
   validateSheba,
   extractShebaDigits,
   extractAccountNumberFromSheba,
-  ShebaValidationResult
+  generateShebaFromAccount,
+  validateAccountNumber,
+  ShebaValidationResult,
+  IRANIAN_BANKS,
+  IranianBankInfo
 } from '../../../../core/utils/sheba-utils';
 
 export type VehicleStatusFilter = 'all' | 'draft' | 'pending_supervisor' | 'revision_required' | 'approved' | 'rejected';
@@ -107,15 +111,32 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     bank_name: '',
     account_number: '',
     sheba_number: '',
+    notes: '',
     is_active: true,
     approval_status: 'draft'
   };
 
-  // اعتبارسنجی زنده و نمایش فرمت‌شده شبا
+  // اعتبارسنجی زنده و نمایش فرمت‌شده شبا و اطلاعات بانکی
   shebaValidationResult: ShebaValidationResult | null = null;
   shebaDigitsDisplay: string = '';
   isShebaCopied: boolean = false;
+  isAccountCopied: boolean = false;
+  isBankDropdownOpen: boolean = false;
+  bankSearchQuery: string = '';
+  iranianBanks: IranianBankInfo[] = IRANIAN_BANKS;
   private _isSyncingBank: boolean = false;
+
+  get filteredBanks(): IranianBankInfo[] {
+    if (!this.bankSearchQuery?.trim()) {
+      return this.iranianBanks;
+    }
+    const q = this.bankSearchQuery.trim().toLowerCase();
+    return this.iranianBanks.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      b.shortName.toLowerCase().includes(q) || 
+      b.code.includes(q)
+    );
+  }
 
   // اعتبارسنجی زنده کدهای ملی
   nationalCodeError: string | null = null;
@@ -183,7 +204,8 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     bank_name: 'نام بانک',
     account_number: 'شماره حساب',
     sheba_number: 'شماره شبا',
-    is_active: 'وضعیت فعال/غیرفعال'
+    is_active: 'وضعیت فعال/غیرفعال',
+    notes: 'توضیحات و یادداشت تکمیلی'
   };
 
   getFieldLabel(key: string): string {
@@ -588,7 +610,8 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       owner_phone: v.owner_phone || '',
       vehicle_type: v.vehicle_type || 'nissan',
       ownership_type: v.ownership_type || 'contract',
-      default_service_rate: v.default_service_rate || 0
+      default_service_rate: v.default_service_rate || 0,
+      notes: v.notes || ''
     };
     this.rateFormattedDisplay = (v.default_service_rate && v.default_service_rate > 0)
       ? Number(v.default_service_rate).toLocaleString('fa-IR')
@@ -801,11 +824,12 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
   }
 
   copyShebaToClipboard(sheba?: string): void {
-    if (!sheba) return;
-    const clean = 'IR' + extractShebaDigits(sheba);
+    const raw = sheba || this.newVehicle.sheba_number || '';
+    if (!raw) return;
+    const clean = 'IR' + extractShebaDigits(raw);
+    this.isShebaCopied = true;
     if (navigator?.clipboard?.writeText) {
       navigator.clipboard.writeText(clean).then(() => {
-        this.isShebaCopied = true;
         this.toast.show('success', 'شماره شبا در کلیپ‌بورد کپی شد.');
         setTimeout(() => this.isShebaCopied = false, 2500);
       }).catch(() => {
@@ -813,6 +837,14 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       });
     } else {
       this.toast.show('info', clean);
+      setTimeout(() => this.isShebaCopied = false, 2500);
+    }
+  }
+
+  openBankDropdown(): void {
+    if (!this.isReadOnlyMode) {
+      this.isBankDropdownOpen = true;
+      this.bankSearchQuery = '';
     }
   }
 
@@ -832,6 +864,122 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       }
     }
     this.saveDraftToStorage();
+  }
+
+  // ─── مدیریت دوطرفه شماره حساب بانکی و شبا (Banking Standard) ───
+  onAccountNumberInput(event: any): void {
+    if (this._isSyncingBank) return;
+    const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
+    const cleanAcc = rawVal.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                           .replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                           .replace(/\D/g, '')
+                           .substring(0, 18);
+    this.newVehicle.account_number = cleanAcc;
+    if (event?.target) {
+      event.target.value = cleanAcc;
+    }
+
+    const accValidation = validateAccountNumber(cleanAcc);
+    if (accValidation.isValid && this.newVehicle.bank_name) {
+      const generated = generateShebaFromAccount(this.newVehicle.bank_name, cleanAcc);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.newVehicle.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.saveDraftToStorage();
+    this.cdr.detectChanges();
+  }
+
+  onAccountNumberPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pasted = event.clipboardData?.getData('text') || '';
+    this.onAccountNumberInput(pasted);
+  }
+
+  onAccountNumberCopy(event: ClipboardEvent): void {
+    const acc = this.newVehicle.account_number || '';
+    if (acc && event.clipboardData) {
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', acc);
+      this.isAccountCopied = true;
+      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+      this.cdr.detectChanges();
+    }
+  }
+
+  copyAccountNumberToClipboard(): void {
+    const acc = this.newVehicle.account_number || '';
+    if (!acc) return;
+    this.isAccountCopied = true;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(acc).then(() => {
+        this.toast.show('success', 'شماره حساب در کلیپ‌بورد کپی شد.');
+        setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+        this.cdr.detectChanges();
+      }).catch(() => {
+        this.toast.show('warning', 'امکان کپی خودکار مقدور نشد.');
+      });
+    } else {
+      this.toast.show('success', 'شماره حساب کپی شد.');
+      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+    }
+  }
+
+  onBankSelect(bankName: string): void {
+    this.newVehicle.bank_name = bankName;
+    const accValidation = validateAccountNumber(this.newVehicle.account_number);
+    if (accValidation.isValid && bankName) {
+      const generated = generateShebaFromAccount(bankName, this.newVehicle.account_number);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.newVehicle.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.saveDraftToStorage();
+    this.cdr.detectChanges();
+  }
+
+  selectBankFromDropdown(bank: IranianBankInfo, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.onBankSelect(bank.name);
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
+  }
+
+  convertAccountToShebaNow(): void {
+    if (!this.newVehicle.bank_name) {
+      this.toast.show('warning', 'لطفاً ابتدا بانک عامل را انتخاب نمایید.');
+      return;
+    }
+    const accValidation = validateAccountNumber(this.newVehicle.account_number);
+    if (!accValidation.isValid) {
+      this.toast.show('warning', accValidation.errorMessage || 'شماره حساب معتبر نیست.');
+      return;
+    }
+    const generated = generateShebaFromAccount(this.newVehicle.bank_name, this.newVehicle.account_number);
+    if (generated) {
+      this.onShebaInput(generated);
+      this.toast.show('success', `شماره شبا با موفقیت بر اساس بانک ${this.newVehicle.bank_name} تولید شد.`);
+    } else {
+      this.toast.show('error', 'امکان تولید شبا برای این ساختار شماره حساب وجود ندارد.');
+    }
   }
 
   // ─── اعتبارسنجی الگوریتم ۱۰ رقمی کد ملی راننده (Mod 11) و انطباق با پرسنل موجود ───
@@ -1000,7 +1148,9 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       owner_phone: !this.newVehicle.is_driver_owner ? (this.newVehicle.owner_phone?.trim() || undefined) : undefined,
       default_service_rate: Number(this.newVehicle.default_service_rate) || 0,
       sheba_number: this.newVehicle.sheba_number ? cleanShebaInput(this.newVehicle.sheba_number) : undefined,
+      notes: this.newVehicle.notes?.trim() || undefined,
       section: this.selectedSectionId,
+      company: this.selectedSection?.company_id || (this.selectedSection as any)?.company || this.mySections.find(s => Number(s.id) === Number(this.selectedSectionId))?.company_id || undefined,
       approval_status: targetStatus,
       is_active: true
     };
@@ -1133,6 +1283,7 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
       bank_name: '',
       account_number: '',
       sheba_number: '',
+      notes: '',
       is_active: true,
       approval_status: 'draft'
     };
@@ -1144,6 +1295,9 @@ export class EmployeeNewVehicleHubComponent implements OnInit, OnDestroy {
     this.shebaValidationResult = null;
     this.shebaDigitsDisplay = '';
     this.isShebaCopied = false;
+    this.isAccountCopied = false;
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
     this.nationalCodeError = null;
     this.ownerNationalCodeError = null;
     this.matchedPersonnelNotice = null;

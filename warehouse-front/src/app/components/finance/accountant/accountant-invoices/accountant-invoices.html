@@ -169,12 +169,25 @@
             <td class="p-3 font-mono font-bold text-emerald-600">{{ item.amount | number }}</td>
             <td class="p-3 font-bold text-slate-600">{{ item.supervisor_approver_name || 'سرپرست کارگاه' }}</td>
             <td class="p-3 text-center">
-              <button
-                type="button"
-                (click)="bookDocument(item)"
-                class="px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
-                ✓ صدور و ثبت سند مالی
-              </button>
+              <div *ngIf="item.status === 'pending_accountant'" class="flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  (click)="bookDocument(item)"
+                  class="px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                  ✓ صدور سند و ارسال به مدیر
+                </button>
+                <button
+                  type="button"
+                  (click)="rejectDocument(item)"
+                  class="px-2 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                  title="عودت جهت بازنگری">
+                  ✕ عودت
+                </button>
+              </div>
+              <div *ngIf="item.status !== 'pending_accountant'" class="text-[11px] font-bold"
+                [ngClass]="item.status === 'paid' ? 'text-emerald-600' : 'text-slate-400'">
+                {{ item.status === 'paid' ? '✅ تسویه شده' : (item.status === 'ready_to_pay' ? '🏦 آماده پرداخت' : 'تایید و ارسال شده') }}
+              </div>
             </td>
           </tr>
         </tbody>

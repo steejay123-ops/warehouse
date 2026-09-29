@@ -48,58 +48,8 @@ export class TreasurerDisbursementsComponent implements OnInit, OnDestroy {
 
   // State
   isLoading = false;
-  items: DisbursementQueueItem[] = [
-    {
-      id: 1,
-      type: 'payroll',
-      title: 'حقوق تیر ماه ۱۴۰۵',
-      recipient_name: 'علیرضا شمس',
-      sheba_number: 'IR120120000000001234567890',
-      bank_name: 'بانک ملت',
-      section_name: 'بخش لجستیک و انبار مرکزی',
-      amount: 28450000,
-      approved_by_manager: true,
-      status: 'pending_payment'
-    },
-    {
-      id: 2,
-      type: 'payroll',
-      title: 'حقوق تیر ماه ۱۴۰۵',
-      recipient_name: 'محمد مرادی',
-      sheba_number: 'IR340180000000009876543210',
-      bank_name: 'بانک تجارت',
-      section_name: 'بخش تخلیه و بارگیری اسکله',
-      amount: 23100000,
-      approved_by_manager: true,
-      status: 'pending_payment'
-    },
-    {
-      id: 3,
-      type: 'fleet',
-      title: 'تسویه اجاره و کارکرد کشنده اسکانیا',
-      recipient_name: 'حسین اسماعیلی',
-      sheba_number: 'IR560170000000005544332211',
-      bank_name: 'بانک ملی',
-      section_name: 'بخش ترابری سنگین',
-      amount: 112500000,
-      approved_by_manager: true,
-      status: 'pending_payment'
-    },
-    {
-      id: 4,
-      type: 'payroll',
-      title: 'حقوق تیر ماه ۱۴۰۵',
-      recipient_name: 'سعید رضایی',
-      sheba_number: 'IR780190000000003322114455',
-      bank_name: 'بانک صادرات',
-      section_name: 'بخش اداری و پشتیبانی فنی',
-      amount: 21800000,
-      approved_by_manager: true,
-      status: 'paid',
-      tracking_code: 'TRK-9842105',
-      payment_date: '1405/04/28'
-    }
-  ];
+  items: DisbursementQueueItem[] = [];
+  currentPeriodId: number | null = null;
 
   // Pay Single Modal
   isPayModalOpen = false;
@@ -172,11 +122,13 @@ export class TreasurerDisbursementsComponent implements OnInit, OnDestroy {
       this.selectedSection = this.mySections.find(s => s.id === this.selectedSectionId) || null;
     }
     this.isLoadingSections = false;
+    this.refreshData();
   }
 
   onSectionChanged(): void {
     this.selectedSection = this.mySections.find(s => s.id === Number(this.selectedSectionId)) || null;
     this.syncUrlParams();
+    this.refreshData();
   }
 
   switchSubTab(tab: 'pending_queue' | 'disbursed_archive'): void {
@@ -227,7 +179,8 @@ export class TreasurerDisbursementsComponent implements OnInit, OnDestroy {
 
   openPayModal(item: DisbursementQueueItem): void {
     this.payingItem = item;
-    this.trackingCodeInput = 'TRK-' + Math.floor(1000000 + Math.random() * 9000000);
+    const now = new Date();
+    this.trackingCodeInput = `PAY-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getTime().toString().slice(-6)}`;
     this.isPayModalOpen = true;
   }
 
@@ -238,28 +191,139 @@ export class TreasurerDisbursementsComponent implements OnInit, OnDestroy {
 
   confirmDisbursement(): void {
     if (!this.payingItem) return;
-    this.payingItem.status = 'paid';
-    this.payingItem.tracking_code = this.trackingCodeInput;
-    this.payingItem.payment_date = '1405/04/29';
-    this.toast.success(`پرداخت مبلغ ${this.payingItem.amount.toLocaleString()} تومان به حساب شبا ${this.payingItem.recipient_name} ثبت و قطعی شد.`);
-    this.closePayModal();
+    if (!this.trackingCodeInput.trim()) {
+      this.toast.warning('لطفاً شناسه پیگیری پرداخت بانکی را وارد نمایید.');
+      return;
+    }
+
+    const payload: any = {
+      tracking_code: this.trackingCodeInput.trim()
+    };
+
+    if (this.payingItem.type === 'payroll') {
+      payload.action = 'disburse_single_payroll';
+      payload.payroll_id = this.payingItem.id;
+    } else {
+      payload.action = 'disburse_fleet';
+      payload.trip_ids = [this.payingItem.id];
+    }
+
+    this.personnelApi.disburseTreasury(payload).subscribe({
+      next: () => {
+        this.toast.success(`پرداخت مبلغ ${this.payingItem?.amount.toLocaleString()} ریال با شناسه پیگیری ${this.trackingCodeInput} قطعی شد.`);
+        this.closePayModal();
+        this.refreshData();
+      },
+      error: (err: any) => {
+        const msg = err?.error?.error || 'خطا در ثبت تسویه و پرداخت خزانه‌داری.';
+        this.toast.error(msg);
+      }
+    });
   }
 
   generateBatchPayaFile(): void {
-    this.toast.success('فایل انتقال وجه بین‌بانکی پایا (فرمت شتاب/شبا) با موفقیت تولید و بارگیری شد.');
+    if (!this.currentPeriodId) {
+      this.toast.warning('دوره فعالی برای صدور دیسکت پایا انتخاب نشده است.');
+      return;
+    }
+    this.toast.info('در حال تولید فایل انتقال وجه بین‌بانکی پایا...');
+    this.personnelApi.exportTreasuryDiskette(this.currentPeriodId, 'paya').subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `PAYA_Batch_${this.currentPeriodId}.csv`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.toast.success('فایل پایا با موفقیت دانلود شد.');
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت فایل دیسکت پایا.');
+      }
+    });
   }
 
   exportExcel(): void {
-    this.toast.success('فایل اکسل ۲ ردیفه پرداخت‌های خزانه‌داری صادر گردید.');
+    if (!this.currentPeriodId) {
+      this.toast.warning('دوره فعالی جهت خروجی اکسل یافت نشد.');
+      return;
+    }
+    this.personnelApi.exportMonthlyPayrollExcel(this.currentPeriodId).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Treasury_Disbursements_${this.fiscalYear}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.toast.success('فایل اکسل پرداخت‌های خزانه‌داری صادر گردید.');
+      },
+      error: () => {
+        this.toast.error('خطا در دریافت فایل اکسل خزانه‌داری.');
+      }
+    });
   }
 
   refreshData(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.toast.info('صف دستور پرداخت‌های مصوب خزانه‌داری به‌روزرسانی شد.');
-      this.cdr.detectChanges();
-    }, 300);
+    this.personnelApi.getTreasuryCartable().subscribe({
+      next: (data: any) => {
+        this.isLoading = false;
+        const newItems: DisbursementQueueItem[] = [];
+
+        // Map Payrolls
+        if (data?.payrolls && Array.isArray(data.payrolls)) {
+          for (const p of data.payrolls) {
+            if (p.period_id && !this.currentPeriodId) {
+              this.currentPeriodId = p.period_id;
+            }
+            newItems.push({
+              id: p.id,
+              type: 'payroll',
+              title: `حقوق دوره ${p.period_year_month || this.selectedMonth + ' ' + this.fiscalYear}`,
+              recipient_name: p.personnel_name || p.full_name || 'کارمند',
+              sheba_number: p.sheba_number || p.bank_account_number || 'فاقد شبا',
+              bank_name: p.bank_name || 'بانک عامل',
+              section_name: p.section_name || 'پرسنل شرکت',
+              amount: Number(p.net_salary || p.payable_amount || 0),
+              approved_by_manager: true,
+              status: p.payment_status === 'PAID' ? 'paid' : 'pending_payment',
+              tracking_code: p.payment_tracking_code || '',
+              payment_date: p.paid_at || ''
+            });
+          }
+        }
+
+        // Map Trips
+        if (data?.trips && Array.isArray(data.trips)) {
+          for (const t of data.trips) {
+            newItems.push({
+              id: t.id,
+              type: 'fleet',
+              title: `تسویه تردد ناوگان (${t.plate_number || ''})`,
+              recipient_name: t.driver_name || 'راننده',
+              sheba_number: t.sheba_number || 'فاقد شبا',
+              bank_name: t.bank_name || 'بانک عامل',
+              section_name: 'ترابری و ناوگان',
+              amount: Number(t.total_amount || 0),
+              approved_by_manager: true,
+              status: t.is_settled ? 'paid' : 'pending_payment',
+              tracking_code: '',
+              payment_date: t.date_shamsi || ''
+            });
+          }
+        }
+
+        this.items = newItems;
+        this.toast.info('صف دستور پرداخت‌های مصوب خزانه‌داری به‌روزرسانی شد.');
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoading = false;
+        this.toast.error('خطا در بارگذاری کارتابل پرداخت خزانه‌داری.');
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   clearSearch(): void {

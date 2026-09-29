@@ -44,6 +44,8 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     new_value: any;
     is_changed: boolean;
   }> = [];
+  diffAuditLogs: any[] = [];
+  isLoadingDiffLogs = false;
 
   statusCounters = {
     personnel: 0,
@@ -51,6 +53,12 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     change_requests: 0,
     all: 0
   };
+
+  // ─── مودال ثبت توضیحات و تایید (Approval Note Modal) ───
+  isApprovalModalOpen = false;
+  approvalTarget: { type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr'; item: any; title: string } | null = null;
+  approvalNote = '';
+  isApproving = false;
 
   private routeSub?: Subscription;
   private wsSub?: Subscription;
@@ -224,15 +232,64 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     this.statusCounters.vehicles = this.vehicleItems.length;
     this.statusCounters.change_requests = this.personnelChangeRequests.length + this.vehicleChangeRequests.length;
     this.statusCounters.all = this.personnelItems.length + this.vehicleItems.length + this.statusCounters.change_requests;
+
+    // رفع نقطه کور بصری (Blindspot): اگر پرسنل جدید صفر باشد ولی درخواست تغییرات وجود داشته باشد و کاربر تب خاصی انتخاب نکرده باشد
+    if (!this.route?.snapshot?.queryParams?.['tab'] && this.activeSubTab === 'personnel' && this.personnelItems.length === 0 && this.statusCounters.change_requests > 0) {
+      this.activeSubTab = 'change_requests';
+    }
   }
 
-  approvePersonnel(item: any): void {
-    this.personnelApi.approvePersonnelSupervisor(item.id).subscribe({
+  openApprovalModal(type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr', item: any): void {
+    const title = type === 'personnel'
+      ? `تایید پرونده پرسنل: ${item.first_name || ''} ${item.last_name || ''}`
+      : type === 'vehicle'
+      ? `تایید پرونده خودرو: ${item.plate_number || ''}`
+      : type === 'personnel_cr'
+      ? `تایید تغییرات پرسنل: ${item.personnel_name || ''}`
+      : `تایید تغییرات خودرو: ${item.plate_number || ''}`;
+    this.approvalTarget = { type, item, title };
+    this.approvalNote = '';
+    this.isApprovalModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closeApprovalModal(): void {
+    this.isApprovalModalOpen = false;
+    this.approvalTarget = null;
+    this.approvalNote = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmApproval(): void {
+    if (!this.approvalTarget) return;
+    const { type, item } = this.approvalTarget;
+    const note = this.approvalNote.trim() || undefined;
+    this.isApproving = true;
+
+    if (type === 'personnel') {
+      this.approvePersonnel(item, note);
+    } else if (type === 'vehicle') {
+      this.approveVehicle(item, note);
+    } else if (type === 'personnel_cr') {
+      this.approvePersonnelChange(item, note);
+    } else if (type === 'vehicle_cr') {
+      this.approveVehicleChange(item, note);
+    }
+  }
+
+  approvePersonnel(item: any, note?: string): void {
+    const req$ = note
+      ? this.personnelApi.approvePersonnelSupervisor(item.id, note)
+      : this.personnelApi.approvePersonnelSupervisor(item.id);
+    req$.subscribe({
       next: () => {
+        this.isApproving = false;
+        this.closeApprovalModal();
         this.toast.success(`پرونده پرسنل ${item.first_name} ${item.last_name} تایید و جهت بررسی به حسابداری ارجاع شد.`);
         this.fetchProfiles();
       },
       error: (err: any) => {
+        this.isApproving = false;
         this.toast.error('خطا در تایید پرونده پرسنل: ' + (err.error?.error || err.message || 'نامشخص'));
       }
     });
@@ -250,13 +307,19 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     });
   }
 
-  approveVehicle(item: any): void {
-    this.personnelApi.approveVehicleSupervisor(item.id).subscribe({
+  approveVehicle(item: any, note?: string): void {
+    const req$ = note
+      ? this.personnelApi.approveVehicleSupervisor(item.id, note)
+      : this.personnelApi.approveVehicleSupervisor(item.id);
+    req$.subscribe({
       next: () => {
+        this.isApproving = false;
+        this.closeApprovalModal();
         this.toast.success(`خودرو ${item.plate_number} تایید و به مرحله مالی ارسال گردید.`);
         this.fetchProfiles();
       },
       error: (err: any) => {
+        this.isApproving = false;
         this.toast.error('خطا در تایید خودرو: ' + (err.error?.error || err.message || 'نامشخص'));
       }
     });
@@ -274,14 +337,20 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     });
   }
 
-  approvePersonnelChange(cr: PersonnelChangeRequest): void {
-    this.personnelApi.approvePersonnelChangeRequestSupervisor(cr.id).subscribe({
+  approvePersonnelChange(cr: PersonnelChangeRequest, note?: string): void {
+    const req$ = note
+      ? this.personnelApi.approvePersonnelChangeRequestSupervisor(cr.id, note)
+      : this.personnelApi.approvePersonnelChangeRequestSupervisor(cr.id);
+    req$.subscribe({
       next: (res: any) => {
+        this.isApproving = false;
+        this.closeApprovalModal();
         this.toast.success(res?.message || `تغییرات پرسنل «${cr.personnel_name || ''}» تایید و به کارتابل حسابداری ارسال شد.`);
         this.isDiffModalOpen = false;
         this.fetchProfiles();
       },
       error: (err: any) => {
+        this.isApproving = false;
         this.toast.error('خطا در تایید تغییرات پرسنل: ' + (err.error?.error || err.message || 'نامشخص'));
       }
     });
@@ -302,14 +371,20 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
     });
   }
 
-  approveVehicleChange(cr: VehicleChangeRequest): void {
-    this.personnelApi.approveVehicleChangeRequestSupervisor(cr.id).subscribe({
+  approveVehicleChange(cr: VehicleChangeRequest, note?: string): void {
+    const req$ = note
+      ? this.personnelApi.approveVehicleChangeRequestSupervisor(cr.id, note)
+      : this.personnelApi.approveVehicleChangeRequestSupervisor(cr.id);
+    req$.subscribe({
       next: (res: any) => {
+        this.isApproving = false;
+        this.closeApprovalModal();
         this.toast.success(res?.message || `تغییرات خودرو «${cr.plate_number || ''}» تایید و به کارتابل حسابداری ارسال شد.`);
         this.isDiffModalOpen = false;
         this.fetchProfiles();
       },
       error: (err: any) => {
+        this.isApproving = false;
         this.toast.error('خطا در تایید تغییرات ناوگان: ' + (err.error?.error || err.message || 'نامشخص'));
       }
     });
@@ -333,6 +408,7 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
   openDiffModal(cr: any, type: 'personnel' | 'vehicle'): void {
     this.diffTargetType = type;
     this.selectedDiffCR = cr;
+    this.isDiffModalOpen = true;
     this.diffFieldRows = [];
 
     const proposed = cr.proposed_changes || {};
@@ -389,7 +465,20 @@ export class SupervisorNewProfilesHubComponent implements OnInit, OnDestroy {
       });
     }
 
-    this.isDiffModalOpen = true;
+    this.diffAuditLogs = [];
+    this.isLoadingDiffLogs = true;
+    const modelName = type === 'personnel' ? 'personnelchangerequest' : 'vehiclechangerequest';
+    this.personnelApi.getWorkflowAuditLogs({ content_type: modelName, object_id: cr.id }).subscribe({
+      next: (logs: any) => {
+        this.diffAuditLogs = Array.isArray(logs) ? logs : (logs?.results || []);
+        this.isLoadingDiffLogs = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingDiffLogs = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   getFieldNameLabel(field: string): string {

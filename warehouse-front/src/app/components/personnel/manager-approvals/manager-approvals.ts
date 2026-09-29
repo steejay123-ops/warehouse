@@ -25,12 +25,14 @@ import {
   styleUrl: './manager-approvals.css'
 })
 export class ManagerApprovals implements OnInit, OnDestroy {
-  // 4 Main Tabs:
-  activeTab: 'new_personnel' | 'new_fleet' | 'change_requests' | 'work_periods' = 'new_personnel';
+  // 6 Main Tabs:
+  activeTab: 'new_personnel' | 'new_fleet' | 'change_requests' | 'work_periods' | 'invoices' | 'petty_cash' = 'new_personnel';
   
   // Status Filters: 'ALL' | 'pending_manager' | 'revision_required' | 'approved' | 'rejected'
   approvalStatusFilter: string = 'pending_manager';
   changeRequestSubTab: 'personnel' | 'vehicles' = 'personnel';
+  crStatusFilter: string = 'pending_manager';
+  crSearchQuery: string = '';
   
   // Warehouse & Date Context
   selectedWarehouseId: number | null = null;
@@ -44,6 +46,8 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   personnelChangeRequests: PersonnelChangeRequest[] = [];
   vehicleChangeRequests: VehicleChangeRequest[] = [];
   workPeriods: any[] = [];
+  invoicesList: any[] = [];
+  pettyCashList: any[] = [];
   yearlySettings: PayrollYearlySettings | null = null;
 
   // Loading Indicators
@@ -65,6 +69,8 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     new_value: any;
     is_changed: boolean;
   }> = [];
+  diffAuditLogs: any[] = [];
+  isLoadingDiffLogs = false;
 
   // Reject / Revision Reason Modal
   isRejectModalOpen = false;
@@ -73,6 +79,14 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   rejectTargetId: number | null = null;
   rejectTargetName: string = '';
   rejectReasonText: string = '';
+
+  // Approval Note Modal State
+  isApprovalModalOpen = false;
+  approvalTargetType: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr' = 'personnel';
+  approvalTargetId: number | null = null;
+  approvalTargetName = '';
+  approvalNoteText = '';
+  isApproving = false;
 
   // Edit Personnel Modal State
   isPersonnelModalOpen = false;
@@ -125,6 +139,14 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     return this.workPeriods.filter(wp => wp.status === 'OPEN' || wp.status === 'REJECTED').length;
   }
 
+  get pendingInvoicesCount(): number {
+    return this.invoicesList.filter(inv => inv.status === 'pending_manager' || inv.status === 'ready_to_pay').length;
+  }
+
+  get pendingPettyCashCount(): number {
+    return this.pettyCashList.filter(pc => pc.status === 'approved' || pc.status === 'pending_manager').length;
+  }
+
   ngOnInit(): void {
     this.whService.getAll().subscribe({
       next: (data: any) => {
@@ -138,9 +160,12 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       error: () => {}
     });
 
+    // Eagerly prefetch change requests and vehicles count for header badge accuracy
+    this.loadInitialCounts();
+
     // Listen to query params for two-way state syncing
     this.querySub = this.route.queryParams.subscribe(params => {
-      if (params['tab'] && ['new_personnel', 'new_fleet', 'change_requests', 'work_periods'].includes(params['tab'])) {
+      if (params['tab'] && ['new_personnel', 'new_fleet', 'change_requests', 'work_periods', 'invoices', 'petty_cash'].includes(params['tab'])) {
         this.activeTab = params['tab'];
       }
       if (params['status']) {
@@ -156,13 +181,51 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     });
   }
 
+  loadInitialCounts(): void {
+    this.api.getPersonnelChangeRequests().subscribe({
+      next: (res: any) => {
+        this.personnelChangeRequests = Array.isArray(res) ? res : (res?.results || []);
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+    this.api.getVehicleChangeRequests().subscribe({
+      next: (res: any) => {
+        this.vehicleChangeRequests = Array.isArray(res) ? res : (res?.results || []);
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+    this.api.getVehicleProfiles({ approval_status: 'pending_manager,accountant_approved' }).subscribe({
+      next: (res: any) => {
+        this.vehiclesList = Array.isArray(res) ? res : (res?.results || []);
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+    this.api.getExpenseInvoices({ status: 'pending_manager' }).subscribe({
+      next: (res: any) => {
+        this.invoicesList = Array.isArray(res) ? res : (res?.results || []);
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+    this.api.getPettyCashTransactions({ status: 'approved' }).subscribe({
+      next: (res: any) => {
+        this.pettyCashList = Array.isArray(res) ? res : (res?.results || []);
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+  }
+
   ngOnDestroy(): void {
     if (this.querySub) {
       this.querySub.unsubscribe();
     }
   }
 
-  setTab(tab: 'new_personnel' | 'new_fleet' | 'change_requests' | 'work_periods'): void {
+  setTab(tab: 'new_personnel' | 'new_fleet' | 'change_requests' | 'work_periods' | 'invoices' | 'petty_cash'): void {
     this.activeTab = tab;
     this.updateQueryParams();
   }
@@ -175,6 +238,10 @@ export class ManagerApprovals implements OnInit, OnDestroy {
   setCRSubTab(subTab: 'personnel' | 'vehicles'): void {
     this.changeRequestSubTab = subTab;
     this.updateQueryParams();
+  }
+
+  setCRStatusFilter(status: string): void {
+    this.crStatusFilter = status;
   }
 
   onWarehouseChange(): void {
@@ -203,6 +270,10 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       this.loadChangeRequests();
     } else if (this.activeTab === 'work_periods') {
       this.loadWorkPeriods();
+    } else if (this.activeTab === 'invoices') {
+      this.loadInvoices();
+    } else if (this.activeTab === 'petty_cash') {
+      this.loadPettyCash();
     }
   }
 
@@ -220,6 +291,13 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       next: (res: any) => {
         this.personnelList = Array.isArray(res) ? res : (res?.results || []);
         this.isLoading = false;
+
+        // رفع نقطه کور: هدایت خودکار به تب درخواست‌های تغییرات در صورت نبود پرونده جدید
+        if (!this.route?.snapshot?.queryParams?.['tab'] && this.activeTab === 'new_personnel' && this.personnelList.length === 0 && this.pendingCRCount > 0) {
+          this.activeTab = 'change_requests';
+          this.loadChangeRequests();
+        }
+
         this.cdr.detectChanges();
       },
       error: (err: any) => {
@@ -251,9 +329,63 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     return list;
   }
 
-  approvePersonnelManager(p: PersonnelProfile): void {
+  openApprovalModal(id: number, name: string, type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr'): void {
+    this.approvalTargetId = id;
+    this.approvalTargetName = name;
+    this.approvalTargetType = type;
+    this.approvalNoteText = '';
+    this.isApprovalModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closeApprovalModal(): void {
+    this.isApprovalModalOpen = false;
+    this.approvalTargetId = null;
+    this.approvalTargetName = '';
+    this.approvalNoteText = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmApprovalWithNote(): void {
+    if (!this.approvalTargetId) return;
+    const id = this.approvalTargetId;
+    const note = this.approvalNoteText.trim() || undefined;
+    const type = this.approvalTargetType;
+    this.isApproving = true;
+
+    let req$: any;
+    if (type === 'personnel') {
+      req$ = note ? this.api.approvePersonnelManager(id, note) : this.api.approvePersonnelManager(id);
+    } else if (type === 'vehicle') {
+      req$ = note ? this.api.approveVehicleManager(id, note) : this.api.approveVehicleManager(id);
+    } else if (type === 'personnel_cr') {
+      req$ = note ? this.api.approvePersonnelChangeRequestManager(id, note) : this.api.approvePersonnelChangeRequestManager(id);
+    } else if (type === 'vehicle_cr') {
+      req$ = note ? this.api.approveVehicleChangeRequestManager(id, note) : this.api.approveVehicleChangeRequestManager(id);
+    }
+
+    if (req$) {
+      req$.subscribe({
+        next: (res: any) => {
+          this.isApproving = false;
+          this.toast.show('success', res.message || 'تصویب نهایی با موفقیت ثبت شد و پرونده فعال گردید.');
+          this.closeApprovalModal();
+          this.isDiffModalOpen = false;
+          this.refreshCurrentTabData();
+        },
+        error: (err: any) => {
+          this.isApproving = false;
+          this.toast.show('error', err?.error?.error || 'خطا در ثبت تصویب نهایی');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  approvePersonnelManager(p: PersonnelProfile, note?: string): void {
     if (!p.id) return;
-    this.api.approvePersonnelManager(p.id).subscribe({
+    const req$ = note ? this.api.approvePersonnelManager(p.id, note) : this.api.approvePersonnelManager(p.id);
+    req$.subscribe({
       next: (res: any) => {
         this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و پرسنل فعال گردید.');
         this.loadPersonnel();
@@ -308,9 +440,10 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     return list;
   }
 
-  approveVehicleManager(v: VehicleDriverProfile): void {
+  approveVehicleManager(v: VehicleDriverProfile, note?: string): void {
     if (!v.id) return;
-    this.api.approveVehicleManager(v.id).subscribe({
+    const req$ = note ? this.api.approveVehicleManager(v.id, note) : this.api.approveVehicleManager(v.id);
+    req$.subscribe({
       next: (res: any) => {
         this.toast.show('success', res.message || 'تصویب نهایی مدیر با موفقیت ثبت شد و خودرو فعال گردید.');
         this.loadVehicles();
@@ -345,9 +478,50 @@ export class ManagerApprovals implements OnInit, OnDestroy {
     }
   }
 
+  get filteredPersonnelChangeRequests(): PersonnelChangeRequest[] {
+    let list = this.personnelChangeRequests;
+    if (this.crStatusFilter !== 'ALL') {
+      if (this.crStatusFilter === 'pending_manager') {
+        list = list.filter(cr => cr.status === 'pending_manager' || cr.status === 'accountant_approved');
+      } else {
+        list = list.filter(cr => cr.status === this.crStatusFilter);
+      }
+    }
+    if (this.crSearchQuery.trim()) {
+      const q = this.crSearchQuery.trim().toLowerCase();
+      list = list.filter(cr =>
+        (cr.personnel_name && cr.personnel_name.toLowerCase().includes(q)) ||
+        (cr.personnel_national_code && cr.personnel_national_code.includes(q)) ||
+        (cr.requested_by_name && cr.requested_by_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }
+
+  get filteredVehicleChangeRequests(): VehicleChangeRequest[] {
+    let list = this.vehicleChangeRequests;
+    if (this.crStatusFilter !== 'ALL') {
+      if (this.crStatusFilter === 'pending_manager') {
+        list = list.filter(cr => cr.status === 'pending_manager' || cr.status === 'accountant_approved');
+      } else {
+        list = list.filter(cr => cr.status === this.crStatusFilter);
+      }
+    }
+    if (this.crSearchQuery.trim()) {
+      const q = this.crSearchQuery.trim().toLowerCase();
+      list = list.filter(cr =>
+        (cr.driver_name && cr.driver_name.toLowerCase().includes(q)) ||
+        (cr.plate_number && cr.plate_number.includes(q)) ||
+        (cr.created_by_name && cr.created_by_name.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }
+
   openDiffModal(cr: any, type: 'personnel' | 'vehicle'): void {
     this.diffTargetType = type;
     this.selectedDiffCR = cr;
+    this.isDiffModalOpen = true;
     this.diffFieldRows = [];
 
     const proposed = cr.proposed_changes || {};
@@ -366,18 +540,29 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       job_title: 'سمت شغلی',
       job_grade: 'گروه شغلی',
       contract_type: 'نوع قرارداد',
+      marital_status: 'وضعیت تأهل',
+      children_count: 'تعداد اولاد',
       sheba_number: 'شماره شبا',
       account_number: 'شماره حساب',
       bank_name: 'نام بانک',
+      phone_number: 'شماره تماس',
+      mobile: 'شماره همراه',
+      attachment: 'پیوست مدارک',
       driver_name: 'نام راننده',
       plate_number: 'شماره پلاک',
       vehicle_type: 'نوع خودرو',
       default_service_rate: 'نرخ پایه هر سرویس',
-      driver_phone: 'شماره تماس',
-      ownership_type: 'نوع مالکیت'
+      driver_phone: 'شماره تماس راننده',
+      ownership_type: 'نوع مالکیت',
+      is_active: 'وضعیت فعالیت'
     };
 
+    // Filter out internal system and audit keys from diff modal
+    const ignoredKeys = new Set(['id', 'pk', 'approval_status', 'created_at', 'updated_at', 'created_by', 'section']);
+
     for (const key of allKeys) {
+      if (ignoredKeys.has(key)) continue;
+
       let oldVal = previous[key];
       let newVal = proposed[key];
 
@@ -400,13 +585,26 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       });
     }
 
-    this.isDiffModalOpen = true;
+    this.diffAuditLogs = [];
+    this.isLoadingDiffLogs = true;
+    const modelName = type === 'personnel' ? 'personnelchangerequest' : 'vehiclechangerequest';
+    this.api.getWorkflowAuditLogs({ content_type: modelName, object_id: cr.id }).subscribe({
+      next: (logs: any) => {
+        this.diffAuditLogs = Array.isArray(logs) ? logs : (logs?.results || []);
+        this.isLoadingDiffLogs = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingDiffLogs = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
-  approveChangeRequestManager(cr: any, type: 'personnel' | 'vehicle'): void {
+  approveChangeRequestManager(cr: any, type: 'personnel' | 'vehicle', note?: string): void {
     const req$ = type === 'personnel'
-      ? this.api.approvePersonnelChangeRequestManager(cr.id)
-      : this.api.approveVehicleChangeRequestManager(cr.id);
+      ? (note ? this.api.approvePersonnelChangeRequestManager(cr.id, note) : this.api.approvePersonnelChangeRequestManager(cr.id))
+      : (note ? this.api.approveVehicleChangeRequestManager(cr.id, note) : this.api.approveVehicleChangeRequestManager(cr.id));
 
     req$.subscribe({
       next: (res: any) => {
@@ -567,6 +765,91 @@ export class ManagerApprovals implements OnInit, OnDestroy {
       error: (err: any) => {
         this.isSaving = false;
         this.toast.show('error', err?.error?.error || 'خطا در ویرایش ناوگان');
+      }
+    });
+  }
+
+  // ─── 5. Invoices & Petty Cash (Manager Approval Hub) ──────────
+  loadInvoices(): void {
+    this.isLoading = true;
+    this.api.getExpenseInvoices({ status: 'pending_manager' }).subscribe({
+      next: (res: any) => {
+        this.invoicesList = Array.isArray(res) ? res : (res?.results || []);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.show('error', err?.error?.error || 'خطا در دریافت لیست فاکتورهای هزینه');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  loadPettyCash(): void {
+    this.isLoading = true;
+    this.api.getPettyCashTransactions({ status: 'approved' }).subscribe({
+      next: (res: any) => {
+        this.pettyCashList = Array.isArray(res) ? res : (res?.results || []);
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.show('error', err?.error?.error || 'خطا در دریافت اسناد تنخواه');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  approveInvoiceManager(inv: any): void {
+    this.api.postCartableAction('manager', { action: 'approve', model: 'invoice', id: inv.id }).subscribe({
+      next: () => {
+        this.toast.show('success', `فاکتور هزینه «${inv.invoice_number || inv.id}» تایید و مجوز پرداخت صادر گردید.`);
+        this.loadInvoices();
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.error || 'خطا در صدور مجوز پرداخت فاکتور');
+      }
+    });
+  }
+
+  rejectInvoiceManager(inv: any): void {
+    const reason = window.prompt(`علت بازنگری یا رد فاکتور «${inv.invoice_number || inv.id}» را وارد کنید:`);
+    if (!reason) return;
+    this.api.postCartableAction('manager', { action: 'revision', model: 'invoice', id: inv.id, reason }).subscribe({
+      next: () => {
+        this.toast.show('warning', 'فاکتور هزینه جهت بازنگری عودت گردید.');
+        this.loadInvoices();
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.error || 'خطا در ارجاع بازنگری فاکتور');
+      }
+    });
+  }
+
+  approvePettyCashManager(pc: any): void {
+    this.api.postCartableAction('manager', { action: 'approve', model: 'petty_cash', id: pc.id }).subscribe({
+      next: () => {
+        this.toast.show('success', `سند تنخواه «${pc.title || pc.id}» تایید و به مرحله پرداخت رفت.`);
+        this.loadPettyCash();
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.error || 'خطا در تایید سند تنخواه');
+      }
+    });
+  }
+
+  rejectPettyCashManager(pc: any): void {
+    const reason = window.prompt(`علت بازنگری یا رد سند تنخواه «${pc.title || pc.id}» را وارد کنید:`);
+    if (!reason) return;
+    this.api.postCartableAction('manager', { action: 'revision', model: 'petty_cash', id: pc.id, reason }).subscribe({
+      next: () => {
+        this.toast.show('warning', 'سند تنخواه جهت بازنگری عودت گردید.');
+        this.loadPettyCash();
+      },
+      error: (err: any) => {
+        this.toast.show('error', err?.error?.error || 'خطا در ارجاع بازنگری سند تنخواه');
       }
     });
   }

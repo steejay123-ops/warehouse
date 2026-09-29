@@ -142,27 +142,128 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
 
   fetchFleetData(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.statusCounters = {
-        pending: this.items.filter(x => x.status === 'pending_supervisor').length,
-        approved: this.items.filter(x => x.status === 'approved' || x.status === 'manager_approved').length,
-        all: this.items.length
-      };
-      this.cdr.detectChanges();
-    }, 200);
+    const options: any = {};
+    if (this.selectedSectionId) options.section_id = this.selectedSectionId;
+    const dateStr = this.selectedDateShamsi || '';
+
+    this.personnelApi.getVehicleMatrix(null, dateStr, options).subscribe({
+      next: (res: any) => {
+        this.isLoading = false;
+        const rows = (res?.vehicles || res?.items || []).map((v: any) => ({
+          ...v,
+          work_hours: v.work_hours || 0,
+          trips_count: v.trips_count || v.total_trips || 0,
+          status: v.status || 'pending_supervisor'
+        }));
+        let filtered = rows;
+        if (this.searchQuery?.trim()) {
+          const q = this.searchQuery.trim().toLowerCase();
+          filtered = filtered.filter((x: any) =>
+            (x.plate_number && x.plate_number.toLowerCase().includes(q)) ||
+            (x.driver_name && x.driver_name.toLowerCase().includes(q))
+          );
+        }
+        this.statusCounters = {
+          pending: filtered.filter((x: any) => x.status === 'pending_supervisor' || !x.status).length,
+          approved: filtered.filter((x: any) => x.status === 'approved' || x.status === 'manager_approved').length,
+          all: filtered.length
+        };
+        if (this.activeSubTab === 'pending') {
+          this.items = filtered.filter((x: any) => x.status === 'pending_supervisor' || !x.status);
+        } else if (this.activeSubTab === 'approved') {
+          this.items = filtered.filter((x: any) => x.status === 'approved' || x.status === 'manager_approved');
+        } else {
+          this.items = filtered;
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در دریافت اطلاعات ناوگان: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   approveSingle(item: any): void {
-    this.toast.success(`کارکرد خودرو ${item.plate_number || ''} تایید شد.`);
+    const targetId = item.id || item.trip_id;
+    if (!targetId) return;
+    const previousStatus = item.status;
+    item.status = 'approved';
+    this.statusCounters.approved = this.items.filter(x => x.status === 'approved').length;
+    this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+
+    this.personnelApi.patchVehicleTrip(targetId, { notes: item.notes ? `${item.notes} | تایید سرپرست` : 'تایید سرپرست' }).subscribe({
+      next: () => {
+        this.toast.success(`کارکرد خودرو ${item.plate_number || ''} با موفقیت تایید شد.`);
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        item.status = previousStatus;
+        this.statusCounters.approved = this.items.filter(x => x.status === 'approved').length;
+        this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+        this.toast.error('خطا در تایید کارکرد ناوگان: ' + (err?.error?.error || err?.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   rejectSingle(item: any): void {
-    this.toast.warning(`کارکرد خودرو ${item.plate_number || ''} جهت اصلاح بازگردانده شد.`);
+    const targetId = item.id || item.trip_id;
+    if (!targetId) return;
+    const reason = window.prompt(`علت عودت کارکرد خودرو ${item.plate_number || ''} را وارد نمایید:`);
+    if (reason === null) return;
+    const previousStatus = item.status;
+    item.status = 'rejected';
+    this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+
+    this.personnelApi.patchVehicleTrip(targetId, { notes: `عودت سرپرست: ${reason}` }).subscribe({
+      next: () => {
+        this.toast.warning(`کارکرد خودرو ${item.plate_number || ''} جهت اصلاح بازگردانده شد.`);
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        item.status = previousStatus;
+        this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+        this.toast.error('خطا در ثبت عودت ناوگان: ' + (err?.error?.error || err?.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   approveBatch(): void {
-    this.toast.success('کلیه کارکردهای ناوگان در انتظار تایید شدند.');
+    const pendingItems = this.items.filter(it => it.status === 'pending_supervisor');
+    if (pendingItems.length === 0) return;
+
+    pendingItems.forEach(it => { it.status = 'approved'; });
+    this.statusCounters.approved = this.items.filter(x => x.status === 'approved').length;
+    this.statusCounters.pending = 0;
+
+    let completed = 0;
+    pendingItems.forEach(it => {
+      const targetId = it.id || it.trip_id;
+      if (targetId) {
+        this.personnelApi.patchVehicleTrip(targetId, { notes: it.notes ? `${it.notes} | تایید سرپرست` : 'تایید سرپرست' }).subscribe({
+          next: () => {
+            completed++;
+            if (completed === pendingItems.length) {
+              this.toast.success('کلیه کارکردهای ناوگان در انتظار تایید شدند.');
+              this.cdr.detectChanges();
+            }
+          },
+          error: () => {
+            completed++;
+            if (completed === pendingItems.length) {
+              this.toast.success('عملیات تایید دسته‌ای انجام شد.');
+              this.cdr.detectChanges();
+            }
+          }
+        });
+      } else {
+        completed++;
+      }
+    });
+    this.cdr.detectChanges();
   }
 
   exportExcel(): void {
@@ -176,5 +277,6 @@ export class SupervisorFleetHubComponent implements OnInit, OnDestroy {
   clearSearch(): void {
     this.searchQuery = '';
     this.syncUrlParams();
+    this.fetchFleetData();
   }
 }

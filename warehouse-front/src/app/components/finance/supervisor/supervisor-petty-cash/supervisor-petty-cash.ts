@@ -7,7 +7,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 import { StateService } from '../../../../services/state.service';
 import { ToastService } from '../../../../shared/components/toast/toast.component';
 import { PersonnelApiService } from '../../../../core/api/personnel-api.service';
-import { ProjectSection } from '../../../../core/models/personnel.model';
+import { ProjectSection, PettyCashTransaction } from '../../../../core/models/personnel.model';
 
 @Component({
   selector: 'app-supervisor-petty-cash-hub',
@@ -26,7 +26,8 @@ export class SupervisorPettyCashHubComponent implements OnInit, OnDestroy {
 
   searchQuery = '';
   isLoading = false;
-  items: any[] = [];
+  allTransactions: PettyCashTransaction[] = [];
+  items: PettyCashTransaction[] = [];
 
   statusCounters = {
     pending: 0,
@@ -113,7 +114,7 @@ export class SupervisorPettyCashHubComponent implements OnInit, OnDestroy {
   switchSubTab(tab: 'pending' | 'approved' | 'all'): void {
     this.activeSubTab = tab;
     this.syncUrlParams();
-    this.fetchPettyCash();
+    this.updateViewAndCounters();
   }
 
   syncUrlParams(): void {
@@ -130,27 +131,101 @@ export class SupervisorPettyCashHubComponent implements OnInit, OnDestroy {
 
   fetchPettyCash(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.statusCounters = {
-        pending: this.items.filter(x => x.status === 'pending_supervisor').length,
-        approved: this.items.filter(x => x.status === 'approved' || x.status === 'pending_accountant').length,
-        all: this.items.length
-      };
-      this.cdr.detectChanges();
-    }, 200);
+    const params: { section_id?: number; search?: string } = {};
+    if (this.selectedSectionId) params.section_id = this.selectedSectionId;
+    if (this.searchQuery?.trim()) params.search = this.searchQuery.trim();
+
+    this.personnelApi.getPettyCashTransactions(params).subscribe({
+      next: (data: PettyCashTransaction[]) => {
+        this.isLoading = false;
+        this.allTransactions = data || [];
+        this.updateViewAndCounters();
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در دریافت اسناد تن‌خواه: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
-  approveSingle(item: any): void {
-    this.toast.success(`سند تن‌خواه ${item.title || ''} تایید گردید.`);
+  updateViewAndCounters(): void {
+    const list = this.allTransactions;
+    this.statusCounters = {
+      pending: list.filter(x => x.status === 'pending_supervisor').length,
+      approved: list.filter(x => ['pending_accountant', 'pending_manager', 'approved'].includes(x.status)).length,
+      all: list.length
+    };
+
+    if (this.activeSubTab === 'pending') {
+      this.items = list.filter(x => x.status === 'pending_supervisor');
+    } else if (this.activeSubTab === 'approved') {
+      this.items = list.filter(x => ['pending_accountant', 'pending_manager', 'approved'].includes(x.status));
+    } else {
+      this.items = list;
+    }
   }
 
-  rejectSingle(item: any): void {
-    this.toast.warning(`سند تن‌خواه ${item.title || ''} جهت بازنگری عودت شد.`);
+  approveSingle(item: PettyCashTransaction): void {
+    if (!item.id) return;
+    this.isLoading = true;
+    this.personnelApi.approvePettyCashTransaction(item.id).subscribe({
+      next: () => {
+        this.isLoading = false;
+        this.toast.success(`سند تن‌خواه ${item.title || ''} تایید و به کارتابل حسابداری ارسال شد.`);
+        this.fetchPettyCash();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در تایید تن‌خواه: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  rejectSingle(item: PettyCashTransaction): void {
+    if (!item.id) return;
+    const reason = window.prompt(`علت عودت سند تن‌خواه «${item.title || ''}» را وارد کنید:`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      this.toast.warning('ثبت دلیل عودت الزامی است.');
+      return;
+    }
+    this.isLoading = true;
+    this.personnelApi.rejectPettyCashTransaction(item.id, reason.trim()).subscribe({
+      next: () => {
+        this.isLoading = false;
+        this.toast.warning(`سند تن‌خواه «${item.title || ''}» جهت بازنگری عودت شد.`);
+        this.fetchPettyCash();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در عودت تن‌خواه: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   exportExcel(): void {
     this.toast.info('در حال تولید فایل اکسل تن‌خواه...');
+    this.personnelApi.exportPettyCashTransactionsExcel({
+      section_id: this.selectedSectionId || undefined,
+      status: this.activeSubTab === 'pending' ? 'pending_supervisor' : undefined
+    }).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Petty_Cash_${this.selectedSectionId || 'all'}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.toast.success('فایل اکسل اسناد تن‌خواه با موفقیت دریافت شد.');
+      },
+      error: () => {
+        this.toast.error('خطا در دانلود فایل اکسل تن‌خواه.');
+      }
+    });
   }
 
   importExcel(): void {
@@ -160,5 +235,6 @@ export class SupervisorPettyCashHubComponent implements OnInit, OnDestroy {
   clearSearch(): void {
     this.searchQuery = '';
     this.syncUrlParams();
+    this.fetchPettyCash();
   }
 }

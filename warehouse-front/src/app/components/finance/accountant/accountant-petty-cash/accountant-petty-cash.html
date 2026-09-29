@@ -152,10 +152,12 @@
         <thead class="bg-slate-50 border-b border-slate-100 text-slate-500 font-black">
           <tr>
             <th class="p-3">ردیف</th>
-            <th class="p-3">عنوان دفتر تنخواه</th>
-            <th class="p-3">مسئول تنخواه</th>
-            <th class="p-3">مبلغ کل اسناد (ریال)</th>
-            <th class="p-3">مانده فعال تنخواه</th>
+            <th class="p-3">عنوان سند</th>
+            <th class="p-3">تنخواه‌دار</th>
+            <th class="p-3">دسته‌بندی</th>
+            <th class="p-3">مبلغ (ریال)</th>
+            <th class="p-3">تاریخ سند</th>
+            <th class="p-3">وضعیت</th>
             <th class="p-3 text-center">عملیات حسابداری</th>
           </tr>
         </thead>
@@ -163,16 +165,45 @@
           <tr *ngFor="let item of items; let idx = index" class="hover:bg-slate-50/70 transition-colors">
             <td class="p-3 font-mono text-slate-400">{{ idx + 1 }}</td>
             <td class="p-3 font-bold text-slate-800">{{ item.title }}</td>
-            <td class="p-3 font-bold text-slate-700">{{ item.holder_name }}</td>
-            <td class="p-3 font-mono font-bold text-slate-800">{{ item.total_expenses | number }}</td>
-            <td class="p-3 font-mono font-bold text-emerald-600">{{ item.current_balance | number }}</td>
+            <td class="p-3 font-bold text-slate-700">{{ item.custodian_name || item.counterparty_name || 'تنخواه‌دار' }}</td>
+            <td class="p-3 text-slate-600">{{ item.category }}</td>
+            <td class="p-3 font-mono font-bold text-emerald-600">{{ item.amount | number }}</td>
+            <td class="p-3 font-mono text-slate-600">{{ item.transaction_date_shamsi }}</td>
+            <td class="p-3">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border"
+                [ngClass]="{
+                  'bg-sky-50 text-sky-800 border-sky-200': item.status === 'pending_accountant',
+                  'bg-indigo-50 text-indigo-800 border-indigo-200': item.status === 'pending_manager',
+                  'bg-emerald-50 text-emerald-800 border-emerald-200': item.status === 'approved',
+                  'bg-rose-50 text-rose-800 border-rose-200': item.status === 'rejected',
+                  'bg-amber-100 text-amber-900 border-amber-300': item.status === 'revision_required'
+                }">
+                {{ item.status === 'pending_accountant' ? '💼 در انتظار حسابداری' :
+                   item.status === 'pending_manager' ? '👔 در انتظار مدیریت' :
+                   item.status === 'approved' ? '✅ تایید نهایی' :
+                   item.status === 'revision_required' ? '⚠️ نیازمند بازنگری' :
+                   item.status === 'rejected' ? '❌ ابطال شده' : item.status }}
+              </span>
+            </td>
             <td class="p-3 text-center">
-              <button
-                type="button"
-                (click)="approveReplenishment(item)"
-                class="px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
-                ✓ ممیزی و صدور شارژ
-              </button>
+              <div *ngIf="item.status === 'pending_accountant'" class="flex items-center justify-center gap-1.5">
+                <button
+                  type="button"
+                  (click)="approveReplenishment(item)"
+                  class="px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                  ✓ ممیزی و تایید
+                </button>
+                <button
+                  type="button"
+                  (click)="rejectReplenishment(item)"
+                  class="px-2 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                  title="عودت به سرپرست">
+                  ✕ عودت
+                </button>
+              </div>
+              <div *ngIf="item.status !== 'pending_accountant'" class="text-[11px] text-slate-400 font-bold">
+                {{ item.status === 'approved' ? '✅ تایید شده' : 'ارسال شده' }}
+              </div>
             </td>
           </tr>
         </tbody>

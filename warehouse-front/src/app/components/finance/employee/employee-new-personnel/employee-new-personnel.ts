@@ -20,7 +20,9 @@ import {
   extractAccountNumberFromSheba,
   generateShebaFromAccount,
   validateAccountNumber,
-  ShebaValidationResult
+  ShebaValidationResult,
+  IRANIAN_BANKS,
+  IranianBankInfo
 } from '../../../../core/utils/sheba-utils';
 
 export type PersonnelStatusFilter = 'all' | 'draft' | 'pending' | 'pending_supervisor' | 'manager_approved' | 'approved' | 'revision_required' | 'rejected';
@@ -81,6 +83,13 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     last_name: '',
     national_code: '',
     father_name: '',
+    id_number: '',
+    id_series: '',
+    id_serial: '',
+    birth_date: '',
+    birth_place: '',
+    issue_place: '',
+    gender: 'مرد',
     job_title: 'کارگر انبار',
     contract_type: 'daily',
     marital_status: 'single',
@@ -90,15 +99,32 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     bank_name: '',
     account_number: '',
     sheba_number: '',
+    notes: '',
     is_active: true,
     approval_status: 'draft'
   };
 
-  // اعتبارسنجی زنده و نمایش فرمت‌شده شبا (مشابه تعریف راننده و خودرو)
+  // اعتبارسنجی زنده و نمایش فرمت‌شده شبا و اطلاعات بانکی
   shebaValidationResult: ShebaValidationResult | null = null;
   shebaDigitsDisplay: string = '';
   isShebaCopied: boolean = false;
+  isAccountCopied: boolean = false;
+  isBankDropdownOpen: boolean = false;
+  bankSearchQuery: string = '';
+  iranianBanks: IranianBankInfo[] = IRANIAN_BANKS;
   private _isSyncingBank: boolean = false;
+
+  get filteredBanks(): IranianBankInfo[] {
+    if (!this.bankSearchQuery?.trim()) {
+      return this.iranianBanks;
+    }
+    const q = this.bankSearchQuery.trim().toLowerCase();
+    return this.iranianBanks.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      b.shortName.toLowerCase().includes(q) || 
+      b.code.includes(q)
+    );
+  }
 
   // مدیریت پیوست و آپلود مدارک هویتی پرسنل
   selectedDocumentAttachment: File | null = null;
@@ -567,7 +593,15 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
       contract_type: p.contract_type || 'daily',
       marital_status: p.marital_status || 'single',
       children_count: p.children_count || 0,
-      daily_base_wage: p.daily_base_wage || 0
+      daily_base_wage: p.daily_base_wage || 0,
+      gender: p.gender || 'مرد',
+      id_number: p.id_number || '',
+      id_series: p.id_series || '',
+      id_serial: p.id_serial || '',
+      birth_date: p.birth_date || '',
+      birth_place: p.birth_place || '',
+      issue_place: p.issue_place || '',
+      notes: p.notes || ''
     };
     this.wageFormattedDisplay = (p.daily_base_wage && p.daily_base_wage > 0) ? (p.daily_base_wage).toLocaleString('fa-IR') : '';
     this.existingAttachmentUrl = p.attachment || null;
@@ -727,6 +761,127 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ─── مدیریت دوطرفه شماره حساب بانکی و شبا (Banking Standard) ───
+  onAccountNumberInput(event: any): void {
+    if (this._isSyncingBank) return;
+    const rawVal = typeof event === 'string' ? event : (event?.target?.value || '');
+    const cleanAcc = rawVal.replace(/[۰-۹]/g, (d: string) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                           .replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+                           .replace(/\D/g, '')
+                           .substring(0, 18);
+    this.newPersonnel.account_number = cleanAcc;
+    if (event?.target) {
+      event.target.value = cleanAcc;
+    }
+
+    const accValidation = validateAccountNumber(cleanAcc);
+    if (accValidation.isValid && this.newPersonnel.bank_name) {
+      const generated = generateShebaFromAccount(this.newPersonnel.bank_name, cleanAcc);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.newPersonnel.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  onAccountNumberPaste(event: ClipboardEvent): void {
+    event.preventDefault();
+    const pasted = event.clipboardData?.getData('text') || '';
+    this.onAccountNumberInput(pasted);
+  }
+
+  onAccountNumberCopy(event: ClipboardEvent): void {
+    const acc = this.newPersonnel.account_number || '';
+    if (acc && event.clipboardData) {
+      event.preventDefault();
+      event.clipboardData.setData('text/plain', acc);
+      this.isAccountCopied = true;
+      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+      this.cdr.detectChanges();
+    }
+  }
+
+  copyAccountNumberToClipboard(): void {
+    const acc = this.newPersonnel.account_number || '';
+    if (!acc) return;
+    this.isAccountCopied = true;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(acc).then(() => {
+        this.toast.show('success', 'شماره حساب در کلیپ‌بورد کپی شد.');
+        setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+        this.cdr.detectChanges();
+      }).catch(() => {
+        this.toast.show('warning', 'امکان کپی خودکار مقدور نشد.');
+      });
+    } else {
+      this.toast.show('success', 'شماره حساب کپی شد.');
+      setTimeout(() => { this.isAccountCopied = false; this.cdr.detectChanges(); }, 2000);
+    }
+  }
+
+  onBankSelect(bankName: string): void {
+    this.newPersonnel.bank_name = bankName;
+    const accValidation = validateAccountNumber(this.newPersonnel.account_number);
+    if (accValidation.isValid && bankName) {
+      const generated = generateShebaFromAccount(bankName, this.newPersonnel.account_number);
+      if (generated) {
+        this._isSyncingBank = true;
+        try {
+          const res = validateSheba(generated);
+          this.shebaValidationResult = res;
+          this.shebaDigitsDisplay = res.formattedDigits;
+          this.newPersonnel.sheba_number = res.rawSheba;
+        } finally {
+          this._isSyncingBank = false;
+        }
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  selectBankFromDropdown(bank: IranianBankInfo, event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.onBankSelect(bank.name);
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
+  }
+
+  openBankDropdown(): void {
+    if (!this.isReadOnlyMode) {
+      this.isBankDropdownOpen = true;
+      this.bankSearchQuery = '';
+    }
+  }
+
+  convertAccountToShebaNow(): void {
+    if (!this.newPersonnel.bank_name) {
+      this.toast.show('warning', 'لطفاً ابتدا بانک عامل را انتخاب نمایید.');
+      return;
+    }
+    const accValidation = validateAccountNumber(this.newPersonnel.account_number);
+    if (!accValidation.isValid) {
+      this.toast.show('warning', accValidation.errorMessage || 'شماره حساب معتبر نیست.');
+      return;
+    }
+    const generated = generateShebaFromAccount(this.newPersonnel.bank_name, this.newPersonnel.account_number);
+    if (generated) {
+      this.onShebaInput(generated);
+      this.toast.show('success', `شماره شبا با موفقیت بر اساس بانک ${this.newPersonnel.bank_name} تولید شد.`);
+    } else {
+      this.toast.show('error', 'امکان تولید شبا برای این ساختار شماره حساب وجود ندارد.');
+    }
+  }
+
   // ─── مدیریت آپلود مدارک هویتی پرسنل ───
   onDocumentFileSelected(event: any): void {
     const file = event.target?.files?.[0];
@@ -777,6 +932,25 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     this.nationalCodeError = isValid ? null : 'ساختار کد ملی نامعتبر است (خطای رقم کنترلی).';
   }
 
+  // ─── فرمت‌بندی و ماسک‌گذاری خودکار تاریخ تولد شمسی (YYYY/MM/DD) ───
+  onBirthDateInput(event: any): void {
+    const inputEl = event?.target as HTMLInputElement | undefined;
+    const rawVal = inputEl?.value || (typeof event === 'string' ? event : '');
+    const cleanDigits = normalizeDigits(rawVal).replace(/\D/g, '').substring(0, 8);
+
+    let formatted = cleanDigits;
+    if (cleanDigits.length > 4 && cleanDigits.length <= 6) {
+      formatted = `${cleanDigits.slice(0, 4)}/${cleanDigits.slice(4)}`;
+    } else if (cleanDigits.length > 6) {
+      formatted = `${cleanDigits.slice(0, 4)}/${cleanDigits.slice(4, 6)}/${cleanDigits.slice(6, 8)}`;
+    }
+
+    this.newPersonnel.birth_date = formatted;
+    if (inputEl) {
+      inputEl.value = formatted;
+    }
+  }
+
   // ─── معادل تومان مزد پایه روزانه ───
   get wageInTomans(): number {
     return Math.floor((Number(this.newPersonnel.daily_base_wage) || 0) / 10);
@@ -810,13 +984,24 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     // در صورت وجود پیوست مدارک از FormData استفاده می‌کنیم
     let payload: Partial<PersonnelProfile> | FormData;
 
+    const companyId = this.selectedSection?.company_id;
     if (this.selectedDocumentAttachment) {
       const formData = new FormData();
       formData.append('section', String(this.selectedSectionId));
+      if (companyId) {
+        formData.append('company', String(companyId));
+      }
       formData.append('first_name', this.newPersonnel.first_name!.trim());
       formData.append('last_name', this.newPersonnel.last_name!.trim());
       formData.append('national_code', this.newPersonnel.national_code!.trim());
       if (this.newPersonnel.father_name?.trim()) formData.append('father_name', this.newPersonnel.father_name.trim());
+      if (this.newPersonnel.gender) formData.append('gender', this.newPersonnel.gender);
+      if (this.newPersonnel.id_number?.trim()) formData.append('id_number', this.newPersonnel.id_number.trim());
+      if (this.newPersonnel.id_series?.trim()) formData.append('id_series', this.newPersonnel.id_series.trim());
+      if (this.newPersonnel.id_serial?.trim()) formData.append('id_serial', this.newPersonnel.id_serial.trim());
+      if (this.newPersonnel.birth_date?.trim()) formData.append('birth_date', this.newPersonnel.birth_date.trim());
+      if (this.newPersonnel.birth_place?.trim()) formData.append('birth_place', this.newPersonnel.birth_place.trim());
+      if (this.newPersonnel.issue_place?.trim()) formData.append('issue_place', this.newPersonnel.issue_place.trim());
       if (this.newPersonnel.job_title?.trim()) formData.append('job_title', this.newPersonnel.job_title.trim());
       if (this.newPersonnel.contract_type) formData.append('contract_type', this.newPersonnel.contract_type);
       if (this.newPersonnel.marital_status) formData.append('marital_status', this.newPersonnel.marital_status);
@@ -826,6 +1011,7 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
       if (this.newPersonnel.bank_name?.trim()) formData.append('bank_name', this.newPersonnel.bank_name.trim());
       if (this.newPersonnel.account_number?.trim()) formData.append('account_number', this.newPersonnel.account_number.trim());
       if (this.newPersonnel.sheba_number) formData.append('sheba_number', cleanShebaInput(this.newPersonnel.sheba_number));
+      if (this.newPersonnel.notes?.trim()) formData.append('notes', this.newPersonnel.notes.trim());
       formData.append('approval_status', targetStatus);
       formData.append('is_active', 'true');
       formData.append('attachment', this.selectedDocumentAttachment);
@@ -837,11 +1023,21 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
         last_name: this.newPersonnel.last_name!.trim(),
         national_code: this.newPersonnel.national_code!.trim(),
         father_name: this.newPersonnel.father_name?.trim() || undefined,
+        gender: this.newPersonnel.gender || 'مرد',
+        id_number: this.newPersonnel.id_number?.trim() || undefined,
+        id_series: this.newPersonnel.id_series?.trim() || undefined,
+        id_serial: this.newPersonnel.id_serial?.trim() || undefined,
+        birth_date: this.newPersonnel.birth_date?.trim() || undefined,
+        birth_place: this.newPersonnel.birth_place?.trim() || undefined,
+        issue_place: this.newPersonnel.issue_place?.trim() || undefined,
         job_title: this.newPersonnel.job_title?.trim() || 'کارگر انبار',
         children_count: Number(this.newPersonnel.children_count) || 0,
         phone_number: this.newPersonnel.phone_number?.trim() || undefined,
         sheba_number: this.newPersonnel.sheba_number ? cleanShebaInput(this.newPersonnel.sheba_number) : undefined,
+        daily_base_wage: Number(this.newPersonnel.daily_base_wage) || 0,
+        notes: this.newPersonnel.notes?.trim() || undefined,
         section: this.selectedSectionId,
+        ...(companyId ? { company: companyId } : {}),
         approval_status: targetStatus,
         is_active: true
       };
@@ -900,6 +1096,13 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
       last_name: '',
       national_code: '',
       father_name: '',
+      id_number: '',
+      id_series: '',
+      id_serial: '',
+      birth_date: '',
+      birth_place: '',
+      issue_place: '',
+      gender: 'مرد',
       job_title: 'کارگر انبار',
       contract_type: 'daily',
       marital_status: 'single',
@@ -909,6 +1112,7 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
       bank_name: '',
       account_number: '',
       sheba_number: '',
+      notes: '',
       is_active: true,
       approval_status: 'draft'
     };
@@ -916,6 +1120,9 @@ export class EmployeeNewPersonnelHubComponent implements OnInit, OnDestroy {
     this.shebaDigitsDisplay = '';
     this.wageFormattedDisplay = '';
     this.isShebaCopied = false;
+    this.isAccountCopied = false;
+    this.isBankDropdownOpen = false;
+    this.bankSearchQuery = '';
     this.selectedDocumentAttachment = null;
     this.attachmentFileName = '';
     this.nationalCodeError = null;

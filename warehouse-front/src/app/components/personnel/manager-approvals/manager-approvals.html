@@ -56,16 +56,30 @@
       <span *ngIf="pendingFleetCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-blue-500 text-white">{{ pendingFleetCount }}</span>
     </button>
 
-    <button (click)="setTab('change_requests')" [class.active-tab]="activeTab === 'change_requests'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer">
+    <button (click)="setTab('change_requests')" [class.active-tab]="activeTab === 'change_requests'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer relative">
       <span>📋</span>
       <span>۳. کارتابل ویرایش‌ها (Diff)</span>
-      <span *ngIf="pendingCRCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-rose-500 text-white">{{ pendingCRCount }}</span>
+      <span *ngIf="pendingCRCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black"
+            [ngClass]="activeTab !== 'change_requests' ? 'bg-amber-500 text-white animate-pulse' : 'bg-rose-500 text-white'">{{ pendingCRCount }}</span>
+      <span *ngIf="pendingCRCount > 0 && activeTab !== 'change_requests'" class="w-2 h-2 rounded-full bg-amber-500 inline-block animate-ping"></span>
     </button>
 
     <button (click)="setTab('work_periods')" [class.active-tab]="activeTab === 'work_periods'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer">
       <span>📅</span>
       <span>۴. دوره‌های کارکرد ماهانه</span>
       <span *ngIf="pendingWorkPeriodCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-indigo-500 text-white">{{ pendingWorkPeriodCount }}</span>
+    </button>
+
+    <button (click)="setTab('invoices')" [class.active-tab]="activeTab === 'invoices'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer">
+      <span>🧾</span>
+      <span>۵. فاکتورهای هزینه</span>
+      <span *ngIf="pendingInvoicesCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-emerald-500 text-white">{{ pendingInvoicesCount }}</span>
+    </button>
+
+    <button (click)="setTab('petty_cash')" [class.active-tab]="activeTab === 'petty_cash'" class="tab-btn px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-slate-600 flex items-center gap-2 cursor-pointer">
+      <span>💰</span>
+      <span>۶. اسناد تنخواه‌گردان</span>
+      <span *ngIf="pendingPettyCashCount > 0" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-black bg-purple-500 text-white">{{ pendingPettyCashCount }}</span>
     </button>
   </div>
 
@@ -174,7 +188,7 @@
         <div class="mt-4 border-t border-slate-100 pt-3 space-y-2">
           <!-- Step 1: Manager Approval Actions -->
           <div *ngIf="(p.approval_status === 'pending_manager' || p.approval_status === 'accountant_approved' || p.approval_status === 'draft') && canApprovePersonnelManager" class="flex items-center gap-1.5">
-            <button (click)="approvePersonnelManager(p)" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer">
+            <button (click)="openApprovalModal(p.id!, p.full_name || p.first_name, 'personnel')" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer">
               <span>✅ تصویب نهایی و فعال‌سازی</span>
             </button>
             <button (click)="openProfileRejectModal(p.id!, p.full_name || p.first_name, 'personnel', 'revision')" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl transition-colors cursor-pointer" title="درخواست اصلاح و بازنگری">
@@ -304,7 +318,7 @@
         <div class="mt-4 border-t border-slate-100 pt-3 space-y-2">
           <!-- Step 1: Manager Approval Actions -->
           <div *ngIf="(v.approval_status === 'pending_manager' || v.approval_status === 'accountant_approved' || v.approval_status === 'draft') && canApproveFleetManager" class="flex items-center gap-1.5">
-            <button (click)="approveVehicleManager(v)" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer">
+            <button (click)="openApprovalModal(v.id!, v.driver_name || v.plate_number, 'vehicle')" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer">
               <span>✅ تصویب نهایی و فعال‌سازی</span>
             </button>
             <button (click)="openProfileRejectModal(v.id!, v.driver_name, 'vehicle', 'revision')" class="px-3 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-bold rounded-xl transition-colors cursor-pointer" title="درخواست اصلاح و بازنگری">
@@ -334,15 +348,39 @@
   <!-- ۵. تب سوم: کارتابل ویرایش‌ها و مقایسه تغییرات (Diff Viewer) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="activeTab === 'change_requests'" class="space-y-4">
-    <!-- Sub-tab Toggle: Personnel vs Vehicles -->
-    <div class="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
+    <!-- Sub-tab & Filter Bar -->
+    <div class="bg-white rounded-3xl p-4 border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <!-- Sub-tab Toggle: Personnel vs Vehicles -->
+      <div class="flex items-center gap-1.5 bg-slate-100/80 p-1 rounded-2xl border border-slate-200/70">
+        <button (click)="setCRSubTab('personnel')" [class]="changeRequestSubTab === 'personnel' ? 'bg-white text-indigo-700 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5">
+          <span>👥 پرسنل</span>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-md" [class]="changeRequestSubTab === 'personnel' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'">{{ personnelChangeRequests.length }}</span>
+        </button>
+        <button (click)="setCRSubTab('vehicles')" [class]="changeRequestSubTab === 'vehicles' ? 'bg-white text-indigo-700 font-black shadow-xs' : 'text-slate-600 hover:text-slate-900 font-bold'" class="px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1.5">
+          <span>🚚 ناوگان</span>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-md" [class]="changeRequestSubTab === 'vehicles' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200 text-slate-600'">{{ vehicleChangeRequests.length }}</span>
+        </button>
+      </div>
+
+      <!-- Status Filter Chips -->
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <button (click)="setCRStatusFilter('pending_manager')" [class.active-chip]="crStatusFilter === 'pending_manager'" class="filter-chip px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-bold transition-all cursor-pointer">
+          ⏳ در انتظار تصویب مدیر
+        </button>
+        <button (click)="setCRStatusFilter('approved')" [class.active-chip]="crStatusFilter === 'approved'" class="filter-chip px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-all cursor-pointer">
+          ✅ تصویب شده
+        </button>
+        <button (click)="setCRStatusFilter('rejected')" [class.active-chip]="crStatusFilter === 'rejected'" class="filter-chip px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer">
+          ❌ رد شده
+        </button>
+        <button (click)="setCRStatusFilter('ALL')" [class.active-chip]="crStatusFilter === 'ALL'" class="filter-chip px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer">
+          🌐 همه
+        </button>
+      </div>
+
+      <!-- Search Input -->
       <div class="flex items-center gap-2">
-        <button (click)="setCRSubTab('personnel')" [class]="changeRequestSubTab === 'personnel' ? 'bg-indigo-600 text-white font-black' : 'bg-slate-100 text-slate-700 font-bold'" class="px-4 py-2 rounded-xl text-xs transition-all cursor-pointer">
-          درخواست‌های تغییرات پرسنل ({{ personnelChangeRequests.length }})
-        </button>
-        <button (click)="setCRSubTab('vehicles')" [class]="changeRequestSubTab === 'vehicles' ? 'bg-indigo-600 text-white font-black' : 'bg-slate-100 text-slate-700 font-bold'" class="px-4 py-2 rounded-xl text-xs transition-all cursor-pointer">
-          درخواست‌های تغییرات ناوگان ({{ vehicleChangeRequests.length }})
-        </button>
+        <input type="text" [(ngModel)]="crSearchQuery" placeholder="🔍 جستجوی نام، کد ملی، ثبت‌کننده..." class="w-52 sm:w-64 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
       </div>
     </div>
 
@@ -362,7 +400,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let cr of personnelChangeRequests; let idx = index" class="hover:bg-slate-50/50">
+            <tr *ngFor="let cr of filteredPersonnelChangeRequests; let idx = index" class="hover:bg-slate-50/50">
               <td class="p-3.5 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
               <td class="p-3.5 font-bold text-slate-800">{{ cr.personnel_name }}</td>
               <td class="p-3.5 font-mono text-slate-700">{{ cr.personnel_national_code || cr.national_code || '-' }}</td>
@@ -390,8 +428,8 @@
                 </div>
               </td>
             </tr>
-            <tr *ngIf="personnelChangeRequests.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ درخواست تغییری برای پرسنل ثبت نشده است.</td>
+            <tr *ngIf="filteredPersonnelChangeRequests.length === 0">
+              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ درخواست تغییری با شرایط انتخابی برای پرسنل یافت نشد.</td>
             </tr>
           </tbody>
         </table>
@@ -414,7 +452,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr *ngFor="let cr of vehicleChangeRequests; let idx = index" class="hover:bg-slate-50/50">
+            <tr *ngFor="let cr of filteredVehicleChangeRequests; let idx = index" class="hover:bg-slate-50/50">
               <td class="p-3.5 text-center text-slate-400 font-bold">{{ idx + 1 }}</td>
               <td class="p-3.5 font-bold text-slate-800">{{ cr.driver_name }}</td>
               <td class="p-3.5 font-mono text-slate-700">{{ cr.plate_number }}</td>
@@ -442,8 +480,8 @@
                 </div>
               </td>
             </tr>
-            <tr *ngIf="vehicleChangeRequests.length === 0">
-              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ درخواست تغییری برای ناوگان ثبت نشده است.</td>
+            <tr *ngIf="filteredVehicleChangeRequests.length === 0">
+              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ درخواست تغییری با شرایط انتخابی برای ناوگان یافت نشد.</td>
             </tr>
           </tbody>
         </table>
@@ -506,6 +544,134 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۵. تب پنجم: فاکتورهای هزینه جهت تصویب پرداخت -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'invoices'" class="space-y-4">
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span>🧾</span>
+          <span>فاکتورهای هزینه و اسناد خرید نیازمند مجوز پرداخت مدیریت</span>
+        </h3>
+        <button (click)="loadInvoices()" class="btn-icon-square btn-icon-slate" title="رفرش فاکتورها" aria-label="رفرش">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" [class.animate-spin]="isLoading">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3">شماره فاکتور</th>
+              <th class="p-3">طرف‌حساب</th>
+              <th class="p-3">بخش / پروژه</th>
+              <th class="p-3">مبلغ کل (ریال)</th>
+              <th class="p-3">تاریخ فاکتور</th>
+              <th class="p-3">وضعیت</th>
+              <th class="p-3 text-center">عملیات مدیر</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-slate-700">
+            <tr *ngFor="let inv of invoicesList" class="hover:bg-slate-50 transition-colors">
+              <td class="p-3 font-mono font-bold text-slate-900">{{ inv.invoice_number || inv.id }}</td>
+              <td class="p-3 font-bold">{{ inv.counterparty_name || '—' }}</td>
+              <td class="p-3">{{ inv.section_name || '—' }}</td>
+              <td class="p-3 font-mono font-black text-indigo-700">{{ (inv.total_amount || 0) | number }}</td>
+              <td class="p-3 font-mono">{{ inv.issue_date_shamsi || inv.date || '—' }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-indigo-50 text-indigo-700 border-indigo-200">
+                  {{ inv.status === 'pending_manager' ? 'در انتظار تایید مدیر' : (inv.status_display || inv.status) }}
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button (click)="approveInvoiceManager(inv)" class="px-2.5 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs">
+                    ✓ صدور مجوز پرداخت
+                  </button>
+                  <button (click)="rejectInvoiceManager(inv)" class="px-2.5 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                    ✕ بازنگری / رد
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="invoicesList.length === 0">
+              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ فاکتوری در انتظار تصویب مدیر نمی‌باشد.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ۶. تب ششم: اسناد تنخواه‌گردان -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="activeTab === 'petty_cash'" class="space-y-4">
+    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+          <span>💰</span>
+          <span>اسناد و تراکنش‌های تنخواه‌گردان کارگاه‌ها نیازمند مجوز مدیریت</span>
+        </h3>
+        <button (click)="loadPettyCash()" class="btn-icon-square btn-icon-slate" title="رفرش تنخواه" aria-label="رفرش">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" [class.animate-spin]="isLoading">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-right text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+            <tr>
+              <th class="p-3">عنوان هزینه</th>
+              <th class="p-3">تنخواه‌دار</th>
+              <th class="p-3">بخش</th>
+              <th class="p-3">مبلغ (ریال)</th>
+              <th class="p-3">تاریخ</th>
+              <th class="p-3">وضعیت</th>
+              <th class="p-3 text-center">عملیات مدیر</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-slate-700">
+            <tr *ngFor="let pc of pettyCashList" class="hover:bg-slate-50 transition-colors">
+              <td class="p-3 font-bold text-slate-900">{{ pc.title || pc.id }}</td>
+              <td class="p-3">{{ pc.custodian_name || '—' }}</td>
+              <td class="p-3">{{ pc.section_name || '—' }}</td>
+              <td class="p-3 font-mono font-black text-indigo-700">{{ (pc.amount || 0) | number }}</td>
+              <td class="p-3 font-mono">{{ pc.date_shamsi || pc.created_at || '—' }}</td>
+              <td class="p-3">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                  {{ pc.status === 'approved' ? 'تایید حسابدار / در انتظار مدیر' : pc.status }}
+                </span>
+              </td>
+              <td class="p-3 text-center">
+                <div class="flex items-center justify-center gap-1.5">
+                  <button (click)="approvePettyCashManager(pc)" class="px-2.5 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs">
+                    ✓ تایید پرداخت
+                  </button>
+                  <button (click)="rejectPettyCashManager(pc)" class="px-2.5 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                    ✕ بازنگری / رد
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="pettyCashList.length === 0">
+              <td colspan="7" class="p-8 text-center text-slate-400 font-medium">هیچ سند تنخواهی در انتظار تایید مدیریت نمی‌باشد.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- MODAL: پنجره مقایسه تغییرات (Diff Viewer Modal) -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <div *ngIf="isDiffModalOpen && selectedDiffCR" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -536,11 +702,36 @@
         </table>
       </div>
 
+      <!-- تاریخچه و خط زمانی ممیزی گردش کار (Workflow Audit Timeline) -->
+      <div *ngIf="diffAuditLogs.length > 0" class="p-3 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2">
+        <h4 class="text-[11px] font-black text-slate-700 flex items-center gap-1.5">
+          <span>⏱️</span>
+          <span>تاریخچه گردش کار و ممیزی (Audit Trail)</span>
+        </h4>
+        <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+          <div *ngFor="let log of diffAuditLogs" class="text-[11px] p-2 rounded-xl bg-white border border-slate-200/60 flex items-center justify-between shadow-2xs">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-800">{{ log.actor_name || 'کاربر سیستم' }}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                [ngClass]="{
+                  'bg-emerald-100 text-emerald-800': log.action === 'approve',
+                  'bg-amber-100 text-amber-800': log.action === 'revision',
+                  'bg-rose-100 text-rose-800': log.action === 'reject'
+                }">
+                {{ log.action_display || log.action }}
+              </span>
+              <span *ngIf="log.reason" class="text-slate-500 italic">«{{ log.reason }}»</span>
+            </div>
+            <span class="text-slate-400 font-mono text-[10px]">{{ log.created_at_jalali || log.created_at }}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
         <button (click)="isDiffModalOpen = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">
           بستن
         </button>
-        <button *ngIf="(selectedDiffCR.status === 'pending_manager' || selectedDiffCR.status === 'accountant_approved') && canApprovePersonnelManager" (click)="approveChangeRequestManager(selectedDiffCR, diffTargetType)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
+        <button *ngIf="(selectedDiffCR.status === 'pending_manager' || selectedDiffCR.status === 'accountant_approved') && (diffTargetType === 'personnel' ? canApprovePersonnelManager : canApproveFleetManager)" (click)="approveChangeRequestManager(selectedDiffCR, diffTargetType)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer">
           ✅ تصویب نهایی و اعمال تغییرات روی پرونده
         </button>
       </div>
@@ -563,6 +754,36 @@
         <button (click)="isRejectModalOpen = false" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
         <button (click)="confirmProfileRejectOrRevision()" class="px-4 py-2 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer" [ngClass]="rejectActionType === 'reject' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-purple-600 hover:bg-purple-700'">
           ثبت نهایی اقدام
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: ثبت توضیحات و تصویب نهایی مدیر (Approval Note Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isApprovalModalOpen" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm font-black">✅</span>
+          <h3 class="text-sm font-black text-slate-800">
+            تصویب نهایی و فعال‌سازی: {{ approvalTargetName }}
+          </h3>
+        </div>
+        <button (click)="closeApprovalModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+      <p class="text-xs text-slate-500">
+        با تصویب نهایی مدیریت، پرونده فعال و در سیستم‌های حضورغیاب، مالی و کارکرد قابل استفاده خواهد شد. در صورت تمایل دستور یا یادداشت تصویب خود را درج فرمایید:
+      </p>
+      
+      <textarea [(ngModel)]="approvalNoteText" rows="3" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="یادداشت / دستور تصویب نهایی مدیر (اختیاری)..."></textarea>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button (click)="closeApprovalModal()" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">انصراف</button>
+        <button (click)="confirmApprovalWithNote()" [disabled]="isApproving" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5">
+          <span *ngIf="isApproving" class="animate-spin text-xs">⏳</span>
+          <span>✓ تصویب نهایی و فعال‌سازی</span>
         </button>
       </div>
     </div>

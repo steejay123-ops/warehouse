@@ -121,6 +121,14 @@ export class FinanceCartable implements OnInit, OnDestroy {
   rejectTargetName = '';
   rejectReasonText = '';
 
+  // Approval Note Modal State
+  isApprovalModalOpen = false;
+  approvalTargetType: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr' = 'personnel';
+  approvalTargetId: number | null = null;
+  approvalTargetName = '';
+  approvalNoteText = '';
+  isApproving = false;
+
   private querySub!: Subscription;
 
   constructor(
@@ -291,9 +299,63 @@ export class FinanceCartable implements OnInit, OnDestroy {
     });
   }
 
-  approvePersonnelFinance(p: PersonnelProfile): void {
+  openApprovalModal(id: number, name: string, type: 'personnel' | 'vehicle' | 'personnel_cr' | 'vehicle_cr'): void {
+    this.approvalTargetId = id;
+    this.approvalTargetName = name;
+    this.approvalTargetType = type;
+    this.approvalNoteText = '';
+    this.isApprovalModalOpen = true;
+    this.cdr.detectChanges();
+  }
+
+  closeApprovalModal(): void {
+    this.isApprovalModalOpen = false;
+    this.approvalTargetId = null;
+    this.approvalTargetName = '';
+    this.approvalNoteText = '';
+    this.cdr.detectChanges();
+  }
+
+  confirmApprovalWithNote(): void {
+    if (!this.approvalTargetId) return;
+    const id = this.approvalTargetId;
+    const note = this.approvalNoteText.trim() || undefined;
+    const type = this.approvalTargetType;
+    this.isApproving = true;
+
+    let req$: any;
+    if (type === 'personnel') {
+      req$ = note ? this.api.approvePersonnelFinance(id, note) : this.api.approvePersonnelFinance(id);
+    } else if (type === 'vehicle') {
+      req$ = note ? this.api.approveVehicleFinance(id, note) : this.api.approveVehicleFinance(id);
+    } else if (type === 'personnel_cr') {
+      req$ = note ? this.api.approvePersonnelChangeRequestFinance(id, note) : this.api.approvePersonnelChangeRequestFinance(id);
+    } else if (type === 'vehicle_cr') {
+      req$ = note ? this.api.approveVehicleChangeRequestFinance(id, note) : this.api.approveVehicleChangeRequestFinance(id);
+    }
+
+    if (req$) {
+      req$.subscribe({
+        next: (res: any) => {
+          this.isApproving = false;
+          this.toast.show('success', res.message || 'تایید مالی با موفقیت ثبت شد و پرونده به کارتابل مدیر ارسال گردید.');
+          this.closeApprovalModal();
+          this.isDiffModalOpen = false;
+          this.loadFinalApprovalsData();
+        },
+        error: (err: any) => {
+          this.isApproving = false;
+          this.toast.show('error', err?.error?.error || 'خطا در ثبت تایید مالی');
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  approvePersonnelFinance(p: PersonnelProfile, note?: string): void {
     if (!p.id) return;
-    this.api.approvePersonnelFinance(p.id).subscribe({
+    const req$ = note ? this.api.approvePersonnelFinance(p.id, note) : this.api.approvePersonnelFinance(p.id);
+    req$.subscribe({
       next: (res: any) => {
         this.toast.show('success', res.message || 'تایید مالی با موفقیت صادر و پرونده پرسنل جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadFinalApprovalsData();
@@ -304,9 +366,10 @@ export class FinanceCartable implements OnInit, OnDestroy {
     });
   }
 
-  approveVehicleFinance(v: VehicleDriverProfile): void {
+  approveVehicleFinance(v: VehicleDriverProfile, note?: string): void {
     if (!v.id) return;
-    this.api.approveVehicleFinance(v.id).subscribe({
+    const req$ = note ? this.api.approveVehicleFinance(v.id, note) : this.api.approveVehicleFinance(v.id);
+    req$.subscribe({
       next: (res: any) => {
         this.toast.show('success', res.message || 'تایید مالی با موفقیت صادر و پرونده ناوگان جهت تصویب نهایی به کارتابل مدیر ارسال گردید.');
         this.loadFinalApprovalsData();
@@ -317,10 +380,10 @@ export class FinanceCartable implements OnInit, OnDestroy {
     });
   }
 
-  approveChangeRequestFinance(cr: any, type: 'personnel' | 'vehicle'): void {
+  approveChangeRequestFinance(cr: any, type: 'personnel' | 'vehicle', note?: string): void {
     const req$ = type === 'personnel'
-      ? this.api.approvePersonnelChangeRequestFinance(cr.id)
-      : this.api.approveVehicleChangeRequestFinance(cr.id);
+      ? (note ? this.api.approvePersonnelChangeRequestFinance(cr.id, note) : this.api.approvePersonnelChangeRequestFinance(cr.id))
+      : (note ? this.api.approveVehicleChangeRequestFinance(cr.id, note) : this.api.approveVehicleChangeRequestFinance(cr.id));
 
     req$.subscribe({
       next: (res: any) => {

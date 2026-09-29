@@ -169,11 +169,22 @@ export class ManagerDashboardComponent implements OnInit, OnDestroy {
 
   refreshData(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.toast.info('شاخص‌های مدیریتی با آخرین اطلاعات مالی و کارکرد همگام‌سازی شد.');
-      this.cdr.detectChanges();
-    }, 300);
+    this.personnelApi.getManagerCartable().subscribe({
+      next: (data: any) => {
+        this.isLoading = false;
+        if (data?.counts) {
+          this.kpiSummary.pendingApprovalsCount = data.counts.total_pending || 0;
+          if (data.counts.personnel) this.kpiSummary.activePersonnelCount = data.counts.personnel;
+          if (data.counts.vehicles) this.kpiSummary.activeFleetCount = data.counts.vehicles;
+        }
+        this.toast.info('شاخص‌های مدیریتی با کارتابل تصویب مدیر همگام‌سازی شد.');
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   clearSearch(): void {

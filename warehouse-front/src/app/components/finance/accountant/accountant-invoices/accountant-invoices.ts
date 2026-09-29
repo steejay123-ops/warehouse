@@ -7,7 +7,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 import { StateService } from '../../../../services/state.service';
 import { ToastService } from '../../../../shared/components/toast/toast.component';
 import { PersonnelApiService } from '../../../../core/api/personnel-api.service';
-import { ProjectSection } from '../../../../core/models/personnel.model';
+import { ProjectSection, ExpenseInvoice } from '../../../../core/models/personnel.model';
 
 @Component({
   selector: 'app-accountant-invoices-hub',
@@ -28,7 +28,8 @@ export class AccountantInvoicesHubComponent implements OnInit, OnDestroy {
   fiscalYear = '1405';
 
   isLoading = false;
-  items: any[] = [];
+  allInvoices: ExpenseInvoice[] = [];
+  items: ExpenseInvoice[] = [];
 
   statusCounters = {
     pending_audit: 0,
@@ -115,7 +116,7 @@ export class AccountantInvoicesHubComponent implements OnInit, OnDestroy {
   switchSubTab(tab: 'pending_audit' | 'booked' | 'all'): void {
     this.activeSubTab = tab;
     this.syncUrlParams();
-    this.fetchInvoices();
+    this.updateViewAndCounters();
   }
 
   syncUrlParams(): void {
@@ -132,23 +133,101 @@ export class AccountantInvoicesHubComponent implements OnInit, OnDestroy {
 
   fetchInvoices(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.statusCounters = {
-        pending_audit: this.items.filter(x => x.status === 'pending_accountant').length,
-        booked: this.items.filter(x => x.status === 'booked' || x.status === 'approved').length,
-        all: this.items.length
-      };
-      this.cdr.detectChanges();
-    }, 200);
+    const params: { section_id?: number; search?: string } = {};
+    if (this.selectedSectionId) params.section_id = this.selectedSectionId;
+    if (this.searchQuery?.trim()) params.search = this.searchQuery.trim();
+
+    this.personnelApi.getExpenseInvoices(params).subscribe({
+      next: (data: ExpenseInvoice[]) => {
+        this.isLoading = false;
+        this.allInvoices = data || [];
+        this.updateViewAndCounters();
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در دریافت فاکتورهای حسابداری: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
-  bookDocument(item: any): void {
-    this.toast.success(`سند حسابداری فاکتور ${item.invoice_number || ''} صادر و ثبت دفتر شد.`);
+  updateViewAndCounters(): void {
+    const list = this.allInvoices;
+    this.statusCounters = {
+      pending_audit: list.filter(x => x.status === 'pending_accountant').length,
+      booked: list.filter(x => ['pending_manager', 'ready_to_pay', 'paid'].includes(x.status)).length,
+      all: list.length
+    };
+
+    if (this.activeSubTab === 'pending_audit') {
+      this.items = list.filter(x => x.status === 'pending_accountant');
+    } else if (this.activeSubTab === 'booked') {
+      this.items = list.filter(x => ['pending_manager', 'ready_to_pay', 'paid'].includes(x.status));
+    } else {
+      this.items = list;
+    }
+  }
+
+  bookDocument(item: ExpenseInvoice): void {
+    if (!item.id) return;
+    this.isLoading = true;
+    this.personnelApi.approveExpenseInvoice(item.id).subscribe({
+      next: () => {
+        this.isLoading = false;
+        this.toast.success(`سند حسابداری فاکتور ${item.invoice_number || ''} صادر و پرونده جهت تایید نهایی به مدیر ارسال شد.`);
+        this.fetchInvoices();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در صدور سند حسابداری: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  rejectDocument(item: ExpenseInvoice): void {
+    if (!item.id) return;
+    const reason = window.prompt(`علت بازگرداندن فاکتور شماره ${item.invoice_number || ''} به سرپرست را وارد کنید:`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      this.toast.warning('ثبت دلیل عودت الزامی است.');
+      return;
+    }
+    this.isLoading = true;
+    this.personnelApi.requestRevisionExpenseInvoice(item.id, reason.trim()).subscribe({
+      next: () => {
+        this.isLoading = false;
+        this.toast.warning(`فاکتور شماره ${item.invoice_number || ''} جهت بازنگری به سرپرست برگردانده شد.`);
+        this.fetchInvoices();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در ارجاع به بازنگری: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   exportExcel(): void {
     this.toast.info('در حال تولید فایل اکسل ممیزی فاکتورها...');
+    this.personnelApi.exportExpenseInvoicesExcel({
+      section_id: this.selectedSectionId || undefined,
+      status: this.activeSubTab === 'pending_audit' ? 'pending_accountant' : undefined
+    }).subscribe({
+      next: (blob: Blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Accountant_Invoices_${this.selectedSectionId || 'all'}.xlsx`;
+        a.click();
+        window.URL.revokeObjectURL(url);
+        this.toast.success('فایل اکسل ممیزی فاکتورها دریافت شد.');
+      },
+      error: () => {
+        this.toast.error('خطا در دانلود فایل اکسل.');
+      }
+    });
   }
 
   importExcel(): void {
@@ -158,5 +237,6 @@ export class AccountantInvoicesHubComponent implements OnInit, OnDestroy {
   clearSearch(): void {
     this.searchQuery = '';
     this.syncUrlParams();
+    this.fetchInvoices();
   }
 }

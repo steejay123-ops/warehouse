@@ -49,12 +49,13 @@
             type="button"
             (click)="switchSubTab('change_requests')"
             [ngClass]="activeSubTab === 'change_requests' ? 'bg-white text-indigo-700 shadow-xs font-black' : 'text-slate-600 hover:text-slate-900 font-bold'"
-            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+            class="px-2.5 py-1 rounded-lg text-xs transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer relative">
             <span>🔄 درخواست‌های تغییرات</span>
             <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-md"
-                  [ngClass]="activeSubTab === 'change_requests' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600'">
+                  [ngClass]="statusCounters.change_requests > 0 && activeSubTab !== 'change_requests' ? 'bg-amber-500 text-white animate-pulse' : (activeSubTab === 'change_requests' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-200/70 text-slate-600')">
               {{ statusCounters.change_requests }}
             </span>
+            <span *ngIf="statusCounters.change_requests > 0 && activeSubTab !== 'change_requests'" class="w-2 h-2 rounded-full bg-amber-500 inline-block animate-ping"></span>
           </button>
 
           <button
@@ -184,7 +185,7 @@
               <td class="p-3 font-mono text-[11px]">{{ item.sheba_number }}</td>
               <td class="p-3 text-center">
                 <div class="flex items-center justify-center gap-1.5">
-                  <button (click)="approvePersonnel(item)" class="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                  <button (click)="openApprovalModal('personnel', item)" class="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
                     ✓ تایید پرونده
                   </button>
                   <button (click)="rejectPersonnel(item)" class="px-2 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
@@ -231,7 +232,7 @@
               <td class="p-3 font-mono">{{ item.owner_national_code }}</td>
               <td class="p-3 text-center">
                 <div class="flex items-center justify-center gap-1.5">
-                  <button (click)="approveVehicle(item)" class="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
+                  <button (click)="openApprovalModal('vehicle', item)" class="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
                     ✓ تایید ناوگان
                   </button>
                   <button (click)="rejectVehicle(item)" class="px-2 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
@@ -313,7 +314,7 @@
                   </button>
                   <button
                     type="button"
-                    (click)="approvePersonnelChange(cr)"
+                    (click)="openApprovalModal('personnel_cr', cr)"
                     class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition-all cursor-pointer shadow-2xs active:scale-95"
                     title="تایید مرحله اول سرپرست و ارسال به حسابداری">
                     ✓ تایید سرپرست
@@ -388,7 +389,7 @@
                   </button>
                   <button
                     type="button"
-                    (click)="approveVehicleChange(cr)"
+                    (click)="openApprovalModal('vehicle_cr', cr)"
                     class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-black transition-all cursor-pointer shadow-2xs active:scale-95"
                     title="تایید مرحله اول سرپرست و ارسال به حسابداری">
                     ✓ تایید سرپرست
@@ -457,6 +458,31 @@
         </table>
       </div>
 
+      <!-- تاریخچه و خط زمانی ممیزی گردش کار (Workflow Audit Timeline) -->
+      <div *ngIf="diffAuditLogs.length > 0" class="p-3 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2">
+        <h4 class="text-[11px] font-black text-slate-700 flex items-center gap-1.5">
+          <span>⏱️</span>
+          <span>تاریخچه گردش کار و ممیزی (Audit Trail)</span>
+        </h4>
+        <div class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+          <div *ngFor="let log of diffAuditLogs" class="text-[11px] p-2 rounded-xl bg-white border border-slate-200/60 flex items-center justify-between shadow-2xs">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-800">{{ log.actor_name || 'کاربر سیستم' }}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                [ngClass]="{
+                  'bg-emerald-100 text-emerald-800': log.action === 'approve',
+                  'bg-amber-100 text-amber-800': log.action === 'revision',
+                  'bg-rose-100 text-rose-800': log.action === 'reject'
+                }">
+                {{ log.action_display || log.action }}
+              </span>
+              <span *ngIf="log.reason" class="text-slate-500 italic">«{{ log.reason }}»</span>
+            </div>
+            <span class="text-slate-400 font-mono text-[10px]">{{ log.created_at_jalali || log.created_at }}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
         <button (click)="isDiffModalOpen = false" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer">
           بستن
@@ -469,9 +495,59 @@
         </button>
         <button
           type="button"
-          (click)="diffTargetType === 'personnel' ? approvePersonnelChange(selectedDiffCR) : approveVehicleChange(selectedDiffCR)"
+          (click)="openApprovalModal(diffTargetType === 'personnel' ? 'personnel_cr' : 'vehicle_cr', selectedDiffCR)"
           class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer transition-all active:scale-95">
           ✓ تایید سرپرست (ارسال به حسابداری)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: ثبت توضیحات و تایید پرونده (Approval Note Modal) -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div *ngIf="isApprovalModalOpen && approvalTarget" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in duration-200 border border-slate-200/80">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm font-black">✓</span>
+          <h3 class="text-sm font-black text-slate-800">{{ approvalTarget.title }}</h3>
+        </div>
+        <button (click)="closeApprovalModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold cursor-pointer">&times;</button>
+      </div>
+
+      <div class="space-y-3">
+        <p class="text-xs text-slate-600 leading-relaxed">
+          با تایید این پرونده، اطلاعات جهت بررسی مالی و احکام استخدامی به کارتابل حسابداری ارجاع خواهد شد. در صورت تمایل می‌توانید یادداشت یا توضیحات نظارتی خود را ثبت نمایید:
+        </p>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">
+            یادداشت / توضیحات تایید سرپرست (اختیاری):
+          </label>
+          <textarea
+            [(ngModel)]="approvalNote"
+            rows="3"
+            placeholder="مثال: مدارک هویتی و قرارداد بررسی و با شرایط کارگاهی تطبیق دارد..."
+            class="w-full text-xs p-3 rounded-2xl border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all placeholder:text-slate-400 bg-slate-50/50">
+          </textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+        <button
+          type="button"
+          (click)="closeApprovalModal()"
+          class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-all">
+          انصراف
+        </button>
+        <button
+          type="button"
+          (click)="confirmApproval()"
+          [disabled]="isApproving"
+          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5">
+          <span *ngIf="isApproving" class="animate-spin text-xs">⏳</span>
+          <span>✓ تایید و ارسال به حسابداری</span>
         </button>
       </div>
     </div>

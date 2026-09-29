@@ -171,15 +171,25 @@
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border"
                 [ngClass]="{
                   'bg-amber-50 text-amber-800 border-amber-200': item.status === 'pending_supervisor',
-                  'bg-emerald-50 text-emerald-800 border-emerald-200': item.status === 'approved' || item.status === 'pending_accountant',
+                  'bg-sky-50 text-sky-800 border-sky-200': item.status === 'pending_accountant',
+                  'bg-indigo-50 text-indigo-800 border-indigo-200': item.status === 'pending_manager',
+                  'bg-purple-50 text-purple-800 border-purple-200': item.status === 'ready_to_pay',
+                  'bg-emerald-50 text-emerald-800 border-emerald-200': item.status === 'paid',
                   'bg-rose-50 text-rose-800 border-rose-200': item.status === 'rejected',
+                  'bg-amber-100 text-amber-900 border-amber-300': item.status === 'revision_required',
                   'bg-slate-100 text-slate-700 border-slate-200': item.status === 'draft'
                 }">
-                {{ item.status === 'pending_supervisor' ? '⏳ در انتظار سرپرست' : (item.status === 'approved' ? '✅ تایید شده' : item.status) }}
+                {{ item.status === 'pending_supervisor' ? '⏳ در انتظار سرپرست' :
+                   item.status === 'pending_accountant' ? '💼 در انتظار حسابداری' :
+                   item.status === 'pending_manager' ? '👔 در انتظار مدیریت' :
+                   item.status === 'ready_to_pay' ? '🏦 آماده پرداخت' :
+                   item.status === 'paid' ? '✅ تسویه خزانه‌داری' :
+                   item.status === 'revision_required' ? '⚠️ نیازمند بازنگری' :
+                   item.status === 'rejected' ? '❌ ابطال شده' : 'پیش‌نویس' }}
               </span>
             </td>
             <td class="p-3 text-center">
-              <div class="flex items-center justify-center gap-1.5">
+              <div *ngIf="item.status === 'pending_supervisor'" class="flex items-center justify-center gap-1.5">
                 <button
                   type="button"
                   (click)="approveSingle(item)"
@@ -192,6 +202,9 @@
                   class="px-2 py-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg text-[11px] font-bold transition-all cursor-pointer">
                   ✕ عودت
                 </button>
+              </div>
+              <div *ngIf="item.status !== 'pending_supervisor'" class="text-[11px] text-slate-400 font-bold">
+                {{ item.status === 'paid' ? 'تسویه شده' : (item.status === 'rejected' ? 'ابطال شده' : 'ارسال شده') }}
               </div>
             </td>
           </tr>

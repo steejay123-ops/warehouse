@@ -130,12 +130,61 @@ export class SupervisorPeriodLockHubComponent implements OnInit, OnDestroy {
     });
   }
 
+  monthMap: Record<string, string> = {
+    'فروردین': '01',
+    'اردیبهشت': '02',
+    'خرداد': '03',
+    'تیر': '04',
+    'مرداد': '05',
+    'شهریور': '06',
+    'مهر': '07',
+    'آبان': '08',
+    'آذر': '09',
+    'دی': '10',
+    'بهمن': '11',
+    'اسفند': '12'
+  };
+
+  currentPeriodId: number | null = null;
+
   fetchPeriodData(): void {
     this.isLoading = true;
-    setTimeout(() => {
-      this.isLoading = false;
-      this.cdr.detectChanges();
-    }, 200);
+    const m = this.monthMap[this.selectedMonth] || '04';
+    const yearMonth = `${this.fiscalYear}/${m}`;
+
+    this.personnelApi.getSupervisorCartable().subscribe({
+      next: (cartable: any) => {
+        const periods = cartable?.periods || [];
+        const match = periods.find((p: any) => p.year_month === yearMonth);
+        if (match) {
+          this.currentPeriodId = match.id;
+          this.currentPeriodSummary.is_locked = match.status === 'LOCKED' || match.status === 'SUBMITTED_SUPERVISOR' || match.status === 'SUBMITTED_ACCOUNTANT';
+        }
+
+        this.personnelApi.getAttendanceMonthlySummary(null, yearMonth).subscribe({
+          next: (summaryRes: any) => {
+            this.isLoading = false;
+            const rows = summaryRes?.summary || [];
+            this.currentPeriodSummary = {
+              total_personnel: rows.length,
+              total_work_hours: rows.reduce((sum: number, r: any) => sum + (Number(r.total_work_hours) || 0), 0),
+              total_overtime_hours: rows.reduce((sum: number, r: any) => sum + (Number(r.total_overtime_hours) || 0), 0),
+              pending_approvals: summaryRes?.is_locked ? 0 : 0,
+              is_locked: summaryRes?.is_locked || this.currentPeriodSummary.is_locked
+            };
+            this.cdr.detectChanges();
+          },
+          error: () => {
+            this.isLoading = false;
+            this.cdr.detectChanges();
+          }
+        });
+      },
+      error: () => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   lockAndSubmitPeriod(): void {
@@ -143,13 +192,30 @@ export class SupervisorPeriodLockHubComponent implements OnInit, OnDestroy {
       this.toast.error('ابتدا کلیه کارکردهای در انتظار تایید را نهایی کنید.');
       return;
     }
+
+    const m = this.monthMap[this.selectedMonth] || '04';
+    const yearMonth = `${this.fiscalYear}/${m}`;
+
     this.isLocking = true;
-    setTimeout(() => {
-      this.isLocking = false;
-      this.currentPeriodSummary.is_locked = true;
-      this.toast.success(`دوره کارکرد ${this.selectedMonth} ماه ${this.fiscalYear} با موفقیت قفل و به کارتابل حسابداری ارسال شد.`);
-      this.cdr.detectChanges();
-    }, 500);
+    this.personnelApi.postCartableAction('supervisor', {
+      action: 'approve',
+      model: 'period',
+      id: this.currentPeriodId || 0,
+      year_month: yearMonth,
+      warehouse_id: this.selectedSection?.project_id || this.selectedSection?.project || null
+    }).subscribe({
+      next: () => {
+        this.isLocking = false;
+        this.currentPeriodSummary.is_locked = true;
+        this.toast.success(`دوره کارکرد ${this.selectedMonth} ماه ${this.fiscalYear} با موفقیت قفل و به کارتابل حسابداری ارسال شد.`);
+        this.fetchPeriodData();
+      },
+      error: (err: any) => {
+        this.isLocking = false;
+        this.toast.error('خطا در قفل دوره: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   exportExcel(): void {

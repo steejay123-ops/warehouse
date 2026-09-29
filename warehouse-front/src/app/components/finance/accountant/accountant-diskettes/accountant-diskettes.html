@@ -11,6 +11,19 @@
           <span class="text-xs font-black text-blue-700 font-mono">{{ selectedMonth }} {{ fiscalYear }}</span>
         </div>
 
+        <!-- انتخابگر پروژه -->
+        <div *ngIf="projects.length > 0" class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-xl">
+          <span class="text-[11px] font-bold text-slate-500">پروژه:</span>
+          <select
+            [(ngModel)]="selectedProjectId"
+            (change)="syncUrlParams()"
+            class="bg-transparent text-xs font-black text-blue-700 focus:outline-none cursor-pointer">
+            <option *ngFor="let proj of projects" [value]="proj.id">
+              {{ proj.code ? ('(' + proj.code + ') ') : '' }}{{ proj.name }}
+            </option>
+          </select>
+        </div>
+
         <!-- تب‌های فرعی در کپسول محصور -->
         <div class="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 overflow-x-auto w-full md:w-auto">
           <button

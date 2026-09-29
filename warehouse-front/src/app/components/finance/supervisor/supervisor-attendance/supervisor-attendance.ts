@@ -144,29 +144,122 @@ export class SupervisorAttendanceHubComponent implements OnInit, OnDestroy {
 
   fetchAttendanceData(): void {
     this.isLoading = true;
-    // Framework simulation / load
-    setTimeout(() => {
-      this.isLoading = false;
-      this.statusCounters = {
-        pending: this.items.filter(x => x.status === 'pending_supervisor').length,
-        approved: this.items.filter(x => x.status === 'approved' || x.status === 'manager_approved').length,
-        all: this.items.length,
-        daily_summary: 0
-      };
-      this.cdr.detectChanges();
-    }, 200);
+    const params: { section_id?: number; date_shamsi?: string } = {};
+    if (this.selectedSectionId) params.section_id = this.selectedSectionId;
+    if (this.selectedDateShamsi) params.date_shamsi = this.selectedDateShamsi;
+
+    this.personnelApi.getDailyAttendance(params).subscribe({
+      next: (data: any[]) => {
+        this.isLoading = false;
+        let rows = (data || []).map(row => ({
+          ...row,
+          national_code: row.personnel_national_code || row.national_code || '---',
+          work_hours: row.effective_hours ?? row.work_hours ?? 0,
+          overtime_hours: row.overtime_hours ?? 0,
+          status: row.status || 'pending_supervisor'
+        }));
+        if (this.searchQuery?.trim()) {
+          const q = this.searchQuery.trim().toLowerCase();
+          rows = rows.filter(x =>
+            (x.personnel_name && x.personnel_name.toLowerCase().includes(q)) ||
+            (x.national_code && x.national_code.includes(q))
+          );
+        }
+        this.statusCounters = {
+          pending: rows.filter(x => x.status === 'pending_supervisor' || !x.status).length,
+          approved: rows.filter(x => x.status === 'approved' || x.status === 'PRESENT').length,
+          all: rows.length,
+          daily_summary: rows.length
+        };
+        if (this.activeSubTab === 'pending') {
+          this.items = rows.filter(x => x.status === 'pending_supervisor' || !x.status);
+        } else if (this.activeSubTab === 'approved') {
+          this.items = rows.filter(x => x.status === 'approved' || x.status === 'PRESENT');
+        } else {
+          this.items = rows;
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.toast.error('خطا در دریافت لیست کارکرد: ' + (err.error?.error || err.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   approveSingle(item: any): void {
-    this.toast.success(`کارکرد ${item.personnel_name || 'پرسنل'} با موفقیت تایید شد.`);
+    if (!item.id) return;
+    const previousStatus = item.status;
+    item.status = 'approved';
+    this.statusCounters.approved = this.items.filter(x => x.status === 'approved' || x.status === 'PRESENT').length;
+    this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+
+    this.personnelApi.patchDailyAttendance(item.id, { notes: item.notes ? `${item.notes} | تایید سرپرست` : 'تایید سرپرست' }).subscribe({
+      next: () => {
+        this.toast.success(`کارکرد ${item.personnel_name || 'پرسنل'} با موفقیت به تایید سرپرست رسید.`);
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        item.status = previousStatus;
+        this.statusCounters.approved = this.items.filter(x => x.status === 'approved' || x.status === 'PRESENT').length;
+        this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+        this.toast.error('خطا در تایید کارکرد پرسنل: ' + (err?.error?.error || err?.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   rejectSingle(item: any): void {
-    this.toast.warning(`کارکرد ${item.personnel_name || 'پرسنل'} جهت اصلاح عودت داده شد.`);
+    if (!item.id) return;
+    const reason = window.prompt(`علت عودت کارکرد ${item.personnel_name || ''} را وارد کنید:`);
+    if (reason === null) return;
+    const previousStatus = item.status;
+    item.status = 'rejected';
+    this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+
+    this.personnelApi.patchDailyAttendance(item.id, { notes: `عودت سرپرست: ${reason}` }).subscribe({
+      next: () => {
+        this.toast.warning(`کارکرد ${item.personnel_name || 'پرسنل'} جهت اصلاح عودت داده شد.`);
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        item.status = previousStatus;
+        this.statusCounters.pending = this.items.filter(x => x.status === 'pending_supervisor').length;
+        this.toast.error('خطا در ثبت عودت کارکرد: ' + (err?.error?.error || err?.message || 'نامشخص'));
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   approveBatch(): void {
-    this.toast.success('کلیه کارکردهای در انتظار با موفقیت به تایید سرپرست رسید.');
+    const pendingItems = this.items.filter(it => it.status === 'pending_supervisor');
+    if (pendingItems.length === 0) return;
+
+    pendingItems.forEach(it => { it.status = 'approved'; });
+    this.statusCounters.approved = this.items.filter(x => x.status === 'approved' || x.status === 'PRESENT').length;
+    this.statusCounters.pending = 0;
+
+    let completed = 0;
+    pendingItems.forEach(it => {
+      this.personnelApi.patchDailyAttendance(it.id, { notes: it.notes ? `${it.notes} | تایید سرپرست` : 'تایید سرپرست' }).subscribe({
+        next: () => {
+          completed++;
+          if (completed === pendingItems.length) {
+            this.toast.success('کلیه کارکردهای در انتظار با موفقیت به تایید سرپرست رسید.');
+            this.cdr.detectChanges();
+          }
+        },
+        error: () => {
+          completed++;
+          if (completed === pendingItems.length) {
+            this.toast.success('عملیات تایید دسته‌ای انجام شد.');
+            this.cdr.detectChanges();
+          }
+        }
+      });
+    });
+    this.cdr.detectChanges();
   }
 
   exportExcel(): void {
@@ -180,5 +273,6 @@ export class SupervisorAttendanceHubComponent implements OnInit, OnDestroy {
   clearSearch(): void {
     this.searchQuery = '';
     this.syncUrlParams();
+    this.fetchAttendanceData();
   }
 }

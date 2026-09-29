@@ -197,13 +197,13 @@
         <tbody class="divide-y divide-slate-100 text-slate-700">
           <tr *ngFor="let item of items; let idx = index" class="hover:bg-slate-50/70 transition-colors">
             <td class="p-3 font-mono text-slate-400">{{ idx + 1 }}</td>
-            <td class="p-3 font-bold text-slate-800">{{ item.personnel_name }}</td>
+            <td class="p-3 font-bold text-slate-800">{{ item.personnel_name || item.full_name }}</td>
             <td class="p-3 font-mono text-slate-600">{{ item.national_code }}</td>
-            <td class="p-3 font-mono">{{ item.effective_days }} روز</td>
+            <td class="p-3 font-mono">{{ item.effective_days || item.insurance_days || 0 }} روز</td>
             <td class="p-3 font-mono font-bold">{{ item.gross_salary | number }}</td>
-            <td class="p-3 font-mono text-rose-600">{{ item.insurance_employee | number }}</td>
-            <td class="p-3 font-mono text-rose-600">{{ item.tax_amount | number }}</td>
-            <td class="p-3 font-mono font-bold text-emerald-600">{{ item.net_salary | number }}</td>
+            <td class="p-3 font-mono text-rose-600">{{ (item.insurance_employee || item.worker_insurance || 0) | number }}</td>
+            <td class="p-3 font-mono text-rose-600">{{ (item.tax_amount || item.income_tax || 0) | number }}</td>
+            <td class="p-3 font-mono font-bold text-emerald-600">{{ (item.net_salary || item.payable_amount || 0) | number }}</td>
             <td class="p-3 text-center">
               <button
                 type="button"

@@ -1,3 +1,5 @@
+- [Personnel MultiSection and Ergonomics Completed](Personnel_MultiSection_And_Ergonomics/walkthrough_personnel_multisection_and_ergonomics.md)
+- [Personnel MultiSection and Ergonomics Planned](Personnel_MultiSection_And_Ergonomics/implementation_plan_personnel_multisection_and_ergonomics.md)
 - [Fleet and Personnel Complete Synergy Planned](Fleet_And_Personnel_Complete_Synergy/implementation_plan_fleet_synergy.md)
 - [Attendance Ergonomics and Fleet Split Completed](Attendance_Ergonomics_And_Fleet_Split/walkthrough_attendance_ergonomics.md)
 - [Attendance Ergonomics and Fleet Split Planned](Attendance_Ergonomics_And_Fleet_Split/implementation_plan_attendance_ergonomics.md)

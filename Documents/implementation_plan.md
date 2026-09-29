@@ -266,7 +266,22 @@ graph TD
 * **چک‌لیست وظایف:** [`Documents/Personnel_Vehicle_Registration_Approval/task_personnel_registration_approval.md`](file:///e:/warehouse%20project/Documents/Personnel_Vehicle_Registration_Approval/task_personnel_registration_approval.md)
 * **هدف:** حل قطعی خطای ۴۰۰ اعتبارسنجی فیلد شرکت (`company: This field is required`)، پشتیبانی از ثبت یادداشت‌ها و شروط تایید توسط کلیه نقش‌ها (`approval_note`) در `WorkflowAuditLog`، و تفکیک وظایف ثبت هویتی از تکمیل احکام مالی و استخدامی در کارتابل مدیریت و حسابداری.
 
+---
+
+# 👥 طرح جامع پیاده‌سازی کارتابل «تایید پرسنل و ناوگان» در منوی حسابدار (Accountant New Profiles Hub)
+* **سند تفصیلی طرح:** [`Documents/Accountant_New_Profiles/implementation_plan_accountant_new_profiles.md`](file:///e:/warehouse%20project/Documents/Accountant_New_Profiles/implementation_plan_accountant_new_profiles.md)
+* **چک‌لیست وظایف:** [`Documents/Accountant_New_Profiles/task_accountant_new_profiles.md`](file:///e:/warehouse%20project/Documents/Accountant_New_Profiles/task_accountant_new_profiles.md)
+* **هدف:** ایجاد آیتم هفتم در منوی حسابدار تحت عنوان «👥 تایید پرسنل و ناوگان» با دسترسی به کامپوننت اختصاصی هماهنگ، بازاستفاده حداکثری از موتور محاسباتی مزد ۲۰ گانه، مودال ۴ تبِ احکام مالی، بیمه و شبا، و فراهم آوردن اختیارات کامل ویرایش و تایید مالی برای حسابدار.
+
+---
+
+# 🗂️ طرح جامع پیاده‌سازی معماری دو هاب بنیادین «پرسنل» و «ناوگان» در منوی سمت راست برای ۳ نقش سرپرست، حسابدار و مدیر (Triple-Role Dual-Hub Architecture)
+* **سند تفصیلی طرح:** [`Documents/Profiles_DualTab_Architecture/implementation_plan_profiles_dualtab.md`](file:///e:/warehouse%20project/Documents/Profiles_DualTab_Architecture/implementation_plan_profiles_dualtab.md)
+* **چک‌لیست وظایف:** [`Documents/Profiles_DualTab_Architecture/task_profiles_dualtab.md`](file:///e:/warehouse%20project/Documents/Profiles_DualTab_Architecture/task_profiles_dualtab.md)
+* **هدف:** تعبیه دو منوی اصلی و شاخص به نام‌های «👥 پرسنل» و «🚚 ناوگان» در منوی سمت راست (سایدبار) برای هر ۳ نقش سرپرست، حسابدار و مدیر، و تجمیع کلیه امور مربوطه (پرونده‌های جدید، کارکرد، احکام و حقوق، تسویه‌حساب و تغییرات) در قالب زیرتب‌های افقی در هر صفحه هاب، با حفظ ۱۰۰٪ سازگاری با روت‌های گذشته و پایداری در رفرش مرورگر (URL Query Params).
+
 </div>
+
 
 
 

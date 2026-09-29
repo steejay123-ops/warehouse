@@ -79,4 +79,22 @@ Application bundle generation complete. [36.960s] -> 0 Errors
 | **۴. لایه داده و وب‌سوکت** | ۴ مورد | عدم وجود اکسل، نبود وب‌سوکت، جستجوی بدون تاخیر | مودال ایمپورت اکسل، برودکست لحظه‌ای وب‌سوکت، دی‌بانس ۳۰۰ms جستجو |
 | **۵. لایه موبایل و تست خودکار** | ۳ مورد | جدول فاقد نمای کارتی، کمبود تست‌های DOM در فرانت‌اند | کارت‌های ارگونومیک موبایل، تست‌های سریع Vitest/jsdom، تست بیلد صفر خطا |
 
+---
+
+## ۶. پیاده‌سازی معماری دو هاب بنیادین «پرسنل» و «ناوگان» برای ۳ نقش سرپرست، حسابدار و مدیر (Triple-Role Dual-Hub Architecture)
+
+* **سند تفصیلی گزارش و راستی‌آزمایی:** [`Documents/Profiles_DualTab_Architecture/walkthrough_profiles_dualtab.md`](file:///e:/warehouse%20project/Documents/Profiles_DualTab_Architecture/walkthrough_profiles_dualtab.md)
+* **برنامه اجرایی (DUAL-SAVE):** [`Documents/Profiles_DualTab_Architecture/implementation_plan_profiles_dualtab.md`](file:///e:/warehouse%20project/Documents/Profiles_DualTab_Architecture/implementation_plan_profiles_dualtab.md)
+* **لیست تسک‌ها (DUAL-SAVE):** [`Documents/Profiles_DualTab_Architecture/task_profiles_dualtab.md`](file:///e:/warehouse%20project/Documents/Profiles_DualTab_Architecture/task_profiles_dualtab.md)
+* **وضعیت:** ✅ ۱۰۰٪ پیاده‌سازی و تست‌های ۵۳گانه با موفقیت کامل پاس شدند.
+
+| هاب / نقش | مسیر URL اصلی | زیرتب‌های فعال در کپسول افقی | ویژگی‌های شاخص پیاده‌سازی‌شده |
+| :--- | :--- | :--- | :--- |
+| **سرپرست: پرسنل** | `/app/finance/supervisor-personnel` | 🆕 در انتظار تایید، ⏱ کارکرد روزانه، 🔄 تغییرات، 📁 همه پرسنل | تایید کارکرد، یادداشت سرپرست، ثبت علت عودت و بازنگری مدارک |
+| **سرپرست: ناوگان** | `/app/finance/supervisor-fleet` | 🆕 خودروهای جدید، 🚚 کارکرد ماشین‌آلات، 🔄 تغییرات، 📁 همه ناوگان | تایید خودرو، کنترل راننده و مالک، نمایشگر مغایرت‌ها (Diff Viewer) |
+| **حسابدار: پرسنل** | `/app/finance/accountant-personnel` | 🆕 بررسی و احکام مالی، 💰 حقوق ماهانه، 🔄 تغییرات پرسنل، 📁 همه پرسنل | موتور ۲۰ رتبه قانون کار، اعتبارسنجی ISO 7064 Mod 97، تولید آنی شبا با کلید `⚡` |
+| **حسابدار: ناوگان** | `/app/finance/accountant-fleet` | 🆕 خودروها و نرخ کرایه، 🚚 تسویه‌حساب و کارکرد، 🔄 درخواست‌های تغییرات، 📁 همه ناوگان | تنظیم نرخ پایه کرایه و حساب، تسویه‌حساب ماهانه، تایید مالی به مدیر |
+| **مدیر: پرسنل** | `/app/finance/manager-personnel` | 🆕 پرونده‌های در انتظار تصویب، 📜 احکام و قراردادها، 🔄 تغییرات پرسنل، 📁 همه پرسنل | تصویب نهایی استخدام، درج یادداشت و شروط مدیریت، رد قطعی یا ارجاع |
+| **مدیر: ناوگان** | `/app/finance/manager-fleet` | 🆕 ناوگان در انتظار تایید، 🚚 تسویه‌حساب و کارکرد ماهانه، 🔄 تغییرات ناوگان، 📁 همه ناوگان فعال | تصویب نهایی خودروها، تایید صورت‌وضعیت‌های تسویه‌حساب، بررسی مغایرت‌ها |
+
 </div>

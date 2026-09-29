@@ -335,7 +335,7 @@ class PersonnelFullCycleTests(TestCase):
         v_payload = {
             "plate_number": "12ب345-67",
             "driver_name": "علی اکبری",
-            "driver_national_code": "2280009988",
+            "driver_national_code": "2280009986",
             "driver_phone": "09173334455",
             "vehicle_type": "pickup",
             "default_service_rate": 1800000,

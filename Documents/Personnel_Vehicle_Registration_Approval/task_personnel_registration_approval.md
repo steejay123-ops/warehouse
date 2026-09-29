@@ -25,10 +25,10 @@
     - [x] پیاده‌سازی مودال تایید با کادر متنی توضیحات اختیاری در کارتابل مدیر (`manager-approvals`) <!-- id: 17 -->
     - [x] اطمینان از امکان ویرایش و بازبینی اطلاعات مالی و احکام پیش از تصویب نهایی در کارتابل مدیریت/حسابداری <!-- id: 18 -->
 
-- [x] **فاز ۵: تست‌های جامع و اعتبارسنجی نهایی (Verification & Build)** <!-- id: 19 -->
+- [/] **فاز ۵: تست‌های جامع و اعتبارسنجی نهایی (Verification & Build)** <!-- id: 19 -->
     - [x] اجرای تست‌های خودکار فرانت‌اند (`employee-new-personnel.spec.ts` و `employee-new-vehicle.spec.ts` - ۱۱۱ تست پاس شد) <!-- id: 20 -->
     - [x] اجرای تست‌های خودکار کارتابل‌ها (`supervisor-new-profiles.spec.ts`، `finance-cartable.spec.ts`، `manager-approvals.spec.ts`، `personnel-approval-cycle.spec.ts` - ۲۳ تست پاس شد) <!-- id: 21 -->
     - [x] اجرای تست‌های خودکار بک‌اند (`tests_personnel_cycle.py` - ۷ تست کامل جنگو پاس شد) <!-- id: 22 -->
-    - [x] اجرای موفق `npm run build` بدون خطای کامپایل (خروج موفق کد ۰) <!-- id: 23 -->
+    - [/] اجرای موفق `npm run build` بدون خطای کامپایل <!-- id: 23 -->
 
 </div>

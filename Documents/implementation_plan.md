@@ -225,7 +225,7 @@ graph TD
 # 🏢 طرح جامع اصلاح و تحکیم معماری چندمستأجری سطح شرکت (نسخه ۴.۰)
 * **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/comprehensive_multi_tenant_remediation_plan.md)
 * **چک‌لیست وظایف:** [`Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_multi_tenant_remediation.md)
-* **هدف:** گذار کامل و ریشه‌ای سامane از معماری تک‌شرکتی انبار-محور به یک معماری اصولی و ایزوله چندشرکتی سازمانی (Enterprise Multi-Tenancy).
+* **هدف:** گذار کامل و ریشه‌ای سامانه از معماری تک‌شرکتی انبار-محور به یک معماری اصولی و ایزوله چندشرکتی سازمانی (Enterprise Multi-Tenancy).
 * **ارکان شش‌گانه طرح:**
   1. 🗄️ **تصحیح مدل‌ها و قیود یکتا:** تبدیل قیدهای سراسری کد پروژه (`FinancialProject.code`) و کدملی پرسنل (`PersonnelProfile.national_code`) به قیدهای یکتا به تفکیک شرکت (`unique_together`)؛ افزودن مستقیم کلید خارجی شرکت به مدل‌های `VehicleDriverProfile`، `ItemFieldDefinition` و ستون ایندکس‌شده `company_id` به `AuditLog`.
   2. 🛡️ **ارتقای میان‌افزار به نگهبان چندمستأجری (Tenant Guard Middleware):** اعتبارسنجی قطعی دسترسی کاربر در لحظه ورود درخواست به سرور و قطع دسترسی با پاسخ ۴۰۳ در صورت جعل هدر یا تلاش برای دسترسی به شرکت غیرمجاز.
@@ -234,7 +234,41 @@ graph TD
   5. 💼 **انعطاف در محاسبات حقوق و مالیات:** حذف شرط اجباری بودن انبار فیزیکی در بستن دوره کارکرد ماهانه و محاسبه حقوق ۵۸ ستونه، و ایزوله کردن کامل کوئری فیش‌های حقوقی.
   6. 🌐 **فرانت‌اند، هماهنگی URL و واکنش‌پذیری عمومی:** همگام‌سازی دوطرفه شرکت فعال با کوئری‌پارامترهای URL (`?cid=...`) جهت قطعیت پیوندها و اتصال مستقیم کامپوننت‌ها به سیگنال تغییر شرکت بدون نیاز به رفرش دستی.
 
+---
+
+# 🏢 طرح جامع یکپارچگی چندشرکتی: فرم کاربر، ایزولاسیون کش آفلاین و سوییچر سراسری هدر (نسخه ۴.۱)
+* **سند تفصیلی طرح:** [`Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v4.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/implementation_plan_company_architecture_v4.md)
+* **چک‌لیست وظایف:** [`Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v4.md`](file:///e:/warehouse%20project/Documents/Company_Multi_Tenant_Architecture/task_company_architecture_v4.md)
+* **هدف:** حل ریشه‌ای مشکلات فرم کاربر، عایق‌سازی کش IndexedDB در فرانت‌اند و در دسترس قرار دادن سوئیچر شرکت روی نوار بالای صفحه.
+* **ارکان پنج‌گانه طرح:**
+  1. 👤 **انتساب شرکت در فرم تعریف کاربر:** افزودن چک‌باکس چندانتخابی شرکت‌های مجاز و رادیوباتن شرکت پیش‌فرض در فرم کاربر و ثبت تراکنشی `UserCompanyAccess`.
+  2. ⚡ **عایق‌سازی کلید کش آفلاین:** الصاق شناسه شرکت به کلید کش در `offline.interceptor.ts` و ارسال `company_id` در `whService.getAll()` جهت جلوگیری قطعی از تداخل انبارها میان شرکت‌ها.
+  3. 🏬 **وابستگی پویای انبارها به شرکت انتخابی:** فیلتر آنی لیست انبارها در فرم کاربر بر مبنای شرکت‌های تیک‌خورده در همان فرم.
+  4. 🏢 **سوییچر شکیل شرکت در نوار بالای صفحه (Navbar):** تعبیه دکمه و منوی کشویی مدرن انتخاب شرکت روی هدر اصلی صفحه با نمایش آیکون و نام شرکت.
+  5. 🛡️ **فیلترینگ و اعتبارسنجی بک‌اند کاربران:** اعمال فیلتر شرکت در `UserViewSet` و جلوگیری از انتساب انبار نامرتبط با شرکت کاربر.
+
+---
+
+# 🔄 طرح جامع و گزارش ممیزی عمیق چرخه گردش‌کار سازمانی (از کارمند تا مدیر)
+* **سند تفصیلی طرح:** [`Documents/Workflow_Lifecycle_Audit/implementation_plan_workflow_lifecycle_audit.md`](file:///e:/warehouse%20project/Documents/Workflow_Lifecycle_Audit/implementation_plan_workflow_lifecycle_audit.md)
+* **چک‌لیست وظایف:** [`Documents/Workflow_Lifecycle_Audit/task_workflow_lifecycle_audit.md`](file:///e:/warehouse%20project/Documents/Workflow_Lifecycle_Audit/task_workflow_lifecycle_audit.md)
+* **هدف:** بررسی کالبدشکافانه و خط‌به‌خط تمامی فرایندهای سازمانی که از ثبت اولیه توسط کارمند (اپراتور) آغاز شده و با عبور از سرپرست و حسابدار به تصویب نهایی مدیر و تسویه خزانه‌داری ختم می‌شوند، شناسایی انقطاع‌های استاب در کامپوننت‌های فرانت‌اند و ارائه راهکارهای جامع معماری.
+* **ارکان چهارگانه اصلاحات پیشنهادی:**
+  1. 🔌 **اتصال واقعی کامپوننت‌های استاب به دیتابیس:** جایگزینی آرایه‌های خالی و `setTimeout` در پرتال‌های کارکرد، ناوگان، فاکتور و تن‌خواه سرپرست، حسابدار و خزانه‌دار با سرویس‌های واقعی دیتابیس.
+  2. ⚙️ **یکپارچه‌سازی بک‌اند و ماشین حالت ۵ سطحی:** افزودن فاکتورها و تن‌خواه به موتور کارتابل ۵ سطحی، حذف محدودیت غیرمنطقی سوپریوزر در ویوست فاکتورها، و فعال‌سازی سراسری عبور هوشمند (Auto-Pass).
+  3. 📜 **سیستم ممیزی پایدار تاریخچه رد و اصلاح (Audit Trail):** پیاده‌سازی مدل لاگ تاریخچه تغییرات و مکاتبات به جای فیلد منفرد `rejection_reason`.
+  4. 🎯 **شفاف‌سازی و رفع کوری دید در کارتابل‌ها:** بارگذاری مشتاقانه شمارنده‌ها در بدو ورود کاربر، تفکیک برجسته درخواست‌های ویرایش از پرسنل جدید، و اعمال استاندارد Unified Sticky Command Center.
+
+---
+
+# 🏢 طرح ارتقای پنل ثبت و چرخه تایید پرسنل و ناوگان (حل خطای شرکت و ثبت توضیحات تایید)
+* **سند تفصیلی طرح:** [`Documents/Personnel_Vehicle_Registration_Approval/implementation_plan_personnel_registration_approval.md`](file:///e:/warehouse%20project/Documents/Personnel_Vehicle_Registration_Approval/implementation_plan_personnel_registration_approval.md)
+* **چک‌لیست وظایف:** [`Documents/Personnel_Vehicle_Registration_Approval/task_personnel_registration_approval.md`](file:///e:/warehouse%20project/Documents/Personnel_Vehicle_Registration_Approval/task_personnel_registration_approval.md)
+* **هدف:** حل قطعی خطای ۴۰۰ اعتبارسنجی فیلد شرکت (`company: This field is required`)، پشتیبانی از ثبت یادداشت‌ها و شروط تایید توسط کلیه نقش‌ها (`approval_note`) در `WorkflowAuditLog`، و تفکیک وظایف ثبت هویتی از تکمیل احکام مالی و استخدامی در کارتابل مدیریت و حسابداری.
+
 </div>
+
+
 
 
 

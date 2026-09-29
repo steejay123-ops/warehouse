@@ -88,6 +88,7 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
       getProjectSections: vi.fn().mockReturnValue(of(sampleSections)),
       getPersonnelProfiles: vi.fn().mockReturnValue(of(samplePersonnel)),
       getJobTitles: vi.fn().mockReturnValue(of({ job_titles: ['کارگر ساده انبار', 'اپراتور لیفتراک', 'راننده'] })),
+      lookupPersonnelByNationalCode: vi.fn().mockReturnValue(of({ found: false })),
       createPersonnelProfile: vi.fn().mockImplementation((data: any) => of({ id: 204, ...data })),
       updatePersonnelProfile: vi.fn().mockImplementation((id: number, data: any) => of({ id, ...data })),
       deletePersonnelProfile: vi.fn().mockReturnValue(of({ success: true })),
@@ -1032,6 +1033,44 @@ describe('EmployeeNewPersonnelHubComponent Vitest Suite (Phase 5)', () => {
       expect(component.isAccountCopied).toBe(true);
       await Promise.resolve();
       expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('شماره حساب'));
+    });
+
+    it('متد copyPhoneToClipboard باید شماره موبایل را کپی کرده و پرچم isPhoneCopied را فعال کند', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockImplementation(() => Promise.resolve())
+        }
+      });
+      component.newPersonnel.phone_number = '09121234567';
+      component.copyPhoneToClipboard();
+      expect(component.isPhoneCopied).toBe(true);
+      await Promise.resolve();
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('شماره همراه'));
+    });
+
+    it('استعلام کد ملی موجود و بازخوانی اطلاعات باید فرم را خودکار پر کند', () => {
+      const existingPerson = {
+        id: 55,
+        first_name: 'رضا',
+        last_name: 'حسینی',
+        father_name: 'علی',
+        national_code: '0012345678',
+        sheba_number: '120170000000101111111001',
+        bank_name: 'بانک ملی ایران',
+        account_number: '0101111111001',
+        daily_base_wage: 7500000,
+        children_count: 3
+      };
+      component.foundExistingPersonnel = existingPerson;
+      component.applyFoundPersonnelData();
+
+      expect(component.newPersonnel.first_name).toBe('رضا');
+      expect(component.newPersonnel.last_name).toBe('حسینی');
+      expect(component.newPersonnel.father_name).toBe('علی');
+      expect(component.newPersonnel.children_count).toBe(3);
+      expect(component.newPersonnel.daily_base_wage).toBe(7500000);
+      expect(component.foundExistingPersonnel).toBeNull();
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('با موفقیت فراخوانی شد'));
     });
   });
 });

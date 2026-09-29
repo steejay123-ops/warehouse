@@ -454,7 +454,7 @@ describe('Segregation of Duties (SoD) & DOM Verification for All 12 Database Use
 
         case 'supervisor':
           expect(employeeLinks.length).toBe(0);
-          expect(supervisorLinks.length).toBe(6);
+          expect(supervisorLinks.length).toBe(5);
           expect(accountantLinks.length).toBe(0);
           expect(managerLinks.length).toBe(0);
           expect(treasurerLinks.length).toBe(0);

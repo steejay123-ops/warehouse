@@ -1,4 +1,11 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+// @vitest-environment jsdom
+import '@angular/compiler';
+import { describe, it, expect, beforeEach, beforeAll, afterEach, vi } from 'vitest';
+import { ComponentFixture, TestBed, getTestBed } from '@angular/core/testing';
+import { BrowserTestingModule, platformBrowserTesting } from '@angular/platform-browser/testing';
+import { ɵresolveComponentResources } from '@angular/core';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Users } from './users';
 import { of, Subject } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,10 +18,28 @@ import { AccountsHttpService } from '../../core/http/accounts-http.service';
 import { WarehouseHttpService } from '../../core/http/warehouse-http.service';
 import { ConfirmDialogService } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { By } from '@angular/platform-browser';
+import { CompanyApiService } from '../../core/api/company-api.service';
+import { ActiveCompanyService } from '../../core/services/active-company.service';
+import { PersonnelApiService } from '../../core/api/personnel-api.service';
+
+try {
+  getTestBed().initTestEnvironment(BrowserTestingModule, platformBrowserTesting());
+} catch {}
 
 describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Roles)', () => {
   let component: Users;
   let fixture: ComponentFixture<Users>;
+
+  beforeAll(async () => {
+    await ɵresolveComponentResources(async (url) => {
+      const filename = path.basename(url);
+      const localPath = path.resolve(__dirname, filename);
+      if (fs.existsSync(localPath)) {
+        return fs.readFileSync(localPath, 'utf-8');
+      }
+      return '';
+    });
+  });
 
   // Mock Data
   const mockPermissions = [
@@ -42,6 +67,8 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       is_superuser: true,
       groups: [10],
       assigned_warehouses: [101],
+      company_ids: [1],
+      default_company_id: 1,
       blood_type: 'O+',
       emergency_contact: '09129999999',
       company: 'مرکزی',
@@ -61,6 +88,8 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       is_superuser: false,
       groups: [11],
       assigned_warehouses: [],
+      company_ids: [2],
+      default_company_id: 2,
       blood_type: 'A+',
       emergency_contact: '09128888888',
       company: 'پیمانکار',
@@ -70,13 +99,21 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
     }
   ];
 
+  const mockCompanies = [
+    { id: 1, name: 'شرکت پاینده توان ساینا', code: 'PTS', is_active: true },
+    { id: 2, name: 'شرکت فارس عالیش', code: 'FA', is_active: true }
+  ];
+
   const mockWarehouses = [
-    { id: 101, name: 'انبار مرکزی شماره ۱', code: 'WH-01' },
-    { id: 102, name: 'انبار قطعات یدکی', code: 'WH-02' }
+    { id: 101, name: 'انبار مرکزی شماره ۱', code: 'WH-01', company: 1, company_name: 'پاینده توان ساینا' },
+    { id: 102, name: 'انبار قطعات یدکی', code: 'WH-02', company: 2, company_name: 'فارس عالیش' }
   ];
 
   let mockAccountsHttp: any;
   let mockWarehouseHttp: any;
+  let mockCompanyApi: any;
+  let mockActiveCompanyService: any;
+  let mockPersonnelApi: any;
   let mockToast: any;
   let mockAuth: any;
   let mockPersona: any;
@@ -110,8 +147,37 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
     };
 
     mockWarehouseHttp = {
-      getAll: vi.fn().mockReturnValue(of(mockWarehouses)),
-      getWarehouses: vi.fn().mockReturnValue(of(mockWarehouses))
+      getAll: vi.fn().mockImplementation((companyId?: number) => {
+        if (companyId) {
+          return of(mockWarehouses.filter(w => w.company === companyId));
+        }
+        return of(mockWarehouses);
+      }),
+      getWarehouses: vi.fn().mockImplementation((companyId?: number) => {
+        if (companyId) {
+          return of(mockWarehouses.filter(w => w.company === companyId));
+        }
+        return of(mockWarehouses);
+      })
+    };
+
+    mockCompanyApi = {
+      getAll: vi.fn().mockReturnValue(of({ results: mockCompanies })),
+      getCompanies: vi.fn().mockReturnValue(of({ results: mockCompanies }))
+    };
+
+    mockActiveCompanyService = {
+      activeCompany$: of(mockCompanies[0]),
+      activeCompanyId$: of(1),
+      getActiveCompanyId: vi.fn().mockReturnValue(1),
+      getActiveCompany: vi.fn().mockReturnValue(mockCompanies[0]),
+      setActiveCompany: vi.fn(),
+      loadAvailableCompanies: vi.fn().mockReturnValue(of(mockCompanies)),
+      availableCompanies$: of(mockCompanies)
+    };
+
+    mockPersonnelApi = {
+      getAll: vi.fn().mockReturnValue(of([]))
     };
 
     mockToast = {
@@ -152,6 +218,9 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
         StateService,
         { provide: AccountsHttpService, useValue: mockAccountsHttp },
         { provide: WarehouseHttpService, useValue: mockWarehouseHttp },
+        { provide: CompanyApiService, useValue: mockCompanyApi },
+        { provide: ActiveCompanyService, useValue: mockActiveCompanyService },
+        { provide: PersonnelApiService, useValue: mockPersonnelApi },
         { provide: ToastService, useValue: mockToast },
         { provide: AuthService, useValue: mockAuth },
         { provide: AppPersonaService, useValue: mockPersona },
@@ -170,6 +239,10 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
     fixture = TestBed.createComponent(Users);
     component = fixture.componentInstance;
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -527,6 +600,7 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
 
     it('باید ورودی‌های نام کاربری و رمز در مودال دارای autocomplete="new-password" باشند تا مرورگر تکمیل خودکار نکند', () => {
       component.openUserModal();
+      component.userModalInnerTab = 'security';
       fixture.detectChanges();
       const usernameInput = fixture.debugElement.query(By.css('input[name="personnel_username"]'));
       const passwordInput = fixture.debugElement.query(By.css('input[name="personnel_password"]'));
@@ -603,4 +677,145 @@ describe('Users & Roles Management Comprehensive Tests (Tab 1: Users & Tab 2: Ro
       expect(component.currentFormAuthorizedSystems.badges[0].key).toBe('superuser');
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // 11. مدیریت چندشرکتی کاربران (Multi-Company User Assignment & Warehouses)
+  // ─────────────────────────────────────────────────────────────────
+  describe('۱۱. مدیریت چندشرکتی کاربران و فیلتر پویای انبارها بر اساس شرکت انتخابی', () => {
+    it('باید لیست شرکت‌ها هنگام باز شدن مودال کاربر لود شود', () => {
+      component.openUserModal();
+      fixture.detectChanges();
+      expect(component.availableCompanies.length).toBe(2);
+      expect(component.userForm.company_ids).toBeDefined();
+    });
+
+    it('باید با کلیک بر روی شرکت، شرکت به company_ids افزوده یا کاسته شود', () => {
+      component.openUserModal();
+      component.userForm.company_ids = [];
+      component.toggleUserCompany(1);
+      expect(component.userForm.company_ids).toContain(1);
+      expect(component.userForm.default_company_id).toBe(1);
+
+      component.toggleUserCompany(2);
+      expect(component.userForm.company_ids).toContain(2);
+
+      component.toggleUserCompany(1);
+      expect(component.userForm.company_ids).not.toContain(1);
+      expect(component.userForm.default_company_id).toBe(2);
+    });
+
+    it('باید انبارها براساس شرکت‌های انتخابی در modalWarehouses فیلتر شوند', () => {
+      component.openUserModal();
+      component.userForm.company_ids = [1];
+      component.updateModalWarehouses();
+      expect(component.modalWarehouses.length).toBe(1);
+      expect(component.modalWarehouses[0].company).toBe(1);
+
+      component.userForm.company_ids = [1, 2];
+      component.updateModalWarehouses();
+      expect(component.modalWarehouses.length).toBe(2);
+    });
+
+    it('باید در saveUser، مقادیر company_ids و default_company_id ارسال شوند', () => {
+      component.openUserModal();
+      component.userForm.username = 'new_multitenant_user';
+      component.userForm.first_name = 'تست';
+      component.userForm.last_name = 'چندشرکتی';
+      component.userForm.phone_number = '09121112233';
+      component.userForm.password = 'Pass@1234';
+      component.userForm.company_ids = [1, 2];
+      component.userForm.default_company_id = 1;
+
+      component.saveUser();
+
+      expect(mockAccountsHttp.createUser).toHaveBeenCalled();
+      const calledArg = mockAccountsHttp.createUser.mock.calls[0][0];
+      expect(calledArg.company_ids).toEqual([1, 2]);
+      expect(calledArg.default_company_id).toBe(1);
+    });
+
+    it('باید متدهای انتخاب همه و لغو همه انبارها در تب شرکت‌ها و انبارها به درستی کار کنند', () => {
+      component.openUserModal();
+      component.modalWarehouses = [{ id: 101, name: 'انبار ۱' }, { id: 102, name: 'انبار ۲' }] as any;
+      component.selectAllModalWarehouses();
+      expect(component.userForm.assigned_warehouses).toContain(101);
+      expect(component.userForm.assigned_warehouses).toContain(102);
+
+      component.clearAllModalWarehouses();
+      expect(component.userForm.assigned_warehouses).not.toContain(101);
+      expect(component.userForm.assigned_warehouses).not.toContain(102);
+    });
+
+    it('باید با تغییر شرکت‌ها، انبارهای نامعتبر به صورت خودکار از assigned_warehouses پاک شوند', () => {
+      component.openUserModal();
+      component.userForm.company_ids = [1, 2];
+      component.updateModalWarehouses();
+      // انتساب انبار ۱۰۱ (شرکت ۱) و ۱۰۲ (شرکت ۲)
+      component.userForm.assigned_warehouses = [101, 102];
+
+      // حذف شرکت ۲ و حفظ فقط شرکت ۱
+      component.userForm.company_ids = [1];
+      component.updateModalWarehouses();
+
+      expect(component.modalWarehouses.map((w: any) => w.id)).toEqual([101]);
+      expect(component.userForm.assigned_warehouses).toEqual([101]);
+      expect(component.userForm.assigned_warehouses).not.toContain(102);
+
+      // در صورت لغو همه شرکت‌ها، انبارها خالی می‌شوند
+      component.userForm.company_ids = [];
+      component.updateModalWarehouses();
+      expect(component.modalWarehouses).toEqual([]);
+      expect(component.userForm.assigned_warehouses).toEqual([]);
+    });
+
+    it('باید متد getUserCompanyBadges برای کاربران چندشرکتی نشان‌های مجزا با مشخص بودن شرکت اصلی برگرداند', () => {
+      const multiCompanyUser = {
+        id: 99,
+        company: 'پاینده توان ساینا',
+        company_accesses: [
+          { company_id: 1, company_name: 'پاینده توان ساینا', is_default: true },
+          { company_id: 2, company_name: 'فارس عالیش', is_default: false }
+        ]
+      };
+      const badges = component.getUserCompanyBadges(multiCompanyUser);
+      expect(badges.length).toBe(2);
+      expect(badges[0].name).toBe('پاینده توان ساینا');
+      expect(badges[0].is_default).toBe(true);
+      expect(badges[1].name).toBe('فارس عالیش');
+      expect(badges[1].is_default).toBe(false);
+
+      // کاربر تک‌شرکت سنتی بدون company_accesses
+      const legacyUser = { id: 98, company: 'فارس عالیش' };
+      const legacyBadges = component.getUserCompanyBadges(legacyUser);
+      expect(legacyBadges.length).toBe(1);
+      expect(legacyBadges[0].name).toBe('فارس عالیش');
+      expect(legacyBadges[0].is_default).toBe(true);
+
+      // کاربر بدون شرکت
+      const noCompUser = { id: 97 };
+      expect(component.getUserCompanyBadges(noCompUser)).toEqual([]);
+    });
+
+    it('باید جستجوی کاربران بتواند کاربران را بر اساس نام شرکت‌های موجود در company_accesses نیز پیدا کند', () => {
+      component.state.appState.users = [
+        {
+          id: 10,
+          first_name: 'کاربر',
+          last_name: 'چندشرکتی',
+          username: 'user_multi',
+          company: 'پاینده توان ساینا',
+          company_accesses: [
+            { company_id: 1, company_name: 'پاینده توان ساینا', is_default: true },
+            { company_id: 2, company_name: 'فارس عالیش', is_default: false }
+          ],
+          is_active: true
+        }
+      ] as any;
+      component.searchQuery = 'فارس عالیش';
+      const results = component.filteredUsers;
+      expect(results.length).toBe(1);
+      expect(results[0].id).toBe(10);
+    });
+  });
 });
+

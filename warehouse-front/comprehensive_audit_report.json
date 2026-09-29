@@ -1,0 +1,771 @@
+{
+  "timestamp": "2026-09-28T22:55:03.049Z",
+  "browser": "Google Chrome (Puppeteer)",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "consoleErrors": [
+    {
+      "text": "Failed to load resource: the server responded with a status of 400 (Bad Request)",
+      "location": "http://localhost:4200/api/personnel/vehicles/:undefined"
+    }
+  ],
+  "consoleWarnings": [
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-personnel?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-vehicle?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-vehicle?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-personnel?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-vehicle?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-vehicle?cid=2:undefined"
+    },
+    {
+      "text": "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+      "location": "http://localhost:4200/app/finance/employee-new-personnel?cid=2:undefined"
+    }
+  ],
+  "failedRequests": [
+    {
+      "url": "http://localhost:4200/api/personnel/vehicles/",
+      "status": 400,
+      "statusText": "Bad Request",
+      "body": "{\"plate_number\":[\"خودرویی با شماره پلاک «12 ج 345 ایران 63» قبلاً در سامانه ثبت شده است.\"]}"
+    }
+  ],
+  "networkCalls": [
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/auth/login-logs/heartbeat/",
+      "postData": "{\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\"}"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/contacts/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/?scope=documents",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/job-titles/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/accounts/health/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/contacts/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/?scope=documents",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/vehicles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/vehicles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/vehicles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/accounts/health/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/personnel/vehicles/",
+      "postData": "{\"plate_number\":\"12 ج 345 ایران 63\",\"vehicle_type\":\"nissan\",\"ownership_type\":\"contract\",\"driver_name\":\"رضا مرادی (تست)\",\"driver_national_code\":\"0010398041\",\"is_driver_owner\":true,\"default_service_rate\":0,\"bank_name\":\"بانک ملت\",\"account_number\":\"1234567890\",\"sheba_number\":\"IR160120000000001234567890\""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?search=0010398041",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/contacts/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/?scope=documents",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/job-titles/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/contacts/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/?scope=documents",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/vehicles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/public/config/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/contacts/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/?scope=documents",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/companies/user-available/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/warehouses/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/communications/conversations/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/user-section-assignments/my-sections/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/job-titles/",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/profiles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/personnel/vehicles/?section_id=13",
+      "postData": null
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:4200/api/accounts/health/",
+      "postData": null
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:4200/api/accounts/telemetry/heartbeat/",
+      "postData": "{\"tab_id\":\"tab_dyrsa644_mului5jy\",\"device_model\":\"رایانه رومیزی / لپ‌تاپ ویندوز\",\"os_name\":\"Windows PC\",\"browser_name\":\"Google Chrome\",\"app_scope\":\"personnel\",\"active_role\":\"operator\",\"pending_queue_count\":0,\"conflict_count\":0}"
+    }
+  ],
+  "findings": [],
+  "personnelAudit": {
+    "hub": {
+      "hasStickyHeader": true,
+      "headerTitle": "سامانه مالی و پرسنلی",
+      "selectedSectionId": "13",
+      "sections": [
+        {
+          "value": "13",
+          "text": "انبارداری ◀ انبارداری کارگاه"
+        }
+      ],
+      "switcherButtons": [
+        {
+          "text": "🚗 تعریف خودرو",
+          "isActive": false
+        },
+        {
+          "text": "👥 تعریف پرسنل",
+          "isActive": false
+        },
+        {
+          "text": "👥\nتعریف پرسنل",
+          "isActive": true
+        },
+        {
+          "text": "🚗\nتعریف خودرو",
+          "isActive": false
+        }
+      ],
+      "actionButtons": {
+        "excelExport": true,
+        "excelImport": true,
+        "refresh": true,
+        "addPersonnel": true
+      },
+      "hasSearchInput": true,
+      "tableHeaders": [
+        "#",
+        "نام و نام خانوادگی",
+        "کد ملی",
+        "سمت شغلی",
+        "نوع قرارداد",
+        "شماره همراه",
+        "مزد پایه روزانه",
+        "مشخصات بانکی",
+        "وضعیت تایید",
+        "عملیات"
+      ],
+      "tableRowsCount": 50,
+      "bodyDir": "rtl"
+    },
+    "modal": {
+      "isOpen": true,
+      "title": "تشکیل پرونده و معرفی پرسنل جدید",
+      "inputsCount": 18,
+      "inputs": [
+        {
+          "placeholder": "مثال: علی",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: محمدی",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "۰۱۲۳۴۵۶۷۸۹",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: حسین",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: ۱۲۳۴",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: ۱۲ الف",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: ۶۵۴۳۲۱",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "۱۳۷۰/۰۵/۱۴",
+          "name": "",
+          "type": "text",
+          "dir": "ltr",
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: تهران",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: شیراز",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "۰",
+          "name": "",
+          "type": "number",
+          "dir": null,
+          "value": "0"
+        },
+        {
+          "placeholder": "۰۹۱۲...",
+          "name": "",
+          "type": "tel",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "انتخاب یا تایپ سمت شغلی...",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": "کارگر انبار"
+        },
+        {
+          "placeholder": "",
+          "name": "",
+          "type": "hidden",
+          "dir": null,
+          "value": "daily"
+        },
+        {
+          "placeholder": "-- ---- ---- ---- ---- ----",
+          "name": "",
+          "type": "text",
+          "dir": "ltr",
+          "value": ""
+        },
+        {
+          "placeholder": "-- انتخاب بانک عامل --",
+          "name": "",
+          "type": "text",
+          "dir": null,
+          "value": ""
+        },
+        {
+          "placeholder": "مثلاً: 0101111111001",
+          "name": "",
+          "type": "text",
+          "dir": "ltr",
+          "value": ""
+        },
+        {
+          "placeholder": "",
+          "name": "",
+          "type": "file",
+          "dir": null,
+          "value": ""
+        }
+      ],
+      "selectsCount": 2,
+      "hasConvertBtn": false,
+      "hasCopyShebaBtn": false,
+      "hasCopyAccountBtn": false,
+      "hasDraftBtn": true,
+      "hasSubmitBtn": true
+    },
+    "nationalCodeTest": {
+      "error": "National code input not found"
+    },
+    "shebaConversionTest": {
+      "bankDropdownOpened": true,
+      "bankSelected": true,
+      "shebaGenerated": null,
+      "validationMessage": null,
+      "reverseBankDetected": "بانک ملت",
+      "reverseAccountExtracted": "1234567890"
+    },
+    "birthDateTest": {
+      "birthDateAutoMasked": "1370/05/14",
+      "isAutoMaskedCorrectly": true,
+      "wageInputCleanlyRemoved": true,
+      "blueBannerCleanlyRemoved": true
+    }
+  },
+  "vehicleAudit": {
+    "hub": {
+      "hasStickyHeader": true,
+      "headerTitle": "سامانه مالی و پرسنلی",
+      "selectedSectionId": "13",
+      "sections": [
+        {
+          "value": "13",
+          "text": "انبارداری ◀ انبارداری کارگاه"
+        }
+      ],
+      "switcherButtons": [
+        {
+          "text": "🚗 تعریف خودرو",
+          "isActive": false
+        },
+        {
+          "text": "👥 تعریف پرسنل",
+          "isActive": false
+        },
+        {
+          "text": "👥\nتعریف پرسنل",
+          "isActive": false
+        },
+        {
+          "text": "🚗\nتعریف خودرو",
+          "isActive": true
+        }
+      ],
+      "subtabs": [
+        {
+          "label": "👥",
+          "count": "تعریف پرسنل",
+          "isActive": false
+        },
+        {
+          "label": "🚗",
+          "count": "تعریف خودرو",
+          "isActive": true
+        },
+        {
+          "label": "همه",
+          "count": "۱",
+          "isActive": true
+        },
+        {
+          "label": "پیش‌نویس",
+          "count": "۱",
+          "isActive": false
+        },
+        {
+          "label": "در انتظار سرپرست",
+          "count": "۰",
+          "isActive": false
+        },
+        {
+          "label": "نیازمند اصلاح",
+          "count": "۰",
+          "isActive": false
+        },
+        {
+          "label": "مصوب",
+          "count": "۰",
+          "isActive": false
+        },
+        {
+          "label": "رد شده",
+          "count": "۰",
+          "isActive": false
+        }
+      ],
+      "actionButtons": {
+        "excelExport": true,
+        "excelImport": true,
+        "refresh": true,
+        "addVehicle": true
+      },
+      "hasSearchInput": true,
+      "tableHeaders": [
+        "#",
+        "شماره پلاک ملی",
+        "مشخصات راننده",
+        "نوع خودرو",
+        "نوع مالکیت",
+        "نرخ پایه سرویس (ریال)",
+        "اطلاعات حساب و شبا",
+        "وضعیت پرونده",
+        "عملیات"
+      ],
+      "tableRowsCount": 1
+    },
+    "modal": {
+      "isOpen": true,
+      "title": "ثبت مشخصات خودرو و راننده جدید\nپرونده جدید",
+      "hasPlateWidget": true,
+      "plateInputsCount": 4,
+      "hasPlateGraphicPreview": true,
+      "hasConvertBtn": false,
+      "hasDriverOwnerCheckbox": true,
+      "isDriverOwnerChecked": true,
+      "hasDraftBtn": true,
+      "hasSubmitBtn": true
+    },
+    "plateWidgetTest": {
+      "p1Val": "12",
+      "p2Val": "ج",
+      "p3Val": "345",
+      "p4Val": "63",
+      "previewText": "🇮🇷 I.R. IRAN 12 ج 345 ایران 63"
+    },
+    "ownerToggleTest": {
+      "ownerSectionAppearedOnUncheck": true,
+      "ownerInputsCount": 3,
+      "ownerSectionRemovedOnRecheck": true
+    },
+    "vehicleShebaTest": {
+      "bankSelected": true,
+      "shebaGenerated": null,
+      "validationMessage": null
+    }
+  },
+  "mobileAudit": {
+    "personnel": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 375,
+      "clientWidth": 375
+    },
+    "vehicle": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 375,
+      "clientWidth": 375
+    }
+  },
+  "navigationAudit": {
+    "urlAfterToVehicle": "http://localhost:4200/app/finance/employee-new-vehicle",
+    "urlAfterToPersonnel": "http://localhost:4200/app/finance/employee-new-personnel",
+    "isNavigationWorking": true
+  }
+}

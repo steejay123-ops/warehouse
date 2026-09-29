@@ -84,7 +84,8 @@ describe('SupervisorNewProfilesHubComponent Unit & DOM Tests', () => {
       approvePersonnelChangeRequestSupervisor: vi.fn().mockReturnValue(of({ message: 'درخواست تغییرات به تایید سرپرست رسید و به کارتابل حسابداری ارسال شد.' })),
       rejectPersonnelChangeRequest: vi.fn().mockReturnValue(of({ message: 'درخواست تغییرات رد شد.' })),
       approveVehicleChangeRequestSupervisor: vi.fn().mockReturnValue(of({ message: 'درخواست تغییرات خودرو به تایید سرپرست رسید و به کارتابل حسابداری ارسال شد.' })),
-      rejectVehicleChangeRequest: vi.fn().mockReturnValue(of({ message: 'درخواست تغییرات ناوگان رد شد.' }))
+      rejectVehicleChangeRequest: vi.fn().mockReturnValue(of({ message: 'درخواست تغییرات ناوگان رد شد.' })),
+      getWorkflowAuditLogs: vi.fn().mockReturnValue(of([]))
     };
 
     mockWs = {
@@ -96,7 +97,8 @@ describe('SupervisorNewProfilesHubComponent Unit & DOM Tests', () => {
     };
 
     mockRoute = {
-      queryParams: of({ tab: 'change_requests', section_id: '10' })
+      queryParams: of({ tab: 'change_requests', section_id: '10' }),
+      snapshot: { queryParams: { tab: 'change_requests', section_id: '10' } }
     };
 
     mockCdr = {

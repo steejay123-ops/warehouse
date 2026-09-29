@@ -72,6 +72,7 @@ describe('Complete Personnel 3-Tier Lifecycle DOM & State Integration (Employee 
         return of([activeCR]);
       }),
       getVehicleChangeRequests: vi.fn().mockReturnValue(of([])),
+      getWorkflowAuditLogs: vi.fn().mockReturnValue(of([])),
       approvePersonnelChangeRequestSupervisor: vi.fn().mockImplementation((id: number) => {
         activeCR.status = 'pending_accountant';
         activeCR.status_display = 'در انتظار تایید حسابدار';

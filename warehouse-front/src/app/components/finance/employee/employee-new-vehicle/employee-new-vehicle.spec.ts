@@ -528,4 +528,69 @@ describe('EmployeeNewVehicleHubComponent Vitest Suite (Phase 4 & Refactor)', () 
       expect(equipmentTypes).toContain('other');
     });
   });
+
+  describe('۹. استاندارد جامع بانک، شماره حساب و تبدیل دوطرفه به شبا (ناوگان)', () => {
+    it('باید filteredBanks بر اساس جستجو درست فیلتر شود', () => {
+      component.bankSearchQuery = 'ملت';
+      expect(component.filteredBanks.some(b => b.name.includes('ملت'))).toBe(true);
+
+      component.bankSearchQuery = '';
+      expect(component.filteredBanks.length).toBe(component.iranianBanks.length);
+    });
+
+    it('انتخاب بانک از دراپ‌داون باید بانک را ست کرده و دراپ‌داون را ببندد', () => {
+      const bank = component.iranianBanks.find(b => b.code === '017')!; // بانک ملی
+      component.isBankDropdownOpen = true;
+      component.selectBankFromDropdown(bank);
+
+      expect(component.newVehicle.bank_name).toBe(bank.name);
+      expect(component.isBankDropdownOpen).toBe(false);
+      expect(component.bankSearchQuery).toBe('');
+    });
+
+    it('ورود شماره حساب به همراه بانک معتبر باید خودکار شماره شبا را تولید کند', () => {
+      component.newVehicle.bank_name = 'بانک ملی ایران';
+      component.onAccountNumberInput('0101111111001');
+
+      expect(component.newVehicle.account_number).toBe('0101111111001');
+      expect(component.newVehicle.sheba_number).toMatch(/^IR\d{24}$/);
+      expect(component.shebaValidationResult?.isValid).toBe(true);
+    });
+
+    it('انتخاب بانک در صورتی که شماره حساب معتبر موجود باشد باید شبا را مجدداً محاسبه و تولید کند', () => {
+      component.newVehicle.account_number = '0101111111001';
+      component.onBankSelect('بانک ملی ایران');
+
+      expect(component.newVehicle.sheba_number).toMatch(/^IR\d{24}$/);
+      expect(component.shebaValidationResult?.isValid).toBe(true);
+    });
+
+    it('کلیک بر دکمه تبدیل دستی convertAccountToShebaNow باید با اخطار یا موفقیت پیام دهد', () => {
+      // بدون انتخاب بانک
+      component.newVehicle.bank_name = '';
+      component.convertAccountToShebaNow();
+      expect(mockToast.show).toHaveBeenCalledWith('warning', expect.stringContaining('بانک عامل'));
+
+      // با بانک و شماره حساب معتبر
+      component.newVehicle.bank_name = 'بانک ملی ایران';
+      component.newVehicle.account_number = '0101111111001';
+      component.convertAccountToShebaNow();
+
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('شماره شبا با موفقیت'));
+      expect(component.newVehicle.sheba_number).toMatch(/^IR\d{24}$/);
+    });
+
+    it('متد copyAccountNumberToClipboard باید شماره حساب را کپی کرده و پرچم isAccountCopied را فعال کند', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockImplementation(() => Promise.resolve())
+        }
+      });
+      component.newVehicle.account_number = '0101111111001';
+      component.copyAccountNumberToClipboard();
+      expect(component.isAccountCopied).toBe(true);
+      await Promise.resolve();
+      expect(mockToast.show).toHaveBeenCalledWith('success', expect.stringContaining('شماره حساب'));
+    });
+  });
 });

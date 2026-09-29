@@ -49,7 +49,11 @@ describe('ManagerApprovals Unit Tests', () => {
       approvePersonnelChangeRequestManager: vi.fn().mockReturnValue(of({ message: 'تایید شد' })),
       periodWorkflowAction: vi.fn().mockReturnValue(of({ message: 'ارسال شد' })),
       rejectPersonnel: vi.fn().mockReturnValue(of({ message: 'رد شد' })),
-      requestPersonnelRevision: vi.fn().mockReturnValue(of({ message: 'ارجاع شد' }))
+      requestPersonnelRevision: vi.fn().mockReturnValue(of({ message: 'ارجاع شد' })),
+      getExpenseInvoices: vi.fn().mockReturnValue(of([])),
+      getPettyCashTransactions: vi.fn().mockReturnValue(of([])),
+      getWorkflowAuditLogs: vi.fn().mockReturnValue(of([])),
+      postCartableAction: vi.fn().mockReturnValue(of({ message: 'عملیات با موفقیت انجام شد' }))
     };
 
     mockWhService = {
@@ -69,7 +73,8 @@ describe('ManagerApprovals Unit Tests', () => {
     };
 
     mockRoute = {
-      queryParams: of({ tab: 'new_personnel', status: 'draft' })
+      queryParams: of({ tab: 'new_personnel', status: 'draft' }),
+      snapshot: { queryParams: { tab: 'new_personnel', status: 'draft' } }
     };
 
     mockRouter = {
@@ -133,4 +138,61 @@ describe('ManagerApprovals Unit Tests', () => {
     });
     expect(mockToast.show).toHaveBeenCalledWith('success', expect.any(String));
   });
+
+  it('should filter personnel change requests by status and search query', () => {
+    component.personnelChangeRequests = [
+      { id: 111, personnel_name: 'احمد حسینی', status: 'pending_manager', personnel_national_code: '0012345678' } as any,
+      { id: 110, personnel_name: 'احمد حسینی', status: 'rejected', personnel_national_code: '0012345678' } as any,
+      { id: 105, personnel_name: 'رضا کمالی', status: 'pending_manager', personnel_national_code: '9876543210' } as any
+    ];
+
+    // Default crStatusFilter is 'pending_manager'
+    expect(component.filteredPersonnelChangeRequests.length).toBe(2);
+
+    // Filter by search query
+    component.crSearchQuery = 'احمد';
+    expect(component.filteredPersonnelChangeRequests.length).toBe(1);
+    expect(component.filteredPersonnelChangeRequests[0].id).toBe(111);
+
+    // Switch to ALL
+    component.crSearchQuery = '';
+    component.setCRStatusFilter('ALL');
+    expect(component.filteredPersonnelChangeRequests.length).toBe(3);
+
+    // Switch to rejected
+    component.setCRStatusFilter('rejected');
+    expect(component.filteredPersonnelChangeRequests.length).toBe(1);
+    expect(component.filteredPersonnelChangeRequests[0].id).toBe(110);
+  });
+
+  it('should ignore internal system fields (like approval_status) in Diff Viewer modal and translate phone_number', () => {
+    const mockCR = {
+      id: 111,
+      proposed_changes: {
+        phone_number: '08174567890',
+        approval_status: 'pending_supervisor',
+        attachment: null
+      },
+      previous_values: {
+        phone_number: '09174567890',
+        approval_status: 'approved',
+        attachment: ''
+      }
+    };
+    component.openDiffModal(mockCR, 'personnel');
+    expect(component.isDiffModalOpen).toBe(true);
+
+    // approval_status must NOT be in diff rows
+    const fieldNames = component.diffFieldRows.map(r => r.field_name);
+    expect(fieldNames).not.toContain('approval_status');
+
+    // phone_number must be translated
+    const phoneRow = component.diffFieldRows.find(r => r.field_name === 'phone_number');
+    expect(phoneRow).toBeDefined();
+    expect(phoneRow?.field_label).toBe('شماره تماس');
+    expect(phoneRow?.old_value).toBe('09174567890');
+    expect(phoneRow?.new_value).toBe('08174567890');
+    expect(phoneRow?.is_changed).toBe(true);
+  });
 });
+

@@ -1,0 +1,193 @@
+{
+  "consoleErrors": [],
+  "consoleWarnings": [
+    "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">",
+    "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is deprecated. Please include <meta name=\"mobile-web-app-capable\" content=\"yes\">"
+  ],
+  "failedRequests": [],
+  "personnelPage": {
+    "overview": {
+      "title": "سامانه مالی و پرسنلی — تعریف پرسنل و همکار جدید (پنل کارمند)",
+      "header": "سامانه مالی و پرسنلی",
+      "selectedSection": "3",
+      "sectionOptionsCount": 6,
+      "tableRows": 3
+    },
+    "modalData": {
+      "open": true,
+      "modalTitle": "تشکیل پرونده و معرفی پرسنل جدید",
+      "totalInputs": 13,
+      "inputsSummary": [
+        {
+          "placeholder": "مثال: علی",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "مثال: محمدی",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "۰۱۲۳۴۵۶۷۸۹",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "مثال: حسین",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "انتخاب یا تایپ سمت شغلی...",
+          "name": "",
+          "type": "text",
+          "value": "کارگر انبار",
+          "disabled": false
+        },
+        {
+          "placeholder": "",
+          "name": "",
+          "type": "hidden",
+          "value": "daily",
+          "disabled": false
+        },
+        {
+          "placeholder": "۰",
+          "name": "",
+          "type": "number",
+          "value": "0",
+          "disabled": false
+        },
+        {
+          "placeholder": "۰۹۱۲...",
+          "name": "",
+          "type": "tel",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "مثال: ۴,۵۰۰,۰۰۰",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        },
+        {
+          "placeholder": "-- ---- ---- ---- ---- ----",
+          "name": "",
+          "type": "text",
+          "value": "",
+          "disabled": false
+        }
+      ],
+      "natInputFound": false,
+      "accountInputFound": false,
+      "shebaInputFound": false,
+      "convertBtnFound": false
+    },
+    "formInteractions": {
+      "shebaValBefore": "",
+      "shebaValAfter": "",
+      "validationMsgAfter": null
+    }
+  },
+  "vehiclePage": {
+    "overview": {
+      "title": "سامانه مالی و پرسنلی — تعریف خودرو و ناوگان جدید (پنل کارمند)",
+      "header": "سامانه مالی و پرسنلی",
+      "selectedSection": "3",
+      "sectionOptionsCount": 6,
+      "tableRows": 1
+    },
+    "modalData": {
+      "open": true,
+      "modalTitle": "ثبت مشخصات خودرو و راننده جدید\nپرونده جدید",
+      "totalInputs": 11,
+      "inputsSummary": [
+        {
+          "placeholder": "12",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "345",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "63",
+          "name": "",
+          "type": "text",
+          "value": "63"
+        },
+        {
+          "placeholder": "مثال: علی حسینی",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "۰۱۲۳۴۵۶۷۸۹",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "۰۹۱۲...",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "مثال: ۱,۵۰۰,۰۰۰",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "",
+          "name": "",
+          "type": "checkbox",
+          "value": "on"
+        },
+        {
+          "placeholder": "12 3456 7890 1234 5678 9012 34",
+          "name": "",
+          "type": "text",
+          "value": ""
+        },
+        {
+          "placeholder": "-- انتخاب بانک عامل --",
+          "name": "",
+          "type": "text",
+          "value": ""
+        }
+      ],
+      "plateInputFound": false,
+      "driverNameInputFound": false,
+      "convertBtnFound": false
+    },
+    "formInteractions": {
+      "shebaValBefore": "",
+      "shebaValAfter": "",
+      "validationMsgAfter": null
+    }
+  },
+  "discoveredBugs": [],
+  "overallChecks": {
+    "dir": "rtl",
+    "fontFamily": "Vazirmatn, Tahoma, system-ui, sans-serif",
+    "scrollbarVisible": false
+  }
+}
